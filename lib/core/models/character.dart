@@ -37,6 +37,7 @@ abstract class Character with _$Character {
     String? world,
     String? macroName,
     String? picksHash,
+    @Default(0) int tokenCount,
   }) = _Character;
 
   factory Character.fromJson(Map<String, dynamic> json) =>

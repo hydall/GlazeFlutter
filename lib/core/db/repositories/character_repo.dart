@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import '../app_db.dart';
 import '../../models/character.dart';
 import '../../models/gallery_entry.dart';
+import '../../llm/character_tokens.dart';
 import '../../utils/time_helpers.dart';
 import '../../../features/cloud_sync/sync_repo_interfaces.dart';
 
@@ -160,7 +161,40 @@ class CharacterRepo implements SyncCharacterStore {
 
   @override
   Future<void> put(Character character) async {
-    await _db.into(_db.characters).insertOnConflictUpdate(_toCompanion(character));
+    // Cache the estimated token count on every write (import/save) so the UI
+    // reads it instead of re-encoding during scroll/filter.
+    final withTokens =
+        character.copyWith(tokenCount: estimateCharacterTokens(character));
+    await _db.into(_db.characters).insertOnConflictUpdate(_toCompanion(withTokens));
+  }
+
+  /// Computes and stores `tokenCount` for rows that still have the default 0
+  /// (existing characters from before the column was added). Runs in one batch
+  /// → a single reactive emission; safe to call unawaited at startup.
+  Future<void> backfillMissingTokenCounts() async {
+    final rows = await (_db.select(_db.characters)
+          ..where((t) => t.tokenCount.equals(0)))
+        .get();
+    if (rows.isEmpty) return;
+
+    final updates = <String, int>{};
+    for (final row in rows) {
+      final count = estimateCharacterTokens(_toModel(row));
+      if (count > 0) updates[row.charId] = count;
+      // Yield between encodes so a large library doesn't jank the UI thread.
+      await Future<void>.delayed(Duration.zero);
+    }
+    if (updates.isEmpty) return;
+
+    await _db.batch((b) {
+      updates.forEach((id, count) {
+        b.update(
+          _db.characters,
+          CharactersCompanion(tokenCount: Value(count)),
+          where: ($CharactersTable t) => t.charId.equals(id),
+        );
+      });
+    });
   }
 
   Future<Map<String, dynamic>> updateExtensionsJson(
@@ -203,6 +237,10 @@ class CharacterRepo implements SyncCharacterStore {
           .go();
     }
     await (_db.delete(_db.chatSessions)..where((t) => t.characterId.equals(id))).go();
+    // Drop folder memberships for this character (local folders feature).
+    await (_db.delete(_db.characterFolderMembers)
+          ..where((t) => t.charId.equals(id)))
+        .go();
     await (_db.delete(_db.characters)..where((t) => t.charId.equals(id))).go();
   }
 
@@ -241,6 +279,14 @@ class CharacterRepo implements SyncCharacterStore {
             createdAt: Value(currentTimestampSeconds()),
             tagsJson: Value(jsonEncode(tags)),
             alternateGreetingsJson: Value(jsonEncode(alternateGreetings)),
+            tokenCount: Value(estimateCharacterTokensFromParts(
+              name: name,
+              description: description,
+              personality: personality,
+              scenario: scenario,
+              firstMes: firstMes,
+              mesExample: mesExample,
+            )),
           ),
         );
   }
@@ -285,6 +331,7 @@ class CharacterRepo implements SyncCharacterStore {
       characterVersion: c.characterVersion,
       macroName: c.macroName,
       picksHash: c.picksHash,
+      tokenCount: c.tokenCount,
     );
   }
 
@@ -313,6 +360,7 @@ class CharacterRepo implements SyncCharacterStore {
         characterVersion: Value(m.characterVersion),
         macroName: Value(m.macroName),
         picksHash: Value(m.picksHash),
+        tokenCount: Value(m.tokenCount),
       );
 
   String? _encodeCharacterExtensions(Character m) {

@@ -14,6 +14,7 @@ import '../../../core/models/character.dart';
 import '../../../core/services/character_book_converter.dart';
 import '../../../core/services/character_exporter.dart';
 import '../../../core/services/file_export_service.dart';
+import '../../../core/state/character_folder_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../core/utils/platform_paths.dart';
@@ -23,25 +24,23 @@ import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../character_detail_screen.dart';
-import '../../../core/llm/tokenizer.dart' as tok;
-
-/// Heuristic token count for a local character, mirroring what the prompt
-/// builder concatenates. Shared by [CharacterCard] and the My Characters token
-/// filter so both hit the same tokenizer cache entry.
-int estimateCharacterTokens(Character char) {
-  var text = char.name;
-  if (char.description != null) text += '\n${char.description}';
-  if (char.personality != null) text += '\n${char.personality}';
-  if (char.scenario != null) text += '\n${char.scenario}';
-  if (char.firstMes != null) text += '\n${char.firstMes}';
-  if (char.mesExample != null) text += '\n${char.mesExample}';
-  return tok.estimateTokens(text);
-}
+import '../../../core/llm/character_tokens.dart';
+import 'add_to_folder_sheet.dart';
 
 class CharacterCard extends ConsumerStatefulWidget {
   final Character character;
   final Duration entryDelay;
-  const CharacterCard({super.key, required this.character, this.entryDelay = Duration.zero});
+
+  /// When the card is shown inside a folder, this is that folder's id — it
+  /// enables the "Remove from folder" action.
+  final String? folderId;
+
+  const CharacterCard({
+    super.key,
+    required this.character,
+    this.entryDelay = Duration.zero,
+    this.folderId,
+  });
 
   @override
   ConsumerState<CharacterCard> createState() => _CharacterCardState();
@@ -64,10 +63,15 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         : character.name;
   }
 
+  /// Prefer the cached count persisted on import/save; fall back to a live
+  /// (memoized) estimate only for rows that predate the cached column.
+  int _resolveTokens(Character c) =>
+      c.tokenCount > 0 ? c.tokenCount : estimateCharacterTokens(c);
+
   @override
   void initState() {
     super.initState();
-    _tokenCount = estimateCharacterTokens(widget.character);
+    _tokenCount = _resolveTokens(widget.character);
     _entryCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -88,7 +92,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   void didUpdateWidget(CharacterCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.character != widget.character) {
-      _tokenCount = estimateCharacterTokens(widget.character);
+      _tokenCount = _resolveTokens(widget.character);
     }
   }
 
@@ -285,6 +289,32 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
                 .add(character.copyWith(fav: !character.fav));
           },
         ),
+        BottomSheetItem(
+          icon: Icons.create_new_folder_outlined,
+          label: 'action_add_to_folder'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              useRootNavigator: true,
+              useSafeArea: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => AddToFolderSheet(characterId: character.id),
+            );
+          },
+        ),
+        if (widget.folderId != null)
+          BottomSheetItem(
+            icon: Icons.folder_off_outlined,
+            label: 'action_remove_from_folder'.tr(),
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              ref
+                  .read(characterFolderRepoProvider)
+                  .removeMember(widget.folderId!, character.id);
+            },
+          ),
         BottomSheetItem(
           icon: Icons.delete_rounded,
           label: 'action_delete'.tr(),

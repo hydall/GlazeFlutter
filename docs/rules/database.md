@@ -64,7 +64,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **29**
+Current version: **32**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -79,6 +79,9 @@ Migration history:
 - v27: added `info_blocks.swipe_id` INTEGER DEFAULT 0 (scopes ext blocks per message swipe); backfill `api_configs` columns missing from partial migrations (`top_k`, penalties, cache/session modes)
 - v28: data migration — `UPDATE info_blocks SET swipe_id = 0 WHERE swipe_id IS NULL` (backfill for rows that survived v27 with NULL)
 - v29: added `memory_catalog_rows` table for rebuildable per-session Memory Catalog state
+- v30: added `chat_summaries.enabled` BOOL DEFAULT 1 (+ backfill NULL → 1)
+- v31: added `character_folders` + `character_folder_members` tables (local character folders; composite PK `{folderId, charId}` enforces no-duplicate-within-folder)
+- v32: added `characters.tokenCount` INTEGER DEFAULT 0 (cached estimated token count; computed on import/save, backfilled in background for existing rows)
 
 ---
 

@@ -245,7 +245,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return SessionLifecycleTracker(
       charId: charId,
       child: PopScope(
-        canPop: _drawerCtrl.canPop() && !_search.showSearch,
+        // Never allow a native pop. Chat is always reached via
+        // `context.go('/chat/...')`, which replaces the navigation stack — so a
+        // real pop has nothing beneath it and the OS closes the app instead of
+        // returning to the parent. We intercept every back gesture: dismiss any
+        // open overlay first, otherwise navigate up to '/' (mirrors `onBack`).
+        canPop: false,
         onPopInvokedWithResult: (didPop, result) {
           if (didPop) return;
           if (_drawerCtrl.inputFocus.hasFocus) {
@@ -260,6 +265,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             _search.closeSearch();
             return;
           }
+          context.go('/');
         },
         child: GlazeScaffold(
           extendBodyBehindHeader: true,

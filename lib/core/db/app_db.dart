@@ -12,6 +12,8 @@ part 'app_db.g.dart';
 @DriftDatabase(
   tables: [
     Characters,
+    CharacterFolders,
+    CharacterFolderMembers,
     ChatSessions,
     Presets,
     ApiConfigs,
@@ -31,7 +33,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 32;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -317,6 +319,27 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'UPDATE chat_summaries SET enabled = 1 WHERE enabled IS NULL',
         );
+      }
+      if (from < 31) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('character_folders')) {
+          await m.createTable(characterFolders);
+        }
+        if (!tableNames.contains('character_folder_members')) {
+          await m.createTable(characterFolderMembers);
+        }
+      }
+      if (from < 32) {
+        final cols = await customSelect(
+          'PRAGMA table_info("characters")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('token_count')) {
+          await m.addColumn(characters, characters.tokenCount);
+        }
       }
     },
   );

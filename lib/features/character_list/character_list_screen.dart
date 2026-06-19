@@ -10,9 +10,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/db/repositories/character_repo.dart';
-import '../../core/models/character.dart';
 import '../../core/services/character_book_converter.dart';
 import '../../core/services/character_importer.dart';
+import '../../core/state/character_folder_provider.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
@@ -29,6 +29,7 @@ import '../character_gallery/gallery_provider.dart';
 import '../picks/widgets/picks_grid.dart';
 import '../settings/app_settings_provider.dart';
 import 'character_detail_screen.dart';
+import 'filtered_characters_provider.dart';
 import 'widgets/widgets.dart';
 
 class CharacterListScreen extends ConsumerStatefulWidget {
@@ -48,6 +49,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   int _tabIndex = 0;
   String _searchQuery = '';
   CharacterListFilters _filters = const CharacterListFilters();
+  String? _currentFolderId;
   String _picksTitle = 'Our Picks';
   bool _picksCanGoBack = false;
   VoidCallback? _picksGoBackFn;
@@ -76,12 +78,16 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   @override
   ShellHeaderConfig buildShellHeader() {
     final inSearch = _searchExpanded && _tabIndex != 2;
+    final inFolder = _tabIndex == 0 && _currentFolderId != null;
+    final folderTitle = inFolder ? _folderName(_currentFolderId!) : null;
     return ShellHeaderConfig(
       title: inSearch
           ? null
-          : (_tabIndex == 2 ? _picksTitle : 'header_characters'.tr()),
+          : (_tabIndex == 2
+                ? _picksTitle
+                : (folderTitle ?? 'header_characters'.tr())),
       titleWidget: inSearch ? _buildSearchField(context) : null,
-      showBack: _tabIndex == 2,
+      showBack: _tabIndex == 2 || inFolder,
       onBack: _tabIndex == 2
           ? (_picksCanGoBack && _picksGoBackFn != null
                 ? _picksGoBackFn
@@ -89,6 +95,11 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                     setState(() => _tabIndex = 0);
                     refreshShellHeader();
                   })
+          : inFolder
+          ? () {
+              setState(() => _currentFolderId = null);
+              refreshShellHeader();
+            }
           : null,
       actions: _tabIndex == 2
           ? null
@@ -308,11 +319,20 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     );
   }
 
+  String? _folderName(String id) {
+    final folders = ref.read(characterFoldersProvider).value;
+    return folders?.where((f) => f.id == id).firstOrNull?.name;
+  }
+
   Widget _buildMyCharacters(
     BuildContext context,
     double topPad,
     double navHeight,
   ) {
+    if (_currentFolderId != null) {
+      return _buildFolderContents(context, topPad, navHeight);
+    }
+
     final showOurPicks =
         _searchQuery.isEmpty &&
         !_filters.isActive &&
@@ -368,6 +388,14 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
             tabBar: _buildTabBar(),
             filterCount: _filters.activeCount,
             onFilterTap: () => _showCharacterFilterSheet(context),
+            headerSliver: SliverToBoxAdapter(
+              child: CharacterFoldersSection(
+                onOpenFolder: (id) {
+                  setState(() => _currentFolderId = id);
+                  refreshShellHeader();
+                },
+              ),
+            ),
             showOurPicksCard: showOurPicks,
             onOurPicksTap: () {
               setState(() => _tabIndex = 2);
@@ -394,6 +422,19 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     );
   }
 
+  /// Builds the query for [filteredCharactersProvider] from current UI state.
+  CharacterQuery _query({String? folderId}) => CharacterQuery(
+        search: _searchQuery,
+        favOnly: _filters.favOnly,
+        tags: _filters.tagNames.toList()..sort(),
+        minTokens: _filters.minTokens,
+        maxTokens: _filters.maxTokens,
+        hasTokenFilter: _filters.hasTokenFilter,
+        sortBy: _sortBy,
+        sortDir: _sortDir,
+        folderId: folderId,
+      );
+
   Widget _buildFilteredResults(
     BuildContext context,
     double topPad,
@@ -409,36 +450,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
       ),
-      data: (all) {
-        final q = _searchQuery.toLowerCase();
-        final filtered = all
-            .where((c) {
-              // Search: favorites always surface, otherwise match by name.
-              if (_searchQuery.isNotEmpty) {
-                final displayName = c.displayName?.toLowerCase() ?? '';
-                final matchesSearch = c.fav ||
-                    c.name.toLowerCase().contains(q) ||
-                    displayName.contains(q);
-                if (!matchesSearch) return false;
-              }
-              // Favorites filter.
-              if (_filters.favOnly && !c.fav) return false;
-              // Tags filter (character must carry every selected tag).
-              if (_filters.tagNames.isNotEmpty) {
-                final charTags = c.tags.toSet();
-                if (!_filters.tagNames.every(charTags.contains)) return false;
-              }
-              // Token range filter (estimated, cached per character).
-              if (_filters.hasTokenFilter) {
-                final tokens = estimateCharacterTokens(c);
-                if (tokens < _filters.minTokens || tokens > _filters.maxTokens) {
-                  return false;
-                }
-              }
-              return true;
-            })
-            .toList();
-        final sorted = _sortChars(filtered);
+      data: (_) {
+        // Filtering + sorting happens in the (cached) provider, not here.
+        final sorted = ref.watch(filteredCharactersProvider(_query()));
 
         if (sorted.isEmpty) {
           return CustomScrollView(
@@ -480,6 +494,62 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           tabBar: _buildTabBar(),
           filterCount: _filters.activeCount,
           onFilterTap: () => _showCharacterFilterSheet(context),
+          onSortDirToggle: () => setState(() {
+            _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
+          }),
+          onSortTypeChanged: (t) => setState(() => _sortBy = t),
+        );
+      },
+    );
+  }
+
+  Widget _buildFolderContents(
+    BuildContext context,
+    double topPad,
+    double navHeight,
+  ) {
+    final folderId = _currentFolderId!;
+    final chars = ref.watch(charactersProvider);
+    return chars.when(
+      loading: () =>
+          Center(child: CircularProgressIndicator(color: context.cs.primary)),
+      error: (e, _) => Center(
+        child: Text(
+          '${'title_error'.tr()}: $e',
+          style: TextStyle(color: context.cs.onSurfaceVariant),
+        ),
+      ),
+      data: (_) {
+        final sorted =
+            ref.watch(filteredCharactersProvider(_query(folderId: folderId)));
+
+        if (sorted.isEmpty) {
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: SizedBox(height: topPad)),
+              SliverToBoxAdapter(child: _buildTabBar()),
+              SliverFillRemaining(
+                child: Center(
+                  child: Text(
+                    'folder_empty'.tr(),
+                    style: TextStyle(color: context.cs.onSurfaceVariant),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+        return CharacterGrid(
+          characters: sorted,
+          totalCount: sorted.length,
+          sortBy: _sortBy,
+          sortDir: _sortDir,
+          topPadding: topPad,
+          bottomPadding: navHeight + 20,
+          tabBar: _buildTabBar(),
+          filterCount: _filters.activeCount,
+          onFilterTap: () => _showCharacterFilterSheet(context),
+          folderId: folderId,
           onSortDirToggle: () => setState(() {
             _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
           }),
@@ -550,35 +620,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         },
       ),
     );
-  }
-
-  List<Character> _sortChars(List<Character> chars) {
-    final list = List<Character>.from(chars);
-    final effectiveSort = _sortBy == SortType.lastChat
-        ? SortType.name
-        : _sortBy;
-    String displayNameOf(Character c) {
-      final displayName = c.displayName?.trim();
-      return (displayName != null && displayName.isNotEmpty)
-          ? displayName
-          : c.name;
-    }
-
-    list.sort((a, b) {
-      if (a.fav != b.fav) return a.fav ? -1 : 1;
-      final cmp = switch (effectiveSort) {
-        SortType.name => displayNameOf(a).toLowerCase().compareTo(
-          displayNameOf(b).toLowerCase(),
-        ),
-        SortType.date => a.createdAt.compareTo(b.createdAt),
-        SortType.lastChat => displayNameOf(a).toLowerCase().compareTo(
-          displayNameOf(b).toLowerCase(),
-        ),
-      };
-      if (cmp != 0) return _sortDir == SortDir.desc ? -cmp : cmp;
-      return a.id.compareTo(b.id);
-    });
-    return list;
   }
 
   Future<void> _showAddSheet(BuildContext context, WidgetRef ref) async {

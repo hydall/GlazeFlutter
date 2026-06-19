@@ -28,6 +28,13 @@ class CharacterGrid extends StatelessWidget {
   final int filterCount;
   final VoidCallback? onFilterTap;
 
+  /// Optional sliver inserted right after [tabBar] (e.g. the folders section).
+  final Widget? headerSliver;
+
+  /// When set, cards are rendered inside this folder and expose "Remove from
+  /// folder".
+  final String? folderId;
+
   const CharacterGrid({
     super.key,
     required this.characters,
@@ -46,6 +53,8 @@ class CharacterGrid extends StatelessWidget {
     this.hasMore = false,
     this.filterCount = 0,
     this.onFilterTap,
+    this.headerSliver,
+    this.folderId,
   });
 
   @override
@@ -55,6 +64,7 @@ class CharacterGrid extends StatelessWidget {
         if (topPadding > 0)
           SliverToBoxAdapter(child: SizedBox(height: topPadding)),
         if (tabBar != null) SliverToBoxAdapter(child: tabBar!),
+        ?headerSliver,
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -97,18 +107,19 @@ class CharacterGrid extends StatelessWidget {
               childAspectRatio: 2 / 3,
             ),
             delegate: SliverChildBuilderDelegate(
+              // No explicit RepaintBoundary: SliverChildBuilderDelegate already
+              // wraps each child in one (addRepaintBoundaries: true by default).
               (ctx, i) {
                 if (showOurPicksCard && i == 0) {
-                  return RepaintBoundary(
-                    child: _OurPicksCard(
-                      onTap: onOurPicksTap,
-                      onHide: onOurPicksHide,
-                    ),
+                  return _OurPicksCard(
+                    onTap: onOurPicksTap,
+                    onHide: onOurPicksHide,
                   );
                 }
                 final charIndex = showOurPicksCard ? i - 1 : i;
-                return RepaintBoundary(
-                  child: CharacterCard(character: characters[charIndex]),
+                return CharacterCard(
+                  character: characters[charIndex],
+                  folderId: folderId,
                 );
               },
               childCount: characters.length + (showOurPicksCard ? 1 : 0),

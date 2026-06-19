@@ -30,9 +30,43 @@ class Characters extends Table {
   TextColumn get characterVersion => text().withDefault(const Constant('1'))();
   TextColumn get macroName => text().nullable()();
   TextColumn get picksHash => text().nullable()();
+  IntColumn get tokenCount => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {charId};
+}
+
+@DataClassName('CharacterFolderRow')
+class CharacterFolders extends Table {
+  @override
+  String get tableName => 'character_folders';
+
+  TextColumn get folderId => text()();
+  TextColumn get name => text()();
+  TextColumn get color => text().nullable()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {folderId};
+}
+
+@DataClassName('CharacterFolderMemberRow')
+@TableIndex(name: 'idx_cfm_folder', columns: {#folderId})
+@TableIndex(name: 'idx_cfm_char', columns: {#charId})
+class CharacterFolderMembers extends Table {
+  @override
+  String get tableName => 'character_folder_members';
+
+  TextColumn get folderId => text()();
+  TextColumn get charId => text()();
+  IntColumn get addedAt => integer().withDefault(const Constant(0))();
+
+  // Composite PK: a character can live in many folders (same charId across
+  // different folderId rows), but cannot be duplicated within one folder.
+  @override
+  Set<Column> get primaryKey => {folderId, charId};
 }
 
 @DataClassName('ChatSessionRow')

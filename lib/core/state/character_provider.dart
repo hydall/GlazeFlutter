@@ -208,7 +208,11 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
       },
     );
     ref.onDispose(() => _sub?.cancel());
-    return repo.getAll();
+    final initial = await repo.getAll();
+    // One-time: populate cached token counts for rows predating the column.
+    // Unawaited + chunked so it never blocks first paint.
+    unawaited(repo.backfillMissingTokenCounts());
+    return initial;
   }
 
   Future<void> add(Character character) async {
