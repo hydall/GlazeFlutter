@@ -188,6 +188,8 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     final rootNav = Navigator.of(context, rootNavigator: true);
     final char = ref.read(characterByIdProvider(widget.charId));
     final isHidden = char?.hidden ?? false;
+    final catalogUrl = char?.extensions['catalogUrl'];
+    final hasCatalogUrl = catalogUrl is String && catalogUrl.isNotEmpty;
     GlazeBottomSheet.show<void>(
       context,
       items: [
@@ -228,6 +230,15 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             _showVariations(context);
           },
         ),
+        if (hasCatalogUrl)
+          BottomSheetItem(
+            icon: Icons.travel_explore_outlined,
+            label: 'action_open_in_catalog'.tr(),
+            onTap: () {
+              rootNav.pop();
+              _openExternal(catalogUrl);
+            },
+          ),
         BottomSheetItem(
           icon: Icons.badge_outlined,
           label: 'action_convert_to_persona'.tr(),

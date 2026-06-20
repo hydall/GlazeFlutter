@@ -223,6 +223,7 @@
     "action_chat_stats": "Статистика чата",
     "action_copy": "Скопировать",
     "action_edit": "Изменить",
+    "action_open_in_catalog": "Открыть в каталоге",
     "action_convert_to_persona": "Конвертировать в персону",
     "action_convert_to_character": "Конвертировать в персонажа",
     "convert_to_persona_done": "Персона создана",

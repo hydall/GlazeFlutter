@@ -251,7 +251,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     await search(reset: false);
   }
 
-  Future<String> importCharacter(DownloadedCharacter downloaded) async {
+  Future<String> importCharacter(
+    DownloadedCharacter downloaded, {
+    String? sourceUrl,
+  }) async {
     final charRepo = _ref.read(characterRepoProvider);
     final imageStorage = await _ref.read(imageStorageProvider.future);
     final lorebookRepo = _ref.read(lorebookRepoProvider);
@@ -283,6 +286,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       creator: charData.creator,
       creatorId: charData.creatorId,
       avatarPath: avatarPath,
+      sourceUrl: sourceUrl,
     );
 
     if (charData.characterBook is Map) {

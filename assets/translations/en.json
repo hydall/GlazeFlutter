@@ -222,6 +222,7 @@
     "action_chat_stats": "Chat Statistics",
     "action_copy": "Copy",
     "action_edit": "Edit",
+    "action_open_in_catalog": "Open in Catalog",
     "action_convert_to_persona": "Convert to Persona",
     "action_convert_to_character": "Convert to Character",
     "convert_to_persona_done": "Persona created",

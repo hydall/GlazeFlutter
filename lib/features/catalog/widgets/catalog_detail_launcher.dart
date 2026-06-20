@@ -90,7 +90,7 @@ class _CatalogDetailLauncherState
     try {
       final importedCharId = await ref
           .read(catalogProvider.notifier)
-          .importCharacter(downloaded);
+          .importCharacter(downloaded, sourceUrl: _sourceUrl());
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop(importedCharId);
       }

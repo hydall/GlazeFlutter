@@ -155,7 +155,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
           charData: result.charData!,
           avatarUrl: result.avatarUrl,
         );
-        await notifier.importCharacter(downloaded);
+        await notifier.importCharacter(downloaded, sourceUrl: url);
         if (mounted) {
           Navigator.pop(context);
           GlazeToast.show(context, 'Imported ${result.charData!.name}');

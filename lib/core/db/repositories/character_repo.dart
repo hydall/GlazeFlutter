@@ -363,7 +363,11 @@ class CharacterRepo implements SyncCharacterStore {
     String creator = '',
     String creatorId = '',
     String? avatarPath,
+    String? sourceUrl,
   }) async {
+    final extensionsJson = (sourceUrl != null && sourceUrl.isNotEmpty)
+        ? jsonEncode({'catalogUrl': sourceUrl})
+        : null;
     await _db.into(_db.characters).insertOnConflictUpdate(
           CharactersCompanion(
             charId: Value(id),
@@ -382,6 +386,7 @@ class CharacterRepo implements SyncCharacterStore {
             createdAt: Value(currentTimestampSeconds()),
             tagsJson: Value(jsonEncode(tags)),
             alternateGreetingsJson: Value(jsonEncode(alternateGreetings)),
+            extensionsJson: Value(extensionsJson),
             tokenCount: Value(estimateCharacterTokensFromParts(
               name: name,
               description: description,
