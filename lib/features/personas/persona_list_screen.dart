@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../core/models/persona.dart';
+import '../../core/services/persona_character_converter.dart';
 import '../../core/utils/platform_paths.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
@@ -18,6 +19,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/generic_editor.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/help_tip.dart';
 import '../../shared/widgets/sheet_view.dart';
@@ -197,6 +199,19 @@ class _PersonaTile extends ConsumerWidget {
                         onTap: () {
                           Navigator.of(context, rootNavigator: true).pop();
                           openEditor(persona);
+                        },
+                      ),
+                      BottomSheetItem(
+                        label: 'action_convert_to_character'.tr(),
+                        icon: Icons.person_outline,
+                        onTap: () async {
+                          Navigator.of(context, rootNavigator: true).pop();
+                          await convertPersonaToCharacter(ref, persona);
+                          if (!context.mounted) return;
+                          GlazeToast.show(
+                            context,
+                            'convert_to_character_done'.tr(),
+                          );
                         },
                       ),
                       BottomSheetItem(

@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/character.dart';
 import '../../core/services/chat_import_export.dart';
+import '../../core/services/persona_character_converter.dart';
 import '../../core/utils/html_to_markdown.dart';
 import '../../core/utils/platform_paths.dart';
 import '../../core/state/character_provider.dart';
@@ -225,6 +226,17 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             rootNav.pop();
             if (!mounted) return;
             _showVariations(context);
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.badge_outlined,
+          label: 'action_convert_to_persona'.tr(),
+          onTap: () async {
+            rootNav.pop();
+            if (char == null || !mounted) return;
+            await convertCharacterToPersona(ref, char);
+            if (!mounted) return;
+            GlazeToast.show(context, 'convert_to_persona_done'.tr());
           },
         ),
         BottomSheetItem(
