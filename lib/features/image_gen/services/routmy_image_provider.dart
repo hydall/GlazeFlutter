@@ -20,7 +20,7 @@ class RoutmyImageProvider {
     List<String>? referenceImages,
     CancelToken? cancelToken,
   }) async {
-    final isChatModel = model.startsWith('google/');
+    final isChatModel = RoutMyConstants.chatImageModels.contains(model);
     final hasRefs = referenceImages != null && referenceImages.isNotEmpty;
     // For non-chat (OpenAI-style) models, reference images are only honored by
     // the edits endpoint (/v1/images/edits with an `images` array). The plain
