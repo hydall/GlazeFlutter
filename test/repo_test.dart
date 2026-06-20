@@ -512,6 +512,65 @@ void main() {
         expect(result!.variantGroupId, equals('solo'));
       });
     });
+
+    group('hidden', () {
+      test('hidden characters are excluded from the list by default', () async {
+        await repo.put(Character(id: 'a', name: 'Alice'));
+        await repo.put(Character(id: 'b', name: 'Bob', hidden: true));
+
+        final page = await repo.getPage(
+          limit: 50,
+          offset: 0,
+          sort: CharacterSortField.name,
+          dir: CharacterSortDir.asc,
+        );
+        expect(page.map((c) => c.id), equals(['a']));
+        expect(await repo.watchTotalCount().first, 1);
+
+        // getAll/getById still see hidden rows (chat, detail, sync depend on it).
+        expect((await repo.getAll()).length, 2);
+        expect((await repo.getById('b'))!.hidden, isTrue);
+      });
+
+      test('includeHidden surfaces hidden characters and counts them', () async {
+        await repo.put(Character(id: 'a', name: 'Alice'));
+        await repo.put(Character(id: 'b', name: 'Bob', hidden: true));
+
+        final page = await repo.getPage(
+          limit: 50,
+          offset: 0,
+          sort: CharacterSortField.name,
+          dir: CharacterSortDir.asc,
+          includeHidden: true,
+        );
+        expect(page.map((c) => c.id), equals(['a', 'b']));
+        expect(await repo.watchTotalCount(includeHidden: true).first, 2);
+      });
+
+      test('setHidden hides/reveals every row in a variation group', () async {
+        await repo.put(Character(id: 'c1', name: 'c1', variantGroupId: 'c1'));
+        await repo.put(Character(
+          id: 'c1b',
+          name: 'c1b',
+          variantGroupId: 'c1',
+          variantOrder: 1,
+        ));
+
+        await repo.setHidden('c1', true);
+        expect((await repo.getVariants('c1')).every((c) => c.hidden), isTrue);
+        // Representative is hidden → group leaves the default list.
+        final hiddenPage = await repo.getPage(
+          limit: 50,
+          offset: 0,
+          sort: CharacterSortField.name,
+          dir: CharacterSortDir.asc,
+        );
+        expect(hiddenPage, isEmpty);
+
+        await repo.setHidden('c1', false);
+        expect((await repo.getVariants('c1')).any((c) => c.hidden), isFalse);
+      });
+    });
   });
 
   group('parseSillyTavernPreset', () {

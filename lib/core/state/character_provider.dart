@@ -20,14 +20,26 @@ class InfiniteCharactersKey {
   final CharacterSortField sort;
   final CharacterSortDir dir;
 
-  const InfiniteCharactersKey({required this.sort, required this.dir});
+  /// When true the page query includes hidden characters (the user revealed
+  /// them via the secret gesture). Part of the key so toggling reveal rebuilds
+  /// the provider with a fresh query.
+  final bool showHidden;
+
+  const InfiniteCharactersKey({
+    required this.sort,
+    required this.dir,
+    this.showHidden = false,
+  });
 
   @override
   bool operator ==(Object other) =>
-      other is InfiniteCharactersKey && other.sort == sort && other.dir == dir;
+      other is InfiniteCharactersKey &&
+      other.sort == sort &&
+      other.dir == dir &&
+      other.showHidden == showHidden;
 
   @override
-  int get hashCode => Object.hash(sort, dir);
+  int get hashCode => Object.hash(sort, dir, showHidden);
 }
 
 /// Default key for the My Characters grid: newest first.
@@ -100,6 +112,44 @@ void bumpAvatarVersion(dynamic ref) {
   ref.read(avatarVersionProvider.notifier).state++;
 }
 
+/// Number of taps on the Characters tab required to toggle reveal-hidden mode.
+const int kRevealHiddenTapCount = 10;
+
+/// Window in which those taps must occur.
+const Duration kRevealHiddenTapWindow = Duration(milliseconds: 1500);
+
+/// Whether hidden characters are currently revealed in the My Characters list.
+///
+/// Session-only (resets to `false` on app restart) so hidden characters re-hide
+/// themselves automatically — the gesture must be repeated to reveal them again.
+/// Toggled by [RevealHiddenNotifier.registerCharactersTabTap] when the user taps
+/// the Characters tab [kRevealHiddenTapCount] times within [kRevealHiddenTapWindow].
+final revealHiddenCharactersProvider =
+    NotifierProvider<RevealHiddenNotifier, bool>(RevealHiddenNotifier.new);
+
+class RevealHiddenNotifier extends Notifier<bool> {
+  final List<int> _tapTimes = <int>[];
+
+  @override
+  bool build() => false;
+
+  /// Records a tap on the Characters tab. Returns the new reveal state when the
+  /// gesture completes (toggle happened), or `null` when it didn't.
+  bool? registerCharactersTabTap() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _tapTimes.add(now);
+    _tapTimes.removeWhere(
+      (t) => now - t > kRevealHiddenTapWindow.inMilliseconds,
+    );
+    if (_tapTimes.length >= kRevealHiddenTapCount) {
+      _tapTimes.clear();
+      state = !state;
+      return state;
+    }
+    return null;
+  }
+}
+
 class InfiniteCharactersNotifier
     extends AsyncNotifier<InfiniteCharactersState> {
   InfiniteCharactersNotifier(this.arg);
@@ -117,12 +167,14 @@ class InfiniteCharactersNotifier
     await _itemsSub?.cancel();
     await _countSub?.cancel();
 
-    final initialCount = await repo.watchTotalCount().first;
+    final initialCount =
+        await repo.watchTotalCount(includeHidden: arg.showHidden).first;
     final initialItems = await repo.getPage(
       limit: _loadedLimit,
       offset: 0,
       sort: arg.sort,
       dir: arg.dir,
+      includeHidden: arg.showHidden,
     );
 
     state = AsyncData(
@@ -148,7 +200,13 @@ class InfiniteCharactersNotifier
     final repo = ref.read(characterRepoProvider);
     _itemsSub?.cancel();
     _itemsSub = repo
-        .watchPage(limit: _loadedLimit, offset: 0, sort: arg.sort, dir: arg.dir)
+        .watchPage(
+          limit: _loadedLimit,
+          offset: 0,
+          sort: arg.sort,
+          dir: arg.dir,
+          includeHidden: arg.showHidden,
+        )
         .listen(
           (data) {
             final current = state.value;
@@ -170,7 +228,7 @@ class InfiniteCharactersNotifier
   void _subscribeCount() {
     final repo = ref.read(characterRepoProvider);
     _countSub?.cancel();
-    _countSub = repo.watchTotalCount().listen(
+    _countSub = repo.watchTotalCount(includeHidden: arg.showHidden).listen(
       (count) {
         final current = state.value;
         if (current == null) return;
@@ -282,6 +340,18 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
 
   Future<void> renameVariant(String charId, String name) async {
     await ref.read(characterRepoProvider).renameVariant(charId, name);
+    ref.invalidateSelf();
+  }
+
+  /// Hides or reveals a character's whole variation group. Resolves the group
+  /// from [charId] so callers can pass any member (including a standalone card).
+  Future<void> setHidden(String charId, bool hidden) async {
+    final repo = ref.read(characterRepoProvider);
+    final char = await repo.getById(charId);
+    final groupId = (char == null || char.variantGroupId.isEmpty)
+        ? charId
+        : char.variantGroupId;
+    await repo.setHidden(groupId, hidden);
     ref.invalidateSelf();
   }
 

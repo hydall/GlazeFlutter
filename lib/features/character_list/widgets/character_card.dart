@@ -182,6 +182,8 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
                       tokenCount: _tokenCount,
                     ),
                   ),
+                  if (character.hidden)
+                    const Positioned(top: 8, left: 8, child: _HiddenBadge()),
                   Positioned(
                     top: 8,
                     right: 8,
@@ -302,6 +304,24 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
             ref
                 .read(charactersProvider.notifier)
                 .add(character.copyWith(fav: !character.fav));
+          },
+        ),
+        BottomSheetItem(
+          icon: character.hidden
+              ? Icons.visibility_outlined
+              : Icons.visibility_off_outlined,
+          label: character.hidden ? 'action_unhide'.tr() : 'action_hide'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            ref
+                .read(charactersProvider.notifier)
+                .setHidden(character.id, !character.hidden);
+            GlazeToast.show(
+              context,
+              character.hidden
+                  ? 'char_unhidden_toast'.tr()
+                  : 'char_hidden_toast'.tr(),
+            );
           },
         ),
         BottomSheetItem(
@@ -552,6 +572,31 @@ class _SelectionCheck extends StatelessWidget {
       child: selected
           ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
           : null,
+    );
+  }
+}
+
+class _HiddenBadge extends StatelessWidget {
+  const _HiddenBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.5),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
+      child: const Icon(
+        Icons.visibility_off_rounded,
+        size: 18,
+        color: Colors.white,
+      ),
     );
   }
 }

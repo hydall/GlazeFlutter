@@ -185,6 +185,8 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
 
   void _openActionsMenu() {
     final rootNav = Navigator.of(context, rootNavigator: true);
+    final char = ref.read(characterByIdProvider(widget.charId));
+    final isHidden = char?.hidden ?? false;
     GlazeBottomSheet.show<void>(
       context,
       items: [
@@ -195,6 +197,16 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             rootNav.pop();
             if (!mounted) return;
             context.push('/character/${widget.charId}/edit');
+          },
+        ),
+        BottomSheetItem(
+          icon: isHidden
+              ? Icons.visibility_outlined
+              : Icons.visibility_off_outlined,
+          label: isHidden ? 'action_unhide'.tr() : 'action_hide'.tr(),
+          onTap: () {
+            rootNav.pop();
+            _toggleHidden(isHidden);
           },
         ),
         BottomSheetItem(
@@ -263,6 +275,17 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         ),
       ],
     ));
+  }
+
+  Future<void> _toggleHidden(bool wasHidden) async {
+    await ref
+        .read(charactersProvider.notifier)
+        .setHidden(widget.charId, !wasHidden);
+    if (!mounted) return;
+    GlazeToast.show(
+      context,
+      wasHidden ? 'char_unhidden_toast'.tr() : 'char_hidden_toast'.tr(),
+    );
   }
 
   void _showVariations(BuildContext context) {

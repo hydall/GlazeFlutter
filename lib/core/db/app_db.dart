@@ -33,7 +33,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 33;
+  int get schemaVersion => 34;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -362,6 +362,17 @@ class AppDatabase extends _$AppDatabase {
           "UPDATE characters SET variant_group_id = char_id "
           "WHERE variant_group_id IS NULL OR variant_group_id = ''",
         );
+      }
+      if (from < 34) {
+        // Hideable characters: the `hidden` flag excludes a character (group)
+        // from the My Characters list. Guarded like every prior column.
+        final cols = await customSelect(
+          'PRAGMA table_info("characters")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('hidden')) {
+          await m.addColumn(characters, characters.hidden);
+        }
       }
     },
   );

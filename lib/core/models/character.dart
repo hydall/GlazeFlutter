@@ -41,6 +41,7 @@ abstract class Character with _$Character {
     @Default('') String variantGroupId,
     String? variantName,
     @Default(0) int variantOrder,
+    @Default(false) bool hidden,
   }) = _Character;
 
   factory Character.fromJson(Map<String, dynamic> json) =>

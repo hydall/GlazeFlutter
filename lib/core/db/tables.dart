@@ -40,6 +40,11 @@ class Characters extends Table {
   TextColumn get variantName => text().nullable()();
   IntColumn get variantOrder => integer().withDefault(const Constant(0))();
 
+  // Hidden characters are excluded from the My Characters list (and its count)
+  // unless the user reveals them via the secret gesture (10 taps on the
+  // Characters tab within 1.5s). Applied group-wide for a variation group.
+  BoolColumn get hidden => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {charId};
 }

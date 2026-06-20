@@ -70,11 +70,14 @@ class CharacterQuery {
 final filteredCharactersProvider = Provider.autoDispose
     .family<List<Character>, CharacterQuery>((ref, q) {
       final all = ref.watch(charactersProvider).value ?? const <Character>[];
+      final showHidden = ref.watch(revealHiddenCharactersProvider);
 
       // Collapse variation groups to one representative card. Tags are unioned
       // across the group so search/filter match against every variation, and
       // fav is OR'd so a favorited variation surfaces its card.
       Iterable<Character> list = _collapseGroups(all);
+      // Hidden characters stay out of search/filter results unless revealed.
+      if (!showHidden) list = list.where((c) => !c.hidden);
       if (q.folderId != null) {
         final memberships =
             ref.watch(folderMembershipsProvider).value ??

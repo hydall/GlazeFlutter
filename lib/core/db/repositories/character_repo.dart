@@ -82,11 +82,21 @@ class CharacterRepo implements SyncCharacterStore {
         .map((rows) => rows.map(_toModel).toList());
   }
 
+  /// Representative-row predicate for the My Characters list: only the cover
+  /// (variant_order 0), and — unless [includeHidden] — only non-hidden rows.
+  Expression<bool> _listPredicate(bool includeHidden) {
+    final repOnly = _db.characters.variantOrder.equals(0);
+    return includeHidden
+        ? repOnly
+        : repOnly & _db.characters.hidden.equals(false);
+  }
+
   Future<List<Character>> getPage({
     required int limit,
     required int offset,
     required CharacterSortField sort,
     required CharacterSortDir dir,
+    bool includeHidden = false,
   }) async {
     if (sort == CharacterSortField.lastChat) {
       final rows = await (_db.select(_db.characters).join([
@@ -95,7 +105,7 @@ class CharacterRepo implements SyncCharacterStore {
               _db.chatSessions.characterId.equalsExp(_db.characters.charId),
             ),
           ])
-            ..where(_db.characters.variantOrder.equals(0))
+            ..where(_listPredicate(includeHidden))
             ..addColumns([_lastChatAtColumn()])
             ..groupBy([_db.characters.charId])
             ..orderBy(_lastChatOrderTerms(dir))
@@ -104,7 +114,7 @@ class CharacterRepo implements SyncCharacterStore {
       return rows.map((r) => _toModel(r.readTable(_db.characters))).toList();
     }
     final rows = await (_db.select(_db.characters)
-          ..where((t) => t.variantOrder.equals(0))
+          ..where((t) => _listPredicate(includeHidden))
           ..orderBy(_orderBy(sort, dir))
           ..limit(limit, offset: offset))
         .get();
@@ -116,6 +126,7 @@ class CharacterRepo implements SyncCharacterStore {
     required int offset,
     required CharacterSortField sort,
     required CharacterSortDir dir,
+    bool includeHidden = false,
   }) {
     if (sort == CharacterSortField.lastChat) {
       return (_db.select(_db.characters).join([
@@ -124,7 +135,7 @@ class CharacterRepo implements SyncCharacterStore {
               _db.chatSessions.characterId.equalsExp(_db.characters.charId),
             ),
           ])
-            ..where(_db.characters.variantOrder.equals(0))
+            ..where(_listPredicate(includeHidden))
             ..addColumns([_lastChatAtColumn()])
             ..groupBy([_db.characters.charId])
             ..orderBy(_lastChatOrderTerms(dir))
@@ -134,18 +145,18 @@ class CharacterRepo implements SyncCharacterStore {
               rows.map((r) => _toModel(r.readTable(_db.characters))).toList());
     }
     return (_db.select(_db.characters)
-          ..where((t) => t.variantOrder.equals(0))
+          ..where((t) => _listPredicate(includeHidden))
           ..orderBy(_orderBy(sort, dir))
           ..limit(limit, offset: offset))
         .watch()
         .map((rows) => rows.map(_toModel).toList());
   }
 
-  Stream<int> watchTotalCount() {
+  Stream<int> watchTotalCount({bool includeHidden = false}) {
     final countExp = _db.characters.charId.count();
     final query = _db.selectOnly(_db.characters)
       ..addColumns([countExp])
-      ..where(_db.characters.variantOrder.equals(0));
+      ..where(_listPredicate(includeHidden));
     return query.watchSingle().map((row) => row.read(countExp) ?? 0);
   }
 
@@ -315,6 +326,14 @@ class CharacterRepo implements SyncCharacterStore {
     ));
   }
 
+  /// Hides or reveals an entire variation group. Applied group-wide so that
+  /// promoting a sibling on delete never resurfaces a hidden character.
+  Future<void> setHidden(String groupId, bool hidden) async {
+    await (_db.update(_db.characters)
+          ..where((t) => t.variantGroupId.equals(groupId)))
+        .write(CharactersCompanion(hidden: Value(hidden)));
+  }
+
   /// Reassigns variant_order so [orderedIds] becomes 0..n-1 (index 0 = cover).
   Future<void> reorderVariants(String groupId, List<String> orderedIds) async {
     await _db.batch((b) {
@@ -419,6 +438,7 @@ class CharacterRepo implements SyncCharacterStore {
       variantGroupId: c.variantGroupId.isEmpty ? c.charId : c.variantGroupId,
       variantName: c.variantName,
       variantOrder: c.variantOrder,
+      hidden: c.hidden,
     );
   }
 
@@ -452,6 +472,7 @@ class CharacterRepo implements SyncCharacterStore {
             Value(m.variantGroupId.isEmpty ? m.id : m.variantGroupId),
         variantName: Value(m.variantName),
         variantOrder: Value(m.variantOrder),
+        hidden: Value(m.hidden),
       );
 
   String? _encodeCharacterExtensions(Character m) {

@@ -5,10 +5,12 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../core/state/character_provider.dart';
 import '../../features/settings/app_settings_provider.dart';
 import '../shell/nav_height_provider.dart';
 import '../theme/app_colors.dart';
 import 'glass_surface.dart';
+import 'glaze_toast.dart';
 
 String _iconSvg(String path) =>
     '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="$path"/></svg>';
@@ -26,6 +28,11 @@ class GlassNavBar extends ConsumerStatefulWidget {
   @override
   ConsumerState<GlassNavBar> createState() => _GlassNavBarState();
 }
+
+/// Index of the Characters tab in [_GlassNavBarState._items]. Tapping it
+/// [kRevealHiddenTapCount] times within [kRevealHiddenTapWindow] reveals hidden
+/// characters (secret gesture).
+const int _kCharactersTabIndex = 1;
 
 class _GlassNavBarState extends ConsumerState<GlassNavBar> {
   final _key = GlobalKey();
@@ -65,6 +72,18 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
     }
   }
 
+  void _registerCharactersTabTap() {
+    final revealed = ref
+        .read(revealHiddenCharactersProvider.notifier)
+        .registerCharactersTabTap();
+    if (revealed == null || !mounted) return;
+    HapticFeedback.heavyImpact();
+    GlazeToast.show(
+      context,
+      revealed ? 'hidden_chars_revealed'.tr() : 'hidden_chars_hidden'.tr(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
@@ -88,6 +107,7 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
               if (i != widget.currentIndex) {
                 HapticFeedback.selectionClick();
               }
+              if (i == _kCharactersTabIndex) _registerCharactersTabTap();
               widget.onTap(i);
             },
           ),

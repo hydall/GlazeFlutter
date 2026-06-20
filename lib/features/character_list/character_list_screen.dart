@@ -361,7 +361,11 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       return _buildFilteredResults(context, topPad, navHeight);
     }
 
-    final key = InfiniteCharactersKey(sort: _sortField, dir: _sortDirEnum);
+    final key = InfiniteCharactersKey(
+      sort: _sortField,
+      dir: _sortDirEnum,
+      showHidden: ref.watch(revealHiddenCharactersProvider),
+    );
     final infinite = ref.watch(infiniteCharactersProvider(key));
 
     return infinite.when(
