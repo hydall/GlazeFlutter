@@ -165,8 +165,9 @@ class MessageBridgeCommands {
     return _host.evalJs('window.bridge?.clearAll()');
   }
 
-  Future<void> scrollToBottom() {
-    return _host.evalJs('window.bridge?.scrollToBottom()');
+  Future<void> scrollToBottom({bool smooth = false}) {
+    final behavior = smooth ? "'smooth'" : "'auto'";
+    return _host.evalJs('window.bridge?.scrollToBottom($behavior)');
   }
 
   Future<void> scrollToMessage(String messageId, {bool highlight = false}) {

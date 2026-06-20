@@ -186,7 +186,8 @@ export class Bridge {
     const emitScrollToBottomVisibility = () => {
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
-      const show = distanceFromBottom > 240;
+      // Mirror Vue ChatView.onScroll(): button appears past 100px from bottom.
+      const show = distanceFromBottom > 100;
       if (lastShowScrollToBottom === show) return;
       lastShowScrollToBottom = show;
       this._sendToFlutter('onScrollToBottomVisibility', [show]);
@@ -405,6 +406,15 @@ export class Bridge {
     this._syncMessageControls(section, msg);
 
     this.renderer.updateMessageMeta(section, msg);
+
+    // Follow the bottom while a message streams in — ported from Vue
+    // ChatView.smartScroll() invoked on every generation chunk. Gated on the
+    // typing flag (the streamed message) and suppressed during search so the
+    // active match stays in view. The pin gate inside smartScroll keeps it from
+    // yanking a user who scrolled up.
+    if (msg.isTyping && !(this.renderer && this.renderer.searchQuery)) {
+      this.virtualList.smartScroll();
+    }
   }
 
   flush() { this._updateBatcher.flush(); }
@@ -536,8 +546,8 @@ export class Bridge {
     this.virtualList.clear();
   }
 
-  scrollToBottom() {
-    this.virtualList.scrollToBottom();
+  scrollToBottom(behavior = 'auto') {
+    this.virtualList.scrollToBottom(behavior);
     requestAnimationFrame(() => {
       this._sendToFlutter('onScrollToBottomVisibility', [false]);
     });
@@ -607,11 +617,45 @@ export class Bridge {
 
   setBottomPadding(px) {
     const container = document.getElementById('chat-container') || document.body;
+    const prevPadding = parseFloat(container.style.paddingBottom) || 0;
+    const paddingDiff = px - prevPadding;
+    if (Math.abs(paddingDiff) < 0.1) return;
+
+    // Ported from Vue ChatView.updateContentPadding() — but adapted to this
+    // architecture. In Vue the messages container itself shrinks when the
+    // keyboard opens (Android `marginBottom: keyboardOverlap`, iOS visualViewport
+    // height), so its formula compensates for that height change. Here the chat
+    // container is a FIXED full-screen viewport (`resizeToAvoidBottomInset:
+    // false`, the keyboard overlays it) — it never shrinks. Growing the bottom
+    // padding therefore does not move any content sitting above it, so the only
+    // case that needs a scroll change is "was parked at the bottom": re-pin so
+    // the last message rides up above the taller input bar / keyboard. Any other
+    // scroll position is already visually preserved with scrollTop untouched.
+    const wasAtBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 5;
+
     container.style.paddingBottom = px + 'px';
+
+    if (wasAtBottom) {
+      // Lock the virtual-scroll window logic while we programmatically re-pin so
+      // the keyboard-follow does not fight onContainerScroll / the pin tracker.
+      const vl = this.virtualList;
+      if (vl) {
+        vl.isProgrammaticScrolling = true;
+        clearTimeout(this._bottomPadUnlockTimer);
+        this._bottomPadUnlockTimer = setTimeout(() => {
+          vl.isProgrammaticScrolling = false;
+        }, 120);
+      }
+      // Reading scrollHeight forces a synchronous layout flush so the new
+      // padding is reflected before we re-pin.
+      container.scrollTop = container.scrollHeight - container.clientHeight;
+    }
+
     requestAnimationFrame(() => {
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
-      this._sendToFlutter('onScrollToBottomVisibility', [distanceFromBottom > 240]);
+      this._sendToFlutter('onScrollToBottomVisibility', [distanceFromBottom > 100]);
     });
   }
 

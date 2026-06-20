@@ -160,6 +160,15 @@ class UseVirtualScroll {
         this.scrollTimeout = null;
         this.scrollRaf = null;
         this.mounted = true;
+
+        // Mirrors Vue ChatView's `showScrollButton` gate for `smartScroll`:
+        // tracks whether the user is parked near the bottom. Updated only on
+        // *user* scrolls (programmatic scrolls are ignored) so that streaming
+        // content growth — which fires no scroll event — keeps following the
+        // bottom while the user has not deliberately scrolled away. Defaults to
+        // true because chats open pinned to the bottom.
+        this._pinnedToBottom = true;
+        this._smartScrollUnlock = null;
         
         this.visibleIndices = new Set();
         this.realVisibleIndices = new Set();
@@ -302,10 +311,27 @@ class UseVirtualScroll {
         this._onItemsChanged('remove');
     }
 
+    // Lightweight "follow the bottom while streaming" — ported from Vue
+    // ChatView.smartScroll(): only re-pins to the bottom when the user has not
+    // scrolled away (and not while searching). Unlike scrollToBottom() it does
+    // not rebuild the render window or stack timeouts, so it is cheap enough to
+    // call on every streamed chunk.
+    smartScroll() {
+        if (!this._pinnedToBottom) return;
+        if (this.items.length === 0) return;
+        this.isProgrammaticScrolling = true;
+        this.container.scrollTop = this.container.scrollHeight;
+        clearTimeout(this._smartScrollUnlock);
+        this._smartScrollUnlock = setTimeout(() => {
+            this.isProgrammaticScrolling = false;
+        }, 80);
+    }
+
     scrollToBottom(behavior = 'auto') {
         const count = this.items.length;
         if (count === 0) return;
-        
+
+        this._pinnedToBottom = true;
         let effectiveBehavior = behavior;
         if (this.container.scrollHeight - this.container.scrollTop - this.container.clientHeight > 3000) {
             effectiveBehavior = 'auto';
@@ -607,6 +633,15 @@ class UseVirtualScroll {
     }
 
     _onContainerScroll() {
+        // Update the bottom-pin tracker on EVERY scroll event — including the
+        // ones our own programmatic scrolls fire. This mirrors Vue's separate
+        // `onScroll` handler updating `showScrollButton` unconditionally. It is
+        // essential during streaming: smartScroll keeps isProgrammaticScrolling
+        // continuously true, so gating this behind the early-return below would
+        // make it impossible for the user to scroll up and detach from the
+        // auto-follow. smartScroll re-pins to the exact bottom, so its own
+        // events keep this true; only a genuine user scroll-up flips it false.
+        this._pinnedToBottom = this.isNearBottom(100);
         if (this.isProgrammaticScrolling) return;
         this.isScrolling = true;
         clearTimeout(this.scrollTimeout);

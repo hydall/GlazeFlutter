@@ -843,10 +843,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   /// notification tap) should gate on this.
   bool get isReady => _ready;
 
-  Future<void> scrollToBottom() {
+  Future<void> scrollToBottom({bool smooth = false}) {
     final b = _bridge;
     if (b == null) return Future.value();
-    return b.scrollToBottom();
+    return b.scrollToBottom(smooth: smooth);
   }
 
   Future<void> scrollToMessage(String id, {bool highlight = false}) {

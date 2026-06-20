@@ -492,7 +492,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   Future<void> _scrollToBottom() async {
     final webViewState = _webViewStateKey.currentState;
     if (webViewState != null) {
-      await webViewState.scrollToBottom();
+      // Mirror Vue: the scroll-to-bottom button animates smoothly (the JS side
+      // falls back to an instant jump when more than 3000px away).
+      await webViewState.scrollToBottom(smooth: true);
     }
     if (!mounted) return;
     setState(() => _showScrollToBottom = false);
@@ -813,6 +815,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         final effectiveTopInset = messageListTop + memoryTopReserve;
 
         final messageListBottom = _inputBarHeight + effectiveBottomInset;
+        final showScrollBtn = _showScrollToBottom && !widget.search.showSearch;
 
         final animatedBottomPanelInset =
             panelHeight + (safeBottom * (1 - factor));
@@ -1158,15 +1161,17 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               right: 16,
               bottom: messageListBottom + 16,
               child: IgnorePointer(
-                ignoring: !_showScrollToBottom,
+                // Mirror Vue ChatInput (`v-if="!isSearchMode"`): the
+                // scroll-to-bottom button is suppressed while searching.
+                ignoring: !showScrollBtn,
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeOutCubic,
-                  opacity: _showScrollToBottom ? 1 : 0,
+                  opacity: showScrollBtn ? 1 : 0,
                   child: AnimatedSlide(
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOutCubic,
-                    offset: _showScrollToBottom
+                    offset: showScrollBtn
                         ? Offset.zero
                         : const Offset(0, 0.2),
                     child: GestureDetector(
