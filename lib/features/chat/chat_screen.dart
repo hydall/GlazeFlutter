@@ -244,30 +244,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     return SessionLifecycleTracker(
       charId: charId,
-      child: PopScope(
-        // Never allow a native pop. Chat is always reached via
-        // `context.go('/chat/...')`, which replaces the navigation stack — so a
-        // real pop has nothing beneath it and the OS closes the app instead of
-        // returning to the parent. We intercept every back gesture: dismiss any
-        // open overlay first, otherwise navigate up to '/' (mirrors `onBack`).
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (didPop) return;
-          if (_drawerCtrl.inputFocus.hasFocus) {
-            _drawerCtrl.inputFocus.unfocus();
-            return;
-          }
-          if (_drawerCtrl.drawerOpen) {
-            _drawerCtrl.closeDrawer();
-            return;
-          }
-          if (_search.showSearch) {
-            _search.closeSearch();
-            return;
-          }
-          context.go('/');
-        },
-        child: GlazeScaffold(
+      // Chat is always reached via `context.go('/chat/...')`, which replaces the
+      // navigation stack — so a real pop has nothing beneath it and the OS would
+      // close the app. We must NOT add our own `PopScope` here: `GlazeScaffold`
+      // already wraps its body in a `PopScope` (canPop is false because showBack
+      // is true) and routes the intercepted back gesture to `onBack`. Flutter
+      // invokes the callbacks of *every* registered PopEntry on the route, so a
+      // second `PopScope` would fire alongside `onBack` and still navigate away
+      // even after we dismissed an overlay. All back handling lives in `onBack`.
+      child: GlazeScaffold(
           extendBodyBehindHeader: true,
           resizeToAvoidBottomInset: false,
           hideHeader: _isHeaderHidden,
@@ -309,11 +294,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       )
                     : null),
           onBack: () {
+            // Dismiss any open overlay first; only navigate up when nothing is
+            // open. Order mirrors the precedence the back gesture should follow.
+            if (_drawerCtrl.inputFocus.hasFocus) {
+              _drawerCtrl.inputFocus.unfocus();
+              return;
+            }
+            // Covers both the open magic drawer / quick replies panel and the
+            // brief keyboard→drawer transition window; closeDrawer handles both.
+            if (_drawerCtrl.drawerOpen || _drawerCtrl.switchingToDrawer) {
+              _drawerCtrl.closeDrawer();
+              return;
+            }
             if (_search.showSearch) {
               _search.closeSearch();
-            } else {
-              context.go('/');
+              return;
             }
+            context.go('/');
           },
           actions: _search.showSearch
               ? const []
@@ -380,8 +377,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             },
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

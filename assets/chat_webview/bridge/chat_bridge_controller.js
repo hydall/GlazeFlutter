@@ -621,35 +621,38 @@ export class Bridge {
     const paddingDiff = px - prevPadding;
     if (Math.abs(paddingDiff) < 0.1) return;
 
-    // Ported from Vue ChatView.updateContentPadding() — but adapted to this
-    // architecture. In Vue the messages container itself shrinks when the
-    // keyboard opens (Android `marginBottom: keyboardOverlap`, iOS visualViewport
-    // height), so its formula compensates for that height change. Here the chat
-    // container is a FIXED full-screen viewport (`resizeToAvoidBottomInset:
-    // false`, the keyboard overlays it) — it never shrinks. Growing the bottom
-    // padding therefore does not move any content sitting above it, so the only
-    // case that needs a scroll change is "was parked at the bottom": re-pin so
-    // the last message rides up above the taller input bar / keyboard. Any other
-    // scroll position is already visually preserved with scrollTop untouched.
+    // Ported from Vue ChatView.updateContentPadding(). The chat container is a
+    // FIXED full-screen viewport (`resizeToAvoidBottomInset: false`, the keyboard
+    // overlays it) so its clientHeight never changes — Vue's `containerHeightDiff`
+    // term is 0 here and the scroll adjustment collapses to the padding delta.
+    // We shift scrollTop by that delta so the content the user is reading stays
+    // anchored to the rising/falling input bar when the keyboard / magic drawer /
+    // input height changes — and so more-recent messages slide up into view above
+    // the keyboard. This must happen whether or not the chat is parked at the
+    // bottom; the at-bottom branch is just the numerically-clean equivalent of
+    // `+= paddingDiff` that avoids float drift at the very end of the list.
     const wasAtBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight < 5;
 
+    // Lock the virtual-scroll window logic while we programmatically re-pin so
+    // the inset-follow does not fight onContainerScroll / the pin tracker.
+    const vl = this.virtualList;
+    if (vl) {
+      vl.isProgrammaticScrolling = true;
+      clearTimeout(this._bottomPadUnlockTimer);
+      this._bottomPadUnlockTimer = setTimeout(() => {
+        vl.isProgrammaticScrolling = false;
+      }, 120);
+    }
+
     container.style.paddingBottom = px + 'px';
 
+    // Reading scrollHeight forces a synchronous layout flush so the new padding
+    // is reflected before we adjust the offset.
     if (wasAtBottom) {
-      // Lock the virtual-scroll window logic while we programmatically re-pin so
-      // the keyboard-follow does not fight onContainerScroll / the pin tracker.
-      const vl = this.virtualList;
-      if (vl) {
-        vl.isProgrammaticScrolling = true;
-        clearTimeout(this._bottomPadUnlockTimer);
-        this._bottomPadUnlockTimer = setTimeout(() => {
-          vl.isProgrammaticScrolling = false;
-        }, 120);
-      }
-      // Reading scrollHeight forces a synchronous layout flush so the new
-      // padding is reflected before we re-pin.
       container.scrollTop = container.scrollHeight - container.clientHeight;
+    } else {
+      container.scrollTop += paddingDiff;
     }
 
     requestAnimationFrame(() => {
