@@ -70,9 +70,14 @@ class GlassSurface extends ConsumerWidget {
         border: border,
         boxShadow: boxShadow,
       ),
+      // The foreground content is isolated in its own compositing layer so that
+      // scrolling / press animations / streaming repaints inside it do NOT mark
+      // the enclosing BackdropFilter dirty. When the backdrop behind the surface
+      // is static (e.g. a bottom sheet over a still screen) the expensive blur
+      // pass is then reused frame-to-frame instead of recomputed on every tick.
       child: Material(
         type: MaterialType.transparency,
-        child: child,
+        child: RepaintBoundary(child: child),
       ),
     );
 
@@ -83,11 +88,16 @@ class GlassSurface extends ConsumerWidget {
               filled,
               Positioned.fill(
                 child: IgnorePointer(
-                  child: ClipRRect(
-                    borderRadius: borderRadius,
-                    child: NoiseOverlay(
-                      opacity: preset.noiseOpacity,
-                      intensity: preset.noiseIntensity,
+                  // Cached on its own layer: the noise raster never changes once
+                  // generated, so it must not be re-rasterised when sibling
+                  // content repaints.
+                  child: RepaintBoundary(
+                    child: ClipRRect(
+                      borderRadius: borderRadius,
+                      child: NoiseOverlay(
+                        opacity: preset.noiseOpacity,
+                        intensity: preset.noiseIntensity,
+                      ),
                     ),
                   ),
                 ),

@@ -22,6 +22,7 @@ class NoiseOverlay extends StatefulWidget {
 class _NoiseOverlayState extends State<NoiseOverlay> {
   ui.Image? _cachedImage;
   Size? _cachedSize;
+  bool _generating = false;
 
   @override
   void didUpdateWidget(NoiseOverlay old) {
@@ -32,6 +33,7 @@ class _NoiseOverlayState extends State<NoiseOverlay> {
       _cachedImage?.dispose();
       _cachedImage = null;
       _cachedSize = null;
+      _generating = false;
     }
   }
 
@@ -50,14 +52,28 @@ class _NoiseOverlayState extends State<NoiseOverlay> {
         tint: widget.tint,
         opacity: widget.opacity,
         getCachedImage: () => _cachedImage,
+        getCachedSize: () => _cachedSize,
+        // True while an async raster is already in flight, so the synchronous
+        // per-cell fallback path doesn't re-schedule a new toImage() every
+        // frame before the first one resolves.
+        isGenerating: () => _generating,
+        beginGenerate: () => _generating = true,
         setCachedImage: (img, size) {
-          if (_cachedImage != img) {
+          if (!mounted) {
+            img.dispose();
+            return;
+          }
+          if (_cachedImage == img) return;
+          // setState so the painter rebuilds and switches to the cheap
+          // drawImage path; previously the cache was populated silently and the
+          // expensive per-cell loop kept running on every repaint.
+          setState(() {
             _cachedImage?.dispose();
             _cachedImage = img;
             _cachedSize = size;
-          }
+            _generating = false;
+          });
         },
-        getCachedSize: () => _cachedSize,
       ),
       size: Size.infinite,
     );
@@ -71,6 +87,8 @@ class _CachedNoisePainter extends CustomPainter {
   final ui.Image? Function() getCachedImage;
   final void Function(ui.Image, Size) setCachedImage;
   final Size? Function() getCachedSize;
+  final bool Function() isGenerating;
+  final void Function() beginGenerate;
 
   _CachedNoisePainter({
     required this.intensity,
@@ -79,6 +97,8 @@ class _CachedNoisePainter extends CustomPainter {
     required this.getCachedImage,
     required this.setCachedImage,
     required this.getCachedSize,
+    required this.isGenerating,
+    required this.beginGenerate,
   });
 
   @override
@@ -110,9 +130,14 @@ class _CachedNoisePainter extends CustomPainter {
     }
 
     final picture = recorder.endRecording();
-    picture.toImage(size.width.toInt(), size.height.toInt()).then((img) {
-      setCachedImage(img, size);
-    });
+    // Only schedule one raster at a time. Once it resolves the state setter
+    // triggers a rebuild and subsequent paints take the cheap drawImage path.
+    if (!isGenerating()) {
+      beginGenerate();
+      picture.toImage(size.width.toInt(), size.height.toInt()).then((img) {
+        setCachedImage(img, size);
+      });
+    }
 
     canvas.drawPicture(picture);
   }
