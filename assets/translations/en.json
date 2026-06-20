@@ -1349,6 +1349,8 @@
     "block_trigger_after_user": "After User",
     "block_trigger_after_assistant": "After Assistant",
     "block_trigger_periodic": "Periodic",
+    "block_manual_only_title": "Manual Only",
+    "block_manual_only_sub": "Block never runs automatically — only when you press Run in the panel",
     "blocks_section_header": "Blocks",
     "blocks_no_blocks": "No blocks yet",
     "blocks_new_block": "New Block",

@@ -1356,6 +1356,8 @@
     "block_trigger_after_user": "После user",
     "block_trigger_after_assistant": "После assistant",
     "block_trigger_periodic": "Периодический",
+    "block_manual_only_title": "Только вручную",
+    "block_manual_only_sub": "Блок не запускается автоматически — только по кнопке «Запустить» в панели",
     "blocks_section_header": "Блоки",
     "blocks_no_blocks": "Пока нет блоков",
     "blocks_new_block": "Новый блок",

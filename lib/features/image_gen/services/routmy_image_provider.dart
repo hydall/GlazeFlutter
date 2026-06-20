@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -101,9 +103,9 @@ class RoutmyImageProvider {
     return ImageGenHttp.base64ToBytes(b64);
   }
 
-  /// OpenAI-style image edits via JSON body.
-  /// Refs arrive pre-resized (~50 KB) from _buildRoutmyRefs, so the payload
-  /// stays within provider limits. data-URL format is used for image_url.
+  /// OpenAI-style image edits via multipart/form-data.
+  /// Mirrors sillyimages exactly: single `image` field with PNG MIME for one ref,
+  /// `image[]` repeated for multiple. rout.my proxies OpenAI-style file fields.
   Future<Uint8List> _editImages({
     required String apiKey,
     required String model,
@@ -116,36 +118,79 @@ class RoutmyImageProvider {
   }) async {
     final url = '$baseUrl/v1/images/edits';
 
-    final images = referenceImages
-        .where((s) => s.isNotEmpty)
-        .map((s) => {'image_url': _asDataUrl(s)})
-        .toList();
+    final validRefs = referenceImages.where((s) => s.isNotEmpty).toList();
 
-    debugPrint('ROUTMY _editImages: refs=${images.length} prompt="${prompt.length > 120 ? prompt.substring(0, 120) : prompt}"');
-    for (final img in images) {
-      final u = img['image_url'] ?? '';
-      debugPrint('ROUTMY edit ref: ${u.length} chars prefix=${u.substring(0, u.length.clamp(0, 30))}');
-    }
+    debugPrint('ROUTMY _editImages (multipart): refs=${validRefs.length} model=$model prompt="${prompt.length > 80 ? prompt.substring(0, 80) : prompt}"');
 
-    final body = <String, dynamic>{
+    // Plain string fields — mirror sillyimages field order exactly
+    final fields = <String, String>{
       'model': model,
       'prompt': prompt,
-      'n': 1,
-      'images': images,
-      'image_config': {
-        'aspect_ratio': aspectRatio,
-        'image_size': imageSize,
-        if (quality.isNotEmpty) 'quality': quality,
-      },
+      'n': '1',
     };
 
-    final json = await _http.post(
+    // Map aspect ratio → OpenAI WxH size (gpt-image-2 specific sizes)
+    final sizeStr = _aspectToSizeGptImage2(aspectRatio);
+    if (sizeStr != null) fields['size'] = sizeStr;
+
+    // quality: only send if non-empty and valid for gpt-image family
+    final q = _normalizeQuality(quality);
+    if (q != null) fields['quality'] = q;
+
+    // Image files — sillyimages always uses 'image/png' MIME regardless of actual format.
+    // Single ref → field name 'image'; multiple → 'image[]' repeated.
+    final imageFields = <(String, Uint8List, String, String)>[];
+    final multiRef = validRefs.length > 1;
+    for (var i = 0; i < validRefs.length; i++) {
+      final bytes = _base64ToBytes(validRefs[i]);
+      final fieldName = multiRef ? 'image[]' : 'image';
+      // Always declare as PNG — matches sillyimages iigBase64ToBlob(b64, 'image/png')
+      imageFields.add((fieldName, bytes, 'reference-$i.png', 'image/png'));
+      debugPrint('ROUTMY edit ref[$i]: ${bytes.length} bytes field=$fieldName');
+    }
+
+    final json = await _http.postMultipart(
       url: url,
+      fields: fields,
+      imageFields: imageFields,
       apiKey: apiKey,
-      body: body,
       cancelToken: cancelToken,
     );
     return ImageGenHttp.base64ToBytes(_extractImageBase64(json));
+  }
+
+  /// gpt-image-2 size map (different from gpt-image-1 family).
+  String? _aspectToSizeGptImage2(String aspect) {
+    const map = <String, String>{
+      '1:1': '1024x1024',
+      '16:9': '2048x1152',
+      '9:16': '1152x2048',
+      '3:2': '1536x1024',
+      '2:3': '1024x1536',
+      '4:3': '1536x1152',
+      '3:4': '1152x1536',
+    };
+    return map[aspect];
+  }
+
+  /// Normalize quality string for gpt-image family.
+  String? _normalizeQuality(String quality) {
+    const valid = {'low', 'medium', 'high', 'auto'};
+    final q = quality.toLowerCase().trim();
+    if (valid.contains(q)) return q;
+    if (q == 'hd') return 'high';
+    if (q == 'standard') return 'medium';
+    if (q.isEmpty) return null;
+    return 'auto';
+  }
+
+  /// Decode bare base64 or data-URL to raw bytes.
+  Uint8List _base64ToBytes(String s) {
+    if (s.startsWith('data:')) {
+      final comma = s.indexOf(',');
+      if (comma != -1) s = s.substring(comma + 1);
+    }
+    return base64Decode(s);
   }
 
   /// Reference images arrive as bare base64 (from ImageGenService._fileToBase64)

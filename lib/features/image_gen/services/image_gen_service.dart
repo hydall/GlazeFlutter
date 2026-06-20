@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../../../core/constants/image_gen_patterns.dart';
@@ -443,29 +443,25 @@ class ImageGenService {
     }
   }
 
-  /// Reads an image file, resizes it so the longest side is at most [maxSide]
-  /// pixels, re-encodes as PNG, and returns base64. Falls back to the raw
-  /// file bytes if decoding fails. Keeps refs small for API payloads.
-  Future<String> _fileToBase64Resized(String path, {int maxSide = 512}) async {
+  /// Reads an image file, resizes so the longest side ≤ [maxSide] px,
+  /// re-encodes as JPEG at [jpegQuality] (0–100), and returns bare base64.
+  /// Falls back to the raw file bytes on any error.
+  Future<String> _fileToBase64Resized(
+    String path, {
+    int maxSide = 512,
+    int jpegQuality = 85,
+  }) async {
     try {
       final resolved = resolveGlazeFilePath(path) ?? path;
       final file = File(resolved);
       if (!file.existsSync()) return '';
       final bytes = file.readAsBytesSync();
 
-      final codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: maxSide,
-        targetHeight: maxSide,
-      );
-      final frame = await codec.getNextFrame();
-      final pngData = await frame.image.toByteData(format: ui.ImageByteFormat.png);
-      frame.image.dispose();
+      final decoded = await compute(_decodeAndResizeJpeg, _ResizeArgs(bytes, maxSide, jpegQuality));
+      if (decoded == null) return base64Encode(bytes);
 
-      if (pngData == null) return base64Encode(bytes);
-      final resizedBytes = pngData.buffer.asUint8List();
-      debugPrint('ROUTMY ref resize: ${bytes.length} → ${resizedBytes.length} bytes');
-      return base64Encode(resizedBytes);
+      debugPrint('ROUTMY ref resize: ${bytes.length} → ${decoded.length} bytes (JPEG $jpegQuality%)');
+      return base64Encode(decoded);
     } catch (e) {
       debugPrint('ROUTMY ref resize failed: $e');
       return _fileToBase64(path);
@@ -552,5 +548,33 @@ class ImageGenService {
       final suffix = pipeIdx != -1 ? raw.substring(pipeIdx) : '';
       return '[IMG:RESULT:$newPath$suffix]';
     });
+  }
+}
+
+// ─── Isolate helpers for JPEG resize ────────────────────────────────────────
+
+class _ResizeArgs {
+  const _ResizeArgs(this.bytes, this.maxSide, this.jpegQuality);
+  final Uint8List bytes;
+  final int maxSide;
+  final int jpegQuality;
+}
+
+/// Runs in a separate isolate via [compute]. Decodes the image, resizes to fit
+/// within [args.maxSide] px on the longest side, and encodes as JPEG.
+/// Returns null on any error so the caller can fall back to the raw bytes.
+Uint8List? _decodeAndResizeJpeg(_ResizeArgs args) {
+  try {
+    final src = img.decodeImage(args.bytes);
+    if (src == null) return null;
+    final resized = img.copyResize(
+      src,
+      width: src.width >= src.height ? args.maxSide : -1,
+      height: src.height > src.width ? args.maxSide : -1,
+      interpolation: img.Interpolation.linear,
+    );
+    return Uint8List.fromList(img.encodeJpg(resized, quality: args.jpegQuality));
+  } catch (_) {
+    return null;
   }
 }
