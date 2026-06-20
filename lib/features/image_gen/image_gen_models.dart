@@ -63,14 +63,12 @@ class RoutMyConstants {
   ];
 
   // Models that generate images via /v1/chat/completions with modalities:[image,text].
-  // All other models use /v1/images/generations (no refs) or /v1/images/edits (refs via https URL).
-  // gpt-image-* are added here so that local file refs (avatars) can be sent
-  // as data-URL image_url parts inside messages — edits only accepts https URLs.
+  // openai/gpt-image-* are NOT here — rout.my rejects them on chat completions
+  // ("not a language model"). They go through /v1/images/edits (with refs) or
+  // /v1/images/generations (without refs).
   static const chatImageModels = {
     'google/gemini-3.1-flash-image-preview',
     'google/gemini-3-pro-image',
-    'openai/gpt-image-1.5',
-    'openai/gpt-image-2',
   };
 
   static const aspectRatios = [

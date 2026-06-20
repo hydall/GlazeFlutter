@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -103,9 +101,9 @@ class RoutmyImageProvider {
     return ImageGenHttp.base64ToBytes(b64);
   }
 
-  /// OpenAI-style image edits (`/v1/images/edits`) sent as multipart/form-data.
-  /// JSON body with `images` array was rejected (400) by the upstream provider;
-  /// multipart with binary `image` fields is the canonical OpenAI edits format.
+  /// OpenAI-style image edits via JSON body.
+  /// Refs arrive pre-resized (~50 KB) from _buildRoutmyRefs, so the payload
+  /// stays within provider limits. data-URL format is used for image_url.
   Future<Uint8List> _editImages({
     required String apiKey,
     required String model,
@@ -118,55 +116,36 @@ class RoutmyImageProvider {
   }) async {
     final url = '$baseUrl/v1/images/edits';
 
-    final fields = <String, String>{
-      'model': model,
-      'prompt': prompt,
-      'n': '1',
-    };
+    final images = referenceImages
+        .where((s) => s.isNotEmpty)
+        .map((s) => {'image_url': _asDataUrl(s)})
+        .toList();
 
-    // image_config nested object is not supported in multipart form-data.
-    // Pass only the flat fields that the edits endpoint accepts.
-    // aspect_ratio and image_size are rout.my extensions — skip for edits,
-    // quality maps to the standard OpenAI `quality` field.
-    if (quality.isNotEmpty && quality != 'standard') fields['quality'] = quality;
-
-    final imageFields = <(String, Uint8List, String, String)>[];
-    for (final ref in referenceImages.where((s) => s.isNotEmpty)) {
-      final bytes = _refToBytes(ref);
-      if (bytes == null) continue;
-      final mime = _sniffMimeBytes(bytes);
-      final ext = mime.split('/').last;
-      debugPrint('ROUTMY ref: ${bytes.length} bytes mime=$mime');
-      imageFields.add(('image', bytes, 'ref.$ext', mime));
+    debugPrint('ROUTMY _editImages: refs=${images.length} prompt="${prompt.length > 120 ? prompt.substring(0, 120) : prompt}"');
+    for (final img in images) {
+      final u = img['image_url'] ?? '';
+      debugPrint('ROUTMY edit ref: ${u.length} chars prefix=${u.substring(0, u.length.clamp(0, 30))}');
     }
 
-    debugPrint('ROUTMY _editImages: imageFields=${imageFields.length} prompt="${prompt.length > 120 ? prompt.substring(0, 120) : prompt}"');
-    final json = await _http.postMultipart(
+    final body = <String, dynamic>{
+      'model': model,
+      'prompt': prompt,
+      'n': 1,
+      'images': images,
+      'image_config': {
+        'aspect_ratio': aspectRatio,
+        'image_size': imageSize,
+        if (quality.isNotEmpty) 'quality': quality,
+      },
+    };
+
+    final json = await _http.post(
       url: url,
-      fields: fields,
-      imageFields: imageFields,
       apiKey: apiKey,
+      body: body,
       cancelToken: cancelToken,
     );
     return ImageGenHttp.base64ToBytes(_extractImageBase64(json));
-  }
-
-  /// Converts a reference (bare base64 or data-URL) to raw bytes.
-  Uint8List? _refToBytes(String s) {
-    try {
-      if (s.startsWith('data:')) {
-        final commaIdx = s.indexOf(',');
-        if (commaIdx == -1) return null;
-        return base64Decode(s.substring(commaIdx + 1));
-      }
-      if (s.startsWith('http://') || s.startsWith('https://')) {
-        // HTTP refs not supported for multipart — skip
-        return null;
-      }
-      return base64Decode(s);
-    } catch (_) {
-      return null;
-    }
   }
 
   /// Reference images arrive as bare base64 (from ImageGenService._fileToBase64)
@@ -186,29 +165,6 @@ class RoutmyImageProvider {
     if (b64.startsWith('iVBORw0KGgo')) return 'image/png';
     if (b64.startsWith('UklGR')) return 'image/webp';
     if (b64.startsWith('R0lGOD')) return 'image/gif';
-    return 'image/png';
-  }
-
-  /// Sniff MIME from raw bytes (magic bytes).
-  String _sniffMimeBytes(Uint8List bytes) {
-    if (bytes.length >= 3 &&
-        bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) {
-      return 'image/jpeg';
-    }
-    if (bytes.length >= 8 &&
-        bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E &&
-        bytes[3] == 0x47) {
-      return 'image/png';
-    }
-    if (bytes.length >= 4 &&
-        bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 &&
-        bytes[3] == 0x46) {
-      return 'image/webp';
-    }
-    if (bytes.length >= 6 &&
-        bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) {
-      return 'image/gif';
-    }
     return 'image/png';
   }
 
