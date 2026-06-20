@@ -208,12 +208,24 @@ Future<String?> _loadGoogleFont(String fontName) async {
 final bgImageBytesProvider = Provider<Uint8List?>((ref) {
   final preset = ref.watch(themeProvider).activePreset;
   if (!preset.hasBgImage) return null;
+  return _decodeDataUri(preset.bgImage);
+});
+
+/// Decoded bytes for the chat-area custom background image
+/// (`chatBgMode == 'custom'`). Null when unset or undecodable.
+final chatBgImageBytesProvider = Provider<Uint8List?>((ref) {
+  final preset = ref.watch(themeProvider).activePreset;
+  if (!preset.hasChatBgImage) return null;
+  return _decodeDataUri(preset.chatBgImage);
+});
+
+Uint8List? _decodeDataUri(String? data) {
+  if (data == null) return null;
   try {
-    final data = preset.bgImage!;
     final commaIdx = data.indexOf(',');
     if (commaIdx == -1) return null;
     return base64Decode(data.substring(commaIdx + 1));
   } catch (_) {
     return null;
   }
-});
+}

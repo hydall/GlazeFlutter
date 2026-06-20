@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -48,6 +49,9 @@ class ChatWebViewSurface extends ConsumerWidget {
     required this.bgOpacity,
     required this.bgBlur,
     required this.bgDim,
+    required this.chatBgMode,
+    required this.chatBgColor,
+    required this.chatBgAvatarPath,
     required this.bottomInset,
     required this.onBridgeReady,
     required this.onInitWebView,
@@ -68,6 +72,14 @@ class ChatWebViewSurface extends ConsumerWidget {
   final double bgOpacity;
   final double bgBlur;
   final double bgDim;
+
+  /// Chat-area background source: 'inherit' | 'color' | 'avatar' | 'custom'.
+  /// For 'inherit' and 'custom', [bgImageBytes] already carries the right
+  /// decoded image (global or chat-custom); 'color' uses [chatBgColor];
+  /// 'avatar' loads [chatBgAvatarPath] from disk.
+  final String chatBgMode;
+  final Color? chatBgColor;
+  final String? chatBgAvatarPath;
   final double bottomInset;
 
   /// Called by the surface after the bridge is created and
@@ -87,13 +99,35 @@ class ChatWebViewSurface extends ConsumerWidget {
   /// surface can't flash the previous session's content while the new one is
   /// being pushed in.
   Widget _background(BuildContext context) {
+    // In 'color' mode the base layer is the chosen solid color; otherwise the
+    // theme surface shows behind/around any image.
+    final Color base = chatBgMode == 'color' && chatBgColor != null
+        ? chatBgColor!
+        : Theme.of(context).colorScheme.surface;
+
+    // The image layer: 'avatar' loads from a file path, 'inherit'/'custom'
+    // use the pre-decoded [bgImageBytes]. 'color' has no image layer.
+    Widget? image;
+    if (chatBgMode == 'avatar') {
+      final path = chatBgAvatarPath;
+      if (path != null && path.isNotEmpty) {
+        image = Image.file(File(path), fit: BoxFit.cover, gaplessPlayback: true);
+      }
+    } else if (chatBgMode != 'color' && bgImageBytes != null) {
+      // Decoded bytes (same as GlazeBackground) because the data is a base64
+      // data URI, not a file path.
+      image = Image.memory(
+        bgImageBytes!,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+      );
+    }
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        ColoredBox(color: Theme.of(context).colorScheme.surface),
-        // Decoded bytes (same as GlazeBackground) because preset.bgImage is a
-        // base64 data URI, not a file path.
-        if (bgImageBytes != null) ...[
+        ColoredBox(color: base),
+        if (image != null) ...[
           Opacity(
             opacity: bgOpacity,
             child: bgBlur > 0
@@ -103,17 +137,9 @@ class ChatWebViewSurface extends ConsumerWidget {
                       sigmaY: bgBlur,
                       tileMode: TileMode.clamp,
                     ),
-                    child: Image.memory(
-                      bgImageBytes!,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                    ),
+                    child: image,
                   )
-                : Image.memory(
-                    bgImageBytes!,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                  ),
+                : image,
           ),
           if (bgDim > 0)
             Container(color: Colors.black.withValues(alpha: bgDim)),

@@ -431,7 +431,12 @@ class _GeneralTab extends StatelessWidget {
                 nullLabel: 'theme_auto'.tr(),
                 onChanged: (v) => onUpdate((p) => p.copyWith(bgColor: v)),
               ),
-            _BgImageRow(preset: preset, onUpdate: onUpdate),
+            _BgImageRow(
+              hasImage: preset.hasBgImage,
+              onPicked: (dataUri) =>
+                  onUpdate((p) => p.copyWith(bgImage: dataUri)),
+              onReset: () => onUpdate((p) => p.copyWith(bgImage: null)),
+            ),
             if (preset.hasBgImage) ...[
               _SliderRow(
                 label: 'theme_dimming'.tr(),
@@ -699,6 +704,40 @@ class _ChatColorsTab extends ConsumerWidget {
         preset.hideTokenCount ?? appSettings.hideTokenCount;
     return Column(
       children: [
+        MenuGroup(
+          header: 'theme_chat_background'.tr(),
+          items: [
+            _FontModeRow(
+              label: 'theme_chat_bg'.tr(),
+              mode: preset.chatBgMode,
+              modes: const ['inherit', 'color', 'avatar', 'custom'],
+              modeLabels: [
+                'theme_chat_bg_inherit'.tr(),
+                'theme_chat_bg_color'.tr(),
+                'theme_chat_bg_avatar'.tr(),
+                'theme_chat_bg_custom'.tr(),
+              ],
+              onChanged: (v) => onUpdate((p) => p.copyWith(chatBgMode: v)),
+            ),
+            if (preset.chatBgMode == 'color')
+              _ColorRow(
+                label: 'theme_chat_bg_color'.tr(),
+                value: preset.chatBgColor,
+                palette: _presetUiColors,
+                allowNull: true,
+                showPreviewOverlay: false,
+                nullLabel: 'theme_auto'.tr(),
+                onChanged: (v) => onUpdate((p) => p.copyWith(chatBgColor: v)),
+              ),
+            if (preset.chatBgMode == 'custom')
+              _BgImageRow(
+                hasImage: preset.hasChatBgImage,
+                onPicked: (dataUri) =>
+                    onUpdate((p) => p.copyWith(chatBgImage: dataUri)),
+                onReset: () => onUpdate((p) => p.copyWith(chatBgImage: null)),
+              ),
+          ],
+        ),
         MenuGroup(
           header: 'theme_bubble_colors'.tr(),
           items: [
@@ -1500,10 +1539,15 @@ class _ColorPickerOverlayState extends State<_ColorPickerOverlay>
 // ─── Background image row ─────────────────────────────────────────────────────
 
 class _BgImageRow extends StatelessWidget {
-  final ThemePreset preset;
-  final void Function(ThemePreset Function(ThemePreset)) onUpdate;
+  final bool hasImage;
+  final ValueChanged<String> onPicked;
+  final VoidCallback onReset;
 
-  const _BgImageRow({required this.preset, required this.onUpdate});
+  const _BgImageRow({
+    required this.hasImage,
+    required this.onPicked,
+    required this.onReset,
+  });
 
   Future<void> _pick(BuildContext context) async {
     try {
@@ -1525,15 +1569,13 @@ class _BgImageRow extends StatelessWidget {
                   ? 'image/gif'
                   : 'image/jpeg';
       final dataUri = 'data:$mime;base64,${base64Encode(bytes)}';
-      onUpdate((p) => p.copyWith(bgImage: dataUri));
+      onPicked(dataUri);
     } catch (e) {
       if (context.mounted) {
         GlazeErrorDialog.show(context, e, prefix: 'theme_failed_load_image'.tr());
       }
     }
   }
-
-  void _reset() => onUpdate((p) => p.copyWith(bgImage: null));
 
   @override
   Widget build(BuildContext context) {
@@ -1552,7 +1594,7 @@ class _BgImageRow extends StatelessWidget {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
-                    preset.hasBgImage
+                    hasImage
                     ? 'theme_replace_background_image'.tr()
                     : 'theme_select_image'.tr(),
                     style: TextStyle(
@@ -1566,9 +1608,9 @@ class _BgImageRow extends StatelessWidget {
             ),
           ),
         ),
-        if (preset.hasBgImage)
+        if (hasImage)
           InkWell(
-            onTap: _reset,
+            onTap: onReset,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(

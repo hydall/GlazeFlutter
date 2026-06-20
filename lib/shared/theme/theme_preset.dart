@@ -74,6 +74,14 @@ abstract class ThemePreset with _$ThemePreset {
     @Default(0.4) double bgNoiseIntensity,
     @Default(0) double bgDim,
     String? bgImage,
+    // Chat-area background. Independent of the global UI background.
+    //   'inherit' → reuse the global background (default)
+    //   'color'   → solid [chatBgColor]
+    //   'avatar'  → the active character's avatar image
+    //   'custom'  → a separate [chatBgImage] data URI
+    @Default('inherit') String chatBgMode,
+    String? chatBgColor,
+    String? chatBgImage,
   }) = _ThemePreset;
 
   factory ThemePreset.fromJson(Map<String, dynamic> json) =>
@@ -144,6 +152,8 @@ extension ThemePresetX on ThemePreset {
   bool get hasCustomFont => customFont != null && customFont!.isNotEmpty;
   bool get hasChatFont => chatFont != null && chatFont!.isNotEmpty;
   bool get hasBgImage => bgImage != null && bgImage!.isNotEmpty;
+  bool get hasChatBgImage => chatBgImage != null && chatBgImage!.isNotEmpty;
+  Color? get chatBgColorParsed => _parseNullableHex(chatBgColor);
 
   /// Built-in "Material You" theme whose colors come from the system dynamic
   /// palette (Android) / seed fallback and are not user-editable.

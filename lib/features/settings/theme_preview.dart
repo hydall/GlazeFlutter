@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,6 +55,11 @@ class ThemeChatPreview extends ConsumerWidget {
               preset: preset,
               character: previewCharacter,
               isStandard: isStandard,
+              chatBgColor:
+                  preset.chatBgMode == 'color' ? preset.chatBgColorParsed : null,
+              chatBgImageBytes: preset.chatBgMode == 'custom'
+                  ? _decodeDataUri(preset.chatBgImage)
+                  : null,
             ),
           ),
         ),
@@ -64,17 +72,32 @@ class ThemeChatPreview extends ConsumerWidget {
         ? const Color(0xFF1C1D22)
         : const Color(0xFFF4F6FA);
   }
+
+  static Uint8List? _decodeDataUri(String? data) {
+    if (data == null || data.isEmpty) return null;
+    try {
+      final commaIdx = data.indexOf(',');
+      if (commaIdx == -1) return null;
+      return base64Decode(data.substring(commaIdx + 1));
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 class _PreviewChatScene extends StatelessWidget {
   final ThemePreset preset;
   final Character character;
   final bool isStandard;
+  final Color? chatBgColor;
+  final Uint8List? chatBgImageBytes;
 
   const _PreviewChatScene({
     required this.preset,
     required this.character,
     required this.isStandard,
+    this.chatBgColor,
+    this.chatBgImageBytes,
   });
 
   @override
@@ -86,8 +109,9 @@ class _PreviewChatScene extends StatelessWidget {
         colors.userText ?? ThemeChatPreview.textOn(colors.userBubble);
 
     return Material(
-      color: cs.surface,
-      child: Column(
+      color: chatBgColor ?? cs.surface,
+      child: _withChatBg(
+        Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -184,7 +208,23 @@ class _PreviewChatScene extends StatelessWidget {
             initialDraft: '',
           ),
         ],
+        ),
       ),
+    );
+  }
+
+  /// Layer a custom chat background image behind [child]. Color-mode is handled
+  /// by the [Material] color, so only the image needs a stacked layer here.
+  Widget _withChatBg(Widget child) {
+    final bytes = chatBgImageBytes;
+    if (bytes == null) return child;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true),
+        ),
+        child,
+      ],
     );
   }
 }

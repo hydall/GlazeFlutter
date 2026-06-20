@@ -45,6 +45,8 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final double bgNoiseOpacity;
   final double bgNoiseIntensity;
   final double bgDim;
+  final String chatBgMode;
+  final Color? chatBgColor;
   final List<ChatMessage> messages;
   final bool isGenerating;
   final bool isGeneratingImage;
@@ -108,6 +110,8 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.bgNoiseOpacity = 0.0,
     this.bgNoiseIntensity = 1.0,
     this.bgDim = 0.0,
+    this.chatBgMode = 'inherit',
+    this.chatBgColor,
     required this.messages,
     required this.isGenerating,
     this.isGeneratingImage = false,
@@ -786,7 +790,13 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       onSyncExtBlockPanels: _syncExtBlockPanels,
     ).attach();
 
-    final bgImageBytes = ref.watch(bgImageBytesProvider);
+    // 'inherit' reuses the global background image; 'custom' uses the chat's
+    // own image; 'color'/'avatar' don't need decoded bytes here.
+    final bgImageBytes = switch (widget.chatBgMode) {
+      'custom' => ref.watch(chatBgImageBytesProvider),
+      'inherit' => ref.watch(bgImageBytesProvider),
+      _ => null,
+    };
 
     return ChatWebViewSurface(
       bridgeHost: _bridgeHost,
@@ -804,6 +814,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       bgOpacity: widget.bgOpacity,
       bgBlur: widget.bgBlur,
       bgDim: widget.bgDim,
+      chatBgMode: widget.chatBgMode,
+      chatBgColor: widget.chatBgColor,
+      chatBgAvatarPath: widget.charAvatarPath,
       bottomInset: widget.bottomInset,
       onBridgeReady: (ChatBridgeController b) => _bridge = b,
       onInitWebView: _initWebView,

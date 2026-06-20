@@ -868,6 +868,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     bgNoiseOpacity: preset.bgNoiseOpacity,
                     bgNoiseIntensity: preset.bgNoiseIntensity,
                     bgDim: preset.bgDim,
+                    chatBgMode: preset.chatBgMode,
+                    chatBgColor: preset.chatBgColorParsed,
                     chatFontName: fontStyle.fontFamily,
                     chatFontDataUrl: fontDataUrl,
                     chatFontSize: fontStyle.fontSize,
