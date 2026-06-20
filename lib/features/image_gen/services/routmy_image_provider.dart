@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -101,9 +103,9 @@ class RoutmyImageProvider {
     return ImageGenHttp.base64ToBytes(b64);
   }
 
-  /// OpenAI-style image edits (`/v1/images/edits`) — the only generations-style
-  /// route on rout.my that accepts reference images, as an `images` array of
-  /// `{image_url: <data-url|https-url>}`. See https://docs.rout.my/api/images
+  /// OpenAI-style image edits (`/v1/images/edits`) sent as multipart/form-data.
+  /// JSON body with `images` array was rejected (400) by the upstream provider;
+  /// multipart with binary `image` fields is the canonical OpenAI edits format.
   Future<Uint8List> _editImages({
     required String apiKey,
     required String model,
@@ -116,31 +118,52 @@ class RoutmyImageProvider {
   }) async {
     final url = '$baseUrl/v1/images/edits';
 
-    final images = referenceImages
-        .where((s) => s.isNotEmpty)
-        .map((s) => {'image_url': _asDataUrl(s)})
-        .toList();
-
-    final body = <String, dynamic>{
+    final fields = <String, String>{
       'model': model,
       'prompt': prompt,
-      'n': 1,
-      'images': images,
-      'image_config': {
-        'aspect_ratio': aspectRatio,
-        'image_size': imageSize,
-        if (quality.isNotEmpty) 'quality': quality,
-      },
+      'n': '1',
     };
 
-    final b64 = await _http.postAndExtractBase64(
+    // image_config as individual fields (multipart form does not accept nested objects)
+    fields['image_config[aspect_ratio]'] = aspectRatio;
+    fields['image_config[image_size]'] = imageSize;
+    if (quality.isNotEmpty) fields['image_config[quality]'] = quality;
+
+    final imageFields = <(String, Uint8List, String, String)>[];
+    for (final ref in referenceImages.where((s) => s.isNotEmpty)) {
+      final bytes = _refToBytes(ref);
+      if (bytes == null) continue;
+      final mime = _sniffMime(ref);
+      final ext = mime.split('/').last;
+      imageFields.add(('image', bytes, 'ref.$ext', mime));
+    }
+
+    final json = await _http.postMultipart(
       url: url,
+      fields: fields,
+      imageFields: imageFields,
       apiKey: apiKey,
-      body: body,
       cancelToken: cancelToken,
-      extractBase64: _extractImageBase64,
     );
-    return ImageGenHttp.base64ToBytes(b64);
+    return ImageGenHttp.base64ToBytes(_extractImageBase64(json));
+  }
+
+  /// Converts a reference (bare base64 or data-URL) to raw bytes.
+  Uint8List? _refToBytes(String s) {
+    try {
+      if (s.startsWith('data:')) {
+        final commaIdx = s.indexOf(',');
+        if (commaIdx == -1) return null;
+        return base64Decode(s.substring(commaIdx + 1));
+      }
+      if (s.startsWith('http://') || s.startsWith('https://')) {
+        // HTTP refs not supported for multipart — skip
+        return null;
+      }
+      return base64Decode(s);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Reference images arrive as bare base64 (from ImageGenService._fileToBase64)
