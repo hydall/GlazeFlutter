@@ -794,7 +794,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     // own image; 'color'/'avatar' don't need decoded bytes here.
     final bgImageBytes = switch (widget.chatBgMode) {
       'custom' => ref.watch(chatBgImageBytesProvider),
-      'inherit' => ref.watch(bgImageBytesProvider),
+      'inherit' => ref.watch(effectiveBgImageBytesProvider),
       _ => null,
     };
 

@@ -17,7 +17,7 @@ class GlazeBackground extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bytes = ref.watch(bgImageBytesProvider);
+    final bytes = ref.watch(effectiveBgImageBytesProvider);
     final preset = ref.watch(themeProvider).activePreset;
     final batterySaver =
         ref.watch(appSettingsProvider).value?.batterySaver ?? false;

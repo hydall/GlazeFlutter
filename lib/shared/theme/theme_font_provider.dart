@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/platform/wallpaper.dart';
 import '../theme/theme_provider.dart';
 import '../theme/theme_preset.dart';
 
@@ -229,3 +230,26 @@ Uint8List? _decodeDataUri(String? data) {
     return null;
   }
 }
+
+/// Device wallpaper bytes, used as the background for the Material You theme.
+/// Android-only (the only platform where Material You sources dynamic color);
+/// null elsewhere or when the wallpaper can't be read. Fetched lazily — the
+/// permission prompt only fires once this provider is first watched (i.e. when
+/// a Material You preset is active).
+final wallpaperBytesProvider = FutureProvider<Uint8List?>((ref) async {
+  if (defaultTargetPlatform != TargetPlatform.android) return null;
+  return Wallpaper.getWallpaper();
+});
+
+/// The background image bytes actually rendered by [GlazeBackground] and the
+/// chat's `inherit` background. An explicit preset background image always
+/// wins; otherwise the Material You theme falls back to the device wallpaper.
+final effectiveBgImageBytesProvider = Provider<Uint8List?>((ref) {
+  final explicit = ref.watch(bgImageBytesProvider);
+  if (explicit != null) return explicit;
+  final preset = ref.watch(themeProvider).activePreset;
+  if (preset.isMaterialYou) {
+    return ref.watch(wallpaperBytesProvider).value;
+  }
+  return null;
+});

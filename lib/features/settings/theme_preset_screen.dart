@@ -1,14 +1,16 @@
 import 'dart:io';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/platform/wallpaper.dart';
 import '../../../core/services/file_export_service.dart';
 import '../../../shared/shell/nav_height_provider.dart';
+import '../../../shared/theme/theme_font_provider.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -341,7 +343,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: isActive ? null : () => _applyPreset(preset),
+                onTap: isActive ? null : () => _selectPreset(preset),
                 child: content,
               ),
             ),
@@ -498,6 +500,53 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
 
   void _applyPreset(ThemePreset preset) {
     ref.read(themeProvider.notifier).applyPreset(preset);
+  }
+
+  /// Applies a preset from a direct tap. For Material You, also offers the
+  /// wallpaper-background permission prompt (Android only).
+  Future<void> _selectPreset(ThemePreset preset) async {
+    _applyPreset(preset);
+    if (preset.isMaterialYou) {
+      await _promptWallpaperPermissionIfNeeded();
+    }
+  }
+
+  /// Material You uses the device wallpaper as its background, which needs the
+  /// storage/media permission. Show a sheet explaining this with grant/decline
+  /// options. No-op when not on Android or the permission is already granted.
+  Future<void> _promptWallpaperPermissionIfNeeded() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (await Wallpaper.hasPermission()) return;
+    if (!mounted) return;
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'theme_wallpaper_permission_title'.tr(),
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.wallpaper_outlined,
+        description: 'theme_wallpaper_permission_desc'.tr(),
+      ),
+      items: [
+        BottomSheetItem(
+          icon: Icons.check_circle_outline,
+          label: 'theme_wallpaper_permission_grant'.tr(),
+          centered: true,
+          onTap: () async {
+            Navigator.of(context, rootNavigator: true).pop();
+            final granted = await Wallpaper.requestPermission();
+            if (granted && mounted) {
+              ref.invalidate(wallpaperBytesProvider);
+            }
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.close,
+          label: 'theme_wallpaper_permission_decline'.tr(),
+          isDestructive: true,
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(),
+        ),
+      ],
+    );
   }
 
   Future<void> _deletePreset(String id) async {

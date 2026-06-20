@@ -15,22 +15,6 @@ import UIKit
       didFinishLaunchingWithOptions: launchOptions
     )
 
-    if let controller = window?.rootViewController as? FlutterViewController {
-      let channel = FlutterMethodChannel(
-        name: systemSettingsChannelName,
-        binaryMessenger: controller.binaryMessenger
-      )
-      channel.setMethodCallHandler { [weak self] call, result in
-        switch call.method {
-        case "openNotificationSettings":
-          self?.openNotificationSettings()
-          result(nil)
-        default:
-          result(FlutterMethodNotImplemented)
-        }
-      }
-    }
-
     return didFinishLaunching
   }
 
@@ -44,6 +28,22 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    if let settingsRegistrar = engineBridge.pluginRegistry.registrar(forPlugin: "GlazeSystemSettings") {
+      let settingsChannel = FlutterMethodChannel(
+        name: systemSettingsChannelName,
+        binaryMessenger: settingsRegistrar.messenger()
+      )
+      settingsChannel.setMethodCallHandler { [weak self] call, result in
+        switch call.method {
+        case "openNotificationSettings":
+          self?.openNotificationSettings()
+          result(nil)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+    }
 
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "GlazeBackgroundAudio") else { return }
     let channel = FlutterMethodChannel(

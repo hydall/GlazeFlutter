@@ -20,39 +20,8 @@ class ShellScreen extends StatefulWidget {
   State<ShellScreen> createState() => _ShellScreenState();
 }
 
-class _ShellScreenState extends State<ShellScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fade;
-  int _currentIndex = 0;
+class _ShellScreenState extends State<ShellScreen> {
   int _lastBackPress = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentIndex = widget.navigationShell.currentIndex;
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-    );
-    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
-    _controller.value = 1.0;
-  }
-
-  @override
-  void didUpdateWidget(ShellScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.navigationShell.currentIndex != _currentIndex) {
-      _currentIndex = widget.navigationShell.currentIndex;
-      _controller.forward(from: 0.0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,11 +29,14 @@ class _ShellScreenState extends State<ShellScreen>
     final location = GoRouterState.of(context).uri.toString();
     final isDesktop = isDesktopLayout(context);
 
+    // The branch cross-fade is owned entirely by [FadeBranchContainer] (the
+    // shell's navigatorContainerBuilder). Do NOT wrap navigationShell in a
+    // second FadeTransition here: stacking a shorter outer fade over the inner
+    // cross-fade un-dims the still-fading-out previous branch the instant the
+    // outer fade completes, flashing a frame of the previous screen at the end
+    // of the transition (most visible on iOS).
     if (isDesktop) {
-      return FadeTransition(
-        opacity: _fade,
-        child: widget.navigationShell,
-      );
+      return widget.navigationShell;
     }
 
     final isIosLikeTargetPlatform =
@@ -97,10 +69,7 @@ class _ShellScreenState extends State<ShellScreen>
           body: Stack(
             children: [
               Positioned.fill(
-                child: FadeTransition(
-                  opacity: _fade,
-                  child: widget.navigationShell,
-                ),
+                child: widget.navigationShell,
               ),
               Positioned(
                 top: 0,
