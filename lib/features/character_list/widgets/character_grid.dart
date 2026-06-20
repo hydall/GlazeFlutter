@@ -1,9 +1,13 @@
+import 'dart:math';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glass_surface.dart';
+import '../character_detail_screen.dart';
 import '../character_sort.dart';
 import 'character_card.dart';
 
@@ -48,6 +52,23 @@ class CharacterGrid extends StatelessWidget {
     this.folderId,
   });
 
+  /// Opens a random character from the currently shown list in the detail
+  /// sheet. Mirrors the card's tap behaviour (modal sheet + route-return nav).
+  Future<void> _openRandom(BuildContext context) async {
+    if (characters.isEmpty) return;
+    final picked = characters[Random().nextInt(characters.length)];
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CharacterDetailScreen(charId: picked.id),
+    );
+    if (result != null && result.isNotEmpty && context.mounted) {
+      context.go(result);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
@@ -62,6 +83,10 @@ class CharacterGrid extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                if (characters.isNotEmpty) ...[
+                  _DiceButton(onTap: () => _openRandom(context)),
+                  const SizedBox(width: 10),
+                ],
                 if (onFilterTap != null) ...[
                   _FilterButton(count: filterCount, onTap: onFilterTap!),
                   const SizedBox(width: 10),
@@ -158,6 +183,35 @@ class _SortDirButton extends StatelessWidget {
                 size: 18,
                 color: context.cs.primary,
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DiceButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _DiceButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 32,
+        height: 32,
+        child: GlassSurface(
+          borderRadius: BorderRadius.circular(16),
+          tint: context.cs.surface,
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.18)),
+          child: Center(
+            child: Icon(
+              Icons.casino_rounded,
+              size: 18,
+              color: context.cs.primary,
             ),
           ),
         ),
