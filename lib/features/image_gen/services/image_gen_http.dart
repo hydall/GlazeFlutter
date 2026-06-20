@@ -24,13 +24,20 @@ class ImageGenHttp {
         'Authorization': 'Bearer $apiKey',
       ...?extraHeaders,
     };
-    final response = await _dio.post<Map<String, dynamic>>(
-      url,
-      data: body,
-      options: Options(headers: headers),
-      cancelToken: cancelToken,
-    );
-    return response.data ?? {};
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        url,
+        data: body,
+        options: Options(headers: headers),
+        cancelToken: cancelToken,
+      );
+      return response.data ?? {};
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final body = e.response?.data;
+      debugPrint('ROUTMY json error $status: $body');
+      rethrow;
+    }
   }
 
   Future<String> postAndExtractBase64({

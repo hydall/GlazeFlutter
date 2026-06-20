@@ -248,12 +248,15 @@ class RoutmyImageProvider {
     if (referenceImages != null) {
       for (final ref in referenceImages) {
         if (ref.isEmpty) continue;
+        final dataUrl = _asDataUrl(ref);
+        debugPrint('ROUTMY chat ref: len=${ref.length} dataUrl_prefix=${dataUrl.substring(0, dataUrl.length.clamp(0, 40))}');
         content.add({
           'type': 'image_url',
-          'image_url': {'url': _asDataUrl(ref)},
+          'image_url': {'url': dataUrl},
         });
       }
     }
+    debugPrint('ROUTMY chat content parts=${content.length} model=$model');
     content.add({'type': 'text', 'text': prompt});
 
     final body = <String, dynamic>{
