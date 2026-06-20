@@ -124,10 +124,11 @@ class RoutmyImageProvider {
       'n': '1',
     };
 
-    // image_config as individual fields (multipart form does not accept nested objects)
-    fields['image_config[aspect_ratio]'] = aspectRatio;
-    fields['image_config[image_size]'] = imageSize;
-    if (quality.isNotEmpty) fields['image_config[quality]'] = quality;
+    // image_config nested object is not supported in multipart form-data.
+    // Pass only the flat fields that the edits endpoint accepts.
+    // aspect_ratio and image_size are rout.my extensions — skip for edits,
+    // quality maps to the standard OpenAI `quality` field.
+    if (quality.isNotEmpty && quality != 'standard') fields['quality'] = quality;
 
     final imageFields = <(String, Uint8List, String, String)>[];
     for (final ref in referenceImages.where((s) => s.isNotEmpty)) {
@@ -139,6 +140,7 @@ class RoutmyImageProvider {
       imageFields.add(('image', bytes, 'ref.$ext', mime));
     }
 
+    debugPrint('ROUTMY _editImages: imageFields=${imageFields.length} prompt="${prompt.length > 120 ? prompt.substring(0, 120) : prompt}"');
     final json = await _http.postMultipart(
       url: url,
       fields: fields,
