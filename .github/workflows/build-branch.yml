@@ -10,7 +10,7 @@ on:
       notify_people:
         description: 'Ping people in Telegram'
         required: false
-        default: true
+        default: false
         type: boolean
 
 permissions:
