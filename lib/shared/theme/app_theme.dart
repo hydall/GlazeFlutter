@@ -96,6 +96,25 @@ ColorScheme _buildColorScheme(ThemePreset preset, {required bool isDark}) {
   );
 }
 
+/// Seed used by the "Material You" theme when the system does not provide a
+/// dynamic palette (non-Android platforms, older Android).
+const _materialYouFallbackSeed = Color(0xFF7996CE);
+
+/// Resolve the Material 3 [ColorScheme] for the built-in "Material You" theme.
+/// On Android [dynamicScheme] is the system palette; everywhere else (or when
+/// unavailable) it falls back to a seeded tonal palette so the theme still
+/// renders consistently.
+ColorScheme _materialYouScheme(ColorScheme? dynamicScheme,
+    {required bool isDark}) {
+  if (dynamicScheme != null) {
+    return dynamicScheme;
+  }
+  return ColorScheme.fromSeed(
+    seedColor: _materialYouFallbackSeed,
+    brightness: isDark ? Brightness.dark : Brightness.light,
+  );
+}
+
 Color _deriveUiColor(Color accent, bool isDark) {
   if (isDark) {
     final hsl = HSLColor.fromColor(accent);
@@ -142,14 +161,20 @@ Color _borderFor(Color bg, bool isDark) {
 }
 
 class AppTheme {
-  static ThemeData dark(ThemePreset preset, {String? fontFamily}) {
-    final colorScheme = _buildColorScheme(preset, isDark: true);
+  static ThemeData dark(ThemePreset preset,
+      {String? fontFamily, ColorScheme? dynamicScheme}) {
+    final isMaterialYou = preset.isMaterialYou;
+    final colorScheme = isMaterialYou
+        ? _materialYouScheme(dynamicScheme, isDark: true)
+        : _buildColorScheme(preset, isDark: true);
     final effectiveFont = fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
     final uiWeight = preset.uiFontWeightValue;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 15.0 : 1.0;
-    final glazeColors = GlazeColors.fromPreset(preset, isDark: true);
+    final glazeColors = isMaterialYou
+        ? GlazeColors.fromColorScheme(colorScheme)
+        : GlazeColors.fromPreset(preset, isDark: true);
     final btnBg = _ensureButtonContrast(
         colorScheme.primary, colorScheme.surface, isDark: true);
     final btnFg = btnBg.computeLuminance() > 0.35
@@ -271,14 +296,20 @@ class AppTheme {
     );
   }
 
-  static ThemeData light(ThemePreset preset, {String? fontFamily}) {
-    final colorScheme = _buildColorScheme(preset, isDark: false);
+  static ThemeData light(ThemePreset preset,
+      {String? fontFamily, ColorScheme? dynamicScheme}) {
+    final isMaterialYou = preset.isMaterialYou;
+    final colorScheme = isMaterialYou
+        ? _materialYouScheme(dynamicScheme, isDark: false)
+        : _buildColorScheme(preset, isDark: false);
     final effectiveFont = fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
     final uiWeight = preset.uiFontWeightValue;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 15.0 : 1.0;
-    final glazeColors = GlazeColors.fromPreset(preset, isDark: false);
+    final glazeColors = isMaterialYou
+        ? GlazeColors.fromColorScheme(colorScheme)
+        : GlazeColors.fromPreset(preset, isDark: false);
     final btnBg = _ensureButtonContrast(
         colorScheme.primary, colorScheme.surface, isDark: false);
     final btnFg = btnBg.computeLuminance() > 0.35

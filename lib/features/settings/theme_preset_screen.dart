@@ -380,7 +380,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
             _exportPreset(preset);
           },
         ),
-        if (preset.id != 'default')
+        if (!preset.isBuiltIn)
           BottomSheetItem(
             icon: Icons.delete_outline,
             label: 'theme_confirm_delete_preset'.tr(),

@@ -125,10 +125,13 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
   Widget build(BuildContext context) {
     final preset = ref.watch(themeProvider).activePreset;
     final isDefault = preset.id == 'default';
+    // Material You drives its palette from the system; colors are locked but
+    // fonts and background/element effects stay editable.
+    final colorsLocked = preset.isMaterialYou;
     final topPad = MediaQuery.of(context).padding.top + 74.0;
     final bottomPad = ref.watch(navHeightProvider) + 20;
     final tabHeight = 68.0;
-    final warningHeight = isDefault ? 62.0 : 0.0;
+    final warningHeight = (isDefault || colorsLocked) ? 62.0 : 0.0;
     final totalTopPadding = topPad + warningHeight + tabHeight;
 
     return GlazeScaffold(
@@ -142,22 +145,25 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
               absorbing: isDefault,
               child: Opacity(
                 opacity: isDefault ? 0.45 : 1.0,
-                child: IndexedStack(
-                  index: _activeTab,
-                  children: [
-                    _GeneralTab(
-                      preset: preset,
-                      onUpdate: _update,
-                      topPadding: totalTopPadding,
-                      bottomPadding: bottomPad,
-                    ),
-                    _ChatTab(
-                      preset: preset,
-                      onUpdate: _update,
-                      topPadding: totalTopPadding,
-                      bottomPadding: bottomPad,
-                    ),
-                  ],
+                child: _ColorsLockedScope(
+                  locked: colorsLocked,
+                  child: IndexedStack(
+                    index: _activeTab,
+                    children: [
+                      _GeneralTab(
+                        preset: preset,
+                        onUpdate: _update,
+                        topPadding: totalTopPadding,
+                        bottomPadding: bottomPad,
+                      ),
+                      _ChatTab(
+                        preset: preset,
+                        onUpdate: _update,
+                        topPadding: totalTopPadding,
+                        bottomPadding: bottomPad,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -170,7 +176,7 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(height: topPad),
-                if (isDefault)
+                if (isDefault || colorsLocked)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: Container(
@@ -187,7 +193,9 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                     child: Text(
-                      'theme_default_not_editable'.tr(),
+                      isDefault
+                          ? 'theme_default_not_editable'.tr()
+                          : 'theme_material_you_colors_locked'.tr(),
                       style: TextStyle(
                                   fontSize: 12, color: context.cs.onSurfaceVariant),
                             ),
@@ -1185,6 +1193,24 @@ class _FontModeRow extends StatelessWidget {
 
 // ─── Color row ───────────────────────────────────────────────────────────────
 
+/// Propagates a "colors are locked" flag (built-in Material You theme) down to
+/// every [_ColorRow] without threading a parameter through each call site.
+class _ColorsLockedScope extends InheritedWidget {
+  final bool locked;
+
+  const _ColorsLockedScope({required this.locked, required super.child});
+
+  static bool of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_ColorsLockedScope>()
+          ?.locked ??
+      false;
+
+  @override
+  bool updateShouldNotify(_ColorsLockedScope oldWidget) =>
+      oldWidget.locked != locked;
+}
+
 class _ColorRow extends ConsumerWidget {
   final String label;
   final String? value; // null = auto
@@ -1215,59 +1241,71 @@ class _ColorRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final locked = _ColorsLockedScope.of(context);
     final gradientValue =
         allowGradient ? _decodeGradient(gradient) : null;
     final current = value != null && value!.isNotEmpty ? _hex(value!) : null;
     final textOnCurrent = current != null
         ? (current.computeLuminance() > 0.5 ? Colors.black : Colors.white)
         : context.cs.onSurfaceVariant;
-    return InkWell(
-      onTap: () => _openPicker(context, ref.read(themeProvider).activePreset),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: context.cs.onSurfaceVariant,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w400,
+    return Opacity(
+      opacity: locked ? 0.4 : 1.0,
+      child: InkWell(
+        onTap: locked
+            ? null
+            : () => _openPicker(context, ref.read(themeProvider).activePreset),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: context.cs.onSurfaceVariant,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ),
-            ),
-            Container(
-              constraints: const BoxConstraints(minWidth: 48),
-              height: 24,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: gradientValue == null
-                    ? (current ?? Colors.transparent)
+              if (locked)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Icon(Icons.lock_outline,
+                      size: 16, color: context.cs.onSurfaceVariant),
+                ),
+              Container(
+                constraints: const BoxConstraints(minWidth: 48),
+                height: 24,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: gradientValue == null
+                      ? (current ?? Colors.transparent)
+                      : null,
+                  gradient: gradientValue,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: context.cs.outlineVariant.withValues(
+                        alpha: (current == null && gradientValue == null)
+                            ? 0.6
+                            : 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: (current == null && gradientValue == null)
+                    ? Text(
+                        nullLabel,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: textOnCurrent,
+                        ),
+                      )
                     : null,
-                gradient: gradientValue,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: context.cs.outlineVariant.withValues(
-                      alpha: (current == null && gradientValue == null)
-                          ? 0.6
-                          : 0.3),
-                  width: 1,
-                ),
               ),
-              child: (current == null && gradientValue == null)
-                  ? Text(
-                      nullLabel,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: textOnCurrent,
-                      ),
-                    )
-                  : null,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

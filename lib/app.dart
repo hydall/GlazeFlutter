@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +26,7 @@ import 'features/cloud_sync/sync_provider.dart';
 import 'features/cloud_sync/sync_models.dart';
 
 import 'shared/theme/app_theme.dart';
+import 'shared/theme/theme_preset.dart';
 import 'shared/theme/theme_provider.dart';
 
 import 'features/chat/widgets/chat_webview_preload.dart';
@@ -219,10 +222,43 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
         : preset.themeMode == 'dark'
         ? ThemeMode.dark
         : themeSettings.mode;
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        // Material You dynamic colors are sourced from the system only on
+        // Android; elsewhere the theme falls back to a seeded tonal palette.
+        final useDynamic = defaultTargetPlatform == TargetPlatform.android;
+        final lightScheme = preset.isMaterialYou && useDynamic
+            ? lightDynamic
+            : null;
+        final darkScheme = preset.isMaterialYou && useDynamic
+            ? darkDynamic
+            : null;
+        return _buildApp(
+          context,
+          router: router,
+          preset: preset,
+          uiFont: uiFont,
+          mode: mode,
+          lightScheme: lightScheme,
+          darkScheme: darkScheme,
+        );
+      },
+    );
+  }
+
+  Widget _buildApp(
+    BuildContext context, {
+    required GoRouter router,
+    required ThemePreset preset,
+    required String? uiFont,
+    required ThemeMode mode,
+    required ColorScheme? lightScheme,
+    required ColorScheme? darkScheme,
+  }) {
     return MaterialApp.router(
       title: 'Glaze',
-      theme: AppTheme.light(preset, fontFamily: uiFont),
-      darkTheme: AppTheme.dark(preset, fontFamily: uiFont),
+      theme: AppTheme.light(preset, fontFamily: uiFont, dynamicScheme: lightScheme),
+      darkTheme: AppTheme.dark(preset, fontFamily: uiFont, dynamicScheme: darkScheme),
       themeMode: mode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,

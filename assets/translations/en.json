@@ -1517,6 +1517,7 @@
     "theme_invalid_theme_file": "Invalid theme file: {message}",
     "theme_confirm_delete_message": "Are you sure you want to delete this theme?",
     "theme_default_not_editable": "Default theme cannot be edited. Import or create a new theme to customise.",
+    "theme_material_you_colors_locked": "Material You uses your system colors. Colors can't be changed — only fonts and background/element effects.",
     "theme_accent_label": "Accent",
     "theme_font_glaze": "Glaze (Inter)",
     "theme_font_google": "Google Fonts",

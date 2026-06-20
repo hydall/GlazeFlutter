@@ -22,15 +22,32 @@ class ThemePresetStorage implements SyncThemePresetStore {
 
   Future<List<ThemePreset>> loadAll() async {
     final raw = _prefs.getString(_presetsKey);
-    if (raw == null) return [_defaultPreset];
+    if (raw == null) return _withBuiltins([]);
     try {
       final list = jsonDecode(raw) as List;
-      final presets = list.map((e) => ThemePreset.fromJson(e as Map<String, dynamic>)).toList();
-      if (presets.isEmpty) presets.add(_defaultPreset);
-      return presets;
+      final presets = list
+          .map((e) => ThemePreset.fromJson(e as Map<String, dynamic>))
+          .toList();
+      return _withBuiltins(presets);
     } catch (_) {
-      return [_defaultPreset];
+      return _withBuiltins([]);
     }
+  }
+
+  /// Guarantee the built-in standard themes are always present and pinned to
+  /// the top of the list (Default first, then Material You). Existing user
+  /// copies of a built-in id are kept as-is so customised fonts/effects
+  /// survive a reload.
+  List<ThemePreset> _withBuiltins(List<ThemePreset> presets) {
+    final result = List<ThemePreset>.from(presets);
+    if (!result.any((p) => p.id == 'default')) {
+      result.insert(0, _defaultPreset);
+    }
+    if (!result.any((p) => p.id == kMaterialYouPresetId)) {
+      final defaultIdx = result.indexWhere((p) => p.id == 'default');
+      result.insert(defaultIdx + 1, _materialYouPreset);
+    }
+    return result;
   }
 
   Future<String> loadActiveId() async {
@@ -395,7 +412,7 @@ class ThemePresetStorage implements SyncThemePresetStore {
   }
 
   Future<void> removePreset(String id) async {
-    if (id == 'default') return;
+    if (id == 'default' || id == kMaterialYouPresetId) return;
     final presets = await loadAll();
     presets.removeWhere((p) => p.id == id);
     await saveAll(presets);
@@ -415,6 +432,27 @@ class ThemePresetStorage implements SyncThemePresetStore {
 final _defaultPreset = ThemePreset(
   id: 'default',
   name: 'Default',
+  accentColor: '#7996CE',
+  bgOpacity: 0.85,
+  elementOpacity: 0.8,
+  elementBlur: 12,
+  chatLayout: 'default',
+  borderWidth: 1,
+  borderOpacity: 0.1,
+  noiseOpacity: 0.03,
+  noiseIntensity: 0.8,
+  bgNoiseOpacity: 0.03,
+  bgNoiseIntensity: 0.4,
+);
+
+/// Built-in "Material You" standard theme. Colors are resolved from the system
+/// dynamic palette (Android) or a seed fallback at theme-build time, so the
+/// stored `accentColor`/bubble fields here are only placeholders — they are
+/// ignored when the theme is rendered. Fonts and background/element effects
+/// remain user-editable.
+final _materialYouPreset = ThemePreset(
+  id: kMaterialYouPresetId,
+  name: 'Material You',
   accentColor: '#7996CE',
   bgOpacity: 0.85,
   elementOpacity: 0.8,

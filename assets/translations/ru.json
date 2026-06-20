@@ -1558,6 +1558,7 @@
     "theme_custom_font_subtitle": "Использовать кастомный шрифт темы",
     "theme_dark_overlay": "Тёмный оверлей",
     "theme_default_not_editable": "Стандартную тему нельзя редактировать. Импортируйте или создайте новую тему для настройки.",
+    "theme_material_you_colors_locked": "Material You использует цвета системы. Цвета изменить нельзя — только шрифты и фоны с элементами.",
     "theme_edit_theme": "Редактировать тему",
     "theme_failed_load_font": "Не удалось загрузить шрифт: ",
     "theme_failed_load_image": "Не удалось загрузить изображение: ",

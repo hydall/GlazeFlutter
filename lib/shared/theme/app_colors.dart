@@ -44,6 +44,27 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   // Vue base UI element bg (src/assets/css/base.css: --ui-bg-default-rgb)
   static const _vueUiBg = Color(0xFF1E1E1E);
 
+  /// Build chat/bubble colors straight from a Material 3 [ColorScheme] (used by
+  /// the built-in "Material You" theme). The accent and bubble colors track the
+  /// dynamic palette; italics stay the neutral gray default.
+  static GlazeColors fromColorScheme(ColorScheme scheme) {
+    final isDark = scheme.brightness == Brightness.dark;
+    final charBubble = isDark
+        ? scheme.surfaceContainerHigh
+        : scheme.surfaceContainerHighest;
+    return GlazeColors(
+      accent: scheme.primary,
+      userBubble: scheme.primary,
+      charBubble: charBubble,
+      userText: scheme.onPrimary,
+      charText: scheme.onSurface,
+      userQuote: scheme.onPrimary,
+      charQuote: scheme.primary,
+      userItalic: _defaultItalic,
+      charItalic: _defaultItalic,
+    );
+  }
+
   static GlazeColors fromPreset(ThemePreset preset, {required bool isDark}) {
     final base = isDark ? dark : light;
     final accent = preset.accent;

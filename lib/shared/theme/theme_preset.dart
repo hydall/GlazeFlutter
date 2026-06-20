@@ -6,6 +6,11 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'theme_preset.freezed.dart';
 part 'theme_preset.g.dart';
 
+/// Id of the built-in "Material You" standard theme. Its palette is driven by
+/// the system dynamic color (Android) or a seed fallback elsewhere and cannot
+/// be edited — only fonts and background/element effects are customisable.
+const String kMaterialYouPresetId = 'material_you';
+
 @Freezed(fromJson: true, toJson: true)
 abstract class ThemePreset with _$ThemePreset {
   const factory ThemePreset({
@@ -139,6 +144,13 @@ extension ThemePresetX on ThemePreset {
   bool get hasCustomFont => customFont != null && customFont!.isNotEmpty;
   bool get hasChatFont => chatFont != null && chatFont!.isNotEmpty;
   bool get hasBgImage => bgImage != null && bgImage!.isNotEmpty;
+
+  /// Built-in "Material You" theme whose colors come from the system dynamic
+  /// palette (Android) / seed fallback and are not user-editable.
+  bool get isMaterialYou => id == kMaterialYouPresetId;
+
+  /// Built-in standard themes that always exist and cannot be deleted.
+  bool get isBuiltIn => id == 'default' || id == kMaterialYouPresetId;
 }
 
 Color _parseHex(String hex) {

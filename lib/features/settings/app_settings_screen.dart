@@ -75,7 +75,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                 width: 12,
                 height: 12,
                 decoration: BoxDecoration(
-                  color: ref.watch(themeProvider).accentColor,
+                  color: context.cs.primary,
                   shape: BoxShape.circle,
                 ),
               ),
