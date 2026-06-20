@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../../../core/constants/image_gen_patterns.dart';
@@ -193,13 +194,11 @@ class ImageGenService {
         onUpdate?.call(currentText);
       } on DioException catch (e) {
         if (CancelToken.isCancel(e)) break;
-        debugPrint('IMAGE GEN: failed for prompt "$prompt": $e');
         final errorMsg = _formatError(e);
         currentText = replaceTagWithError(currentText, i, errorMsg);
         onUpdate?.call(currentText);
         onError?.call(errorMsg);
       } catch (e) {
-        debugPrint('IMAGE GEN: failed for prompt "$prompt": $e');
         final errorMsg = _formatErrorString(e.toString());
         currentText = replaceTagWithError(currentText, i, errorMsg);
         onUpdate?.call(currentText);
@@ -233,13 +232,23 @@ class ImageGenService {
     String? instructionImageSize,
     CancelToken? cancelToken,
   }) async {
-    final refs = _buildReferences(
-      settings: settings,
-      prompt: prompt,
-      character: character,
-      persona: persona,
-      recentImageContexts: recentImageContexts,
-    );
+    final isRoutmy = settings.apiType == ImageGenApiType.routmy ||
+        settings.apiType == ImageGenApiType.ruRoutmy;
+    final refs = isRoutmy
+        ? await _buildRoutmyRefs(
+            settings: settings,
+            prompt: prompt,
+            character: character,
+            persona: persona,
+            recentImageContexts: recentImageContexts,
+          )
+        : _buildReferences(
+            settings: settings,
+            prompt: prompt,
+            character: character,
+            persona: persona,
+            recentImageContexts: recentImageContexts,
+          );
 
     switch (settings.apiType) {
       case ImageGenApiType.openai:
@@ -360,36 +369,8 @@ class ImageGenService {
       }
     }
 
-    if (settings.apiType == ImageGenApiType.routmy) {
-      if (settings.routmySendCharAvatar && character?.avatarPath != null) {
-        refs.add({'name': character!.name, 'image': _fileToBase64(character.avatarPath!)});
-      }
-      if (settings.routmySendUserAvatar && persona?.avatarPath != null) {
-        refs.add({'name': persona!.name, 'image': _fileToBase64(persona.avatarPath!)});
-      }
-      for (final ref in settings.routmyAdditionalRefs) {
-        if (ref.matchMode == 'always' || promptLower.contains(ref.name.toLowerCase())) {
-          refs.add({'name': ref.name, 'image': _extractBase64FromDataUrl(ref.imageData)});
-        }
-      }
-    }
-
-    if (settings.apiType == ImageGenApiType.ruRoutmy) {
-      if (settings.ruRoutmySendCharAvatar && character?.avatarPath != null) {
-        refs.add({'name': character!.name, 'image': _fileToBase64(character.avatarPath!)});
-      }
-      if (settings.ruRoutmySendUserAvatar && persona?.avatarPath != null) {
-        refs.add({'name': persona!.name, 'image': _fileToBase64(persona.avatarPath!)});
-      }
-      // ruRoutmy is the same RoutMy provider on a regional mirror, so it
-      // reuses the RoutMy user-reference list. Without this loop, user
-      // references were silently dropped for ruRoutmy.
-      for (final ref in settings.routmyAdditionalRefs) {
-        if (ref.matchMode == 'always' || promptLower.contains(ref.name.toLowerCase())) {
-          refs.add({'name': ref.name, 'image': _extractBase64FromDataUrl(ref.imageData)});
-        }
-      }
-    }
+    // routmy / ruRoutmy refs are built asynchronously (resized) — see _buildRoutmyRefs
+    
 
     if (settings.imageContextEnabled && recentImageContexts != null) {
       final count = settings.imageContextCount.clamp(1, 3);
@@ -405,6 +386,50 @@ class ImageGenService {
     return refs;
   }
 
+  /// Async variant of [_buildReferences] for routmy/ruRoutmy.
+  /// Resizes avatar/context images to 512px before base64-encoding so that
+  /// the JSON payload stays within provider limits.
+  Future<List<Map<String, String>>> _buildRoutmyRefs({
+    required ImageGenSettings settings,
+    required String prompt,
+    Character? character,
+    Persona? persona,
+    List<String>? recentImageContexts,
+  }) async {
+    final refs = <Map<String, String>>[];
+    final promptLower = prompt.toLowerCase();
+    final isRu = settings.apiType == ImageGenApiType.ruRoutmy;
+
+    final sendChar = isRu ? settings.ruRoutmySendCharAvatar : settings.routmySendCharAvatar;
+    final sendUser = isRu ? settings.ruRoutmySendUserAvatar : settings.routmySendUserAvatar;
+
+    if (sendChar && character?.avatarPath != null) {
+      final img = await _fileToBase64Resized(character!.avatarPath!);
+      if (img.isNotEmpty) refs.add({'name': character.name, 'image': img});
+    }
+    if (sendUser && persona?.avatarPath != null) {
+      final img = await _fileToBase64Resized(persona!.avatarPath!);
+      if (img.isNotEmpty) refs.add({'name': persona.name, 'image': img});
+    }
+    for (final ref in settings.routmyAdditionalRefs) {
+      if (ref.matchMode == 'always' || promptLower.contains(ref.name.toLowerCase())) {
+        final raw = _extractBase64FromDataUrl(ref.imageData);
+        if (raw.isNotEmpty) refs.add({'name': ref.name, 'image': raw});
+      }
+    }
+
+    if (settings.imageContextEnabled && recentImageContexts != null) {
+      final count = settings.imageContextCount.clamp(1, 3);
+      for (final ctx in recentImageContexts.take(count)) {
+        final path = normalizeImageResultPayload(ctx);
+        final encoded = await _fileToBase64Resized(path);
+        if (encoded.isNotEmpty) refs.add({'name': 'context', 'image': encoded});
+      }
+    }
+
+    return refs;
+  }
+
   String _fileToBase64(String path) {
     try {
       final resolved = resolveGlazeFilePath(path) ?? path;
@@ -413,6 +438,28 @@ class ImageGenService {
       return base64Encode(file.readAsBytesSync());
     } catch (_) {
       return '';
+    }
+  }
+
+  /// Reads an image file, resizes so the longest side ≤ [maxSide] px,
+  /// re-encodes as JPEG at [jpegQuality] (0–100), and returns bare base64.
+  /// Falls back to the raw file bytes on any error.
+  Future<String> _fileToBase64Resized(
+    String path, {
+    int maxSide = 512,
+    int jpegQuality = 85,
+  }) async {
+    try {
+      final resolved = resolveGlazeFilePath(path) ?? path;
+      final file = File(resolved);
+      if (!file.existsSync()) return '';
+      final bytes = file.readAsBytesSync();
+
+      final decoded = await compute(_decodeAndResizeJpeg, _ResizeArgs(bytes, maxSide, jpegQuality));
+      if (decoded == null) return base64Encode(bytes);
+      return base64Encode(decoded);
+    } catch (_) {
+      return _fileToBase64(path);
     }
   }
 
@@ -496,5 +543,33 @@ class ImageGenService {
       final suffix = pipeIdx != -1 ? raw.substring(pipeIdx) : '';
       return '[IMG:RESULT:$newPath$suffix]';
     });
+  }
+}
+
+// ─── Isolate helpers for JPEG resize ────────────────────────────────────────
+
+class _ResizeArgs {
+  const _ResizeArgs(this.bytes, this.maxSide, this.jpegQuality);
+  final Uint8List bytes;
+  final int maxSide;
+  final int jpegQuality;
+}
+
+/// Runs in a separate isolate via [compute]. Decodes the image, resizes to fit
+/// within [args.maxSide] px on the longest side, and encodes as JPEG.
+/// Returns null on any error so the caller can fall back to the raw bytes.
+Uint8List? _decodeAndResizeJpeg(_ResizeArgs args) {
+  try {
+    final src = img.decodeImage(args.bytes);
+    if (src == null) return null;
+    final resized = img.copyResize(
+      src,
+      width: src.width >= src.height ? args.maxSide : -1,
+      height: src.height > src.width ? args.maxSide : -1,
+      interpolation: img.Interpolation.linear,
+    );
+    return Uint8List.fromList(img.encodeJpg(resized, quality: args.jpegQuality));
+  } catch (_) {
+    return null;
   }
 }

@@ -38,6 +38,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
   late int _previousBlocksCount;
   late bool _streamToPanel;
   late bool _useStaticHtml;
+  late bool _manualOnly;
   bool _fetchingModels = false;
 
   @override
@@ -69,6 +70,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
     _contextMessageCount = b.contextMessageCount;
     _previousBlocksCount = b.previousBlocksCount;
     _streamToPanel = b.streamToPanel;
+    _manualOnly = b.manualOnly;
     _useStaticHtml =
         b.type == BlockType.interactive && b.script.trim().isNotEmpty;
   }
@@ -103,6 +105,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
       previousBlocksCount: usesLlm ? _previousBlocksCount : 0,
       contextSystemPrompt: usesLlm ? _contextSystemPromptController.text : '',
       streamToPanel: usesLlm ? _streamToPanel : false,
+      manualOnly: _manualOnly,
       script: isInteractive
           ? (_useStaticHtml ? _staticHtmlController.text : '')
           : (isJs ? widget.block.script : ''),
@@ -156,6 +159,14 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
               BlockTriggerPicker(
                 selected: _trigger,
                 onChanged: (v) => setState(() => _trigger = v),
+              ),
+              const SizedBox(height: 4),
+              SwitchListTile(
+                title: Text('block_manual_only_title'.tr()),
+                subtitle: Text('block_manual_only_sub'.tr()),
+                value: _manualOnly,
+                onChanged: (v) => setState(() => _manualOnly = v),
+                contentPadding: EdgeInsets.zero,
               ),
               if (_type == BlockType.infoblock ||
                   _type == BlockType.imageGen ||

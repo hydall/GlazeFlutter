@@ -19,7 +19,7 @@ class BlockProcessor {
 
   List<BlockConfig> selectBlocks(ExtensionPreset preset, BlockTrigger trigger) {
     return preset.blocks
-        .where((b) => b.enabled && b.trigger == trigger)
+        .where((b) => b.enabled && b.trigger == trigger && !b.manualOnly)
         .toList()
       ..sort((a, b) => a.order.compareTo(b.order));
   }

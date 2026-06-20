@@ -50,46 +50,49 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
           color: context.cs.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+        child: Material(
+          type: MaterialType.transparency,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: items.length,
-                itemBuilder: (context, i) {
-                  final item = items[i];
-                  final selected = isSelected(item);
-                  return ListTile(
-                    title: Text(labelBuilder(item)),
-                    trailing: selected
-                        ? Text(
-                            'Active',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: context.cs.primary,
-                            ),
-                          )
-                        : null,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onSelected(item);
-                    },
-                  );
-                },
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: items.length,
+                  itemBuilder: (context, i) {
+                    final item = items[i];
+                    final selected = isSelected(item);
+                    return ListTile(
+                      title: Text(labelBuilder(item)),
+                      trailing: selected
+                          ? Text(
+                              'Active',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.cs.primary,
+                              ),
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.pop(context);
+                        onSelected(item);
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -57,13 +57,19 @@ class RoutMyConstants {
 
   static const models = [
     ('google/gemini-3.1-flash-image-preview', 'Gemini 3.1 Flash Image'),
+    ('google/gemini-3-pro-image', 'Gemini 3 Pro Image'),
     ('openai/gpt-image-1.5', 'GPT Image 1.5'),
     ('openai/gpt-image-2', 'GPT Image 2'),
-    ('x-ai/grok-imagine-image', 'Grok Imagine Image'),
-    ('x-ai/grok-imagine-image-pro', 'Grok Imagine Image Pro'),
-    ('recraft/recraft-v4.1', 'Recraft V4.1'),
-    ('recraft/recraft-v4.1-utility', 'Recraft V4.1 Utility'),
   ];
+
+  // Models that generate images via /v1/chat/completions with modalities:[image,text].
+  // openai/gpt-image-* are NOT here — rout.my rejects them on chat completions
+  // ("not a language model"). They go through /v1/images/edits (with refs) or
+  // /v1/images/generations (without refs).
+  static const chatImageModels = {
+    'google/gemini-3.1-flash-image-preview',
+    'google/gemini-3-pro-image',
+  };
 
   static const aspectRatios = [
     '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9',

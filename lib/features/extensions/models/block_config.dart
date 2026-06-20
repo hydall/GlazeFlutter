@@ -69,6 +69,10 @@ abstract class BlockConfig with _$BlockConfig {
     /// headless engine every `periodicIntervalSeconds` seconds while
     /// extensions are enabled. Ignored for other trigger types.
     @Default(60) int periodicIntervalSeconds,
+    /// When true, the block is never triggered automatically (afterUser,
+    /// afterAssistant, periodic). It only runs when the user presses
+    /// "Run All" / "Rerun" manually from the ext-blocks panel.
+    @Default(false) bool manualOnly,
   }) = _BlockConfig;
 
   factory BlockConfig.fromJson(Map<String, dynamic> json) =>

@@ -324,52 +324,55 @@ class _ImageGenReferenceRowState extends State<ImageGenReferenceRow> {
                       top: Radius.circular(20),
                     ),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          'imggen_match_mode'.tr(),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'imggen_match_mode'.tr(),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      ListTile(
-                        title: Text('imggen_match_mode_match'.tr()),
-                        trailing: widget.refItem.matchMode == 'match'
-                            ? Text(
-                                'label_active'.tr(),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: context.cs.primary,
-                                ),
-                              )
-                            : null,
-                        onTap: () {
-                          widget.onMatchModeChanged('match');
-                          Navigator.pop(context);
-                        },
-                      ),
-                      ListTile(
-                        title: Text('imggen_match_mode_always'.tr()),
-                        trailing: widget.refItem.matchMode == 'always'
-                            ? Text(
-                                'label_active'.tr(),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: context.cs.primary,
-                                ),
-                              )
-                            : null,
-                        onTap: () {
-                          widget.onMatchModeChanged('always');
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ],
+                        ListTile(
+                          title: Text('imggen_match_mode_match'.tr()),
+                          trailing: widget.refItem.matchMode == 'match'
+                              ? Text(
+                                  'label_active'.tr(),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: context.cs.primary,
+                                  ),
+                                )
+                              : null,
+                          onTap: () {
+                            widget.onMatchModeChanged('match');
+                            Navigator.pop(context);
+                          },
+                        ),
+                        ListTile(
+                          title: Text('imggen_match_mode_always'.tr()),
+                          trailing: widget.refItem.matchMode == 'always'
+                              ? Text(
+                                  'label_active'.tr(),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: context.cs.primary,
+                                  ),
+                                )
+                              : null,
+                          onTap: () {
+                            widget.onMatchModeChanged('always');
+                            Navigator.pop(context);
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );

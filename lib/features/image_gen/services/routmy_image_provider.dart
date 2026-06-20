@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -20,17 +22,8 @@ class RoutmyImageProvider {
     List<String>? referenceImages,
     CancelToken? cancelToken,
   }) async {
-    final isChatModel = model.startsWith('google/');
+    final isChatModel = RoutMyConstants.chatImageModels.contains(model);
     final hasRefs = referenceImages != null && referenceImages.isNotEmpty;
-    // For non-chat (OpenAI-style) models, reference images are only honored by
-    // the edits endpoint (/v1/images/edits with an `images` array). The plain
-    // /v1/images/generations endpoint ignores reference input, so route to
-    // edits whenever references are present. See https://docs.rout.my/api/images
-    final endpoint = isChatModel
-        ? '/v1/chat/completions'
-        : (hasRefs ? '/v1/images/edits' : '/v1/images/generations');
-    final fullUrl = '$baseUrl$endpoint';
-    debugPrint('ROUTMY: url=$fullUrl model=$model apiKey=${apiKey.length > 8 ? "${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}" : "SHORT"} refs=${referenceImages?.length ?? 0}');
 
     if (isChatModel) {
       return _generateChat(
@@ -101,9 +94,9 @@ class RoutmyImageProvider {
     return ImageGenHttp.base64ToBytes(b64);
   }
 
-  /// OpenAI-style image edits (`/v1/images/edits`) — the only generations-style
-  /// route on rout.my that accepts reference images, as an `images` array of
-  /// `{image_url: <data-url|https-url>}`. See https://docs.rout.my/api/images
+  /// OpenAI-style image edits via multipart/form-data.
+  /// Mirrors sillyimages exactly: single `image` field with PNG MIME for one ref,
+  /// `image[]` repeated for multiple. rout.my proxies OpenAI-style file fields.
   Future<Uint8List> _editImages({
     required String apiKey,
     required String model,
@@ -116,31 +109,76 @@ class RoutmyImageProvider {
   }) async {
     final url = '$baseUrl/v1/images/edits';
 
-    final images = referenceImages
-        .where((s) => s.isNotEmpty)
-        .map((s) => {'image_url': _asDataUrl(s)})
-        .toList();
+    final validRefs = referenceImages.where((s) => s.isNotEmpty).toList();
 
-    final body = <String, dynamic>{
+    // Plain string fields — mirror sillyimages field order exactly
+    final fields = <String, String>{
       'model': model,
       'prompt': prompt,
-      'n': 1,
-      'images': images,
-      'image_config': {
-        'aspect_ratio': aspectRatio,
-        'image_size': imageSize,
-        if (quality.isNotEmpty) 'quality': quality,
-      },
+      'n': '1',
     };
 
-    final b64 = await _http.postAndExtractBase64(
+    // Map aspect ratio → OpenAI WxH size (gpt-image-2 specific sizes)
+    final sizeStr = _aspectToSizeGptImage2(aspectRatio);
+    if (sizeStr != null) fields['size'] = sizeStr;
+
+    // quality: only send if non-empty and valid for gpt-image family
+    final q = _normalizeQuality(quality);
+    if (q != null) fields['quality'] = q;
+
+    // Image files — sillyimages always uses 'image/png' MIME regardless of actual format.
+    // Single ref → field name 'image'; multiple → 'image[]' repeated.
+    final imageFields = <(String, Uint8List, String, String)>[];
+    final multiRef = validRefs.length > 1;
+    for (var i = 0; i < validRefs.length; i++) {
+      final bytes = _base64ToBytes(validRefs[i]);
+      final fieldName = multiRef ? 'image[]' : 'image';
+      // Always declare as PNG — matches sillyimages iigBase64ToBlob(b64, 'image/png')
+      imageFields.add((fieldName, bytes, 'reference-$i.png', 'image/png'));
+    }
+
+    final json = await _http.postMultipart(
       url: url,
+      fields: fields,
+      imageFields: imageFields,
       apiKey: apiKey,
-      body: body,
       cancelToken: cancelToken,
-      extractBase64: _extractImageBase64,
     );
-    return ImageGenHttp.base64ToBytes(b64);
+    return ImageGenHttp.base64ToBytes(_extractImageBase64(json));
+  }
+
+  /// gpt-image-2 size map (different from gpt-image-1 family).
+  String? _aspectToSizeGptImage2(String aspect) {
+    const map = <String, String>{
+      '1:1': '1024x1024',
+      '16:9': '2048x1152',
+      '9:16': '1152x2048',
+      '3:2': '1536x1024',
+      '2:3': '1024x1536',
+      '4:3': '1536x1152',
+      '3:4': '1152x1536',
+    };
+    return map[aspect];
+  }
+
+  /// Normalize quality string for gpt-image family.
+  String? _normalizeQuality(String quality) {
+    const valid = {'low', 'medium', 'high', 'auto'};
+    final q = quality.toLowerCase().trim();
+    if (valid.contains(q)) return q;
+    if (q == 'hd') return 'high';
+    if (q == 'standard') return 'medium';
+    if (q.isEmpty) return null;
+    return 'auto';
+  }
+
+  /// Decode bare base64 or data-URL to raw bytes.
+  Uint8List _base64ToBytes(String s) {
+    if (s.startsWith('data:')) {
+      final comma = s.indexOf(',');
+      if (comma != -1) s = s.substring(comma + 1);
+    }
+    return base64Decode(s);
   }
 
   /// Reference images arrive as bare base64 (from ImageGenService._fileToBase64)
@@ -199,9 +237,10 @@ class RoutmyImageProvider {
     if (referenceImages != null) {
       for (final ref in referenceImages) {
         if (ref.isEmpty) continue;
+        final dataUrl = _asDataUrl(ref);
         content.add({
           'type': 'image_url',
-          'image_url': {'url': _asDataUrl(ref)},
+          'image_url': {'url': dataUrl},
         });
       }
     }
