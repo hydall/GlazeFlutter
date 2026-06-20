@@ -32,10 +32,7 @@ class ImageGenHttp {
         cancelToken: cancelToken,
       );
       return response.data ?? {};
-    } on DioException catch (e) {
-      final status = e.response?.statusCode;
-      final body = e.response?.data;
-      debugPrint('ROUTMY json error $status: $body');
+    } on DioException {
       rethrow;
     }
   }
@@ -100,10 +97,7 @@ class ImageGenHttp {
         cancelToken: cancelToken,
       );
       return response.data ?? {};
-    } on DioException catch (e) {
-      final status = e.response?.statusCode;
-      final body = e.response?.data;
-      debugPrint('ROUTMY multipart error $status: $body');
+    } on DioException {
       rethrow;
     }
   }

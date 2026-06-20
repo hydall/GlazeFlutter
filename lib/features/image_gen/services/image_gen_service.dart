@@ -194,13 +194,11 @@ class ImageGenService {
         onUpdate?.call(currentText);
       } on DioException catch (e) {
         if (CancelToken.isCancel(e)) break;
-        debugPrint('IMAGE GEN: failed for prompt "$prompt": $e');
         final errorMsg = _formatError(e);
         currentText = replaceTagWithError(currentText, i, errorMsg);
         onUpdate?.call(currentText);
         onError?.call(errorMsg);
       } catch (e) {
-        debugPrint('IMAGE GEN: failed for prompt "$prompt": $e');
         final errorMsg = _formatErrorString(e.toString());
         currentText = replaceTagWithError(currentText, i, errorMsg);
         onUpdate?.call(currentText);
@@ -459,11 +457,8 @@ class ImageGenService {
 
       final decoded = await compute(_decodeAndResizeJpeg, _ResizeArgs(bytes, maxSide, jpegQuality));
       if (decoded == null) return base64Encode(bytes);
-
-      debugPrint('ROUTMY ref resize: ${bytes.length} → ${decoded.length} bytes (JPEG $jpegQuality%)');
       return base64Encode(decoded);
-    } catch (e) {
-      debugPrint('ROUTMY ref resize failed: $e');
+    } catch (_) {
       return _fileToBase64(path);
     }
   }

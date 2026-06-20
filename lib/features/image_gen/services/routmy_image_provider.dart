@@ -24,15 +24,6 @@ class RoutmyImageProvider {
   }) async {
     final isChatModel = RoutMyConstants.chatImageModels.contains(model);
     final hasRefs = referenceImages != null && referenceImages.isNotEmpty;
-    // For non-chat (OpenAI-style) models, reference images are only honored by
-    // the edits endpoint (/v1/images/edits with an `images` array). The plain
-    // /v1/images/generations endpoint ignores reference input, so route to
-    // edits whenever references are present. See https://docs.rout.my/api/images
-    final endpoint = isChatModel
-        ? '/v1/chat/completions'
-        : (hasRefs ? '/v1/images/edits' : '/v1/images/generations');
-    final fullUrl = '$baseUrl$endpoint';
-    debugPrint('ROUTMY: url=$fullUrl model=$model apiKey=${apiKey.length > 8 ? "${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}" : "SHORT"} refs=${referenceImages?.length ?? 0}');
 
     if (isChatModel) {
       return _generateChat(
@@ -120,8 +111,6 @@ class RoutmyImageProvider {
 
     final validRefs = referenceImages.where((s) => s.isNotEmpty).toList();
 
-    debugPrint('ROUTMY _editImages (multipart): refs=${validRefs.length} model=$model prompt="${prompt.length > 80 ? prompt.substring(0, 80) : prompt}"');
-
     // Plain string fields — mirror sillyimages field order exactly
     final fields = <String, String>{
       'model': model,
@@ -146,7 +135,6 @@ class RoutmyImageProvider {
       final fieldName = multiRef ? 'image[]' : 'image';
       // Always declare as PNG — matches sillyimages iigBase64ToBlob(b64, 'image/png')
       imageFields.add((fieldName, bytes, 'reference-$i.png', 'image/png'));
-      debugPrint('ROUTMY edit ref[$i]: ${bytes.length} bytes field=$fieldName');
     }
 
     final json = await _http.postMultipart(
@@ -250,14 +238,12 @@ class RoutmyImageProvider {
       for (final ref in referenceImages) {
         if (ref.isEmpty) continue;
         final dataUrl = _asDataUrl(ref);
-        debugPrint('ROUTMY chat ref: len=${ref.length} dataUrl_prefix=${dataUrl.substring(0, dataUrl.length.clamp(0, 40))}');
         content.add({
           'type': 'image_url',
           'image_url': {'url': dataUrl},
         });
       }
     }
-    debugPrint('ROUTMY chat content parts=${content.length} model=$model');
     content.add({'type': 'text', 'text': prompt});
 
     final body = <String, dynamic>{
