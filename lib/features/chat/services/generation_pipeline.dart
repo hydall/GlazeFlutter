@@ -338,7 +338,10 @@ class GenerationPipeline {
       );
     }
 
-    if (character != null && result.session != null) {
+    final lastMessage = result.session?.messages.lastOrNull;
+    final hasGenerationError = lastMessage?.isError == true;
+
+    if (character != null && result.session != null && !hasGenerationError) {
       await service.processExtensions(
         charId: charId,
         session: result.session!,
