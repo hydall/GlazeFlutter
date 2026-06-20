@@ -793,6 +793,8 @@
     "menu_hide_help_tips": "Hide Tooltips",
     "desc_hide_help_tips": "Hides contextual help buttons (?) across the app",
     "menu_interface_settings": "Interface Settings",
+    "menu_haptic_feedback": "Haptic Feedback",
+    "desc_haptic_feedback": "Vibration when tapping buttons and controls",
     "menu_app_toast_position": "Toast Position",
     "desc_app_toast_position": "Choose where in-app notifications appear",
     "toast_position_top": "Top",

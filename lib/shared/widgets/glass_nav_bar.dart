@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../core/platform/haptics.dart';
 import '../../core/state/character_provider.dart';
 import '../../features/settings/app_settings_provider.dart';
 import '../shell/nav_height_provider.dart';
@@ -77,7 +77,7 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
         .read(revealHiddenCharactersProvider.notifier)
         .registerCharactersTabTap();
     if (revealed == null || !mounted) return;
-    HapticFeedback.heavyImpact();
+    Haptics.heavyImpact();
     GlazeToast.show(
       context,
       revealed ? 'hidden_chars_revealed'.tr() : 'hidden_chars_hidden'.tr(),
@@ -105,7 +105,7 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
             isActive: i == widget.currentIndex,
             onTap: () {
               if (i != widget.currentIndex) {
-                HapticFeedback.selectionClick();
+                Haptics.selectionClick();
               }
               if (i == _kCharactersTabIndex) _registerCharactersTabTap();
               widget.onTap(i);

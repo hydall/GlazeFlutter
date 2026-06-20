@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
+import '../../core/platform/haptics.dart';
 
 const String kKeyboardHeightPref = 'chat_last_keyboard_height';
 const double _kDefaultKeyboardHeight = 320;
@@ -76,13 +77,13 @@ class ChatDrawerController extends ChangeNotifier {
         _drawerAnimController.reverse();
       } else {
         _activePanel = panel;
-        HapticFeedback.selectionClick();
+        Haptics.selectionClick();
       }
       notifyListeners();
       return;
     }
     _activePanel = panel;
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     _activeDrawerHeight = _lastKeyboardHeight;
 
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;

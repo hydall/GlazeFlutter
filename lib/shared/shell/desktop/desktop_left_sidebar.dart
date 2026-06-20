@@ -2,10 +2,10 @@ import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/platform/haptics.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../features/chat_history/chat_history_list.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -48,7 +48,7 @@ class _DesktopLeftSidebarState extends ConsumerState<DesktopLeftSidebar> {
         .read(revealHiddenCharactersProvider.notifier)
         .registerCharactersTabTap();
     if (revealed == null || !mounted) return;
-    HapticFeedback.heavyImpact();
+    Haptics.heavyImpact();
     GlazeToast.show(
       context,
       revealed ? 'hidden_chars_revealed'.tr() : 'hidden_chars_hidden'.tr(),

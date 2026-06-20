@@ -5,10 +5,10 @@ import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/platform/haptics.dart';
 import '../../../core/services/chat_import_export.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/lorebook_provider.dart';
@@ -814,7 +814,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
                           data: index,
                           delay: const Duration(milliseconds: 300),
                           onDragStarted: () {
-                            HapticFeedback.mediumImpact();
+                            Haptics.mediumImpact();
                             setState(() {
                               if (!_editing) _editing = true;
                               _draggingIndex = index;

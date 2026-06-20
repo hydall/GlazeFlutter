@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soft_edge_blur/soft_edge_blur.dart';
 
+import '../../core/platform/haptics.dart';
 import '../theme/app_colors.dart';
 import '../../features/settings/app_settings_provider.dart';
 import 'glass_surface.dart';
@@ -538,6 +539,7 @@ class _ItemRowState extends State<_ItemRow> {
       onTapCancel: () => setState(() => _pressed = false),
       onTap: () {
         setState(() => _pressed = false);
+        Haptics.selectionClick();
         item.onTap();
       },
       child: AnimatedContainer(
@@ -631,6 +633,7 @@ class _ItemCardRowState extends State<_ItemCardRow> {
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: () {
+          Haptics.selectionClick();
           item.onTap();
         },
         borderRadius: BorderRadius.circular(16),

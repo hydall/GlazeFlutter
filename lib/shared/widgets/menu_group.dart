@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/platform/haptics.dart';
 import '../theme/app_colors.dart';
 import 'glass_surface.dart';
 import 'help_tip.dart';
@@ -142,6 +143,7 @@ class _MenuItemState extends State<MenuItem> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
+        Haptics.selectionClick();
         widget.onTap();
       },
       onTapCancel: () => setState(() => _pressed = false),
@@ -216,7 +218,10 @@ class MenuSwitchItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => onChanged(!value),
+      onTap: () {
+        Haptics.selectionClick();
+        onChanged(!value);
+      },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
@@ -250,7 +255,10 @@ class MenuSwitchItem extends StatelessWidget {
             const SizedBox(width: 16),
             Switch(
               value: value,
-              onChanged: onChanged,
+              onChanged: (v) {
+                Haptics.selectionClick();
+                onChanged(v);
+              },
               activeThumbColor: context.cs.primary,
               activeTrackColor: context.cs.primary.withValues(alpha: 0.5),
               trackOutlineColor: WidgetStateProperty.resolveWith(
@@ -471,6 +479,7 @@ class _MenuScriptItemState extends State<MenuScriptItem> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
+        Haptics.selectionClick();
         widget.onTap();
       },
       onTapCancel: () => setState(() => _pressed = false),
@@ -516,7 +525,10 @@ class _MenuScriptItemState extends State<MenuScriptItem> {
             const SizedBox(width: 8),
             Switch(
               value: widget.enabled,
-              onChanged: widget.onToggle,
+              onChanged: (v) {
+                Haptics.selectionClick();
+                widget.onToggle(v);
+              },
               activeThumbColor: context.cs.primary,
               activeTrackColor: context.cs.primary.withValues(alpha: 0.5),
               trackOutlineColor: WidgetStateProperty.resolveWith(
@@ -528,7 +540,10 @@ class _MenuScriptItemState extends State<MenuScriptItem> {
             ),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: widget.onMore,
+              onTap: () {
+                Haptics.selectionClick();
+                widget.onMore();
+              },
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(4, 8, 0, 8),
                 child: Icon(
@@ -562,7 +577,10 @@ class MenuSelectorItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        Haptics.selectionClick();
+        onTap();
+      },
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
         child: Column(

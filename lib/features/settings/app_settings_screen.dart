@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/platform/haptics.dart';
 import '../../core/platform/system_settings.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
@@ -154,6 +155,15 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(virtualKeyboardSend: v)),
             ),
+            if (Haptics.isConfigurable)
+              MenuSwitchItem(
+                label: 'menu_haptic_feedback'.tr(),
+                description: 'desc_haptic_feedback'.tr(),
+                value: s.hapticFeedback,
+                onChanged: (v) => ref
+                    .read(appSettingsProvider.notifier)
+                    .save(s.copyWith(hapticFeedback: v)),
+              ),
           ],
         ),
         MenuGroup(

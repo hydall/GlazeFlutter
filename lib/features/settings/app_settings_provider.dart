@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/platform/haptics.dart';
 import '../../core/state/shared_prefs_provider.dart';
 
 part 'app_settings_provider.freezed.dart';
@@ -59,6 +60,7 @@ abstract class AppSettings with _$AppSettings {
     @Default(true) bool forceMobileLayout,
     @Default(false) bool addBlockAtTop,
     @Default(true) bool openCardAfterImport,
+    @Default(true) bool hapticFeedback,
   }) = _AppSettings;
 }
 
@@ -67,6 +69,14 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
   Future<AppSettings> build() async {
     final prefs = await ref.read(sharedPreferencesProvider.future);
     final savedLanguage = prefs.getString('language');
+    final hapticFeedback = _readBoolPref(
+      prefs,
+      'hapticFeedback',
+      defaultValue: true,
+    );
+    // Cache the toggle so the central [Haptics] gate can decide synchronously
+    // in tap handlers.
+    Haptics.configure(enabled: hapticFeedback);
     return AppSettings(
       enterToSend: _readBoolPref(prefs, 'enterToSend', defaultValue: true),
       hideMessageId: _readBoolPref(prefs, 'hideMessageId', defaultValue: false),
@@ -118,6 +128,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
         'openCardAfterImport',
         defaultValue: true,
       ),
+      hapticFeedback: hapticFeedback,
     );
   }
 
@@ -151,6 +162,8 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setBool('gz_force_mobile_layout', normalized.forceMobileLayout);
     await prefs.setBool('addBlockAtTop', normalized.addBlockAtTop);
     await prefs.setBool('openCardAfterImport', normalized.openCardAfterImport);
+    await prefs.setBool('hapticFeedback', normalized.hapticFeedback);
+    Haptics.configure(enabled: normalized.hapticFeedback);
     state = AsyncData(normalized);
   }
 }

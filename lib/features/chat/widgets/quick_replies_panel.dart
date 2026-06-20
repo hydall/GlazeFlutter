@@ -1,8 +1,8 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/platform/haptics.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../chat_provider.dart';
 import '../quick_replies_provider.dart';
@@ -281,7 +281,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                           data: index,
                           delay: const Duration(milliseconds: 300),
                           onDragStarted: () {
-                            HapticFeedback.mediumImpact();
+                            Haptics.mediumImpact();
                             setState(() {
                               if (!_editing) _editing = true;
                               _draggingIndex = index;
