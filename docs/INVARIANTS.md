@@ -450,12 +450,16 @@ Processing is a no-op when `extensionsSettings.enabled` is false or
 `activePresetId` is null/empty. Info blocks are stored per `sessionId` via
 `infoBlocksProvider`.
 
-### INV-EG4: Block chain does not start if text generation was aborted
+### INV-EG4: Block chain does not start if text generation was aborted or errored
 
 `ExtensionPostGenService.processAfterGeneration()` is only reached via
 `GenerationPipeline._runPostTextSide()`, which itself only executes when the SSE
 stream completes successfully. An aborted generation never reaches the pipeline's
-post-text side; therefore the block chain never starts.
+post-text side; therefore the block chain never starts. When the stream returns
+an error (via `SavedMessageWriter.writeError` / `writeRegenError`), the last
+assistant message has `isError: true`; `_runPostTextSide()` checks this flag and
+skips `processExtensions()`, so the block chain does not start on error either.
+The regen path additionally gates on `regenSucceeded` (`!regenMsg.isError`).
 
 ### INV-EG5: Extension cancel token is independent of the chat generation cancel token
 
@@ -618,7 +622,7 @@ Before merging any structural PR:
 - [x] Memory draft mutex with chat generation (PR-B C12 / INV-M3, INV-M4)
 - [ ] Image generation completes after text generation (not on continue path — INV-CM2)
   - [ ] Extensions post-gen runs after normal/regen only (INV-EG1; not on continue)
-  - [ ] Block chain does not start on aborted generation (INV-EG4)
+  - [ ] Block chain does not start on aborted or errored generation (INV-EG4)
   - [ ] Extension cancel token is separate from chat cancel token (INV-EG5)
   - [ ] `dependsOnPrevious` blocks await the preceding block; output is chained (INV-EG6)
   - [ ] Image-gen block results stored via ImageStorageService; content = `[IMG:RESULT:<path>]` (INV-EG7)

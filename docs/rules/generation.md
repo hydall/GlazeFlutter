@@ -133,7 +133,8 @@ See INV-CM1, INV-CM2 before changing this path.
 After normal/regen completion, `GenerationPipeline` calls
 `ChatGenerationService.processExtensions()` → `ExtensionPostGenService`.
 Failures are logged only (INV-EG2). Gated by `extensionsSettings.enabled` and
-active preset id (INV-EG3). The block chain does not start on aborted generation (INV-EG4).
+active preset id (INV-EG3). The block chain does not start on aborted or errored
+generation (INV-EG4).
 
 ### Block triggers
 
@@ -224,7 +225,7 @@ Before merging any generation-related PR:
 - [x] Memory draft mutex enforced (INV-M3, INV-M4)
 - [ ] Image tags run after text on send/regen (not on continue unless changed)
   - [ ] Extensions post-gen on send/regen only (INV-EG1)
-  - [ ] Block chain does not start on aborted generation (INV-EG4)
+  - [ ] Block chain does not start on aborted or errored generation (INV-EG4)
   - [ ] Extension cancel token independent of chat cancel token (INV-EG5)
   - [ ] `dependsOnPrevious` blocks await preceding block; output chained (INV-EG6)
   - [ ] JS Runner / interactive panel code runs in null-origin iframe (INV-EG8)
