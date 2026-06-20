@@ -21,10 +21,15 @@ class ChatHistoryList extends ConsumerStatefulWidget {
   final bool collapsed;
   final String searchQuery;
 
+  /// Top padding applied inside the scroll view so content can scroll *behind*
+  /// a translucent shell header instead of being clipped by it.
+  final double topPadding;
+
   const ChatHistoryList({
     super.key,
     this.collapsed = false,
     this.searchQuery = '',
+    this.topPadding = 0,
   });
 
   @override
@@ -68,7 +73,7 @@ class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.only(bottom: 20),
+          padding: EdgeInsets.only(top: widget.topPadding, bottom: 20),
           itemCount: filtered.length + 1,
           itemBuilder: (_, i) {
             if (i == 0) return _buildCountHeader(filtered.length);
@@ -83,7 +88,9 @@ class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
+    return Padding(
+      padding: EdgeInsets.only(top: widget.topPadding),
+      child: Center(
       child: widget.collapsed
           ? Icon(
               Icons.chat_bubble_outline,
@@ -108,6 +115,7 @@ class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
                 ),
               ],
             ),
+      ),
     );
   }
 
@@ -125,7 +133,7 @@ class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
       );
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: EdgeInsets.only(top: widget.topPadding, bottom: 20),
       itemCount: sortedGroups.length + 1,
       itemBuilder: (_, i) {
         if (i == 0) return _buildCountHeader(sessions.length);

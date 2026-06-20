@@ -121,14 +121,17 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
     final settingsAsync = ref.watch(appSettingsProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0 + 16.0;
 
-    final list = ChatHistoryList(searchQuery: _searchQuery);
+    final list = ChatHistoryList(
+      searchQuery: _searchQuery,
+      topPadding: topPad,
+    );
     final body = settingsAsync.value?.batterySaver ?? false
         ? list
         : GlowRippleOverlay(radiusFactor: 0.18, intensity: 0.32, child: list);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Padding(padding: EdgeInsets.only(top: topPad), child: body),
+      body: body,
     );
   }
 
