@@ -33,7 +33,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 32;
+  int get schemaVersion => 33;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -340,6 +340,28 @@ class AppDatabase extends _$AppDatabase {
         if (!colNames.contains('token_count')) {
           await m.addColumn(characters, characters.tokenCount);
         }
+      }
+      if (from < 33) {
+        // Character variations: rows sharing variant_group_id collapse to one
+        // list card. Guarded like every prior column migration.
+        final cols = await customSelect(
+          'PRAGMA table_info("characters")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('variant_group_id')) {
+          await m.addColumn(characters, characters.variantGroupId);
+        }
+        if (!colNames.contains('variant_name')) {
+          await m.addColumn(characters, characters.variantName);
+        }
+        if (!colNames.contains('variant_order')) {
+          await m.addColumn(characters, characters.variantOrder);
+        }
+        // Backfill: every existing character is its own standalone group.
+        await customStatement(
+          "UPDATE characters SET variant_group_id = char_id "
+          "WHERE variant_group_id IS NULL OR variant_group_id = ''",
+        );
       }
     },
   );

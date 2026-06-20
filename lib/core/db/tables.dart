@@ -32,6 +32,14 @@ class Characters extends Table {
   TextColumn get picksHash => text().nullable()();
   IntColumn get tokenCount => integer().withDefault(const Constant(0))();
 
+  // Variations: each row is a full character card, but rows sharing a
+  // [variantGroupId] are presented as a single entry in the My Characters list.
+  // The representative ("cover") is the row with the lowest [variantOrder] (0).
+  // For a standalone character, variantGroupId equals its own charId.
+  TextColumn get variantGroupId => text().withDefault(const Constant(''))();
+  TextColumn get variantName => text().nullable()();
+  IntColumn get variantOrder => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {charId};
 }

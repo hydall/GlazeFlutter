@@ -71,7 +71,10 @@ final filteredCharactersProvider = Provider.autoDispose
     .family<List<Character>, CharacterQuery>((ref, q) {
       final all = ref.watch(charactersProvider).value ?? const <Character>[];
 
-      Iterable<Character> list = all;
+      // Collapse variation groups to one representative card. Tags are unioned
+      // across the group so search/filter match against every variation, and
+      // fav is OR'd so a favorited variation surfaces its card.
+      Iterable<Character> list = _collapseGroups(all);
       if (q.folderId != null) {
         final memberships =
             ref.watch(folderMembershipsProvider).value ??
@@ -84,6 +87,38 @@ final filteredCharactersProvider = Provider.autoDispose
       _sort(result, q);
       return result;
     });
+
+/// Reduces a flat character list (which contains every variation row) to one
+/// representative per variation group. The representative is the lowest-ordered
+/// row, augmented with the union of all variations' tags and an OR of their
+/// `fav` flags so search/filter behave group-wide.
+List<Character> _collapseGroups(List<Character> all) {
+  final groups = <String, List<Character>>{};
+  for (final c in all) {
+    final gid = c.variantGroupId.isEmpty ? c.id : c.variantGroupId;
+    groups.putIfAbsent(gid, () => <Character>[]).add(c);
+  }
+  final reps = <Character>[];
+  for (final members in groups.values) {
+    if (members.length == 1) {
+      reps.add(members.first);
+      continue;
+    }
+    members.sort((a, b) => a.variantOrder.compareTo(b.variantOrder));
+    final rep = members.first;
+    var fav = false;
+    final extraTags = <String>[];
+    final seen = rep.tags.toSet();
+    for (final m in members) {
+      fav = fav || m.fav;
+      for (final t in m.tags) {
+        if (seen.add(t)) extraTags.add(t);
+      }
+    }
+    reps.add(rep.copyWith(tags: [...rep.tags, ...extraTags], fav: fav));
+  }
+  return reps;
+}
 
 bool _passes(CharacterQuery q, Character c) {
   if (q.search.isNotEmpty) {

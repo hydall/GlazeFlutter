@@ -7,8 +7,10 @@ import 'package:path/path.dart' as p;
 import '../db/repositories/character_repo.dart';
 import '../models/character.dart';
 import '../models/lorebook.dart';
+import '../utils/id_generator.dart';
 import '../utils/sync_deletion_tracker.dart';
 import '../utils/platform_paths.dart';
+import '../utils/time_helpers.dart';
 import 'db_provider.dart';
 import 'lorebook_provider.dart';
 
@@ -76,6 +78,14 @@ final characterByIdProvider = Provider.family<Character?, String>((ref, id) {
   final chars = ref.watch(charactersProvider).value ?? [];
   return chars.where((c) => c.id == id).firstOrNull;
 });
+
+/// All variations belonging to one variation group (representative first),
+/// reactive to DB changes. Keyed by the group's [Character.variantGroupId].
+final characterVariantsProvider =
+    StreamProvider.autoDispose.family<List<Character>, String>((ref, groupId) {
+      ref.watch(avatarVersionProvider);
+      return ref.read(characterRepoProvider).watchVariants(groupId);
+    });
 
 final infiniteCharactersProvider =
     AsyncNotifierProvider.family<
@@ -224,6 +234,59 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
   Future<void> save(Character character) async {
     final repo = ref.read(characterRepoProvider);
     await repo.put(character);
+    ref.invalidateSelf();
+  }
+
+  /// Creates a new variation cloned from [source] (copy-of-current-card). The
+  /// new row joins [source]'s variation group at the next free order, gets its
+  /// own copied avatar file (so deleting it never orphans a sibling), and
+  /// starts with an empty gallery. Returns the created variation.
+  Future<Character> addVariant(Character source, String name) async {
+    final repo = ref.read(characterRepoProvider);
+    final groupId =
+        source.variantGroupId.isEmpty ? source.id : source.variantGroupId;
+    final newId = generateId();
+    final order = await repo.nextVariantOrder(groupId);
+
+    // Copy the avatar so the variation owns its image file.
+    String? avatarPath;
+    final srcAvatar = source.avatarPath;
+    if (srcAvatar != null && srcAvatar.isNotEmpty) {
+      try {
+        final imageStorage = await ref.read(imageStorageProvider.future);
+        final resolved = resolveGlazeFilePath(srcAvatar) ?? srcAvatar;
+        final bytes = await File(resolved).readAsBytes();
+        avatarPath = await imageStorage.saveAvatar(newId, bytes);
+      } catch (_) {
+        avatarPath = null;
+      }
+    }
+
+    final trimmed = name.trim();
+    final now = currentTimestampSeconds();
+    final variant = source.copyWith(
+      id: newId,
+      variantGroupId: groupId,
+      variantName: trimmed.isEmpty ? null : trimmed,
+      variantOrder: order,
+      avatarPath: avatarPath,
+      gallery: const [],
+      fav: false,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await repo.put(variant);
+    ref.invalidateSelf();
+    return variant;
+  }
+
+  Future<void> renameVariant(String charId, String name) async {
+    await ref.read(characterRepoProvider).renameVariant(charId, name);
+    ref.invalidateSelf();
+  }
+
+  Future<void> reorderVariants(String groupId, List<String> orderedIds) async {
+    await ref.read(characterRepoProvider).reorderVariants(groupId, orderedIds);
     ref.invalidateSelf();
   }
 

@@ -95,6 +95,7 @@ class CharacterRepo implements SyncCharacterStore {
               _db.chatSessions.characterId.equalsExp(_db.characters.charId),
             ),
           ])
+            ..where(_db.characters.variantOrder.equals(0))
             ..addColumns([_lastChatAtColumn()])
             ..groupBy([_db.characters.charId])
             ..orderBy(_lastChatOrderTerms(dir))
@@ -103,6 +104,7 @@ class CharacterRepo implements SyncCharacterStore {
       return rows.map((r) => _toModel(r.readTable(_db.characters))).toList();
     }
     final rows = await (_db.select(_db.characters)
+          ..where((t) => t.variantOrder.equals(0))
           ..orderBy(_orderBy(sort, dir))
           ..limit(limit, offset: offset))
         .get();
@@ -122,6 +124,7 @@ class CharacterRepo implements SyncCharacterStore {
               _db.chatSessions.characterId.equalsExp(_db.characters.charId),
             ),
           ])
+            ..where(_db.characters.variantOrder.equals(0))
             ..addColumns([_lastChatAtColumn()])
             ..groupBy([_db.characters.charId])
             ..orderBy(_lastChatOrderTerms(dir))
@@ -131,6 +134,7 @@ class CharacterRepo implements SyncCharacterStore {
               rows.map((r) => _toModel(r.readTable(_db.characters))).toList());
     }
     return (_db.select(_db.characters)
+          ..where((t) => t.variantOrder.equals(0))
           ..orderBy(_orderBy(sort, dir))
           ..limit(limit, offset: offset))
         .watch()
@@ -139,7 +143,9 @@ class CharacterRepo implements SyncCharacterStore {
 
   Stream<int> watchTotalCount() {
     final countExp = _db.characters.charId.count();
-    final query = _db.selectOnly(_db.characters)..addColumns([countExp]);
+    final query = _db.selectOnly(_db.characters)
+      ..addColumns([countExp])
+      ..where(_db.characters.variantOrder.equals(0));
     return query.watchSingle().map((row) => row.read(countExp) ?? 0);
   }
 
@@ -223,6 +229,14 @@ class CharacterRepo implements SyncCharacterStore {
 
   @override
   Future<void> delete(String id) async {
+    // Capture the variation group/order before deletion so we can promote a
+    // sibling to representative (variant_order 0) if needed — otherwise the
+    // whole group would vanish from the My Characters list (which only shows
+    // variant_order 0 rows).
+    final deletedRow = await (_db.select(_db.characters)
+          ..where((t) => t.charId.equals(id)))
+        .getSingleOrNull();
+
     final sessionIds = (await (_db.select(_db.chatSessions)
               ..where((t) => t.characterId.equals(id)))
             .get())
@@ -242,6 +256,76 @@ class CharacterRepo implements SyncCharacterStore {
           ..where((t) => t.charId.equals(id)))
         .go();
     await (_db.delete(_db.characters)..where((t) => t.charId.equals(id))).go();
+
+    if (deletedRow != null && deletedRow.variantOrder == 0) {
+      final groupId = deletedRow.variantGroupId.isEmpty
+          ? deletedRow.charId
+          : deletedRow.variantGroupId;
+      await _promoteRepresentative(groupId);
+    }
+  }
+
+  /// Ensures the variation group has a representative (variant_order 0) by
+  /// promoting its lowest-ordered remaining sibling. No-op when the group is
+  /// empty or already has a representative.
+  Future<void> _promoteRepresentative(String groupId) async {
+    final siblings = await (_db.select(_db.characters)
+          ..where((t) => t.variantGroupId.equals(groupId))
+          ..orderBy([(t) => OrderingTerm.asc(t.variantOrder)]))
+        .get();
+    if (siblings.isEmpty || siblings.any((s) => s.variantOrder == 0)) return;
+    await (_db.update(_db.characters)
+          ..where((t) => t.charId.equals(siblings.first.charId)))
+        .write(const CharactersCompanion(variantOrder: Value(0)));
+  }
+
+  /// All variations in a group, ordered by variant_order (representative first).
+  Future<List<Character>> getVariants(String groupId) async {
+    final rows = await (_db.select(_db.characters)
+          ..where((t) => t.variantGroupId.equals(groupId))
+          ..orderBy([(t) => OrderingTerm.asc(t.variantOrder)]))
+        .get();
+    return rows.map(_toModel).toList();
+  }
+
+  Stream<List<Character>> watchVariants(String groupId) {
+    return (_db.select(_db.characters)
+          ..where((t) => t.variantGroupId.equals(groupId))
+          ..orderBy([(t) => OrderingTerm.asc(t.variantOrder)]))
+        .watch()
+        .map((rows) => rows.map(_toModel).toList());
+  }
+
+  /// Next free variant_order for a group (max + 1, or 0 for a fresh group).
+  Future<int> nextVariantOrder(String groupId) async {
+    final maxExpr = _db.characters.variantOrder.max();
+    final query = _db.selectOnly(_db.characters)
+      ..addColumns([maxExpr])
+      ..where(_db.characters.variantGroupId.equals(groupId));
+    final row = await query.getSingleOrNull();
+    final current = row?.read(maxExpr);
+    return current == null ? 0 : current + 1;
+  }
+
+  Future<void> renameVariant(String charId, String? name) async {
+    final trimmed = name?.trim();
+    await (_db.update(_db.characters)..where((t) => t.charId.equals(charId)))
+        .write(CharactersCompanion(
+      variantName: Value(trimmed == null || trimmed.isEmpty ? null : trimmed),
+    ));
+  }
+
+  /// Reassigns variant_order so [orderedIds] becomes 0..n-1 (index 0 = cover).
+  Future<void> reorderVariants(String groupId, List<String> orderedIds) async {
+    await _db.batch((b) {
+      for (var i = 0; i < orderedIds.length; i++) {
+        b.update(
+          _db.characters,
+          CharactersCompanion(variantOrder: Value(i)),
+          where: ($CharactersTable t) => t.charId.equals(orderedIds[i]),
+        );
+      }
+    });
   }
 
   Future<void> createCharacterFromCatalog({
@@ -332,6 +416,9 @@ class CharacterRepo implements SyncCharacterStore {
       macroName: c.macroName,
       picksHash: c.picksHash,
       tokenCount: c.tokenCount,
+      variantGroupId: c.variantGroupId.isEmpty ? c.charId : c.variantGroupId,
+      variantName: c.variantName,
+      variantOrder: c.variantOrder,
     );
   }
 
@@ -361,6 +448,10 @@ class CharacterRepo implements SyncCharacterStore {
         macroName: Value(m.macroName),
         picksHash: Value(m.picksHash),
         tokenCount: Value(m.tokenCount),
+        variantGroupId:
+            Value(m.variantGroupId.isEmpty ? m.id : m.variantGroupId),
+        variantName: Value(m.variantName),
+        variantOrder: Value(m.variantOrder),
       );
 
   String? _encodeCharacterExtensions(Character m) {

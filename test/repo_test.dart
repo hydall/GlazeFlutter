@@ -415,6 +415,103 @@ void main() {
       expect(secondEmit.length, 1);
       expect(secondEmit.first.name, equals('Alice'));
     });
+
+    group('variations', () {
+      // Helper: a variation row in group [g] at [order].
+      Future<void> putVariant(
+        String id,
+        String g,
+        int order, {
+        String? variantName,
+        List<String> tags = const [],
+      }) =>
+          repo.put(Character(
+            id: id,
+            name: id,
+            variantGroupId: g,
+            variantOrder: order,
+            variantName: variantName,
+            tags: tags,
+          ));
+
+      test('getPage / watchTotalCount only return representatives', () async {
+        await putVariant('c1', 'c1', 0);
+        await putVariant('c1b', 'c1', 1, variantName: 'NSFW');
+        await putVariant('c2', 'c2', 0);
+
+        final page = await repo.getPage(
+          limit: 50,
+          offset: 0,
+          sort: CharacterSortField.name,
+          dir: CharacterSortDir.asc,
+        );
+        expect(page.map((c) => c.id), equals(['c1', 'c2']),
+            reason: 'Only variant_order 0 rows are list representatives');
+
+        final count = await repo.watchTotalCount().first;
+        expect(count, 2);
+
+        // getAll still returns every variation row.
+        expect((await repo.getAll()).length, 3);
+      });
+
+      test('getVariants returns the group ordered, representative first',
+          () async {
+        await putVariant('c1b', 'c1', 1, variantName: 'NSFW');
+        await putVariant('c1', 'c1', 0);
+
+        final variants = await repo.getVariants('c1');
+        expect(variants.map((c) => c.id), equals(['c1', 'c1b']));
+        expect(variants.first.variantName, isNull);
+        expect(variants.last.variantName, equals('NSFW'));
+      });
+
+      test('nextVariantOrder is max + 1 (and 0 for a fresh group)', () async {
+        expect(await repo.nextVariantOrder('c1'), 0);
+        await putVariant('c1', 'c1', 0);
+        await putVariant('c1b', 'c1', 1);
+        expect(await repo.nextVariantOrder('c1'), 2);
+      });
+
+      test('deleting the representative promotes the next sibling', () async {
+        await putVariant('c1', 'c1', 0);
+        await putVariant('c1b', 'c1', 1, variantName: 'AU');
+
+        await repo.delete('c1');
+
+        final variants = await repo.getVariants('c1');
+        expect(variants.length, 1);
+        expect(variants.first.id, equals('c1b'));
+        expect(variants.first.variantOrder, equals(0),
+            reason: 'Sibling promoted to representative so the group survives');
+
+        final page = await repo.getPage(
+          limit: 50,
+          offset: 0,
+          sort: CharacterSortField.name,
+          dir: CharacterSortDir.asc,
+        );
+        expect(page.map((c) => c.id), equals(['c1b']));
+      });
+
+      test('reorderVariants reassigns order 0..n-1', () async {
+        await putVariant('a', 'g', 0);
+        await putVariant('b', 'g', 1);
+        await putVariant('c', 'g', 2);
+
+        await repo.reorderVariants('g', ['c', 'a', 'b']);
+
+        final variants = await repo.getVariants('g');
+        expect(variants.map((v) => v.id), equals(['c', 'a', 'b']));
+        expect(variants.map((v) => v.variantOrder), equals([0, 1, 2]));
+      });
+
+      test('standalone put backfills variantGroupId to its own id', () async {
+        await repo.put(Character(id: 'solo', name: 'Solo'));
+        final result = await repo.getById('solo');
+        expect(result!.variantGroupId, equals('solo'));
+      });
+    });
   });
 
   group('parseSillyTavernPreset', () {

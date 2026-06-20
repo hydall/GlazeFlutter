@@ -73,12 +73,19 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
 
     final result = allMeta.map((m) {
       final char = charMap[m.characterId];
+      final baseName = char?.displayName?.trim().isNotEmpty == true
+          ? char!.displayName!.trim()
+          : (char?.name ?? 'Unknown');
+      // Variations are separate history groups; surface the variation name on
+      // the chip as "Name — Variation" so they stay distinguishable.
+      final variant = char?.variantName?.trim();
+      final characterName = (variant != null && variant.isNotEmpty)
+          ? '$baseName — $variant'
+          : baseName;
       return ChatSessionInfo(
         sessionId: m.sessionId,
         characterId: m.characterId,
-        characterName: char?.displayName?.trim().isNotEmpty == true
-            ? char!.displayName!.trim()
-            : (char?.name ?? 'Unknown'),
+        characterName: characterName,
         avatarPath: char?.avatarPath,
         lastMessage: m.lastMessageContent,
         lastMessageTime: m.lastMessageTimestamp,

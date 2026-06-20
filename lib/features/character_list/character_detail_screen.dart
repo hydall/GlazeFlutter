@@ -29,6 +29,7 @@ import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/colored_markdown.dart';
+import 'widgets/character_variations_sheet.dart';
 
 // ─── Colour tokens ─────────────────────────────────────────────────────────
 
@@ -206,6 +207,15 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
           },
         ),
         BottomSheetItem(
+          icon: Icons.dynamic_feed_rounded,
+          label: 'variations_title'.tr(),
+          onTap: () {
+            rootNav.pop();
+            if (!mounted) return;
+            _showVariations(context);
+          },
+        ),
+        BottomSheetItem(
           icon: Icons.delete_outline,
           label: 'action_delete_msg'.tr(),
           isDestructive: true,
@@ -255,7 +265,43 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     ));
   }
 
+  void _showVariations(BuildContext context) {
+    final char = ref.read(characterByIdProvider(widget.charId));
+    final groupId = (char == null || char.variantGroupId.isEmpty)
+        ? widget.charId
+        : char.variantGroupId;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CharacterVariationsSheet(groupId: groupId),
+    );
+  }
+
   Future<void> _openChat(BuildContext context, String cId) async {
+    // When the character has multiple variations, choose which one to start the
+    // chat with. The chosen variation is a distinct character id, so its chat
+    // sessions (and history group) are independent and can't be switched later.
+    final all = ref.read(charactersProvider).value ?? const <Character>[];
+    final current = all.where((c) => c.id == cId).firstOrNull;
+    if (current != null) {
+      final groupId = current.variantGroupId.isEmpty
+          ? current.id
+          : current.variantGroupId;
+      final variants = all
+          .where((c) =>
+              (c.variantGroupId.isEmpty ? c.id : c.variantGroupId) == groupId)
+          .toList()
+        ..sort((a, b) => a.variantOrder.compareTo(b.variantOrder));
+      if (variants.length > 1) {
+        final pickedId = await _pickVariation(context, variants);
+        if (pickedId == null || !context.mounted) return;
+        cId = pickedId;
+      }
+    }
+
     final sessions = await ref.read(chatSessionOpsProvider.notifier).getSessionsByCharacter(cId);
     if (!context.mounted) return;
 
@@ -304,6 +350,27 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         ? (sessions.isEmpty ? '/chat/$cId' : '/chat/$cId?new=1')
         : '/chat/$cId?session=${result.substring('session:'.length)}';
     Navigator.of(context, rootNavigator: true).pop<String>(route);
+  }
+
+  Future<String?> _pickVariation(
+    BuildContext context,
+    List<Character> variants,
+  ) {
+    return GlazeBottomSheet.show<String>(
+      context,
+      title: 'variation_pick_title'.tr(),
+      items: [
+        for (final v in variants)
+          BottomSheetItem(
+            icon: Icons.person_outline_rounded,
+            label: v.variantName?.trim().isNotEmpty == true
+                ? v.variantName!.trim()
+                : 'variation_original'.tr(),
+            onTap: () =>
+                Navigator.of(context, rootNavigator: true).pop(v.id),
+          ),
+      ],
+    );
   }
 
   Future<void> _importChat(String charId) async {

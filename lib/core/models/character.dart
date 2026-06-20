@@ -38,6 +38,9 @@ abstract class Character with _$Character {
     String? macroName,
     String? picksHash,
     @Default(0) int tokenCount,
+    @Default('') String variantGroupId,
+    String? variantName,
+    @Default(0) int variantOrder,
   }) = _Character;
 
   factory Character.fromJson(Map<String, dynamic> json) =>
