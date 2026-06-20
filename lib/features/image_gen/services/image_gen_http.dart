@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 class ImageGenHttp {
   final Dio _dio;
@@ -85,12 +85,19 @@ class ImageGenHttp {
     final headers = <String, String>{
       if (apiKey != null && apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
     };
-    final response = await _dio.post<Map<String, dynamic>>(
-      url,
-      data: formData,
-      options: Options(headers: headers),
-      cancelToken: cancelToken,
-    );
-    return response.data ?? {};
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        url,
+        data: formData,
+        options: Options(headers: headers),
+        cancelToken: cancelToken,
+      );
+      return response.data ?? {};
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final body = e.response?.data;
+      debugPrint('ROUTMY multipart error $status: $body');
+      rethrow;
+    }
   }
 }

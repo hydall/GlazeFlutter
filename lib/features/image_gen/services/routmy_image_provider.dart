@@ -133,8 +133,9 @@ class RoutmyImageProvider {
     for (final ref in referenceImages.where((s) => s.isNotEmpty)) {
       final bytes = _refToBytes(ref);
       if (bytes == null) continue;
-      final mime = _sniffMime(ref);
+      final mime = _sniffMimeBytes(bytes);
       final ext = mime.split('/').last;
+      debugPrint('ROUTMY ref: ${bytes.length} bytes mime=$mime');
       imageFields.add(('image', bytes, 'ref.$ext', mime));
     }
 
@@ -183,6 +184,29 @@ class RoutmyImageProvider {
     if (b64.startsWith('iVBORw0KGgo')) return 'image/png';
     if (b64.startsWith('UklGR')) return 'image/webp';
     if (b64.startsWith('R0lGOD')) return 'image/gif';
+    return 'image/png';
+  }
+
+  /// Sniff MIME from raw bytes (magic bytes).
+  String _sniffMimeBytes(Uint8List bytes) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) {
+      return 'image/jpeg';
+    }
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return 'image/png';
+    }
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 &&
+        bytes[3] == 0x46) {
+      return 'image/webp';
+    }
+    if (bytes.length >= 6 &&
+        bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) {
+      return 'image/gif';
+    }
     return 'image/png';
   }
 
