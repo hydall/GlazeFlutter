@@ -715,7 +715,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       title: 'action_delete_indexes'.tr(),
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
-        description: 'theme_confirm_delete_preset'.tr(),
+        description: 'action_delete_indexes_confirm'.tr(),
       ),
       items: [
         BottomSheetItem(

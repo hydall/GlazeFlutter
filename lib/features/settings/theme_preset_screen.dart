@@ -374,6 +374,15 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
             _renamePreset(preset);
           },
         ),
+        if (!preset.isBuiltIn)
+          BottomSheetItem(
+            icon: Icons.copy_all_outlined,
+            label: 'theme_clone_theme'.tr(),
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _clonePreset(preset);
+            },
+          ),
         BottomSheetItem(
           icon: Icons.upload_file,
           label: 'action_export'.tr(),
@@ -385,7 +394,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
         if (!preset.isBuiltIn)
           BottomSheetItem(
             icon: Icons.delete_outline,
-            label: 'theme_confirm_delete_preset'.tr(),
+            label: 'btn_delete'.tr(),
             isDestructive: true,
             onTap: () {
               Navigator.of(context, rootNavigator: true).pop();
@@ -413,6 +422,15 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _clonePreset(ThemePreset preset) async {
+    final clone = preset.copyWith(
+      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+      name: '${preset.name} (copy)',
+    );
+    await ref.read(themeProvider.notifier).importPreset(clone);
+    await ref.read(themeProvider.notifier).applyPreset(clone);
   }
 
   Future<void> _exportPreset(ThemePreset preset) async {
@@ -552,7 +570,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   Future<void> _deletePreset(String id) async {
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
-      title: 'theme_confirm_delete_preset'.tr(),
+      title: 'btn_delete'.tr(),
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
         description: 'theme_confirm_delete_message'.tr(),
