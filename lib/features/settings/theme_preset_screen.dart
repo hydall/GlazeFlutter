@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/platform/wallpaper.dart';
 import '../../../core/services/file_export_service.dart';
 import '../../../shared/shell/nav_height_provider.dart';
+import '../../../shared/theme/built_in_themes.dart';
 import '../../../shared/theme/theme_font_provider.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_provider.dart';
@@ -17,6 +18,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glass_surface.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
+import '../../../shared/widgets/glaze_tab_bar.dart';
 import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import 'theme_editor_screen.dart';
@@ -36,11 +38,12 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   // after applying a preset).
   final Map<String, ({int hash, Uint8List? bytes})> _bgBytesCache = {};
 
+  /// 0 = user's own themes, 1 = built-in author catalog.
+  int _activeTab = 0;
+
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-    final presets = theme.presets;
-    final activeId = theme.activePreset.id;
     final bottomPad = ref.watch(navHeightProvider) + 20;
 
     return GlazeScaffold(
@@ -50,39 +53,160 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       onBack: () => Navigator.pop(context),
       body: Stack(
         children: [
-          ListView(
-            padding: EdgeInsets.only(top: 12, bottom: bottomPad + 60),
+          Column(
             children: [
-              _buildFontToggle(context),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'theme_all_themes'.tr(),
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: context.cs.onSurfaceVariant,
-                  ),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: GlazeTabBar(
+                  tabs: [
+                    GlazeTabItem(
+                      label: 'theme_tab_my'.tr(),
+                      icon: Icons.palette_outlined,
+                    ),
+                    GlazeTabItem(
+                      label: 'theme_tab_built_in'.tr(),
+                      icon: Icons.auto_awesome_outlined,
+                    ),
+                  ],
+                  activeIndex: _activeTab,
+                  onChanged: (i) => setState(() => _activeTab = i),
                 ),
               ),
-              const SizedBox(height: 8),
-              ...presets.map(
-                (p) => _buildPresetTile(
-                  context,
-                  p,
-                  p.id == activeId,
-                  theme.activePreset,
+              Expanded(
+                child: IndexedStack(
+                  index: _activeTab,
+                  children: [
+                    _buildMyThemesList(context, theme, bottomPad),
+                    _buildBuiltInList(context, theme.activePreset, bottomPad),
+                  ],
                 ),
               ),
             ],
           ),
-          Positioned(
-            right: 16,
-            bottom: bottomPad,
-            child: _ThemeFab(onTap: () => _showAddSheet(context)),
-          ),
+          // The add/import FAB only applies to the user's own theme list.
+          if (_activeTab == 0)
+            Positioned(
+              right: 16,
+              bottom: bottomPad,
+              child: _ThemeFab(onTap: () => _showAddSheet(context)),
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMyThemesList(
+    BuildContext context,
+    ThemeSettings theme,
+    double bottomPad,
+  ) {
+    final presets = theme.presets;
+    final activeId = theme.activePreset.id;
+    return ListView(
+      padding: EdgeInsets.only(bottom: bottomPad + 60),
+      children: [
+        _buildFontToggle(context),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'theme_all_themes'.tr(),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...presets.map(
+          (p) => _buildPresetTile(
+            context,
+            p,
+            p.id == activeId,
+            theme.activePreset,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBuiltInList(
+    BuildContext context,
+    ThemePreset activePreset,
+    double bottomPad,
+  ) {
+    final catalog = ref.watch(builtInThemesProvider);
+    if (catalog.isEmpty) {
+      return _buildBuiltInEmptyState(context);
+    }
+    return ListView(
+      padding: EdgeInsets.only(top: 8, bottom: bottomPad + 60),
+      children: [
+        ...catalog.map(
+          (p) => _buildPresetTile(
+            context,
+            p,
+            false,
+            activePreset,
+            catalog: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBuiltInEmptyState(BuildContext context) {
+    final cs = context.cs;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.auto_awesome_outlined,
+              size: 48,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'theme_built_in_empty_title'.tr(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'theme_built_in_empty_desc'.tr(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Installs a built-in catalog theme into the user's own list. Catalog
+  /// entries are templates, so we clone with a fresh `custom_…` id, apply it,
+  /// and flip back to the "My Themes" tab so the user sees the result.
+  Future<void> _installBuiltIn(ThemePreset preset) async {
+    final clone = preset.copyWith(
+      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    await ref.read(themeProvider.notifier).importPreset(clone);
+    await ref.read(themeProvider.notifier).applyPreset(clone);
+    if (!mounted) return;
+    setState(() => _activeTab = 0);
+    GlazeToast.show(
+      context,
+      'theme_imported_message'.tr(namedArgs: {'name': clone.name}),
     );
   }
 
@@ -158,8 +282,9 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
     BuildContext context,
     ThemePreset preset,
     bool isActive,
-    ThemePreset activePreset,
-  ) {
+    ThemePreset activePreset, {
+    bool catalog = false,
+  }) {
     final cs = context.cs;
     final accent = preset.accent;
     final bgBytes = _decodeBgImage(preset);
@@ -259,7 +384,28 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
                   ],
                 ),
               ),
-              if (preset.id != 'default')
+              if (catalog)
+                GestureDetector(
+                  onTap: () => _installBuiltIn(preset),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.add_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              else if (preset.id != 'default')
                 GestureDetector(
                   onTap: () =>
                       _showPresetActions(context, preset, isActive),
@@ -343,7 +489,9 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: isActive ? null : () => _selectPreset(preset),
+                onTap: catalog
+                    ? () => _installBuiltIn(preset)
+                    : (isActive ? null : () => _selectPreset(preset)),
                 child: content,
               ),
             ),
