@@ -922,6 +922,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     charBubbleRadius: preset.charBubbleRadius,
                     userBubbleGradient: preset.userBubbleGradientParsed,
                     charBubbleGradient: preset.charBubbleGradientParsed,
+                    textBgOpacity: preset.textBgOpacity,
                     showUserAvatar: preset.showUserAvatar,
                     showCharAvatar: preset.showCharAvatar,
                     showUserName: preset.showUserName,

@@ -67,6 +67,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final double charBubbleRadius;
   final BubbleGradient? userBubbleGradient;
   final BubbleGradient? charBubbleGradient;
+  final double textBgOpacity;
   final bool showUserAvatar;
   final bool showCharAvatar;
   final bool showUserName;
@@ -130,6 +131,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.charBubbleRadius = 18,
     this.userBubbleGradient,
     this.charBubbleGradient,
+    this.textBgOpacity = 0.0,
     this.showUserAvatar = true,
     this.showCharAvatar = true,
     this.showUserName = true,
@@ -839,6 +841,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         charBubbleRadius: widget.charBubbleRadius,
         userBubbleGradient: widget.userBubbleGradient,
         charBubbleGradient: widget.charBubbleGradient,
+        textBgOpacity: widget.textBgOpacity,
         showUserAvatar: widget.showUserAvatar,
         showCharAvatar: widget.showCharAvatar,
         showUserName: widget.showUserName,

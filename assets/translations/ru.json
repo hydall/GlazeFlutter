@@ -463,6 +463,8 @@
     "theme_italic_colors": "Цвета мыслей (италика)",
     "theme_user_italic": "Цвет мыслей пользователя",
     "theme_char_italic": "Цвет мыслей персонажа",
+    "theme_desktop_effects": "Эффекты ПК",
+    "theme_text_bg_opacity": "Прозрачность подложки сообщений",
     "theme_system_font_size": "Системный",
     "theme_custom_font_size": "Кастомный",
     "theme_ui_font_size": "Размер шрифта UI",

@@ -25,6 +25,7 @@ class ChatWebViewThemeInput {
     required this.showCharName,
     this.userBubbleGradient,
     this.charBubbleGradient,
+    this.textBgOpacity = 0.0,
   });
 
   final double elementOpacity;
@@ -46,6 +47,10 @@ class ChatWebViewThemeInput {
   /// of the solid `*Bubble` color.
   final BubbleGradient? userBubbleGradient;
   final BubbleGradient? charBubbleGradient;
+
+  /// Desktop-only: opacity of the semi-transparent backdrop painted behind
+  /// each message body in layout-default. 0.0 = fully transparent (default).
+  final double textBgOpacity;
 }
 
 /// Builds the `Map<String, String>` that [ChatBridgeController.applyTheme]
@@ -105,6 +110,9 @@ class ChatWebViewThemeBuilder {
       'show-char-avatar': input.showCharAvatar ? '1' : '0',
       'show-user-name': input.showUserName ? '1' : '0',
       'show-char-name': input.showCharName ? '1' : '0',
+      'text-bg-opacity': input.textBgOpacity.clamp(0.0, 1.0).toStringAsFixed(2),
+      // Padding is non-zero only when the backdrop is actually visible.
+      'text-bg-padding': input.textBgOpacity > 0.0 ? '8px 10px' : '0px',
     };
   }
 

@@ -41,6 +41,10 @@
   --char-font-weight: 400;
   --user-bubble-radius: 18px;
   --char-bubble-radius: 18px;
+  /* Desktop-only: semi-transparent backdrop behind layout-default messages.
+     0 = off (default, matches current mobile look). Set via applyTheme(). */
+  --text-bg-opacity: 0;
+  --text-bg-padding: 0px;
 }
 
 /* ============================================================
@@ -1209,15 +1213,20 @@
   padding: 10px 16px;
 }
 .message-section.layout-default .msg-body {
-  background: transparent;
+  /* When --text-bg-opacity is 0 (default/mobile) the background is fully
+     transparent, preserving the original look.
+     On desktop users can raise this to add a readable backdrop.
+     --text-bg-padding is set to 0px when opacity==0, else 8px 10px by Flutter. */
+  background: rgba(var(--ui-bg-rgb), var(--text-bg-opacity, 0));
   border: none;
-  border-radius: 0;
-  padding: 0;
+  border-radius: 8px;
+  padding: var(--text-bg-padding, 0px);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   width: 100%;
   max-width: 100%;
   display: block;
+  transition: background 0.2s ease;
 }
 .message-section.layout-default .msg-header {
   margin-bottom: 6px;
