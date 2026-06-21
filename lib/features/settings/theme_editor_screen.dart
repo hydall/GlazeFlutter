@@ -1600,23 +1600,42 @@ class _BgImageRow extends StatelessWidget {
 
   Future<void> _pick(BuildContext context) async {
     try {
+      // Picker is left unrestricted (FileType.any) so AVIF/WebP stay selectable
+      // on every platform; the accepted formats are enforced below instead.
       final result = await FilePicker.pickFiles(
-        type: FileType.image,
+        type: FileType.any,
       dialogTitle: 'theme_select_image'.tr(),
       withData: true,
     );
       if (result == null || result.files.isEmpty) return;
-      final path = result.files.first.path;
+      final picked = result.files.first;
+      final path = picked.path;
       if (path == null) return;
+      // Accept only formats that render reliably as a background. Anything else
+      // (gif animations aside — those are fine — but mp4/webm/etc.) is rejected
+      // here rather than silently saved with a wrong mime, which corrupts the
+      // preset and makes the previous background reappear on the next change.
+      const mimeByExt = <String, String>{
+        'gif': 'image/gif',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'avif': 'image/avif',
+        'webp': 'image/webp',
+      };
+      final ext = picked.extension?.toLowerCase() ??
+          path.split('.').last.toLowerCase();
+      final mime = mimeByExt[ext];
+      if (mime == null) {
+        if (context.mounted) {
+          GlazeErrorDialog.show(
+            context,
+            'theme_unsupported_image_format'.tr(),
+          );
+        }
+        return;
+      }
       final bytes = await File(path).readAsBytes();
-      final lower = path.toLowerCase();
-      final mime = lower.endsWith('.png')
-          ? 'image/png'
-          : lower.endsWith('.webp')
-              ? 'image/webp'
-              : lower.endsWith('.gif')
-                  ? 'image/gif'
-                  : 'image/jpeg';
       final dataUri = 'data:$mime;base64,${base64Encode(bytes)}';
       onPicked(dataUri);
     } catch (e) {

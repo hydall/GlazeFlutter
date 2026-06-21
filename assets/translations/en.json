@@ -1560,6 +1560,7 @@
     "theme_replace_background_image": "Replace Background Image",
     "theme_failed_load_font": "Failed to load font: ",
     "theme_failed_load_image": "Failed to load image: ",
+    "theme_unsupported_image_format": "Unsupported image format. Use GIF, JPEG, PNG, AVIF or WebP.",
     "theme_invalid_hex_label": "Invalid hex color",
     "theme_hex_color": "Hex Color",
     "theme_search_fonts": "Search fonts...",

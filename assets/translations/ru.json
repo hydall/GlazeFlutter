@@ -1583,6 +1583,7 @@
     "theme_clone_theme": "Клонировать тему",
     "theme_failed_load_font": "Не удалось загрузить шрифт: ",
     "theme_failed_load_image": "Не удалось загрузить изображение: ",
+    "theme_unsupported_image_format": "Неподдерживаемый формат изображения. Используйте GIF, JPEG, PNG, AVIF или WebP.",
     "theme_font_glaze": "Glaze (Inter)",
     "theme_font_google": "Google Fonts",
     "theme_font_same_as_ui": "Как в интерфейсе",
