@@ -24,6 +24,12 @@ Border _uiBorder(BuildContext context, ThemePreset preset) {
 
 class ChatInputBar extends ConsumerStatefulWidget {
   final ValueChanged<String> onSend;
+
+  /// Guard invoked right before a send is dispatched. When it returns false the
+  /// send is aborted and the composed text/image are kept intact so the host
+  /// can show a prerequisite modal (e.g. "no provider selected") without losing
+  /// what the user typed. When null, sending is always allowed.
+  final bool Function()? canSend;
   final void Function(String text, String? guidance)? onSendWithGuidance;
   final bool isGenerating;
   final bool isGeneratingImage;
@@ -70,6 +76,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
   const ChatInputBar({
     super.key,
     required this.onSend,
+    this.canSend,
     this.onSendWithGuidance,
     required this.isGenerating,
     this.isGeneratingImage = false,
@@ -234,6 +241,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final text = _controller.text;
     final hasImage = _attachedImageDataUrl != null;
     if (text.trim().isEmpty && !hasImage) return;
+    // Prerequisites (e.g. a selected provider) failed: keep the composed text
+    // and image so nothing is lost while the host shows its modal.
+    if (widget.canSend != null && !widget.canSend!()) return;
     final imageDataUrl = _attachedImageDataUrl;
     if (imageDataUrl != null) {
       final guidance =

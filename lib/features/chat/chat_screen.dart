@@ -1416,10 +1416,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     virtualKeyboardSend:
                                         widget.virtualKeyboardSend,
                                     enterToSend: widget.enterToSend,
+                                    canSend: () =>
+                                        _ensurePersonaSelected() &&
+                                        _ensureApiSelected(),
                                     onSend: (text) {
                                       if (text.trim().isEmpty) return;
-                                      if (!_ensurePersonaSelected()) return;
-                                      if (!_ensureApiSelected()) return;
                                       ref
                                           .read(
                                             chatProvider(
@@ -1430,8 +1431,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     },
                                     onSendWithGuidance: (text, guidance) {
                                       if (text.trim().isEmpty) return;
-                                      if (!_ensurePersonaSelected()) return;
-                                      if (!_ensureApiSelected()) return;
                                       ref
                                           .read(
                                             chatProvider(
@@ -1445,8 +1444,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     },
                                     onSendWithImage:
                                         (text, guidanceText, imageDataUrl) {
-                                          if (!_ensurePersonaSelected()) return;
-                                          if (!_ensureApiSelected()) return;
                                           ref
                                               .read(
                                                 chatProvider(
