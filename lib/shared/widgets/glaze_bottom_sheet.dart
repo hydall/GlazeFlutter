@@ -170,18 +170,26 @@ class GlazeBottomSheetFrame extends ConsumerWidget {
   final bool showHandle;
   final double maxHeightFactor;
 
+  /// Explicit pixel cap on the sheet height. When set it overrides
+  /// [maxHeightFactor] — used when the sheet must fit a constrained slot (e.g.
+  /// the color picker, which must not cover the pinned preview above it).
+  final double? maxHeight;
+
   const GlazeBottomSheetFrame({
     super.key,
     required this.child,
     this.showHandle = true,
     this.maxHeightFactor = 0.95,
+    this.maxHeight,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cap = maxHeight ??
+        MediaQuery.of(context).size.height * maxHeightFactor;
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * maxHeightFactor,
+        maxHeight: cap,
       ),
       child: GlassSurface(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),

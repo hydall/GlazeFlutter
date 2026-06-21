@@ -206,6 +206,10 @@ class _NavButton extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
+                    // The Inter variable font is loaded at runtime via
+                    // loadFontFromList, which ignores `fontWeight` — the weight
+                    // axis must be driven explicitly via `fontVariations`.
+                    fontVariations: const [FontVariation('wght', 500)],
                     color: color,
                   ),
                 ),

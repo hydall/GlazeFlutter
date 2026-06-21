@@ -22,6 +22,10 @@ TextTheme _applySafe(TextTheme theme, {
       fontSize: s.fontSize != null ? s.fontSize! * fontSizeFactor : null,
       letterSpacing: (s.letterSpacing ?? 0) + letterSpacingDelta,
       fontWeight: fontWeight,
+      // The bundled Inter font is a variable font loaded at runtime, which
+      // ignores `fontWeight` — its weight axis must be driven explicitly via
+      // `fontVariations`. Harmless for static fonts (the axis is simply unused).
+      fontVariations: [FontVariation('wght', fontWeight.value.toDouble())],
     );
   }
 

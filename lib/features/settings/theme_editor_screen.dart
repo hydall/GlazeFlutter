@@ -563,6 +563,10 @@ class _ChatTabState extends State<_ChatTab> {
                     onTap: () => _showLayoutPicker(context),
                   ),
                 ),
+                _ChatBackgroundGroup(
+                  preset: widget.preset,
+                  onUpdate: widget.onUpdate,
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                   child: GlazeTabBar(
@@ -598,6 +602,53 @@ class _ChatTabState extends State<_ChatTab> {
       current: widget.preset.chatLayout,
       onSelect: (layout) =>
           widget.onUpdate((p) => p.copyWith(chatLayout: layout)),
+    );
+  }
+}
+
+// ─── Chat → Background (shown above the font/colors tabs) ─────────────────────
+
+class _ChatBackgroundGroup extends StatelessWidget {
+  final ThemePreset preset;
+  final void Function(ThemePreset Function(ThemePreset)) onUpdate;
+
+  const _ChatBackgroundGroup({required this.preset, required this.onUpdate});
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuGroup(
+      header: 'theme_chat_background'.tr(),
+      items: [
+        _FontModeRow(
+          label: 'theme_chat_bg'.tr(),
+          mode: preset.chatBgMode,
+          modes: const ['inherit', 'color', 'avatar', 'custom'],
+          modeLabels: [
+            'theme_chat_bg_inherit'.tr(),
+            'theme_chat_bg_color'.tr(),
+            'theme_chat_bg_avatar'.tr(),
+            'theme_chat_bg_custom'.tr(),
+          ],
+          onChanged: (v) => onUpdate((p) => p.copyWith(chatBgMode: v)),
+        ),
+        if (preset.chatBgMode == 'color')
+          _ColorRow(
+            label: 'theme_chat_bg_color'.tr(),
+            value: preset.chatBgColor,
+            palette: _presetUiColors,
+            allowNull: true,
+            showPreviewOverlay: false,
+            nullLabel: 'theme_auto'.tr(),
+            onChanged: (v) => onUpdate((p) => p.copyWith(chatBgColor: v)),
+          ),
+        if (preset.chatBgMode == 'custom')
+          _BgImageRow(
+            hasImage: preset.hasChatBgImage,
+            onPicked: (dataUri) =>
+                onUpdate((p) => p.copyWith(chatBgImage: dataUri)),
+            onReset: () => onUpdate((p) => p.copyWith(chatBgImage: null)),
+          ),
+      ],
     );
   }
 }
@@ -704,54 +755,10 @@ class _ChatColorsTab extends ConsumerWidget {
         preset.hideTokenCount ?? appSettings.hideTokenCount;
     return Column(
       children: [
-        MenuGroup(
-          header: 'theme_chat_background'.tr(),
-          items: [
-            _FontModeRow(
-              label: 'theme_chat_bg'.tr(),
-              mode: preset.chatBgMode,
-              modes: const ['inherit', 'color', 'avatar', 'custom'],
-              modeLabels: [
-                'theme_chat_bg_inherit'.tr(),
-                'theme_chat_bg_color'.tr(),
-                'theme_chat_bg_avatar'.tr(),
-                'theme_chat_bg_custom'.tr(),
-              ],
-              onChanged: (v) => onUpdate((p) => p.copyWith(chatBgMode: v)),
-            ),
-            if (preset.chatBgMode == 'color')
-              _ColorRow(
-                label: 'theme_chat_bg_color'.tr(),
-                value: preset.chatBgColor,
-                palette: _presetUiColors,
-                allowNull: true,
-                showPreviewOverlay: false,
-                nullLabel: 'theme_auto'.tr(),
-                onChanged: (v) => onUpdate((p) => p.copyWith(chatBgColor: v)),
-              ),
-            if (preset.chatBgMode == 'custom')
-              _BgImageRow(
-                hasImage: preset.hasChatBgImage,
-                onPicked: (dataUri) =>
-                    onUpdate((p) => p.copyWith(chatBgImage: dataUri)),
-                onReset: () => onUpdate((p) => p.copyWith(chatBgImage: null)),
-              ),
-          ],
-        ),
-        MenuGroup(
-          header: 'theme_bubble_colors'.tr(),
-          items: [
-            if (!isBubble)
-              Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                child: Text(
-                  'theme_switch_to_bubble'.tr(),
-                  style: TextStyle(
-                      fontSize: 12, color: context.cs.onSurfaceVariant),
-                ),
-              )
-            else ...[
+        if (isBubble)
+          MenuGroup(
+            header: 'theme_bubble_colors'.tr(),
+            items: [
               _ColorRow(
                 label: 'theme_user_bubble'.tr(),
                 value: preset.userBubbleColor,
@@ -799,8 +806,7 @@ class _ChatColorsTab extends ConsumerWidget {
                     onUpdate((p) => p.copyWith(charBubbleRadius: v)),
               ),
             ],
-          ],
-        ),
+          ),
         MenuGroup(
           header: 'theme_identity'.tr(),
           items: [
@@ -1433,6 +1439,14 @@ class _ColorPickerOverlay extends StatefulWidget {
 class _ColorPickerOverlayState extends State<_ColorPickerOverlay>
     with SingleTickerProviderStateMixin {
   static const double _dismissThreshold = 80;
+  static const double _previewTop = 8.0;
+  // Vertical gap between the preview's bottom edge and the sheet's top.
+  static const double _previewGap = 8.0;
+  // Never let the sheet collapse below this even if the preview is very tall.
+  static const double _minSheetHeight = 220.0;
+
+  final GlobalKey _previewKey = GlobalKey();
+  double _previewHeight = 0;
   double _dragOffset = 0;
   bool _closing = false;
 
@@ -1447,90 +1461,125 @@ class _ColorPickerOverlayState extends State<_ColorPickerOverlay>
     Navigator.of(context).pop();
   }
 
+  /// Measure the rendered preview after layout so the sheet below can be capped
+  /// to the remaining space (and scroll within it) instead of overlapping it.
+  void _measurePreview() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box = _previewKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      final h = box.size.height;
+      if ((h - _previewHeight).abs() > 0.5) {
+        setState(() => _previewHeight = h);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.showPreviewOverlay) _measurePreview();
     return SafeArea(
       bottom: false,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _close,
-            ),
-          ),
-          if (widget.showPreviewOverlay)
-            Positioned(
-              top: 8.0,
-              left: 16.0,
-              right: 16.0,
-              child: IgnorePointer(
-                child: Hero(
-                  tag: 'theme_chat_preview',
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.28),
-                            blurRadius: 22,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: ThemeChatPreview(
-                        preset: widget.previewPreset,
-                        borderColor: context.cs.outlineVariant.withValues(alpha: 0.75),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeInOutCubic,
-              offset: _closing ? const Offset(0, 1.05) : Offset(0, _dragOffset / 400),
-              child: Transform.translate(
-                offset: Offset(0, _dragOffset),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availH = constraints.maxHeight;
+          double? sheetMax;
+          if (widget.showPreviewOverlay && _previewHeight > 0) {
+            // Sheet has a fixed 12px top padding (the Padding below) on top of
+            // the space taken by the preview.
+            final reserved = _previewTop + _previewHeight + _previewGap + 12;
+            sheetMax = (availH - reserved).clamp(_minSheetHeight, availH);
+          }
+          return Stack(
+            children: [
+              Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onVerticalDragUpdate: (details) {
-                    if (details.primaryDelta == null) return;
-                    final next = (_dragOffset + details.primaryDelta!).clamp(0.0, 400.0);
-                    setState(() => _dragOffset = next);
-                  },
-                  onVerticalDragEnd: (details) {
-                    final velocity = details.primaryVelocity ?? 0;
-                    if (_dragOffset > _dismissThreshold || velocity > 700) {
-                      _close();
-                      return;
-                    }
-                    setState(() => _dragOffset = 0);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                    child: _ColorPickerSheet(
-                      current: widget.current,
-                      palette: widget.palette,
-                      allowNull: widget.allowNull,
-                      nullLabel: widget.nullLabel,
-                      onChanged: widget.onChanged,
-                      onClose: _close,
-                      allowGradient: widget.allowGradient,
-                      gradient: widget.gradient,
-                      onGradientChanged: widget.onGradientChanged,
+                  onTap: _close,
+                ),
+              ),
+              if (widget.showPreviewOverlay)
+                Positioned(
+                  top: _previewTop,
+                  left: 16.0,
+                  right: 16.0,
+                  child: KeyedSubtree(
+                    key: _previewKey,
+                    child: IgnorePointer(
+                      child: Hero(
+                        tag: 'theme_chat_preview',
+                        child: Material(
+                          type: MaterialType.transparency,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.28),
+                                  blurRadius: 22,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: ThemeChatPreview(
+                              preset: widget.previewPreset,
+                              borderColor: context.cs.outlineVariant
+                                  .withValues(alpha: 0.75),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: AnimatedSlide(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeInOutCubic,
+                  offset: _closing
+                      ? const Offset(0, 1.05)
+                      : Offset(0, _dragOffset / 400),
+                  child: Transform.translate(
+                    offset: Offset(0, _dragOffset),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onVerticalDragUpdate: (details) {
+                        if (details.primaryDelta == null) return;
+                        final next = (_dragOffset + details.primaryDelta!)
+                            .clamp(0.0, 400.0);
+                        setState(() => _dragOffset = next);
+                      },
+                      onVerticalDragEnd: (details) {
+                        final velocity = details.primaryVelocity ?? 0;
+                        if (_dragOffset > _dismissThreshold || velocity > 700) {
+                          _close();
+                          return;
+                        }
+                        setState(() => _dragOffset = 0);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                        child: _ColorPickerSheet(
+                          current: widget.current,
+                          palette: widget.palette,
+                          allowNull: widget.allowNull,
+                          nullLabel: widget.nullLabel,
+                          onChanged: widget.onChanged,
+                          onClose: _close,
+                          allowGradient: widget.allowGradient,
+                          gradient: widget.gradient,
+                          onGradientChanged: widget.onGradientChanged,
+                          maxHeight: sheetMax,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -1650,6 +1699,10 @@ class _ColorPickerSheet extends ConsumerStatefulWidget {
   final String? gradient;
   final ValueChanged<String?>? onGradientChanged;
 
+  /// Pixel cap so the sheet fits below the pinned preview and scrolls instead
+  /// of overlapping it. Null = fall back to the default factor-based height.
+  final double? maxHeight;
+
   const _ColorPickerSheet({
     required this.current,
     required this.palette,
@@ -1660,6 +1713,7 @@ class _ColorPickerSheet extends ConsumerStatefulWidget {
     this.allowGradient = false,
     this.gradient,
     this.onGradientChanged,
+    this.maxHeight,
   });
 
   @override
@@ -1928,6 +1982,7 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
     final primaryPalette = widget.palette.skip(1).take(5).toList();
     return GlazeBottomSheetFrame(
       maxHeightFactor: 0.82,
+      maxHeight: widget.maxHeight,
       child: Padding(
         padding: EdgeInsets.only(
           left: 16,
@@ -1986,25 +2041,20 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
                         const SizedBox(height: 12),
                       ],
                       if (_gradientMode) ...[
-                        _GradientStopToggle(
-                          activeStop: _activeStop,
-                          color1: _gColor1,
-                          color2: _gColor2,
-                          onSelect: _selectStop,
-                        ),
-                        const SizedBox(height: 4),
-                        _PickerSlider(
-                          label: 'theme_gradient_angle'.tr(),
-                          value: _gAngle,
-                          min: 0,
-                          max: 360,
-                          divisions: 360,
-                          display: '${_gAngle.round()}°',
+                        _AngleDialRow(
+                          angle: _gAngle,
                           onChanged: (v) {
                             _gAngle = v;
                             _emitGradient();
                             setState(() {});
                           },
+                        ),
+                        const SizedBox(height: 12),
+                        _GradientStopToggle(
+                          activeStop: _activeStop,
+                          color1: _gColor1,
+                          color2: _gColor2,
+                          onSelect: _selectStop,
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -2377,6 +2427,145 @@ class _ModeToggle extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Photoshop-style circular angle control for the gradient direction. The knob
+/// is dragged around the ring; angle is measured in degrees clockwise from the
+/// top (0° = upward), matching the gradient decode in [_ColorRow._decodeGradient].
+class _AngleDialRow extends StatelessWidget {
+  final double angle;
+  final ValueChanged<double> onChanged;
+
+  const _AngleDialRow({required this.angle, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        _AngleDial(angle: angle, onChanged: onChanged),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'theme_gradient_angle'.tr(),
+              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${angle.round()}°',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                fontVariations: const [FontVariation('wght', 600)],
+                color: cs.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _AngleDial extends StatelessWidget {
+  static const double size = 68;
+
+  final double angle;
+  final ValueChanged<double> onChanged;
+
+  const _AngleDial({
+    required this.angle,
+    required this.onChanged,
+  });
+
+  void _update(Offset local) {
+    final c = size / 2;
+    final dx = local.dx - c;
+    final dy = local.dy - c;
+    if (dx == 0 && dy == 0) return;
+    // 0° points up and increases clockwise: a = atan2(dx, -dy).
+    var deg = math.atan2(dx, -dy) * 180.0 / math.pi;
+    if (deg < 0) deg += 360;
+    onChanged(deg.roundToDouble());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTapDown: (d) => _update(d.localPosition),
+      onPanStart: (d) => _update(d.localPosition),
+      onPanUpdate: (d) => _update(d.localPosition),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(
+          painter: _AngleDialPainter(
+            angle: angle,
+            ring: cs.outlineVariant,
+            fill: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+            knob: cs.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AngleDialPainter extends CustomPainter {
+  final double angle;
+  final Color ring;
+  final Color fill;
+  final Color knob;
+
+  _AngleDialPainter({
+    required this.angle,
+    required this.ring,
+    required this.fill,
+    required this.knob,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final r = size.width / 2 - 7;
+
+    canvas.drawCircle(c, r, Paint()..color = fill);
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = ring,
+    );
+
+    final rad = angle * math.pi / 180.0;
+    final dir = Offset(math.sin(rad), -math.cos(rad));
+    final knobCenter = c + dir * r;
+
+    canvas.drawLine(
+      c,
+      knobCenter,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..color = knob,
+    );
+    canvas.drawCircle(c, 3, Paint()..color = knob);
+    canvas.drawCircle(knobCenter, 6, Paint()..color = knob);
+  }
+
+  @override
+  bool shouldRepaint(covariant _AngleDialPainter old) =>
+      old.angle != angle ||
+      old.ring != ring ||
+      old.fill != fill ||
+      old.knob != knob;
 }
 
 /// Two-swatch selector for which gradient stop the editor below is editing.

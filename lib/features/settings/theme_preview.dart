@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/character.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/theme_font_provider.dart';
 import '../../shared/theme/theme_preset.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../chat/widgets/chat_header.dart';
@@ -28,7 +29,11 @@ class ThemeChatPreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = preset.themeMode != 'light';
-    final previewFont = preset.uiFontMode == 'glaze' ? kInterFontFamily : null;
+    // Resolve the live UI/chat fonts through the same providers the real app
+    // uses, so custom/google/glaze selections render in the preview (these load
+    // the font into the engine on demand and return its family name).
+    final previewFont = ref.watch(uiFontFamilyProvider).value;
+    final chatFontFamily = ref.watch(chatFontFamilyProvider).value;
     final previewTheme = isDark
         ? AppTheme.dark(preset, fontFamily: previewFont)
         : AppTheme.light(preset, fontFamily: previewFont);
@@ -55,6 +60,9 @@ class ThemeChatPreview extends ConsumerWidget {
               preset: preset,
               character: previewCharacter,
               isStandard: isStandard,
+              chatFontFamily: chatFontFamily,
+              chatFontSize: preset.chatFontSizeValue,
+              chatLetterSpacing: preset.chatLetterSpacing,
               chatBgColor:
                   preset.chatBgMode == 'color' ? preset.chatBgColorParsed : null,
               chatBgImageBytes: preset.chatBgMode == 'custom'
@@ -89,6 +97,9 @@ class _PreviewChatScene extends StatelessWidget {
   final ThemePreset preset;
   final Character character;
   final bool isStandard;
+  final String? chatFontFamily;
+  final double chatFontSize;
+  final double chatLetterSpacing;
   final Color? chatBgColor;
   final Uint8List? chatBgImageBytes;
 
@@ -96,6 +107,9 @@ class _PreviewChatScene extends StatelessWidget {
     required this.preset,
     required this.character,
     required this.isStandard,
+    required this.chatFontFamily,
+    required this.chatFontSize,
+    required this.chatLetterSpacing,
     this.chatBgColor,
     this.chatBgImageBytes,
   });
@@ -146,6 +160,9 @@ class _PreviewChatScene extends StatelessWidget {
               italicColor: colors.charItalic ?? cs.onSurface,
               quoteColor: colors.charQuote ?? cs.primary,
               fontWeight: preset.charMessageFontWeightValue,
+              fontFamily: chatFontFamily,
+              fontSize: chatFontSize,
+              letterSpacing: chatLetterSpacing,
               text: 'Rei watches in silence, waiting for an answer.',
               quoted: '"Lost?"',
               index: 1,
@@ -164,6 +181,9 @@ class _PreviewChatScene extends StatelessWidget {
               italicColor: colors.userItalic ?? cs.onSurface,
               quoteColor: colors.userQuote ?? cs.primary,
               fontWeight: preset.userMessageFontWeightValue,
+              fontFamily: chatFontFamily,
+              fontSize: chatFontSize,
+              letterSpacing: chatLetterSpacing,
               text: 'I lean against the wall.',
               quoted: '"Not lost. Just looking."',
               index: 2,
@@ -181,6 +201,9 @@ class _PreviewChatScene extends StatelessWidget {
                 quoteColor: colors.charQuote ?? cs.primary,
                 radius: preset.charBubbleRadius,
                 fontWeight: preset.charMessageFontWeightValue,
+                fontFamily: chatFontFamily,
+                fontSize: chatFontSize,
+                letterSpacing: chatLetterSpacing,
                 text: 'Rei watches in silence, waiting for an answer.',
                 quoted: '"Lost?"',
               ),
@@ -196,6 +219,9 @@ class _PreviewChatScene extends StatelessWidget {
                 quoteColor: colors.userQuote ?? cs.primary,
                 radius: preset.userBubbleRadius,
                 fontWeight: preset.userMessageFontWeightValue,
+                fontFamily: chatFontFamily,
+                fontSize: chatFontSize,
+                letterSpacing: chatLetterSpacing,
                 text: 'I lean against the wall.',
                 quoted: '"Not lost. Just looking."',
               ),
@@ -266,6 +292,9 @@ class _PreviewStandardMessage extends StatelessWidget {
   final Color italicColor;
   final Color quoteColor;
   final FontWeight fontWeight;
+  final String? fontFamily;
+  final double fontSize;
+  final double letterSpacing;
   final String text;
   final String? quoted;
   final int index;
@@ -280,6 +309,9 @@ class _PreviewStandardMessage extends StatelessWidget {
     required this.italicColor,
     required this.quoteColor,
     required this.fontWeight,
+    required this.fontFamily,
+    required this.fontSize,
+    required this.letterSpacing,
     required this.text,
     required this.quoted,
     required this.index,
@@ -344,11 +376,16 @@ class _PreviewStandardMessage extends StatelessWidget {
           RichText(
             text: TextSpan(
               style: TextStyle(
-                fontSize: 13.5,
+                fontFamily: fontFamily,
+                fontSize: fontSize,
+                letterSpacing: letterSpacing,
                 height: 1.4,
                 fontStyle: FontStyle.italic,
                 color: italicColor,
                 fontWeight: fontWeight,
+                fontVariations: [
+                  FontVariation('wght', fontWeight.value.toDouble()),
+                ],
               ),
               children: [
                 TextSpan(text: text),
@@ -356,11 +393,11 @@ class _PreviewStandardMessage extends StatelessWidget {
                   const TextSpan(text: ' '),
                   TextSpan(
                     text: quoted,
-                    style: TextStyle(
-                      color: quoteColor,
+                    style: const TextStyle(
                       fontStyle: FontStyle.normal,
                       fontWeight: FontWeight.w500,
-                    ),
+                      fontVariations: [FontVariation('wght', 500)],
+                    ).copyWith(color: quoteColor),
                   ),
                 ],
               ],
@@ -383,6 +420,9 @@ class _PreviewBubble extends StatelessWidget {
   final Color quoteColor;
   final double radius;
   final FontWeight fontWeight;
+  final String? fontFamily;
+  final double fontSize;
+  final double letterSpacing;
   final String text;
   final String? quoted;
 
@@ -395,6 +435,9 @@ class _PreviewBubble extends StatelessWidget {
     required this.quoteColor,
     required this.radius,
     required this.fontWeight,
+    required this.fontFamily,
+    required this.fontSize,
+    required this.letterSpacing,
     required this.text,
     required this.quoted,
   });
@@ -417,11 +460,16 @@ class _PreviewBubble extends StatelessWidget {
         child: RichText(
           text: TextSpan(
             style: TextStyle(
-              fontSize: 13.5,
+              fontFamily: fontFamily,
+              fontSize: fontSize,
+              letterSpacing: letterSpacing,
               height: 1.4,
               fontStyle: FontStyle.italic,
               color: italicColor ?? textColor,
               fontWeight: fontWeight,
+              fontVariations: [
+                FontVariation('wght', fontWeight.value.toDouble()),
+              ],
             ),
             children: [
               TextSpan(text: text),
@@ -429,11 +477,11 @@ class _PreviewBubble extends StatelessWidget {
                 const TextSpan(text: ' '),
                 TextSpan(
                   text: quoted,
-                  style: TextStyle(
-                    color: quoteColor,
+                  style: const TextStyle(
                     fontStyle: FontStyle.normal,
                     fontWeight: FontWeight.w500,
-                  ),
+                    fontVariations: [FontVariation('wght', 500)],
+                  ).copyWith(color: quoteColor),
                 ),
               ],
             ],
