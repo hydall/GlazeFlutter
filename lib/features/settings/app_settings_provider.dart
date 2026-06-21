@@ -49,7 +49,7 @@ abstract class AppSettings with _$AppSettings {
     @Default(false) bool hideGenerationTime,
     @Default(false) bool hideTokenCount,
     @Default(false) bool groupDialogs,
-    @Default(false) bool batterySaver,
+    @Default(true) bool batterySaver,
     @Default(false) bool hideTooltips,
     @Default(false) bool disableSwipeRegeneration,
     @Default('en') String language,
@@ -91,7 +91,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
         defaultValue: false,
       ),
       groupDialogs: _readBoolPref(prefs, 'dialogGrouping', defaultValue: false),
-      batterySaver: _readBoolPref(prefs, 'batterySaver', defaultValue: false),
+      batterySaver: _readBoolPref(prefs, 'batterySaver', defaultValue: true),
       hideTooltips: _readBoolPref(prefs, 'hideTooltips', defaultValue: false),
       disableSwipeRegeneration: _readBoolPref(
         prefs,

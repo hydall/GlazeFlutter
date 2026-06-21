@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_router/go_router.dart';
 
 import '../shell/shell_header_provider.dart';
 import '../theme/app_colors.dart';
@@ -59,7 +60,16 @@ class GlazeScaffold extends StatelessWidget {
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.iOS ||
             defaultTargetPlatform == TargetPlatform.macOS);
-    final navigatorCanPop = Navigator.of(context).canPop();
+    // Use GoRouter's declarative stack, NOT Navigator.canPop(). During a
+    // `go('/chat/...')` transition the outgoing route is still in the
+    // Navigator's animation history, so `Navigator.canPop()` transiently
+    // returns true and that stale value gets baked into `PopScope.canPop`.
+    // On iOS that let the edge-swipe perform a real pop of the only remaining
+    // page, emptying the root navigator and closing the app. GoRouter's match
+    // list is updated synchronously on `go` (a top-level route reports false),
+    // while genuinely pushed routes still report true so the iOS swipe-back
+    // keeps working there.
+    final navigatorCanPop = GoRouter.of(context).canPop();
 
     final header = SafeArea(
       bottom: false,

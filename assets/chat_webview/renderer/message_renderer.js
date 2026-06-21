@@ -767,6 +767,13 @@ if (messageData.isEditing) classes.push('editing');
       }
     }
 
+    if (!hasTokens) {
+      // The current swipe has no token count (e.g. it is still streaming) —
+      // drop any stale count left over from a sibling variation so the old
+      // value isn't shown during the generation animation.
+      sectionEl.querySelectorAll('.token-count-inline').forEach((el) => el.remove());
+    }
+
     if (hasTrigger) {
       const nameEl = sectionEl.querySelector('.msg-name');
       if (nameEl) {

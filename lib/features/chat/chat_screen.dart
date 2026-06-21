@@ -823,9 +823,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             Positioned.fill(
               child: NotificationListener<UserScrollNotification>(
                 onNotification: (notification) {
-                  if (widget.onScrollDirection != null) {
-                    widget.onScrollDirection!(notification.direction);
-                  }
+                  // Do NOT drive the header from Flutter scroll notifications.
+                  // The chat list is an InAppWebView platform view whose internal
+                  // scroll never bubbles here — the only notifications this can
+                  // catch are from stray Flutter scrollables inside the subtree
+                  // (panels, overlays, dropdowns). Forwarding those flipped
+                  // `_isHeaderHidden` out of band while JS still believed the
+                  // opposite, and since JS only emits header events on
+                  // transitions (edge-triggered) it never corrected the desync,
+                  // leaving the header frozen. JS `onHeaderScroll` is the single
+                  // source of truth (see ScrollCallbacks.onHeaderScroll below).
                   return false;
                 },
                 child: RepaintBoundary(
