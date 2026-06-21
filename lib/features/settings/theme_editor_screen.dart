@@ -128,15 +128,16 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
     // Material You drives its palette from the system; colors are locked but
     // fonts and background/element effects stay editable.
     final colorsLocked = preset.isMaterialYou;
-    final topPad = MediaQuery.of(context).padding.top + 74.0;
+    final statusBar = MediaQuery.of(context).padding.top;
     final bottomPad = ref.watch(navHeightProvider) + 20;
-    final tabHeight = 68.0;
+    // Top bar: back arrow + general/chat tabs (replaces the full-width header).
+    const tabRowHeight = 66.0;
     final warningHeight = (isDefault || colorsLocked) ? 62.0 : 0.0;
-    final totalTopPadding = topPad + warningHeight + tabHeight;
+    final totalTopPadding = statusBar + tabRowHeight + warningHeight;
 
     return GlazeScaffold(
-      title: preset.name,
       extendBodyBehindHeader: true,
+      hideHeader: true,
       onBack: () => Navigator.pop(context),
       body: Stack(
         children: [
@@ -172,51 +173,72 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
             top: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(height: topPad),
-                if (isDefault || colorsLocked)
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: context.cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: context.cs.outlineVariant),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline,
-                              size: 16, color: context.cs.onSurfaceVariant),
-                          const SizedBox(width: 8),
-                          Expanded(
-                    child: Text(
-                      isDefault
-                          ? 'theme_default_not_editable'.tr()
-                          : 'theme_material_you_colors_locked'.tr(),
-                      style: TextStyle(
-                                  fontSize: 12, color: context.cs.onSurfaceVariant),
-                            ),
+                    padding: const EdgeInsets.fromLTRB(4, 10, 16, 8),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            size: 20,
                           ),
-                        ],
-                      ),
+                          color: context.cs.primary,
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: GlazeTabBar(
+                            tabs: [
+                              GlazeTabItem(
+                                  label: 'tab_general'.tr(), icon: Icons.tune),
+                              GlazeTabItem(
+                                  label: 'tab_chat'.tr(),
+                                  icon: Icons.chat_bubble_outline),
+                            ],
+                            activeIndex: _activeTab,
+                            onChanged: (i) => setState(() => _activeTab = i),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: GlazeTabBar(
-                    tabs: [
-                      GlazeTabItem(label: 'tab_general'.tr(), icon: Icons.tune),
-                      GlazeTabItem(
-                          label: 'tab_chat'.tr(), icon: Icons.chat_bubble_outline),
-                    ],
-                    activeIndex: _activeTab,
-                    onChanged: (i) => setState(() => _activeTab = i),
-                  ),
-                ),
-              ],
+                  if (isDefault || colorsLocked)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: context.cs.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: context.cs.outlineVariant),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                size: 16, color: context.cs.onSurfaceVariant),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isDefault
+                                    ? 'theme_default_not_editable'.tr()
+                                    : 'theme_material_you_colors_locked'.tr(),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: context.cs.onSurfaceVariant),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ],
