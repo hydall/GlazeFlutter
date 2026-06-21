@@ -159,11 +159,15 @@ class JanitorWebViewProxy {
   /// Fetches [url] (must be a janitorai.com URL) from inside the WebView session
   /// and returns the raw response body. Throws [JanitorCfException] if CF cannot
   /// be cleared, or [Exception] on other HTTP errors.
-  Future<String> fetch(String url) {
+  ///
+  /// [method] defaults to GET; pass e.g. `'PATCH'` with a JSON [body] string to
+  /// mutate account data (the body is sent as `application/json`). Mutating
+  /// requests need an account session — the bearer token is attached in-page.
+  Future<String> fetch(String url, {String method = 'GET', String? body}) {
     final completer = Completer<String>();
     _gate = _gate.then((_) async {
       try {
-        completer.complete(await _fetchLocked(url));
+        completer.complete(await _fetchLocked(url, method: method, body: body));
       } catch (e, st) {
         completer.completeError(e, st);
       }
@@ -265,16 +269,20 @@ class JanitorWebViewProxy {
     await _reload();
   }
 
-  Future<String> _fetchLocked(String url) async {
+  Future<String> _fetchLocked(
+    String url, {
+    String method = 'GET',
+    String? body,
+  }) async {
     await _ensureStarted();
 
-    var result = await _rawFetch(url);
+    var result = await _rawFetch(url, method: method, body: body);
 
     // Soft block: reload the page to re-run Turnstile and refresh cf_clearance.
     if (_isCfBlocked(result)) {
       _log('CF block on fetch — reloading session');
       await _reload();
-      result = await _rawFetch(url);
+      result = await _rawFetch(url, method: method, body: body);
     }
 
     // Still blocked: CF wants an interactive challenge. Surface the visible
@@ -283,7 +291,7 @@ class JanitorWebViewProxy {
       _log('CF block persists — escalating to visible challenge');
       await _escalateToVisible();
       await _reload();
-      result = await _rawFetch(url);
+      result = await _rawFetch(url, method: method, body: body);
     }
 
     if (_isCfBlocked(result)) {
@@ -411,13 +419,18 @@ class JanitorWebViewProxy {
     return false;
   }
 
-  Future<({int status, String body})> _rawFetch(String url) async {
+  Future<({int status, String body})> _rawFetch(
+    String url, {
+    String method = 'GET',
+    String? body,
+  }) async {
     final controller = _controller;
     if (controller == null) return (status: -1, body: '');
-    _log('rawFetch → ${url.length > 80 ? url.substring(0, 80) : url}');
+    _log('rawFetch $method → ${url.length > 80 ? url.substring(0, 80) : url}');
     try {
-      // Inline the URL as a JSON-escaped JS literal rather than passing it via
-      // `arguments` (which has been flaky on Android in this plugin version).
+      // Inline the URL / method / body as JSON-escaped JS literals rather than
+      // passing them via `arguments` (which has been flaky on Android in this
+      // plugin version).
       final res = await controller
           .callAsyncJavaScript(
             functionBody: '''
@@ -425,12 +438,15 @@ class JanitorWebViewProxy {
               const token = __glazeFindToken();
               const headers = { "Accept": "application/json, text/plain, */*" };
               if (token) headers["authorization"] = "Bearer " + token;
-              const r = await fetch(${jsonEncode(url)}, {
+              const opts = {
+                method: ${jsonEncode(method)},
                 headers: headers,
                 credentials: "include",
-              });
-              const body = await r.text();
-              return { status: r.status, body: body, auth: token ? 1 : 0 };
+              };
+              ${body == null ? '' : 'headers["Content-Type"] = "application/json"; opts.body = ${jsonEncode(body)};'}
+              const r = await fetch(${jsonEncode(url)}, opts);
+              const respBody = await r.text();
+              return { status: r.status, body: respBody, auth: token ? 1 : 0 };
             ''',
           )
           .timeout(const Duration(seconds: 25));

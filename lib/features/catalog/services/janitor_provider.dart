@@ -5,6 +5,89 @@ import 'package:flutter/foundation.dart';
 import 'janitor_webview_proxy.dart';
 import '../catalog_models.dart';
 
+/// The signed-in account's block list (`/hampter/profiles/mine/blocked-content`).
+///
+/// [bots] and [creators] are kept as opaque JSON so they survive a round-trip
+/// when we PATCH only [tags] back — the API replaces the whole `block_list`.
+/// [keywords] are arbitrary strings; [tags] are JanitorAI tag ids (see
+/// [fetchJanitorTags]).
+class JanitorBlockList {
+  final List<dynamic> bots;
+  final List<dynamic> creators;
+  final List<String> keywords;
+  final List<int> tags;
+
+  const JanitorBlockList({
+    this.bots = const [],
+    this.creators = const [],
+    this.keywords = const [],
+    this.tags = const [],
+  });
+
+  JanitorBlockList copyWith({List<int>? tags, List<String>? keywords}) =>
+      JanitorBlockList(
+        bots: bots,
+        creators: creators,
+        keywords: keywords ?? this.keywords,
+        tags: tags ?? this.tags,
+      );
+}
+
+const _blockedContentUrl =
+    'https://janitorai.com/hampter/profiles/mine/blocked-content';
+const _profileUrl = 'https://janitorai.com/hampter/profiles/mine';
+
+/// Reads the signed-in account's current block list. Requires a logged-in
+/// JanitorAI session (the bearer token is attached in-page by the proxy).
+Future<JanitorBlockList> fetchJanitorBlockedContent() async {
+  final data = await _janitorFetch(_blockedContentUrl) as Map<String, dynamic>;
+  return JanitorBlockList(
+    bots: (data['bots'] as List?)?.toList() ?? const [],
+    creators: (data['creators'] as List?)?.toList() ?? const [],
+    keywords: ((data['keywords'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList(),
+    tags: ((data['tags'] as List?) ?? const [])
+        .whereType<num>()
+        .map((e) => e.toInt())
+        .toList(),
+  );
+}
+
+/// Keyword autocomplete for the block-list input. Mirrors the site's
+/// `/hampter/characters/tags/suggest?prefix=…` — returns free-text suggestions
+/// the user can block as keywords. Empty on error / empty prefix.
+Future<List<String>> fetchJanitorTagSuggestions(String prefix) async {
+  final p = prefix.trim();
+  if (p.isEmpty) return const [];
+  try {
+    final url =
+        'https://janitorai.com/hampter/characters/tags/suggest?prefix=${Uri.encodeQueryComponent(p)}';
+    final data = await _janitorFetch(url) as Map<String, dynamic>;
+    return ((data['suggestions'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList();
+  } catch (_) {
+    return const [];
+  }
+}
+
+/// Persists [list] via `PATCH /hampter/profiles/mine`. Sends the full
+/// `block_list` (bots/creators preserved from the prior fetch) so blocked bots
+/// and creators are not wiped when only tags change.
+Future<void> saveJanitorBlockList(JanitorBlockList list) async {
+  final payload = jsonEncode({
+    'block_list': {
+      'bots': list.bots,
+      'creators': list.creators,
+      'keywords': list.keywords,
+      'tags': list.tags,
+    },
+  });
+  await JanitorWebViewProxy.instance
+      .fetch(_profileUrl, method: 'PATCH', body: payload);
+}
+
 const _hampterUrl = 'https://janitorai.com/hampter/characters';
 const _imageBase = 'https://ella.janitorai.com/bot-avatars/';
 

@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/widgets/filter_sheet.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../catalog_models.dart';
+import '../janitor_account_provider.dart';
 import '../services/chub_provider.dart';
 import '../services/datacat_provider.dart';
 import '../services/janitor_provider.dart';
+import 'janitor_blocked_content_section.dart';
 import 'package:easy_localization/easy_localization.dart';
 
-class CatalogFilterSheet extends StatefulWidget {
+class CatalogFilterSheet extends ConsumerStatefulWidget {
   final CatalogFilters filters;
   final CatalogProvider provider;
   final ValueChanged<CatalogFilters> onApply;
@@ -20,10 +23,10 @@ class CatalogFilterSheet extends StatefulWidget {
   });
 
   @override
-  State<CatalogFilterSheet> createState() => _CatalogFilterSheetState();
+  ConsumerState<CatalogFilterSheet> createState() => _CatalogFilterSheetState();
 }
 
-class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
+class _CatalogFilterSheetState extends ConsumerState<CatalogFilterSheet> {
   late bool _nsfw;
   late bool _nsfl;
   late int _minTokens;
@@ -33,6 +36,17 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
   Set<String> _selectedTagNames = {};
 
   List<CatalogTag> _allTags = [];
+
+  /// Account-level blocked tags (JanitorAI only, when signed in). Loaded from
+  /// the server on open and PATCHed back on dispose if changed. Null until the
+  /// initial fetch lands (or when not applicable) so the section stays hidden.
+  JanitorBlockList? _blockList;
+  Set<int> _blockedTagIds = {};
+  Set<String> _blockedKeywords = {};
+
+  bool get _janitorBlockTagsEnabled =>
+      widget.provider == CatalogProvider.janitor &&
+      ref.read(janitorAccountProvider).isLoggedIn;
 
   @override
   void initState() {
@@ -45,6 +59,7 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
     _selectedTagNames = Set.from(widget.filters.tagNames);
 
     _loadTags();
+    if (_janitorBlockTagsEnabled) _loadBlockedTags();
   }
 
   Future<void> _loadTags() async {
@@ -62,6 +77,42 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
         _allTags = tags;
       });
     }
+  }
+
+  Future<void> _loadBlockedTags() async {
+    try {
+      final list = await fetchJanitorBlockedContent();
+      if (mounted) {
+        setState(() {
+          _blockList = list;
+          _blockedTagIds = list.tags.toSet();
+          _blockedKeywords = list.keywords.toSet();
+        });
+      }
+    } catch (_) {
+      // Not signed in / CF block / network — leave the section hidden.
+    }
+  }
+
+  void _toggleBlockedTag(int id) {
+    setState(() {
+      if (!_blockedTagIds.remove(id)) _blockedTagIds.add(id);
+    });
+  }
+
+  void _addBlockedKeyword(String keyword) {
+    setState(() => _blockedKeywords.add(keyword));
+  }
+
+  void _removeBlockedKeyword(String keyword) {
+    setState(() => _blockedKeywords.remove(keyword));
+  }
+
+  void _clearBlockedContent() {
+    setState(() {
+      _blockedTagIds.clear();
+      _blockedKeywords.clear();
+    });
   }
 
   @override
@@ -95,7 +146,30 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
         );
       });
     }
+
+    _saveBlockedTagsIfChanged();
     super.dispose();
+  }
+
+  /// PATCHes the account block list if the blocked tags or keywords changed.
+  /// Bots/creators are preserved from the fetched [_blockList]; only the tag id
+  /// set and keyword list are replaced.
+  void _saveBlockedTagsIfChanged() {
+    final original = _blockList;
+    if (original == null) return;
+    final originalTags = original.tags.toSet();
+    final originalKeywords = original.keywords.toSet();
+    final tagsUnchanged = originalTags.length == _blockedTagIds.length &&
+        originalTags.containsAll(_blockedTagIds);
+    final keywordsUnchanged =
+        originalKeywords.length == _blockedKeywords.length &&
+            originalKeywords.containsAll(_blockedKeywords);
+    if (tagsUnchanged && keywordsUnchanged) return;
+    final updated = original.copyWith(
+      tags: _blockedTagIds.toList()..sort(),
+      keywords: _blockedKeywords.toList()..sort(),
+    );
+    Future.microtask(() => saveJanitorBlockList(updated));
   }
 
   void _toggleTag(FilterTag tag) {
@@ -183,6 +257,18 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
           onToggle: _toggleTag,
           onClear: _clearTags,
         ),
+        if (_blockList != null)
+          FilterCustomSection(
+            child: JanitorBlockedContentSection(
+              allTags: _allTags,
+              blockedTagIds: _blockedTagIds,
+              blockedKeywords: _blockedKeywords,
+              onToggleTag: _toggleBlockedTag,
+              onAddKeyword: _addBlockedKeyword,
+              onRemoveKeyword: _removeBlockedKeyword,
+              onClear: _clearBlockedContent,
+            ),
+          ),
       ],
     );
   }

@@ -78,6 +78,14 @@ class FilterTagsSection extends FilterSection {
   });
 }
 
+/// An arbitrary feature-specific widget rendered inline as a section. Use for
+/// rows the descriptor types above can't express (e.g. the JanitorAI blocked
+/// tags + keywords control with its own autocomplete).
+class FilterCustomSection extends FilterSection {
+  final Widget child;
+  const FilterCustomSection({required this.child});
+}
+
 /// Generic, reusable filter bottom sheet.
 ///
 /// Renders an ordered list of [FilterSection]s inside a [SheetView]. Used by
@@ -115,6 +123,10 @@ class FilterSheet extends StatelessWidget {
       FilterTagsSection() => [
         const SizedBox(height: 20),
         _FilterTags(section: section),
+      ],
+      FilterCustomSection() => [
+        const SizedBox(height: 20),
+        section.child,
       ],
     };
   }
