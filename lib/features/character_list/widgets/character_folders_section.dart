@@ -20,11 +20,18 @@ import 'folder_name_dialog.dart';
 /// When [showOurPicks] is set, a special "Our Picks" circle leads the row. It
 /// is not a real folder — it cannot be renamed, deleted, or have characters
 /// added/removed; long-pressing only offers to hide it.
+///
+/// When [showFavorites] is set, a special "Favorites" circle is shown. Like
+/// Our Picks it is not a real folder: its contents come from each character's
+/// `fav` flag, so it can't be renamed, deleted, or hidden, and membership is
+/// only changed via the per-character favorite/unfavorite actions.
 class CharacterFoldersSection extends ConsumerWidget {
   final ValueChanged<String> onOpenFolder;
   final bool showOurPicks;
   final VoidCallback? onOpenPicks;
   final VoidCallback? onHidePicks;
+  final bool showFavorites;
+  final VoidCallback? onOpenFavorites;
 
   const CharacterFoldersSection({
     super.key,
@@ -32,12 +39,16 @@ class CharacterFoldersSection extends ConsumerWidget {
     this.showOurPicks = false,
     this.onOpenPicks,
     this.onHidePicks,
+    this.showFavorites = false,
+    this.onOpenFavorites,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final folders = ref.watch(characterFoldersProvider).value ?? const [];
-    if (folders.isEmpty && !showOurPicks) return const SizedBox.shrink();
+    if (folders.isEmpty && !showOurPicks && !showFavorites) {
+      return const SizedBox.shrink();
+    }
 
     final memberships =
         ref.watch(folderMembershipsProvider).value ?? FolderMemberships.empty;
@@ -51,6 +62,8 @@ class CharacterFoldersSection extends ConsumerWidget {
         .toList();
 
     final tiles = <Widget>[
+      if (showFavorites)
+        _FavoritesCircle(onTap: () => onOpenFavorites?.call()),
       if (showOurPicks)
         _OurPicksCircle(
           onTap: () => onOpenPicks?.call(),
@@ -330,6 +343,76 @@ class _OurPicksCircle extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Our Picks',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Special circle for the virtual "Favorites" collection. Shaped like a folder
+/// circle but visually distinct (heart + warm gradient) and not backed by a
+/// real folder. It has no long-press actions: it can't be renamed, deleted, or
+/// hidden, and membership is driven solely by each character's favorite flag.
+class _FavoritesCircle extends StatelessWidget {
+  static const double _diameter = 64;
+  static const Color _favColor = Color(0xFFFF6B6B);
+
+  final VoidCallback onTap;
+
+  const _FavoritesCircle({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: _diameter,
+              height: _diameter,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [_favColor, Color(0xFFB23A6B)],
+                ),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.favorite_rounded,
+                  size: 28,
+                  color: Colors.white.withValues(alpha: 0.95),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'folder_favorites'.tr(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,

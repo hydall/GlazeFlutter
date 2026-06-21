@@ -339,6 +339,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   }
 
   String? _folderName(String id) {
+    if (id == kFavoritesFolderId) return 'folder_favorites'.tr();
     final folders = ref.read(characterFoldersProvider).value;
     return folders?.where((f) => f.id == id).firstOrNull?.name;
   }
@@ -352,10 +353,17 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       return _buildFolderContents(context, topPad, navHeight);
     }
 
+    final specialsVisible = _searchQuery.isEmpty && !_filters.isActive;
     final showOurPicks =
-        _searchQuery.isEmpty &&
-        !_filters.isActive &&
+        specialsVisible &&
         (ref.watch(appSettingsProvider).value?.showOurPicks ?? true);
+    final hasFavorites = ref
+        .watch(charactersProvider)
+        .maybeWhen(
+          data: (chars) => chars.any((c) => c.fav),
+          orElse: () => false,
+        );
+    final showFavorites = specialsVisible && hasFavorites;
 
     if (_searchQuery.isNotEmpty || _filters.isActive) {
       return _buildFilteredResults(context, topPad, navHeight);
@@ -417,6 +425,11 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                   setState(() => _currentFolderId = id);
                   refreshShellHeader();
                 },
+                showFavorites: showFavorites,
+                onOpenFavorites: () {
+                  setState(() => _currentFolderId = kFavoritesFolderId);
+                  refreshShellHeader();
+                },
                 showOurPicks: showOurPicks,
                 onOpenPicks: () {
                   setState(() => _tabIndex = 2);
@@ -446,17 +459,21 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   }
 
   /// Builds the query for [filteredCharactersProvider] from current UI state.
-  CharacterQuery _query({String? folderId}) => CharacterQuery(
-    search: _searchQuery,
-    favOnly: _filters.favOnly,
-    tags: _filters.tagNames.toList()..sort(),
-    minTokens: _filters.minTokens,
-    maxTokens: _filters.maxTokens,
-    hasTokenFilter: _filters.hasTokenFilter,
-    sortBy: _sortBy,
-    sortDir: _sortDir,
-    folderId: folderId,
-  );
+  ///
+  /// [forceFavOnly] restricts to favorited characters regardless of the active
+  /// filters — used by the virtual "Favorites" folder.
+  CharacterQuery _query({String? folderId, bool forceFavOnly = false}) =>
+      CharacterQuery(
+        search: _searchQuery,
+        favOnly: forceFavOnly || _filters.favOnly,
+        tags: _filters.tagNames.toList()..sort(),
+        minTokens: _filters.minTokens,
+        maxTokens: _filters.maxTokens,
+        hasTokenFilter: _filters.hasTokenFilter,
+        sortBy: _sortBy,
+        sortDir: _sortDir,
+        folderId: folderId,
+      );
 
   Widget _buildFilteredResults(
     BuildContext context,
@@ -534,6 +551,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     double navHeight,
   ) {
     final folderId = _currentFolderId!;
+    final isFavorites = folderId == kFavoritesFolderId;
     final chars = ref.watch(charactersProvider);
     return chars.when(
       loading: () =>
@@ -545,8 +563,14 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         ),
       ),
       data: (_) {
+        // The Favorites folder is virtual: it filters on the `fav` flag rather
+        // than folder membership, so it never passes a folderId downstream.
         final sorted = ref.watch(
-          filteredCharactersProvider(_query(folderId: folderId)),
+          filteredCharactersProvider(
+            isFavorites
+                ? _query(forceFavOnly: true)
+                : _query(folderId: folderId),
+          ),
         );
 
         if (sorted.isEmpty) {
@@ -557,7 +581,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
               SliverFillRemaining(
                 child: Center(
                   child: Text(
-                    'folder_empty'.tr(),
+                    isFavorites
+                        ? 'folder_favorites_empty'.tr()
+                        : 'folder_empty'.tr(),
                     style: TextStyle(color: context.cs.onSurfaceVariant),
                   ),
                 ),
@@ -575,7 +601,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           tabBar: _buildTabBar(),
           filterCount: _filters.activeCount,
           onFilterTap: () => _showCharacterFilterSheet(context),
-          folderId: folderId,
+          folderId: isFavorites ? null : folderId,
           onSortDirToggle: () => setState(() {
             _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
           }),

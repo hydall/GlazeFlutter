@@ -4,6 +4,12 @@ import '../db/repositories/character_folder_repo.dart';
 import '../models/character_folder.dart';
 import 'db_provider.dart';
 
+/// Sentinel id for the virtual "Favorites" folder. It is not a real folder
+/// (no row in `character_folders`); it surfaces every favorited character and
+/// cannot be renamed, deleted, or have membership edited through the folder UI.
+/// Membership is driven purely by each character's `fav` flag.
+const kFavoritesFolderId = '__favorites__';
+
 final characterFolderRepoProvider = Provider<CharacterFolderRepo>((ref) {
   return CharacterFolderRepo(ref.watch(appDbProvider));
 });
