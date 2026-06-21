@@ -697,6 +697,36 @@ export class Bridge {
       if (pos !== undefined) this.virtualList.container.scrollTop = pos;
       return this.virtualList.container.scrollTop;
     });
+    // After the textarea/footer have been swapped in (and the prior scroll
+    // position restored by the controller), smoothly bring the top of the
+    // edited message into view so the user starts editing from its beginning.
+    this._scrollMessageToTop(messageId);
+  }
+
+  // Smoothly scroll so the top of [messageId] lands just below the translucent
+  // header. The container carries a dynamic `padding-top` (header inset, see
+  // setTopPadding), so we subtract it to avoid the message hiding behind it.
+  _scrollMessageToTop(messageId) {
+    const container = this.virtualList?.container;
+    if (!container) return;
+    requestAnimationFrame(() => {
+      const section = document.querySelector(`[data-message-id="${messageId}"]`);
+      if (!section || !container.isConnected) return;
+      const cRect = container.getBoundingClientRect();
+      const sRect = section.getBoundingClientRect();
+      const padTop = parseFloat(getComputedStyle(container).paddingTop) || 0;
+      const target = container.scrollTop + (sRect.top - cRect.top) - padTop - 8;
+      this.virtualList.isProgrammaticScrolling = true;
+      container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+      setTimeout(() => {
+        this.virtualList.isProgrammaticScrolling = false;
+        // Re-sync the render window to the resting scroll position (scroll
+        // events fired during the animation were gated out above).
+        if (typeof this.virtualList.updateWindow === 'function') {
+          this.virtualList.updateWindow();
+        }
+      }, 500);
+    });
   }
 
   stopEdit(messageId) {

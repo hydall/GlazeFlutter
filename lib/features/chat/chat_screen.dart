@@ -30,8 +30,12 @@ import '../../shared/theme/theme_preset.dart';
 import '../../shared/theme/theme_provider.dart';
 
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/image_viewer.dart';
+import '../personas/persona_list_screen.dart';
+import '../settings/api_list_provider.dart';
+import '../settings/api_settings_screen.dart';
 import '../settings/app_settings_provider.dart';
 import 'chat_drawer_controller.dart'
     show ChatDrawerController, DrawerPanel, kKeyboardHeightPref;
@@ -687,6 +691,61 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         ),
       ),
     );
+  }
+
+  /// Guards message sending behind an explicitly selected persona. When no
+  /// persona is selected in the persona list, shows a notice sheet with a
+  /// shortcut to pick one and returns false so the caller aborts the send.
+  bool _ensurePersonaSelected() {
+    if (ref.read(activePersonaIdProvider) != null) return true;
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'persona_required_title'.tr(),
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.person_off_outlined,
+        description: 'persona_required_desc'.tr(),
+        buttonText: 'persona_required_select'.tr(),
+        onButtonTap: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          showModalBottomSheet<void>(
+            context: context,
+            useRootNavigator: true,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const PersonaListScreen(),
+          );
+        },
+      ),
+    );
+    return false;
+  }
+
+  /// Guards message sending behind a configured API. When no API config is
+  /// available, shows a notice sheet with a shortcut to the API settings and
+  /// returns false so the caller aborts the send.
+  bool _ensureApiSelected() {
+    if (ref.read(activeApiConfigProvider) != null) return true;
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'api_required_title'.tr(),
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.cloud_off_outlined,
+        description: 'api_required_desc'.tr(),
+        buttonText: 'api_required_select'.tr(),
+        onButtonTap: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          showModalBottomSheet<void>(
+            context: context,
+            useRootNavigator: true,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            barrierColor: Colors.black54,
+            builder: (_) => const ApiSettingsScreen(),
+          );
+        },
+      ),
+    );
+    return false;
   }
 
   @override
@@ -1359,6 +1418,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     enterToSend: widget.enterToSend,
                                     onSend: (text) {
                                       if (text.trim().isEmpty) return;
+                                      if (!_ensurePersonaSelected()) return;
+                                      if (!_ensureApiSelected()) return;
                                       ref
                                           .read(
                                             chatProvider(
@@ -1369,6 +1430,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     },
                                     onSendWithGuidance: (text, guidance) {
                                       if (text.trim().isEmpty) return;
+                                      if (!_ensurePersonaSelected()) return;
+                                      if (!_ensureApiSelected()) return;
                                       ref
                                           .read(
                                             chatProvider(
@@ -1382,6 +1445,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     },
                                     onSendWithImage:
                                         (text, guidanceText, imageDataUrl) {
+                                          if (!_ensurePersonaSelected()) return;
+                                          if (!_ensureApiSelected()) return;
                                           ref
                                               .read(
                                                 chatProvider(

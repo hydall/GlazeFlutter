@@ -137,6 +137,7 @@ class GlazeBottomSheet {
     Widget? child,
     bool locked = false,
     bool isDismissible = true,
+    int? scrollToIndex,
   }) {
     return showModalBottomSheet<T>(
       context: context,
@@ -157,6 +158,7 @@ class GlazeBottomSheet {
         bigInfo: bigInfo,
         input: input,
         locked: locked,
+        scrollToIndex: scrollToIndex,
         child: child,
       ),
     );
@@ -221,6 +223,7 @@ class _GlazeBottomSheetContent extends ConsumerStatefulWidget {
   final BottomSheetInput? input;
   final Widget? child;
   final bool locked;
+  final int? scrollToIndex;
 
   const _GlazeBottomSheetContent({
     this.title,
@@ -233,6 +236,7 @@ class _GlazeBottomSheetContent extends ConsumerStatefulWidget {
     this.input,
     this.child,
     required this.locked,
+    this.scrollToIndex,
   });
 
   @override
@@ -246,6 +250,7 @@ class _GlazeBottomSheetContentState
   final FocusNode _inputFocus = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final _headerKey = GlobalKey();
+  final _scrollTargetKey = GlobalKey();
   double _headerH = 52; // Estimate initial height
 
   @override
@@ -255,6 +260,19 @@ class _GlazeBottomSheetContentState
     if (widget.input != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         FocusScope.of(context).requestFocus(_inputFocus);
+      });
+    }
+    if (widget.scrollToIndex != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = _scrollTargetKey.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+          );
+        }
       });
     }
   }
@@ -345,7 +363,11 @@ class _GlazeBottomSheetContentState
                                   _BigInfo(info: widget.bigInfo!),
                                 if (widget.items != null &&
                                     widget.items!.isNotEmpty)
-                                  _ItemsList(items: widget.items!),
+                                  _ItemsList(
+                                    items: widget.items!,
+                                    scrollToIndex: widget.scrollToIndex,
+                                    scrollTargetKey: _scrollTargetKey,
+                                  ),
                                 if (widget.itemsAsCards != null &&
                                     widget.itemsAsCards!.isNotEmpty)
                                   _ItemsCardList(items: widget.itemsAsCards!),
@@ -395,7 +417,11 @@ class _GlazeBottomSheetContentState
                                 _BigInfo(info: widget.bigInfo!),
                               if (widget.items != null &&
                                   widget.items!.isNotEmpty)
-                                _ItemsList(items: widget.items!),
+                                _ItemsList(
+                                  items: widget.items!,
+                                  scrollToIndex: widget.scrollToIndex,
+                                  scrollTargetKey: _scrollTargetKey,
+                                ),
                               if (widget.itemsAsCards != null &&
                                   widget.itemsAsCards!.isNotEmpty)
                                 _ItemsCardList(items: widget.itemsAsCards!),
@@ -495,8 +521,14 @@ class _Header extends StatelessWidget {
 
 class _ItemsList extends StatelessWidget {
   final List<BottomSheetItem> items;
+  final int? scrollToIndex;
+  final Key? scrollTargetKey;
 
-  const _ItemsList({required this.items});
+  const _ItemsList({
+    required this.items,
+    this.scrollToIndex,
+    this.scrollTargetKey,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -518,7 +550,10 @@ class _ItemsList extends StatelessWidget {
                   thickness: 1,
                   color: Colors.white.withValues(alpha: 0.06),
                 ),
-              _ItemRow(item: items[i]),
+              KeyedSubtree(
+                key: i == scrollToIndex ? scrollTargetKey : null,
+                child: _ItemRow(item: items[i]),
+              ),
             ],
           ],
         ),

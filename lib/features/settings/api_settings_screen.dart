@@ -931,9 +931,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     if (current.isNotEmpty && !models.contains(current)) {
       models.insert(0, current);
     }
+    final selectedIndex = models.indexOf(current);
     await GlazeBottomSheet.show<void>(
       context,
       title: 'onboarding_select_model'.tr(),
+      scrollToIndex: selectedIndex >= 0 ? selectedIndex : null,
       items: models
           .map(
             (m) => BottomSheetItem(
@@ -1131,10 +1133,10 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     final apiKey = _keyCtrl.text.trim();
     final model = _modelCtrl.text.trim();
     final endpointRequired = _protocol != LlmProtocol.openrouter;
-    if ((endpointRequired && endpoint.isEmpty) ||
-        apiKey.isEmpty ||
-        model.isEmpty) {
-      GlazeToast.show(context, 'settings_err_fill_all'.tr());
+    // Model is optional here: tapping the status should let the user verify the
+    // provider connection even before a model has been picked.
+    if ((endpointRequired && endpoint.isEmpty) || apiKey.isEmpty) {
+      GlazeToast.show(context, 'settings_err_endpoint_key'.tr());
       return;
     }
     setState(() {

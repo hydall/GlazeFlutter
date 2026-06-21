@@ -76,12 +76,24 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     final charBubbleRaw = preset.charBubbleParsed ?? base.charBubble;
     final charBubble = _distinctBubble(charBubbleRaw, effectiveBg, isDark);
 
+    // Auto (null) text colors are judged against the bubble *as it actually
+    // paints*: the (possibly gradient) color composited over the chat
+    // background at the theme's element opacity. Judging the raw opaque color
+    // picked dark text for translucent mid-tone bubbles that render much darker
+    // on screen — e.g. the default blue user bubble in the dark theme ended up
+    // with near-black text that blended into it.
+    final op = preset.elementOpacity.clamp(0.0, 1.0);
+    final userBubbleVisible = _visibleBubble(
+        userBubble, preset.userBubbleGradientParsed, op, effectiveBg);
+    final charBubbleVisible = _visibleBubble(
+        charBubble, preset.charBubbleGradientParsed, op, effectiveBg);
+
     return base.copyWith(
       accent: accent,
       userBubble: userBubble,
       charBubble: charBubble,
-      userText: _ensureContrast(preset.userTextParsed, userBubble),
-      charText: _ensureContrast(preset.charTextParsed, charBubble),
+      userText: _ensureContrast(preset.userTextParsed, userBubbleVisible),
+      charText: _ensureContrast(preset.charTextParsed, charBubbleVisible),
       // If preset sets a quote/italic color — use it; otherwise fall back to accent
       userQuote: preset.userQuoteParsed ?? accent,
       charQuote: preset.charQuoteParsed ?? accent,
@@ -125,11 +137,30 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     return bubble;
   }
 
+  /// The bubble color as it actually paints, used only to pick a readable auto
+  /// text color (not for the bubble fill itself): a 2-stop gradient is reduced
+  /// to the midpoint of its stops, then alpha-composited over the chat
+  /// background at the element opacity.
+  static Color _visibleBubble(
+    Color solid,
+    BubbleGradient? gradient,
+    double opacity,
+    Color bg,
+  ) {
+    final base = gradient == null
+        ? solid
+        : Color.lerp(gradient.color1, gradient.color2, 0.5)!;
+    return Color.alphaBlend(base.withValues(alpha: opacity), bg);
+  }
+
   static Color _contrastFor(Color bg) {
-    final lum = bg.computeLuminance();
-    final hsl = HSLColor.fromColor(bg);
-    final threshold = hsl.saturation > 0.2 ? 0.25 : 0.35;
-    return lum > threshold ? const Color(0xFF1A1A1B) : const Color(0xFFE1E3E6);
+    // Perceptual midpoint split: light bubbles get dark text, dark bubbles get
+    // light text. The old saturation-biased threshold (0.25 for saturated
+    // colors) forced dark text onto saturated mid-tone bubbles, where light
+    // text is far more readable.
+    return bg.computeLuminance() > 0.5
+        ? const Color(0xFF1A1A1B)
+        : const Color(0xFFE1E3E6);
   }
 
   static Color? _ensureContrast(Color? text, Color bg) {

@@ -1306,6 +1306,35 @@
   display: none !important;
 }
 
+/* Default layout: when BOTH the name and avatar are hidden, the header row
+ * collapses to just the timestamp. Instead of leaving it floating on its own
+ * line above the text, pull it out of flow and pin it to the top-right so it
+ * sits in the same row as the start of the message body. (top/right mirror the
+ * .message-section.layout-default padding of 10px 16px.) */
+#chat-container.hide-user-avatar.hide-user-name
+  .message-section.layout-default.user
+  .msg-header,
+#chat-container.hide-char-avatar.hide-char-name
+  .message-section.layout-default.char
+  .msg-header {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  margin: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+/* Keep the hidden-toggle eye / time text interactive even though the wrapper
+ * disables pointer events to avoid blocking taps on the first text line. */
+#chat-container.hide-user-avatar.hide-user-name
+  .message-section.layout-default.user
+  .msg-header .msg-time,
+#chat-container.hide-char-avatar.hide-char-name
+  .message-section.layout-default.char
+  .msg-header .msg-time {
+  pointer-events: auto;
+}
+
 /* ============================================================
  * Shadow DOM content (.glaze-message)
  * NOTE: most of these are also injected inside the shadow root

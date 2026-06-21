@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -56,7 +57,13 @@ Page<void> _adaptivePage({
   if (isIosLikeTargetPlatform) {
     return CupertinoPage<void>(key: state.pageKey, child: child);
   }
-  return _overlayPage(state: state, child: child);
+  // On Android/other, use a real platform page transition (MaterialPage) so the
+  // forward (open) navigation animates instead of snapping in. Previously this
+  // fell back to `_overlayPage` (zero-duration), which made opening a route —
+  // e.g. a chat — flicker into place while closing still animated (the
+  // underlying MaterialPage shell reappears with its default transition),
+  // leaving the open/close pair visibly asymmetric.
+  return MaterialPage<void>(key: state.pageKey, child: child);
 }
 
 /// Constructs a [GoRouter] with the given [navigatorKey].

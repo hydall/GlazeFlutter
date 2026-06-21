@@ -348,7 +348,13 @@ class UseVirtualScroll {
         this.renderDOM();
         
         this.isProgrammaticScrolling = true;
-        setTimeout(() => {
+        // Mirror the Vue implementation (useVirtualScrollNavigation.scrollToBottom):
+        // scroll on the next couple of frames, once the freshly-appended DOM has
+        // been laid out — NOT after a fixed leading delay. The old
+        // `setTimeout(…, 50)` left the new message rendered at the bottom while the
+        // viewport stayed at the previous offset for ~50ms before snapping down,
+        // which read as a janky, non-smooth jump when sending a message.
+        requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 if (!this.mounted) return;
                 if (effectiveBehavior === 'smooth') {
@@ -356,13 +362,15 @@ class UseVirtualScroll {
                     setTimeout(() => { this.isProgrammaticScrolling = false; }, 500);
                 } else {
                     this.container.scrollTop = this.container.scrollHeight;
-                    setTimeout(() => { 
+                    // Re-pin after layout settles (late image/height changes), matching
+                    // Vue's trackTimeout(doScroll, 50) correction pass.
+                    setTimeout(() => {
                         this.container.scrollTop = this.container.scrollHeight;
-                        this.isProgrammaticScrolling = false; 
+                        this.isProgrammaticScrolling = false;
                     }, 150);
                 }
             });
-        }, 50);
+        });
     }
 
     scrollToTop() {

@@ -64,6 +64,9 @@ class ApiConnectionTester {
         }
         return const ApiTestFailure('No response from model');
       }
+      if (model.isEmpty) {
+        return const ApiTestSuccess('Connection successful!');
+      }
       final exists = models.any((m) => m['id'] == model);
       return exists
           ? ApiTestSuccess('Connection successful! Model "$model" found.')
