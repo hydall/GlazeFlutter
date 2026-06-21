@@ -82,6 +82,10 @@ abstract class ThemePreset with _$ThemePreset {
     @Default('inherit') String chatBgMode,
     String? chatBgColor,
     String? chatBgImage,
+    // Desktop-only: semi-transparent backdrop behind each message body in
+    // layout-default so text stays readable over vivid background images.
+    // 0.0 = fully transparent (default, preserves current look on mobile).
+    @Default(0.0) double textBgOpacity,
   }) = _ThemePreset;
 
   factory ThemePreset.fromJson(Map<String, dynamic> json) =>
