@@ -21,6 +21,19 @@ class ChatRepo implements SyncChatStore {
     return rows.map(_toModel).toList();
   }
 
+  /// Lightweight per-character session listing: scans message counts without
+  /// deserializing every message (see [_toMetadata]). Use this when only
+  /// session indexes/counts are needed (e.g. the "Open chat" picker) — the
+  /// full [getByCharacterId] decodes all messages and is noticeably slower for
+  /// characters with large histories.
+  Future<List<SessionMetadata>> getMetadataByCharacterId(String charId) async {
+    final rows = await (_db.select(_db.chatSessions)
+          ..where((t) => t.characterId.equals(charId))
+          ..orderBy([(t) => OrderingTerm(expression: t.sessionIndex)]))
+        .get();
+    return rows.map(_toMetadata).toList();
+  }
+
   Future<List<ChatSession>> getAllSessions() async {
     final rows = await (_db.select(
       _db.chatSessions,

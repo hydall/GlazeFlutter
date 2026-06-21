@@ -348,7 +348,9 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
       }
     }
 
-    final sessions = await ref.read(chatSessionOpsProvider.notifier).getSessionsByCharacter(cId);
+    final sessions = await ref
+        .read(chatSessionOpsProvider.notifier)
+        .getSessionMetadataByCharacter(cId);
     if (!context.mounted) return;
 
     // Inner sheet pops with a value; the outer CharacterDetailScreen modal
@@ -376,7 +378,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
               namedArgs: {'id': '${s.sessionIndex + 1}'},
             ),
             hint:
-                '${s.messages.length} ${'count_messages'.plural(s.messages.length)}',
+                '${s.messageCount} ${'count_messages'.plural(s.messageCount)}',
             onTap: () => Navigator.of(context, rootNavigator: true)
                 .pop('session:${s.sessionIndex}'),
           ),

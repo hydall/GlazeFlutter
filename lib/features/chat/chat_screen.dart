@@ -412,9 +412,15 @@ class _ChatBody extends ConsumerStatefulWidget {
   ConsumerState<_ChatBody> createState() => _ChatBodyState();
 }
 
-class _ChatBodyState extends ConsumerState<_ChatBody> {
+class _ChatBodyState extends ConsumerState<_ChatBody>
+    with WidgetsBindingObserver {
   double _inputBarHeight = 130.0;
   final GlobalKey _inputBarKey = GlobalKey();
+
+  /// Last bottom inset (input bar + keyboard/drawer) pushed to the WebView.
+  /// Cached so it can be re-asserted on app resume — see
+  /// [didChangeAppLifecycleState].
+  double _lastMessageListBottom = 0;
 
   /// Measured height of the floating [MemoryActivityCard] (0 when hidden) so
   /// the message list reserves room at the *top* for it — otherwise the card
@@ -430,6 +436,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkHeight());
     final targetId = widget.targetMessageId;
     if (targetId != null && targetId.isNotEmpty) {
@@ -750,7 +757,31 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // The native WebView freezes its JS while the app is backgrounded, so a
+    // bottom-inset change pushed during the background transition (e.g. the
+    // keyboard hiding) can be dropped. If the app then resumes with the
+    // keyboard re-opening at the same height, Dart's bottomInset is unchanged
+    // so the per-frame diff in the sync dispatcher never re-pushes it — leaving
+    // stale, oversized reserved space under the input bar. Re-assert the
+    // current inset once now and again after the keyboard settles; the JS side
+    // no-ops when the padding already matches.
+    void resync() {
+      if (!mounted) return;
+      unawaited(
+        _webViewStateKey.currentState?.applyBottomInset(_lastMessageListBottom) ??
+            Future<void>.value(),
+      );
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => resync());
+    Future<void>.delayed(const Duration(milliseconds: 400), resync);
   }
 
   @override
@@ -870,6 +901,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         final effectiveTopInset = messageListTop + memoryTopReserve;
 
         final messageListBottom = _inputBarHeight + effectiveBottomInset;
+        _lastMessageListBottom = messageListBottom;
         final showScrollBtn = _showScrollToBottom && !widget.search.showSearch;
 
         final animatedBottomPanelInset =

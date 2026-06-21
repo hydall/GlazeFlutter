@@ -862,6 +862,17 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     return b.scrollToBottom(smooth: smooth);
   }
 
+  /// Re-asserts the WebView's bottom padding to [px]. Used on app resume to
+  /// reconcile a stale padding: the native WebView freezes its JS while
+  /// backgrounded, so an inset change pushed during the background transition
+  /// can be dropped. The JS side no-ops when the padding already matches, so
+  /// this is cheap to call defensively.
+  Future<void> applyBottomInset(double px) {
+    final b = _bridge;
+    if (b == null || !_ready) return Future.value();
+    return b.setBottomPadding(px);
+  }
+
   Future<void> scrollToMessage(String id, {bool highlight = false}) {
     final b = _bridge;
     if (b == null) return Future.value();

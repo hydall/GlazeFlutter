@@ -21,6 +21,15 @@ class ChatSessionOps extends AsyncNotifier<List<ChatSession>> {
   Future<List<ChatSession>> getSessionsByCharacter(String charId) async {
     return ref.read(chatRepoProvider).getByCharacterId(charId);
   }
+
+  /// Lightweight session listing for pickers — only indexes/counts, no full
+  /// message decoding. Far faster than [getSessionsByCharacter] for large
+  /// histories.
+  Future<List<SessionMetadata>> getSessionMetadataByCharacter(
+    String charId,
+  ) async {
+    return ref.read(chatRepoProvider).getMetadataByCharacterId(charId);
+  }
 }
 
 final chatSessionOpsProvider = AsyncNotifierProvider<ChatSessionOps, List<ChatSession>>(
