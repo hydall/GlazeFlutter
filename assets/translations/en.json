@@ -463,6 +463,8 @@
     "theme_italic_colors": "Italic (Thoughts) Colors",
     "theme_user_italic": "User Italic Color",
     "theme_char_italic": "Character Italic Color",
+    "theme_desktop_effects": "Desktop Effects",
+    "theme_text_bg_opacity": "Message Backdrop Opacity",
     "theme_system_font_size": "System",
     "theme_custom_font_size": "Custom",
     "theme_ui_font_size": "UI Font Size",

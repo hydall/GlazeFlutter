@@ -948,6 +948,26 @@ class _ChatColorsTab extends ConsumerWidget {
             ),
           ],
         ),
+        // Desktop-only: message background opacity for layout-default.
+        // On mobile the backdrop is always transparent (no impact on perf).
+        if (!isBubble &&
+            (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
+          MenuGroup(
+            header: 'theme_desktop_effects'.tr(),
+            items: [
+              _SliderRow(
+                label: 'theme_text_bg_opacity'.tr(),
+                value: preset.textBgOpacity,
+                min: 0.0,
+                max: 0.8,
+                divisions: 16,
+                unit: '%',
+                displayMultiplier: 100,
+                onChanged: (v) =>
+                    onUpdate((p) => p.copyWith(textBgOpacity: v)),
+              ),
+            ],
+          ),
         const SizedBox(height: 8),
       ],
     );
