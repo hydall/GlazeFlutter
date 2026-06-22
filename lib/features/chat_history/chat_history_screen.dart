@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/shell/shell_header_provider.dart';
@@ -45,6 +46,25 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
     _registry?.publish(this, 0, _shellHeader());
   }
 
+  /// Slides the shell header out of view while scrolling down the list and back
+  /// in while scrolling up — same behaviour as the character list / chat header.
+  bool _onScrollNotification(ScrollNotification n) {
+    if (n is UserScrollNotification && n.metrics.axis == Axis.vertical) {
+      final notifier = ref.read(shellHeaderHiddenProvider(0).notifier);
+      if (n.direction == ScrollDirection.reverse && !notifier.state) {
+        notifier.state = true;
+      } else if (n.direction == ScrollDirection.forward && notifier.state) {
+        notifier.state = false;
+      }
+    }
+    return false;
+  }
+
+  void _showHeader() {
+    final notifier = ref.read(shellHeaderHiddenProvider(0).notifier);
+    if (notifier.state) notifier.state = false;
+  }
+
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -78,6 +98,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
   );
 
   void _openSearch() {
+    _showHeader();
     setState(() => _searchExpanded = true);
     _refreshShellHeader();
     WidgetsBinding.instance.addPostFrameCallback(
@@ -131,7 +152,10 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: body,
+      body: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        child: body,
+      ),
     );
   }
 

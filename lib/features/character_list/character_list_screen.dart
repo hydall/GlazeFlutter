@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -68,12 +69,61 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   String? _lastOpenedInitialCharacterId;
   bool _openingInitialCharacter = false;
 
+  // The tabs row floats below the shell header like a second header. Its
+  // hide-on-scroll state lives in [shellHeaderHiddenProvider] so it travels in
+  // step with the shell header. This constant is the block it occupies (its top
+  // padding + the bar itself) so content can reserve room.
+  static const double _kTabBarBlock = 52.0;
+
+  // Owns the scroll position of whichever list view is currently shown (the
+  // grids attach via PrimaryScrollController), so tapping the active tab can
+  // animate it back to the top.
+  final ScrollController _listScrollController = ScrollController();
+
   @override
   void dispose() {
     _catalogDebounce?.cancel();
     _searchCtrl.dispose();
     _searchFocus.dispose();
+    _listScrollController.dispose();
     super.dispose();
+  }
+
+  /// Hides the floating tabs row while scrolling down, reveals it scrolling up.
+  /// Mirrors the chat header's behaviour ([_onScrollDirection] there).
+  bool _onScrollNotification(ScrollNotification n) {
+    if (n is UserScrollNotification && n.metrics.axis == Axis.vertical) {
+      final notifier = ref.read(
+        shellHeaderHiddenProvider(headerBranchIndex).notifier,
+      );
+      if (n.direction == ScrollDirection.reverse && !notifier.state) {
+        notifier.state = true;
+      } else if (n.direction == ScrollDirection.forward && notifier.state) {
+        notifier.state = false;
+      }
+    }
+    return false;
+  }
+
+  /// Forces the shell header + tabs row back into view (e.g. after navigating
+  /// between views, where staying hidden would be jarring).
+  void _showHeader() {
+    final notifier = ref.read(
+      shellHeaderHiddenProvider(headerBranchIndex).notifier,
+    );
+    if (notifier.state) notifier.state = false;
+  }
+
+  /// Animates the active list back to the top. Guarded so it never reads a
+  /// position while two scroll views are briefly attached during a tab switch.
+  void _scrollToTop() {
+    if (!_listScrollController.hasClients) return;
+    if (_listScrollController.positions.length != 1) return;
+    _listScrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -97,11 +147,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           ? (_picksCanGoBack && _picksGoBackFn != null
                 ? _picksGoBackFn
                 : () {
+                    _showHeader();
                     setState(() => _currentFolderId = null);
                     refreshShellHeader();
                   })
           : inFolder
           ? () {
+              _showHeader();
               setState(() => _currentFolderId = null);
               refreshShellHeader();
             }
@@ -124,6 +176,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                 ),
               ),
             ],
+      // The tabs ride inside the header (only at the top level) so they hide and
+      // reveal as a single unit with it — one animation, not two.
+      below: inFolder ? null : _buildTabBar(),
     );
   }
 
@@ -260,44 +315,58 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     final selection = ref.watch(characterSelectionProvider);
 
     final topPad = MediaQuery.of(context).padding.top + 74.0;
+    // The tabs ride inside the shell header (its `below` slot) only at the top
+    // level; inside a folder the header shows a back button instead. Reserve the
+    // extra room for the tabs row when it's present so content clears it.
+    final showTabBar = !(_tabIndex == 0 && _currentFolderId != null);
+    final contentTopPad = showTabBar ? topPad + _kTabBarBlock : topPad;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           Positioned.fill(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 350),
-              reverseDuration: const Duration(milliseconds: 300),
-              switchInCurve: Curves.easeOutQuart,
-              switchOutCurve: Curves.easeInQuart,
-              transitionBuilder: (child, animation) {
-                final slide =
-                    Tween<Offset>(
-                      begin: const Offset(0.0, 0.06),
-                      end: Offset.zero,
-                    ).animate(
-                      CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutBack,
-                      ),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _onScrollNotification,
+              child: PrimaryScrollController(
+                controller: _listScrollController,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  reverseDuration: const Duration(milliseconds: 300),
+                  switchInCurve: Curves.easeOutQuart,
+                  switchOutCurve: Curves.easeInQuart,
+                  transitionBuilder: (child, animation) {
+                    final slide =
+                        Tween<Offset>(
+                          begin: const Offset(0.0, 0.06),
+                          end: Offset.zero,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutBack,
+                          ),
+                        );
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(position: slide, child: child),
                     );
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(position: slide, child: child),
-                );
-              },
-              child: _tabIndex == 1
-                  ? CatalogGrid(
-                      key: const ValueKey('catalog_grid'),
-                      topPadding: topPad,
-                      bottomPadding: navHeight + 20,
-                      tabBar: _buildTabBar(),
-                    )
-                  : KeyedSubtree(
-                      key: const ValueKey('my_characters'),
-                      child: _buildMyCharacters(context, topPad, navHeight),
-                    ),
+                  },
+                  child: _tabIndex == 1
+                      ? CatalogGrid(
+                          key: const ValueKey('catalog_grid'),
+                          topPadding: contentTopPad,
+                          bottomPadding: navHeight + 20,
+                        )
+                      : KeyedSubtree(
+                          key: const ValueKey('my_characters'),
+                          child: _buildMyCharacters(
+                            context,
+                            contentTopPad,
+                            navHeight,
+                          ),
+                        ),
+                ),
+              ),
             ),
           ),
           if (_tabIndex == 0 && _currentFolderId != kPicksFolderId)
@@ -377,7 +446,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(child: SizedBox(height: topPad)),
-              SliverToBoxAdapter(child: _buildTabBar()),
               SliverFillRemaining(
                 child: EmptyCharacterState(
                   onImport: () => _importCharacter(context, ref),
@@ -403,7 +471,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
             sortDir: _sortDir,
             topPadding: topPad,
             bottomPadding: navHeight + 20,
-            tabBar: _buildTabBar(),
             filterCount: _filters.activeCount,
             onFilterTap: () => _showCharacterFilterSheet(context),
             // The grid only holds the loaded page; let the dice draw from the
@@ -488,7 +555,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(child: SizedBox(height: topPad)),
-              SliverToBoxAdapter(child: _buildTabBar()),
               SliverFillRemaining(
                 child: Center(
                   child: Column(
@@ -523,7 +589,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           sortDir: _sortDir,
           topPadding: topPad,
           bottomPadding: navHeight + 20,
-          tabBar: _buildTabBar(),
           filterCount: _filters.activeCount,
           onFilterTap: () => _showCharacterFilterSheet(context),
           onSortDirToggle: () => setState(() {
@@ -657,8 +722,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   }
 
   Widget _buildTabBar() {
+    // Rendered in the shell header's `below` slot, which already supplies the
+    // horizontal padding — only the gap under the app bar is needed here.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.only(top: 10),
       child: GlazeTabBar(
         tabs: [
           GlazeTabItem(
@@ -669,7 +736,14 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         ],
         activeIndex: _tabIndex,
         onChanged: (i) {
+          // Tapping the already-active tab scrolls its list back to the top.
+          if (i == _tabIndex) {
+            _scrollToTop();
+            _showHeader();
+            return;
+          }
           ref.read(characterSelectionProvider.notifier).clear();
+          _showHeader();
           setState(() {
             _tabIndex = i;
             if (_searchExpanded) _applySearchForActiveTab();

@@ -108,8 +108,12 @@ class _PersistentHeader extends ConsumerWidget {
     final entry = ref.watch(
       shellHeaderProvider.select((e) => resolveShellHeader(e, branchIndex)),
     );
+    // Slides/fades the whole header out of view while the branch's list scrolls
+    // down, in step with any chrome the screen pins beneath it (e.g. the
+    // character list's tabs row), mirroring the chat header's hide-on-scroll.
+    final hidden = ref.watch(shellHeaderHiddenProvider(branchIndex));
 
-    return AnimatedSwitcher(
+    final switcher = AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeOutCubic,
@@ -139,6 +143,21 @@ class _PersistentHeader extends ConsumerWidget {
                 ),
               ),
             ),
+    );
+
+    return IgnorePointer(
+      ignoring: hidden,
+      child: AnimatedSlide(
+        offset: hidden ? const Offset(0, -1.4) : Offset.zero,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        child: AnimatedOpacity(
+          opacity: hidden ? 0.0 : 1.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          child: switcher,
+        ),
+      ),
     );
   }
 }

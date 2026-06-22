@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 /// Immutable description of what a shell screen wants the persistent header to
 /// show. Screens publish this into [shellHeaderProvider]; [ShellScreen] renders
@@ -128,6 +129,16 @@ final shellHeaderProvider =
     NotifierProvider<ShellHeaderRegistry, List<ShellHeaderEntry>>(
       ShellHeaderRegistry.new,
     );
+
+/// Per-branch flag that slides the persistent header (and any screen chrome
+/// meant to travel with it, e.g. the character list's tabs row) in and out of
+/// view as the branch's list scrolls — the shell-level equivalent of the chat
+/// screen's `_isHeaderHidden`. Screens toggle it from a scroll listener; the
+/// header and the screen both read it so they animate together. Visible (false)
+/// by default and keyed by branch so tabs don't affect each other.
+final shellHeaderHiddenProvider = StateProvider.family<bool, int>(
+  (ref, branchIndex) => false,
+);
 
 /// Resolves the header that should be shown for [branchIndex]: the topmost
 /// (highest-order) claim belonging to that branch, or null if none.

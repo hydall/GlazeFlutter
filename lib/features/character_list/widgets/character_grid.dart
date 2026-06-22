@@ -20,13 +20,13 @@ class CharacterGrid extends StatelessWidget {
   final ValueChanged<SortType> onSortTypeChanged;
   final double topPadding;
   final double bottomPadding;
-  final Widget? tabBar;
   final bool isLoadingMore;
   final bool hasMore;
   final int filterCount;
   final VoidCallback? onFilterTap;
 
-  /// Optional sliver inserted right after [tabBar] (e.g. the folders section).
+  /// Optional sliver inserted right after the top padding (e.g. the folders
+  /// section).
   final Widget? headerSliver;
 
   /// When set, cards are rendered inside this folder and expose "Remove from
@@ -51,7 +51,6 @@ class CharacterGrid extends StatelessWidget {
     required this.onSortTypeChanged,
     this.topPadding = 0,
     this.bottomPadding = 16,
-    this.tabBar,
     this.isLoadingMore = false,
     this.hasMore = false,
     this.filterCount = 0,
@@ -85,7 +84,6 @@ class CharacterGrid extends StatelessWidget {
       slivers: [
         if (topPadding > 0)
           SliverToBoxAdapter(child: SizedBox(height: topPadding)),
-        if (tabBar != null) SliverToBoxAdapter(child: tabBar!),
         ?headerSliver,
         SliverToBoxAdapter(
           child: Padding(
