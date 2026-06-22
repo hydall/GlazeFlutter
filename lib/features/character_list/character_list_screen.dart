@@ -81,22 +81,23 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
 
   @override
   ShellHeaderConfig buildShellHeader() {
-    final inSearch = _searchExpanded && _tabIndex != 2;
     final inFolder = _tabIndex == 0 && _currentFolderId != null;
+    final inPicks = inFolder && _currentFolderId == kPicksFolderId;
+    final inSearch = _searchExpanded && !inPicks;
     final folderTitle = inFolder ? _folderName(_currentFolderId!) : null;
     return ShellHeaderConfig(
       title: inSearch
           ? null
-          : (_tabIndex == 2
+          : (inPicks
                 ? _picksTitle
                 : (folderTitle ?? 'header_characters'.tr())),
       titleWidget: inSearch ? _buildSearchField(context) : null,
-      showBack: _tabIndex == 2 || inFolder,
-      onBack: _tabIndex == 2
+      showBack: inFolder,
+      onBack: inPicks
           ? (_picksCanGoBack && _picksGoBackFn != null
                 ? _picksGoBackFn
                 : () {
-                    setState(() => _tabIndex = 0);
+                    setState(() => _currentFolderId = null);
                     refreshShellHeader();
                   })
           : inFolder
@@ -105,7 +106,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
               refreshShellHeader();
             }
           : null,
-      actions: _tabIndex == 2
+      actions: inPicks
           ? null
           : [
               SizedBox(
@@ -286,22 +287,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                   child: SlideTransition(position: slide, child: child),
                 );
               },
-              child: _tabIndex == 2
-                  ? PicksGrid(
-                      key: const ValueKey('picks_grid'),
-                      topPadding: MediaQuery.of(context).padding.top + 76.0,
-                      bottomPadding: navHeight + 20,
-                      onFolderChanged:
-                          (title, description, canGoBack, goBackFn) {
-                            setState(() {
-                              _picksTitle = title;
-                              _picksCanGoBack = canGoBack;
-                              _picksGoBackFn = goBackFn;
-                            });
-                            refreshShellHeader();
-                          },
-                    )
-                  : _tabIndex == 1
+              child: _tabIndex == 1
                   ? CatalogGrid(
                       key: const ValueKey('catalog_grid'),
                       topPadding: topPad,
@@ -314,7 +300,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                     ),
             ),
           ),
-          if (_tabIndex == 0)
+          if (_tabIndex == 0 && _currentFolderId != kPicksFolderId)
             selection.active
                 ? Positioned(
                     left: 16,
@@ -339,6 +325,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   }
 
   String? _folderName(String id) {
+    if (id == kPicksFolderId) return _picksTitle;
     if (id == kFavoritesFolderId) return 'folder_favorites'.tr();
     final folders = ref.read(characterFoldersProvider).value;
     return folders?.where((f) => f.id == id).firstOrNull?.name;
@@ -435,7 +422,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                 },
                 showOurPicks: showOurPicks,
                 onOpenPicks: () {
-                  setState(() => _tabIndex = 2);
+                  setState(() => _currentFolderId = kPicksFolderId);
                   refreshShellHeader();
                 },
                 onHidePicks: () {
@@ -554,6 +541,21 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     double navHeight,
   ) {
     final folderId = _currentFolderId!;
+    if (folderId == kPicksFolderId) {
+      return PicksGrid(
+        key: const ValueKey('picks_grid'),
+        topPadding: topPad,
+        bottomPadding: navHeight + 20,
+        onFolderChanged: (title, description, canGoBack, goBackFn) {
+          setState(() {
+            _picksTitle = title;
+            _picksCanGoBack = canGoBack;
+            _picksGoBackFn = goBackFn;
+          });
+          refreshShellHeader();
+        },
+      );
+    }
     final isFavorites = folderId == kFavoritesFolderId;
     final chars = ref.watch(charactersProvider);
     return chars.when(
@@ -580,7 +582,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(child: SizedBox(height: topPad)),
-              SliverToBoxAdapter(child: _buildTabBar()),
               SliverFillRemaining(
                 child: Center(
                   child: Text(
@@ -601,7 +602,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           sortDir: _sortDir,
           topPadding: topPad,
           bottomPadding: navHeight + 20,
-          tabBar: _buildTabBar(),
           filterCount: _filters.activeCount,
           onFilterTap: () => _showCharacterFilterSheet(context),
           folderId: isFavorites ? null : folderId,
@@ -667,7 +667,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           ),
           GlazeTabItem(label: 'tab_catalog'.tr(), icon: Icons.public_rounded),
         ],
-        activeIndex: _tabIndex == 2 ? 0 : _tabIndex,
+        activeIndex: _tabIndex,
         onChanged: (i) {
           ref.read(characterSelectionProvider.notifier).clear();
           setState(() {

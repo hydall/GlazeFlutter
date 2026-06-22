@@ -10,6 +10,12 @@ import 'db_provider.dart';
 /// Membership is driven purely by each character's `fav` flag.
 const kFavoritesFolderId = '__favorites__';
 
+/// Sentinel id for the virtual "Our Picks" folder. Like Favorites it is not a
+/// real folder: its contents come from the remote curated catalog, so it cannot
+/// be renamed and characters can't be added to or removed from it. The only
+/// folder action it offers is hiding it (`showOurPicks` app setting).
+const kPicksFolderId = '__picks__';
+
 final characterFolderRepoProvider = Provider<CharacterFolderRepo>((ref) {
   return CharacterFolderRepo(ref.watch(appDbProvider));
 });
