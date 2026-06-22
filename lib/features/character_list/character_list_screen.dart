@@ -419,6 +419,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
             tabBar: _buildTabBar(),
             filterCount: _filters.activeCount,
             onFilterTap: () => _showCharacterFilterSheet(context),
+            // The grid only holds the loaded page; let the dice draw from the
+            // full unfiltered library instead of just the rendered cards.
+            randomPool: () => ref.read(filteredCharactersProvider(_query())),
             headerSliver: SliverToBoxAdapter(
               child: CharacterFoldersSection(
                 onOpenFolder: (id) {

@@ -33,6 +33,14 @@ class CharacterGrid extends StatelessWidget {
   /// folder".
   final String? folderId;
 
+  /// Resolves the full pool of characters the dice may pick from. The grid only
+  /// holds the currently rendered cards ([characters]), which in the paginated
+  /// My-Characters view is just the loaded page — picking from that would bias
+  /// the dice toward already-scrolled rows. When provided, [randomPool] returns
+  /// every character matching the active view (filters/folder included) so the
+  /// dice draws from the complete set. Falls back to [characters] when null.
+  final List<Character> Function()? randomPool;
+
   const CharacterGrid({
     super.key,
     required this.characters,
@@ -50,13 +58,15 @@ class CharacterGrid extends StatelessWidget {
     this.onFilterTap,
     this.headerSliver,
     this.folderId,
+    this.randomPool,
   });
 
-  /// Opens a random character from the currently shown list in the detail
-  /// sheet. Mirrors the card's tap behaviour (modal sheet + route-return nav).
+  /// Opens a random character from the full matching set in the detail sheet.
+  /// Mirrors the card's tap behaviour (modal sheet + route-return nav).
   Future<void> _openRandom(BuildContext context) async {
-    if (characters.isEmpty) return;
-    final picked = characters[Random().nextInt(characters.length)];
+    final pool = randomPool?.call() ?? characters;
+    if (pool.isEmpty) return;
+    final picked = pool[Random().nextInt(pool.length)];
     final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
