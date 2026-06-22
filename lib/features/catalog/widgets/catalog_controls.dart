@@ -110,6 +110,7 @@ class CatalogControls extends StatelessWidget {
               filters: state.filters,
               provider: state.activeProvider,
               onApply: (f) => notifier.setFilters(f),
+              onBlockedTagsChanged: () => notifier.search(reset: true),
             ),
           ),
         ),

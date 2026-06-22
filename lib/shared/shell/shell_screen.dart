@@ -45,6 +45,8 @@ class _ShellScreenState extends State<ShellScreen> {
             defaultTargetPlatform == TargetPlatform.macOS);
     final hideNavBarRoutes = <String>{
       '/menu/about',
+      '/menu/settings',
+      '/menu/themes',
     };
     final showNavBar =
         !location.startsWith('/chat/') &&

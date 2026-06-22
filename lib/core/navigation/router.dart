@@ -50,14 +50,11 @@ Page<void> _adaptivePage({
   required GoRouterState state,
   required Widget child,
 }) {
-  final isIosLikeTargetPlatform =
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.iOS ||
-          defaultTargetPlatform == TargetPlatform.macOS);
-  if (isIosLikeTargetPlatform) {
+  final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+  if (isIos) {
     return CupertinoPage<void>(key: state.pageKey, child: child);
   }
-  // On Android/other, use a real platform page transition (MaterialPage) so the
+  // On Android/macOS/other, use a real platform page transition (MaterialPage) so the
   // forward (open) navigation animates instead of snapping in. Previously this
   // fell back to `_overlayPage` (zero-duration), which made opening a route —
   // e.g. a chat — flicker into place while closing still animated (the

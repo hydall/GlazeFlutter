@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../chat/bridge/chat_webview_environment.dart';
+import '../catalog_provider.dart';
 import '../janitor_account_provider.dart';
 import '../services/janitor_webview_proxy.dart';
 
@@ -29,8 +30,14 @@ Future<void> openJanitorAccountSheet(BuildContext context, WidgetRef ref) async 
         isDestructive: true,
         onTap: () async {
           Navigator.of(context, rootNavigator: true).pop();
-          await JanitorWebViewProxy.instance.logout();
+          // Clear the account state first so the menu reflects the logout
+          // immediately — the WebView/cookie teardown below can take many
+          // seconds (page reload + CF clearance wait) and must not block it.
           await ref.read(janitorAccountProvider.notifier).setUserName(null);
+          await JanitorWebViewProxy.instance.logout();
+          // Drop the stale (authenticated) catalog results so reopening the
+          // catalog shows anonymous content without needing an app restart.
+          await ref.read(catalogProvider.notifier).search(reset: true);
         },
       ),
       BottomSheetItem(
@@ -79,8 +86,9 @@ class _JanitorLoginSheetState extends ConsumerState<JanitorLoginSheet> {
 
   Future<void> _logout() async {
     setState(() => _busy = true);
-    await JanitorWebViewProxy.instance.logout();
     await ref.read(janitorAccountProvider.notifier).setUserName(null);
+    await JanitorWebViewProxy.instance.logout();
+    await ref.read(catalogProvider.notifier).search(reset: true);
     await _controller?.loadUrl(
       urlRequest: URLRequest(url: WebUri(JanitorLoginSheet._loginUrl)),
     );

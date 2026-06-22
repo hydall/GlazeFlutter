@@ -368,14 +368,40 @@ class _CfChallengeWebViewState extends State<_CfChallengeWebView> {
     // cf_clearance uses Domain=.janitorai.com and all attribute-matching tricks
     // leave the cookie intact. A clean store forces CF to issue a fresh cookie
     // bound to the current UA when we navigate to janitorai.com below.
+    //
+    // The Supabase account session lives in `sb-<ref>-auth-token(.N)` cookies in
+    // the same store, so a blanket wipe would silently log the user out every
+    // time CF re-challenges (the "creds lost after a while" bug). Capture those
+    // cookies first and restore them after the wipe so only CF's cookies are
+    // actually reset.
     try {
-      final before = await CookieManager.instance()
-          .getCookies(url: WebUri('https://janitorai.com'));
+      final origin = WebUri('https://janitorai.com');
+      final before = await CookieManager.instance().getCookies(url: origin);
       debugPrint('[CF] Cookies before wipe: ${before.map((c) => c.name).join(', ')}');
+      final authCookies = before
+          .where((c) => c.name.startsWith('sb-') && c.name.contains('-auth-token'))
+          .toList();
       await CookieManager.instance().deleteAllCookies();
-      final after = await CookieManager.instance()
-          .getCookies(url: WebUri('https://janitorai.com'));
-      debugPrint('[CF] Cookies after wipe: ${after.map((c) => c.name).join(', ')} (${after.length} left)');
+      for (final c in authCookies) {
+        try {
+          await CookieManager.instance().setCookie(
+            url: origin,
+            name: c.name,
+            value: c.value.toString(),
+            domain: c.domain,
+            path: c.path ?? '/',
+            expiresDate: c.expiresDate,
+            isSecure: c.isSecure,
+            isHttpOnly: c.isHttpOnly,
+            sameSite: c.sameSite,
+          );
+        } catch (e) {
+          debugPrint('[CF] auth cookie restore error (${c.name}): $e');
+        }
+      }
+      final after = await CookieManager.instance().getCookies(url: origin);
+      debugPrint('[CF] Cookies after wipe: ${after.map((c) => c.name).join(', ')} '
+          '(${after.length} left, ${authCookies.length} auth restored)');
     } catch (e) {
       debugPrint('[CF] Cookie wipe error: $e');
     }

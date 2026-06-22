@@ -15,11 +15,16 @@ class CatalogFilterSheet extends ConsumerStatefulWidget {
   final CatalogProvider provider;
   final ValueChanged<CatalogFilters> onApply;
 
+  /// Called after the JanitorAI account block list is PATCHed (blocked tags or
+  /// keywords changed), so the catalog list can be reloaded to reflect it.
+  final VoidCallback? onBlockedTagsChanged;
+
   const CatalogFilterSheet({
     super.key,
     required this.filters,
     required this.provider,
     required this.onApply,
+    this.onBlockedTagsChanged,
   });
 
   @override
@@ -169,7 +174,12 @@ class _CatalogFilterSheetState extends ConsumerState<CatalogFilterSheet> {
       tags: _blockedTagIds.toList()..sort(),
       keywords: _blockedKeywords.toList()..sort(),
     );
-    Future.microtask(() => saveJanitorBlockList(updated));
+    final onChanged = widget.onBlockedTagsChanged;
+    Future.microtask(() async {
+      await saveJanitorBlockList(updated);
+      // Reload the catalog so the server-side block list applies to results.
+      onChanged?.call();
+    });
   }
 
   void _toggleTag(FilterTag tag) {
