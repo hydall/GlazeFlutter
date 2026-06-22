@@ -19,6 +19,7 @@ import 'core/state/character_provider.dart';
 import 'core/state/lorebook_provider.dart';
 import 'core/services/preset_seeder.dart';
 import 'features/chat_history/chat_history_provider.dart';
+import 'features/settings/api_list_provider.dart';
 import 'features/settings/app_settings_provider.dart';
 import 'shared/theme/theme_font_provider.dart';
 import 'core/services/onboarding_service.dart';
@@ -81,8 +82,14 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
   /// Starts the DB-backed providers behind the initial routes now, concurrently
   /// with the splash, so their async `build()` finishes before the route tree
   /// mounts — the list renders populated instead of flashing a spinner. Holding
-  /// the subscriptions keeps the providers alive (neither is `keepAlive`); they
+  /// the subscriptions keeps the providers alive (none is `keepAlive`); they
   /// are closed in [dispose].
+  ///
+  /// `apiListProvider` is warmed for a different reason: its async `build()`
+  /// also restores the persisted active API config from prefs. Without this,
+  /// the provider stays cold/auto-disposed until the first send, where the
+  /// synchronous `activeApiConfigProvider` read sees a still-loading list and
+  /// falsely reports "no API selected" on every fresh launch.
   void _warmInitialListProviders() {
     _warmSubs.add(ref.listenManual(chatHistoryProvider, (_, _) {}));
     _warmSubs.add(
@@ -91,6 +98,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
         (_, _) {},
       ),
     );
+    _warmSubs.add(ref.listenManual(apiListProvider, (_, _) {}));
   }
 
   @override

@@ -33,7 +33,6 @@ import '../../presets/preset_list_screen.dart';
 import '../../regex/regex_sheet.dart';
 import '../../settings/api_settings_screen.dart';
 import 'authors_note_sheet.dart';
-import 'chat_stats_sheet.dart';
 import 'drawer_panel_scaffold.dart';
 import 'lorebook_coverage_sheet.dart';
 import 'magic_drawer_models.dart';
@@ -77,7 +76,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     MagicDrawerItemDef(id: 'context', label: 'label_tokenizer'.tr(), icon: Icons.segment),
     MagicDrawerItemDef(id: 'summary', label: 'summary_title'.tr(), icon: Icons.subject),
     MagicDrawerItemDef(id: 'sessions', label: 'history_title'.tr(), icon: Icons.history),
-    MagicDrawerItemDef(id: 'stats', label: 'Stats', icon: Icons.insert_chart),
     MagicDrawerItemDef(
       id: 'char-card',
       label: 'menu_characters'.tr(),
@@ -272,7 +270,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             ? '${_stats.summaryChars} chars'
             : 'Not generated',
       'sessions' => '${_stats.sessionCount} sessions',
-      'stats' => '${_stats.messageCount} messages',
       'char-card' =>
         _stats.characterTokens > 0
             ? '${_stats.characterTokens} tokens'
@@ -391,9 +388,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         return;
       case 'sessions':
         await _showSessionsSheet();
-        return;
-      case 'stats':
-        await _showStatsSheet();
         return;
       case 'char-card':
         widget.onClose?.call();
@@ -525,18 +519,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     await GlazeBottomSheet.show<void>(
       context,
       child: MemoryBooksSheet(sessionId: session.id, charId: widget.charId),
-    );
-  }
-
-  Future<void> _showStatsSheet() async {
-    widget.onClose?.call();
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ChatStatsSheet(initialCharId: widget.charId),
     );
   }
 

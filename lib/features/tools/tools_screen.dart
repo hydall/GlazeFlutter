@@ -15,6 +15,8 @@ import '../presets/preset_list_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glass_surface.dart';
+import '../chat/widgets/chat_stats_sheet.dart';
+import '../image_gen/widgets/image_gen_sheet.dart';
 
 class PersonaInfo {
   final String name;
@@ -68,6 +70,10 @@ const _kIconLorebook =
     'M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z';
 const _kIconRegex =
     'M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z';
+const _kIconStats =
+    'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z';
+const _kIconImageGen =
+    'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z';
 
 Widget _svgPath(
   String d, {
@@ -158,6 +164,40 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                       title: 'menu_regex'.tr(),
                       subtitle: 'tools_regex_subtitle'.tr(),
                       onTap: () => context.push('/tools/regex'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _GridTile(
+                      iconPath: _kIconStats,
+                      title: 'stats_title'.tr(),
+                      subtitle: 'stats_subtitle'.tr(),
+                      onTap: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        useRootNavigator: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => const ChatStatsSheet(initialCharId: ''),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _GridTile(
+                      iconPath: _kIconImageGen,
+                      title: 'imggen_title'.tr(),
+                      subtitle: 'imggen_subtitle'.tr(),
+                      onTap: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        useRootNavigator: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => const ImageGenSheet(),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),

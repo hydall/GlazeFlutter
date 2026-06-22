@@ -790,7 +790,7 @@ class _GroupHeader extends ConsumerWidget {
         ref.read(chatProvider(info.characterId).notifier).createNewSession();
         context.go('/chat/${info.characterId}');
       } else if (result == 'edit') {
-        context.push('/characters/${info.characterId}/edit');
+        context.push('/character/${info.characterId}/edit');
       }
     });
   }
