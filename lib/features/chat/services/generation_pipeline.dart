@@ -36,7 +36,7 @@ class GenerationOutcome {
 ///   1. persist the service result (success path)
 ///   2. handle regen rollback if the service's regenTargetId does not match
 ///   3. handle restoration rollback if `abortHandler.restorationMessage` is set
-///   4. clear `restorationMessage` and `imgGenCancelToken` on completion
+///   4. clear `restorationMessage` and chat image `imgGenCancelToken`
 ///   5. kick off [ChatGenerationService.processImageTags]
 ///   6. kick off [ChatGenerationService.processExtensions]
 ///   7. notify sync, fire foreground notification preview
@@ -336,6 +336,10 @@ class GenerationPipeline {
       debugPrint(
         '[GenerationPipeline] processImageTags failed (continuing): $e',
       );
+    } finally {
+      if (identical(abortHandler.imgGenCancelToken, imgCancelToken)) {
+        abortHandler.imgGenCancelToken = null;
+      }
     }
 
     final lastMessage = result.session?.messages.lastOrNull;
@@ -349,8 +353,6 @@ class GenerationPipeline {
       );
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
     }
-
-    abortHandler.imgGenCancelToken = null;
 
     if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 

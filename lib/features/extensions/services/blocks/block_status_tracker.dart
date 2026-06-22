@@ -97,6 +97,20 @@ class BlockStatusTracker {
     return errored;
   }
 
+  Future<InfoBlock> markStoppedForPlaceholder({
+    required String charId,
+    required String sessionId,
+    required String messageId,
+    required String placeholderId,
+    required InfoBlock placeholder,
+  }) async {
+    await repo.updateStatus(placeholderId, BlockRunStatus.stopped);
+    final stopped = placeholder.copyWith(status: BlockRunStatus.stopped);
+    ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(stopped);
+    refreshPanelForMessage(charId, sessionId, messageId, placeholder.swipeId);
+    return stopped;
+  }
+
   Future<String?> dedupeForConfig({
     required String sessionId,
     required String messageId,
