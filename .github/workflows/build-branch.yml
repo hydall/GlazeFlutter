@@ -26,6 +26,7 @@ jobs:
       build_fruit: ${{ steps.meta.outputs.build_fruit }}
       file_slug:   ${{ steps.meta.outputs.file_slug }}
       commits:     ${{ steps.meta.outputs.commits }}
+      git_sha:     ${{ steps.meta.outputs.git_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,6 +46,7 @@ jobs:
           echo "build_date=$BUILD_DATE"   >> $GITHUB_OUTPUT
           echo "build_fruit=$BUILD_FRUIT" >> $GITHUB_OUTPUT
           echo "file_slug=$FILE_SLUG"     >> $GITHUB_OUTPUT
+          echo "git_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
           # Commits since last build tag
           git fetch --tags --force
@@ -137,6 +139,7 @@ jobs:
           "--dart-define=APP_VERSION=${{ needs.metadata.outputs.version }}"
           "--dart-define=BUILD_DATE=${{ needs.metadata.outputs.build_date }}"
           "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}"
+          "--dart-define=BUILD_COMMIT=${{ needs.metadata.outputs.git_sha }}"
 
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/${{ needs.metadata.outputs.file_slug }}.apk"
@@ -189,6 +192,7 @@ jobs:
           "--dart-define=APP_VERSION=${{ needs.metadata.outputs.version }}"
           "--dart-define=BUILD_DATE=${{ needs.metadata.outputs.build_date }}"
           "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}"
+          "--dart-define=BUILD_COMMIT=${{ needs.metadata.outputs.git_sha }}"
 
       - name: Upload Windows
         uses: actions/upload-artifact@v4
@@ -251,7 +255,8 @@ jobs:
           flutter build ios --release --no-codesign --no-pub \
             "--dart-define=APP_VERSION=${{ needs.metadata.outputs.version }}" \
             "--dart-define=BUILD_DATE=${{ needs.metadata.outputs.build_date }}" \
-            "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}"
+            "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}" \
+            "--dart-define=BUILD_COMMIT=${{ needs.metadata.outputs.git_sha }}"
           echo "=== AFTER flutter build ios ==="
           find build/ios -type f -name "*.app" -o -name "*.ipa" 2>/dev/null | head -20 || true
           ls -laR build/ios/iphoneos 2>/dev/null | tail -30 || true

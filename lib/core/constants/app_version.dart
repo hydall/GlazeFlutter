@@ -1,3 +1,8 @@
 const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.7.0');
 const buildDate = String.fromEnvironment('BUILD_DATE');
 const buildFruit = String.fromEnvironment('BUILD_FRUIT');
+
+/// Full git SHA the build was produced from. Injected by the CI workflow
+/// (`--dart-define=BUILD_COMMIT=<sha>`). Empty for local/dev builds, in which
+/// case the update checker cannot diff against the latest CI build.
+const buildCommit = String.fromEnvironment('BUILD_COMMIT');

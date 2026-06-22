@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_version.dart';
+import '../../core/services/update_check_coordinator.dart';
 import '../../core/state/dev_mode_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -43,6 +44,8 @@ class AboutScreen extends ConsumerWidget {
         padding: EdgeInsets.fromLTRB(0, topPad + 8, 0, 40),
         children: [
           const _HeroCard(),
+          const SizedBox(height: 12),
+          const _UpdatesSection(),
           const SizedBox(height: 12),
           _CommunitySection(lang: lang, onLink: _openLink),
           const SizedBox(height: 12),
@@ -195,6 +198,104 @@ class _CommunitySection extends StatelessWidget {
             useIconColor: false,
             onTap: () => onLink('https://buymeacoffee.com/hydall'),
           ),
+      ],
+    );
+  }
+}
+
+class _UpdatesSection extends StatefulWidget {
+  const _UpdatesSection();
+
+  @override
+  State<_UpdatesSection> createState() => _UpdatesSectionState();
+}
+
+class _UpdatesSectionState extends State<_UpdatesSection> {
+  bool _checking = false;
+
+  Future<void> _check() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    try {
+      await runManualUpdateCheck(context);
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.cs;
+    final subtitle = buildDate.isNotEmpty
+        ? 'update_current_build'.tr(namedArgs: {'date': buildDate})
+        : 'update_check_subtitle'.tr();
+    return MenuGroup(
+      header: 'update_section_header'.tr(),
+      headerIcon: Icons.system_update_alt_rounded,
+      items: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _checking ? null : _check,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: _checking
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: cs.primary,
+                          ),
+                        )
+                      : Icon(
+                          Icons.refresh_rounded,
+                          size: 22,
+                          color: cs.primary,
+                        ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'update_check_button'.tr(),
+                        style: TextStyle(
+                          color: cs.onSurface,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.35),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }

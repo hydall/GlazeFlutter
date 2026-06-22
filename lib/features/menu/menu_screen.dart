@@ -16,6 +16,8 @@ import '../catalog/janitor_account_provider.dart';
 import '../catalog/widgets/janitor_login_sheet.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
+import 'update_dialog.dart';
+import '../../core/services/update_check_service.dart';
 
 class MenuScreen extends ConsumerStatefulWidget {
   const MenuScreen({super.key});
@@ -185,6 +187,28 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                             'https://platform.openai.com/account/api-keys.",'
                             '"type":"invalid_request_error","param":null,'
                             '"code":"invalid_api_key"}}',
+                          ),
+                        ),
+                      ),
+                      MenuItem(
+                        icon: Icons.system_update_alt_rounded,
+                        label: 'menu_test_update_dialog'.tr(),
+                        onTap: () => showUpdateDialog(
+                          context,
+                          UpdateInfo(
+                            headSha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+                            createdAt: DateTime.now().toUtc(),
+                            runUrl:
+                                'https://github.com/hydall/GlazeFlutter/actions',
+                            runNumber: 123,
+                            commits: const [
+                              'folders ux/ui',
+                              'fix random character button',
+                              'Fix extblock image generation races',
+                              'tools screen expansion, chat list fix',
+                              'Update Lucy pick card',
+                            ],
+                            totalCommits: 13,
                           ),
                         ),
                       ),

@@ -23,6 +23,7 @@ import 'features/settings/api_list_provider.dart';
 import 'features/settings/app_settings_provider.dart';
 import 'shared/theme/theme_font_provider.dart';
 import 'core/services/onboarding_service.dart';
+import 'core/services/update_check_coordinator.dart';
 import 'features/cloud_sync/sync_provider.dart';
 import 'features/cloud_sync/sync_models.dart';
 
@@ -179,6 +180,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
     checkAndShowOnboarding(context);
     _listenNotificationNavigation();
     _handleColdStartNotification();
+    unawaited(checkAndShowUpdateOnStartup());
   }
 
   void _listenNotificationNavigation() {
