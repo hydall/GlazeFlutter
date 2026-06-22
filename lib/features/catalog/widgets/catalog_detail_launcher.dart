@@ -123,6 +123,10 @@ class _CatalogDetailLauncherState
       previewAvatarUrl: avatarUrl,
       previewSourceUrl: _sourceUrl(),
       previewAuthorUrl: _authorUrl(),
+      // Only JanitorAI exposes a comments/reviews endpoint keyed by character id.
+      janitorReviewCharId: widget.provider == CatalogProvider.janitor
+          ? widget.item.id
+          : null,
       onImport: _doImport,
       importing: _importing,
     );

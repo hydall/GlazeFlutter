@@ -250,6 +250,97 @@ String? resolveJanitorAvatar(String? url) {
   return 'https://ella.janitorai.com/$url?width=400';
 }
 
+const _userImageBase = 'https://ella.janitorai.com/user-avatars/';
+
+/// Resolves a commenter's profile-avatar id (from `user_profiles.avatar`) to a
+/// full CDN URL. User avatars live under a different prefix than bot avatars
+/// (see [resolveJanitorAvatar]); a bare filename is served from
+/// `/user-avatars/`. Returns null when the profile has no avatar.
+String? resolveJanitorUserAvatar(String? url) {
+  if (url == null || url.isEmpty) return null;
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) return 'https://ella.janitorai.com$url?width=100';
+  if (!url.contains('/')) return '$_userImageBase$url?width=100';
+  return 'https://ella.janitorai.com/$url?width=100';
+}
+
+/// Page size used for the reviews endpoint, mirroring the JanitorAI web client
+/// (`size=20`). A full page is the signal there *may* be more — see
+/// [janitorFetchReviews].
+const kJanitorReviewsPageSize = 20;
+
+/// A single user comment ("review") on a JanitorAI character, returned by
+/// `/hampter/reviews/{characterId}`. [replyCount] is the API's `comment_count`
+/// (replies to this comment); [likeCount] drives the default `sortBy=likes`
+/// order. Pinned comments come first in the response.
+class JanitorReview {
+  final String id;
+  final String content;
+  final String authorName;
+  final String authorUserName;
+  final String? avatarUrl;
+  final int likeCount;
+  final int replyCount;
+  final bool isPinned;
+  final bool isVerified;
+  final bool hasPlus;
+  final DateTime? createdAt;
+
+  const JanitorReview({
+    required this.id,
+    required this.content,
+    required this.authorName,
+    required this.authorUserName,
+    this.avatarUrl,
+    this.likeCount = 0,
+    this.replyCount = 0,
+    this.isPinned = false,
+    this.isVerified = false,
+    this.hasPlus = false,
+    this.createdAt,
+  });
+}
+
+/// Fetches one page of comments for [characterId]. The endpoint paginates and
+/// returns a bare JSON array (no total/`hasMore`), so callers detect the end by
+/// a short page: fewer than [size] items means there are no further pages.
+/// Defaults match the web client (`size=20&sortBy=likes`).
+Future<List<JanitorReview>> janitorFetchReviews(
+  String characterId, {
+  int page = 1,
+  int size = kJanitorReviewsPageSize,
+  String sortBy = 'likes',
+}) async {
+  final url =
+      'https://janitorai.com/hampter/reviews/$characterId?page=$page&size=$size&sortBy=$sortBy';
+  final data = await _janitorFetch(url);
+  if (data is! List) return const [];
+  return data
+      .whereType<Map<String, dynamic>>()
+      .map(_normalizeReview)
+      .toList();
+}
+
+JanitorReview _normalizeReview(Map<String, dynamic> m) {
+  final profile = (m['user_profiles'] as Map<String, dynamic>?) ?? const {};
+  final name = (profile['name'] ?? profile['user_name'] ?? 'Anonymous')
+      .toString()
+      .trim();
+  return JanitorReview(
+    id: (m['id'] ?? '') as String,
+    content: (m['content'] ?? '') as String,
+    authorName: name.isEmpty ? 'Anonymous' : name,
+    authorUserName: (profile['user_name'] ?? '').toString(),
+    avatarUrl: resolveJanitorUserAvatar(profile['avatar'] as String?),
+    likeCount: (m['like_count'] as num?)?.toInt() ?? 0,
+    replyCount: (m['comment_count'] as num?)?.toInt() ?? 0,
+    isPinned: (m['is_pinned'] as bool?) ?? false,
+    isVerified: (profile['is_verified'] as bool?) ?? false,
+    hasPlus: (profile['plusbadge'] as bool?) ?? false,
+    createdAt: DateTime.tryParse((m['created_at'] ?? '').toString()),
+  );
+}
+
 List<String> _tagIdsToNames(List<dynamic> tagIds) {
   return tagIds
       .map((id) => _janitorTagMap[id])

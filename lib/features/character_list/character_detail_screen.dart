@@ -13,6 +13,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/character.dart';
 import '../../core/services/chat_import_export.dart';
+import '../catalog/services/janitor_provider.dart';
+import '../catalog/widgets/janitor_comments_section.dart';
 import '../../core/services/persona_character_converter.dart';
 import '../../core/utils/html_to_markdown.dart';
 import '../../core/utils/platform_paths.dart';
@@ -58,12 +60,17 @@ Border _detailHeaderBorder(BuildContext context, ThemePreset preset) {
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
 
-List<GlazeTabItem> _detailTabs(BuildContext context) => [
+List<GlazeTabItem> _detailTabs(BuildContext context, {bool withComments = false}) => [
   GlazeTabItem(label: 'section_info'.tr(), icon: Icons.info_outline_rounded),
   GlazeTabItem(
     label: 'section_prompt_blocks'.tr(),
     icon: Icons.description_outlined,
   ),
+  if (withComments)
+    GlazeTabItem(
+      label: 'section_comments'.tr(),
+      icon: Icons.forum_outlined,
+    ),
 ];
 
 // ─── Screen ────────────────────────────────────────────────────────────────
@@ -142,6 +149,11 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
   /// External URL of the creator's profile page. When set, tapping the
   /// `@creator` label in the hero opens it in the browser.
   final String? previewAuthorUrl;
+
+  /// JanitorAI character id used to fetch this character's comments. Set only
+  /// for JanitorAI catalog previews; when non-null a "Comments" tab is shown
+  /// and its pages are loaded lazily as the sheet scrolls.
+  final String? janitorReviewCharId;
   final Future<void> Function()? onImport;
   final bool importing;
 
@@ -152,6 +164,7 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
     this.previewAvatarUrl,
     this.previewSourceUrl,
     this.previewAuthorUrl,
+    this.janitorReviewCharId,
     this.onImport,
     this.importing = false,
   });
@@ -165,6 +178,76 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
 
 class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
   int _activeTabIndex = 0;
+
+  /// Owns the body's scroll so we can drive lazy comment paging from the
+  /// near-bottom position (see [_onScroll]).
+  final ScrollController _scrollController = ScrollController();
+
+  // ─── Comments paging state (JanitorAI previews only) ──────────────────────
+  final List<JanitorReview> _comments = [];
+  int _commentPage = 1;
+  bool _commentsLoading = false;
+  bool _commentsHasMore = true;
+  bool _commentsStarted = false;
+  Object? _commentsError;
+
+  bool get _hasComments => widget.janitorReviewCharId != null;
+  int get _commentsTabIndex => 2;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_hasComments || _activeTabIndex != _commentsTabIndex) return;
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 600) {
+      _loadMoreComments();
+    }
+  }
+
+  Future<void> _loadMoreComments() async {
+    final charId = widget.janitorReviewCharId;
+    if (charId == null || _commentsLoading || !_commentsHasMore) return;
+    setState(() {
+      _commentsLoading = true;
+      _commentsError = null;
+    });
+    try {
+      final batch = await janitorFetchReviews(charId, page: _commentPage);
+      if (!mounted) return;
+      setState(() {
+        _comments.addAll(batch);
+        // A full page means there may be more; a short page is the end.
+        _commentsHasMore = batch.length >= kJanitorReviewsPageSize;
+        _commentPage += 1;
+        _commentsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _commentsError = e;
+        _commentsLoading = false;
+      });
+    }
+  }
+
+  void _onTabChanged(int i) {
+    setState(() => _activeTabIndex = i);
+    if (_hasComments && i == _commentsTabIndex && !_commentsStarted) {
+      _commentsStarted = true;
+      _loadMoreComments();
+    }
+  }
 
   /// Pops the GlazeBottomSheet, then pops this modal sheet returning [route]
   /// so the caller (launcher / card / drawer) can navigate safely.
@@ -511,6 +594,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: SingleChildScrollView(
+        controller: _scrollController,
         padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,27 +608,39 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: GlazeTabBar(
-                tabs: _detailTabs(context),
+                tabs: _detailTabs(context, withComments: _hasComments),
                 activeIndex: _activeTabIndex,
-                onChanged: (i) => setState(() => _activeTabIndex = i),
+                onChanged: _onTabChanged,
               ),
             ),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               switchInCurve: Curves.easeOut,
               switchOutCurve: Curves.easeIn,
-              child: _activeTabIndex == 0
-                  ? _InfoTab(key: const ValueKey('info'), character: char)
-                  : _PromptsTab(
-                      key: const ValueKey('prompts'),
-                      character: char,
-                    ),
+              child: _buildTabContent(char),
             ),
             SizedBox(height: 100 + safeBottom),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildTabContent(Character char) {
+    if (_hasComments && _activeTabIndex == _commentsTabIndex) {
+      return JanitorCommentsView(
+        key: const ValueKey('comments'),
+        comments: _comments,
+        loading: _commentsLoading,
+        hasMore: _commentsHasMore,
+        error: _commentsError,
+        onRetry: _loadMoreComments,
+      );
+    }
+    if (_activeTabIndex == 0) {
+      return _InfoTab(key: const ValueKey('info'), character: char);
+    }
+    return _PromptsTab(key: const ValueKey('prompts'), character: char);
   }
 
   Widget _buildFloatingHeader(Character? char) {
