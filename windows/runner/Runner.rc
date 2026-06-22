@@ -95,7 +95,7 @@ BEGIN
             VALUE "InternalName", "Glaze" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.glaze. All rights reserved." "\0"
             VALUE "OriginalFilename", "Glaze.exe" "\0"
-            VALUE "ProductName", "Glaze" "\0"
+            VALUE "ProductName", "glaze_flutter" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
