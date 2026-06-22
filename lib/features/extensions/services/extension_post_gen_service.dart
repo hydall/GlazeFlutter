@@ -42,9 +42,10 @@ class ExtensionPostGenService {
   final Ref _ref;
   final BlockPanelUpdater _panelUpdater;
 
-  /// Active cancel token for the current block run. Cancelling this stops
-  /// all in-flight block LLM/image calls without touching the main gen token.
-  CancelToken? _blocksCancelToken;
+  /// Active cancel tokens for block runs. Multiple chains can overlap
+  /// (for example, an afterAssistant image block and afterUser blocks from the
+  /// next message), so a single mutable token would orphan older runs.
+  final Set<CancelToken> _blocksCancelTokens = <CancelToken>{};
 
   final BlockProcessor _blockProcessor = const BlockProcessor();
 
@@ -103,20 +104,24 @@ class ExtensionPostGenService {
 
     _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
 
-    _blocksCancelToken = CancelToken();
-    await _runChain(
-      charId: charId,
-      sessionId: sessionId,
-      messageId: messageId,
-      swipeId: swipeId,
-      messages: messages,
-      preset: preset,
-      character: character,
-      persona: persona,
-      cancelToken: _blocksCancelToken!,
-      trigger: BlockTrigger.afterAssistant,
-    );
-    _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
+    final cancelToken = _startBlockRun();
+    try {
+      await _runChain(
+        charId: charId,
+        sessionId: sessionId,
+        messageId: messageId,
+        swipeId: swipeId,
+        messages: messages,
+        preset: preset,
+        character: character,
+        persona: persona,
+        cancelToken: cancelToken,
+        trigger: BlockTrigger.afterAssistant,
+      );
+    } finally {
+      _finishBlockRun(cancelToken);
+      _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
+    }
   }
 
   ExtensionPreset? _resolveActivePreset() {
@@ -178,25 +183,29 @@ class ExtensionPostGenService {
     if (lastMessage.role != 'user') {
       return;
     }
-    _blocksCancelToken = CancelToken();
-    await _runChain(
-      charId: charId,
-      sessionId: session.id,
-      messageId: lastMessage.id,
-      swipeId: lastMessage.swipeId,
-      messages: session.messages,
-      preset: preset,
-      character: character,
-      persona: persona,
-      cancelToken: _blocksCancelToken!,
-      trigger: BlockTrigger.afterUser,
-    );
-    _refreshPanelForMessage(
-      charId,
-      session.id,
-      lastMessage.id,
-      lastMessage.swipeId,
-    );
+    final cancelToken = _startBlockRun();
+    try {
+      await _runChain(
+        charId: charId,
+        sessionId: session.id,
+        messageId: lastMessage.id,
+        swipeId: lastMessage.swipeId,
+        messages: session.messages,
+        preset: preset,
+        character: character,
+        persona: persona,
+        cancelToken: cancelToken,
+        trigger: BlockTrigger.afterUser,
+      );
+    } finally {
+      _finishBlockRun(cancelToken);
+      _refreshPanelForMessage(
+        charId,
+        session.id,
+        lastMessage.id,
+        lastMessage.swipeId,
+      );
+    }
   }
 
   /// Re-runs a single block for an already-existing message.
@@ -216,8 +225,7 @@ class ExtensionPostGenService {
     final blockConfig = preset.blocks.where((b) => b.id == blockId).firstOrNull;
     if (blockConfig == null) return;
 
-    final cancelToken = CancelToken();
-    _blocksCancelToken = cancelToken;
+    final cancelToken = _startBlockRun();
 
     final reuseBlockId = await _statusTracker.dedupeForConfig(
       sessionId: sessionId,
@@ -226,31 +234,46 @@ class ExtensionPostGenService {
       blockId: blockId,
     );
 
-    final block = await _runSingleBlock(
-      charId: charId,
-      sessionId: sessionId,
-      messageId: messageId,
-      swipeId: swipeId,
-      messages: messages,
-      blockConfig: blockConfig,
-      preset: preset,
-      character: character,
-      persona: persona,
-      previousOutput: null,
-      cancelToken: cancelToken,
-      reuseBlockId: reuseBlockId,
-    );
+    try {
+      final block = await _runSingleBlock(
+        charId: charId,
+        sessionId: sessionId,
+        messageId: messageId,
+        swipeId: swipeId,
+        messages: messages,
+        blockConfig: blockConfig,
+        preset: preset,
+        character: character,
+        persona: persona,
+        previousOutput: null,
+        cancelToken: cancelToken,
+        reuseBlockId: reuseBlockId,
+      );
 
-    if (block != null) {
-      _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(block);
+      if (block != null) {
+        _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(block);
+      }
+    } finally {
+      _finishBlockRun(cancelToken);
     }
     _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
   }
 
   /// Cancels any in-flight block generation for the current session.
   void cancelBlocks() {
-    _blocksCancelToken?.cancel();
-    _blocksCancelToken = null;
+    for (final token in _blocksCancelTokens.toList()) {
+      if (!token.isCancelled) token.cancel();
+    }
+  }
+
+  CancelToken _startBlockRun() {
+    final token = CancelToken();
+    _blocksCancelTokens.add(token);
+    return token;
+  }
+
+  void _finishBlockRun(CancelToken token) {
+    _blocksCancelTokens.remove(token);
   }
 
   void _publishStreamingBlockContent({
@@ -300,25 +323,28 @@ class ExtensionPostGenService {
     final preset = _resolveActivePreset();
     if (preset == null) return;
 
-    final cancelToken = CancelToken();
-    _blocksCancelToken = cancelToken;
+    final cancelToken = _startBlockRun();
 
-    await ImageOnlyRerunner(
-      ref: _ref,
-      repo: _repo,
-      refreshPanelForMessage: _refreshPanelForMessage,
-      renderImagePixels: _renderImagePixels,
-    ).rerun(
-      blockId: blockId,
-      charId: charId,
-      sessionId: sessionId,
-      messageId: messageId,
-      swipeId: swipeId,
-      character: character,
-      persona: persona,
-      blocks: preset.blocks,
-      cancelToken: cancelToken,
-    );
+    try {
+      await ImageOnlyRerunner(
+        ref: _ref,
+        repo: _repo,
+        refreshPanelForMessage: _refreshPanelForMessage,
+        renderImagePixels: _renderImagePixels,
+      ).rerun(
+        blockId: blockId,
+        charId: charId,
+        sessionId: sessionId,
+        messageId: messageId,
+        swipeId: swipeId,
+        character: character,
+        persona: persona,
+        blocks: preset.blocks,
+        cancelToken: cancelToken,
+      );
+    } finally {
+      _finishBlockRun(cancelToken);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────

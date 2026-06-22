@@ -23,7 +23,10 @@ class ImageGenService {
   ImageGenService(this._imageStorage);
 
   bool hasImageGenTags(String text) {
-    if (ImgGenPatterns.htmlIigTagRegex.hasMatch(text) || ImgGenPatterns.htmlIigTagDoubleRegex.hasMatch(text)) return true;
+    if (ImgGenPatterns.htmlIigTagRegex.hasMatch(text) ||
+        ImgGenPatterns.htmlIigTagDoubleRegex.hasMatch(text)) {
+      return true;
+    }
     final stripped = ImgGenPatterns.stripHtmlImgTags(text);
     return ImgGenPatterns.imgGenRegex.hasMatch(stripped);
   }
@@ -70,8 +73,12 @@ class ImageGenService {
 
   String replaceTagWithResult(String text, int index, String imagePath) {
     final instructions = extractImageGenInstructions(text);
-    final instruction = index < instructions.length ? instructions[index] : null;
-    final instrJson = instruction != null && instruction.isNotEmpty ? jsonEncode(instruction) : '';
+    final instruction = index < instructions.length
+        ? instructions[index]
+        : null;
+    final instrJson = instruction != null && instruction.isNotEmpty
+        ? jsonEncode(instruction)
+        : '';
     final payload = instrJson.isNotEmpty ? '$imagePath|$instrJson' : imagePath;
     int count = 0;
     var result = text.replaceAllMapped(ImgGenPatterns.htmlIigTagRegex, (m) {
@@ -79,6 +86,10 @@ class ImageGenService {
       return m.group(0)!;
     });
     result = result.replaceAllMapped(ImgGenPatterns.htmlIigTagDoubleRegex, (m) {
+      if (count++ == index) return '[IMG:RESULT:$payload]';
+      return m.group(0)!;
+    });
+    result = result.replaceAllMapped(ImgGenPatterns.imgSrcGenRegex, (m) {
       if (count++ == index) return '[IMG:RESULT:$payload]';
       return m.group(0)!;
     });
@@ -94,14 +105,23 @@ class ImageGenService {
 
   String replaceTagWithError(String text, int index, String error) {
     final instructions = extractImageGenInstructions(text);
-    final instructionJson = index < instructions.length ? jsonEncode(instructions[index]) : '';
-    final encoded = jsonEncode({'error': error, if (instructionJson.isNotEmpty) 'instruction': instructionJson});
+    final instructionJson = index < instructions.length
+        ? jsonEncode(instructions[index])
+        : '';
+    final encoded = jsonEncode({
+      'error': error,
+      if (instructionJson.isNotEmpty) 'instruction': instructionJson,
+    });
     int count = 0;
     var result = text.replaceAllMapped(ImgGenPatterns.htmlIigTagRegex, (m) {
       if (count++ == index) return '[IMG:ERROR:$encoded]';
       return m.group(0)!;
     });
     result = result.replaceAllMapped(ImgGenPatterns.htmlIigTagDoubleRegex, (m) {
+      if (count++ == index) return '[IMG:ERROR:$encoded]';
+      return m.group(0)!;
+    });
+    result = result.replaceAllMapped(ImgGenPatterns.imgSrcGenRegex, (m) {
       if (count++ == index) return '[IMG:ERROR:$encoded]';
       return m.group(0)!;
     });
@@ -167,7 +187,10 @@ class ImageGenService {
       if (rawPrompt.isEmpty) continue;
 
       final style = instruction['style'] as String? ?? '';
-      var cleanPrompt = rawPrompt.replaceFirst(RegExp(r'^SCENE_PROMPT:\s*'), '');
+      var cleanPrompt = rawPrompt.replaceFirst(
+        RegExp(r'^SCENE_PROMPT:\s*'),
+        '',
+      );
       final prompt = style.isNotEmpty ? '$style, $cleanPrompt' : cleanPrompt;
       final instructionAspectRatio = instruction['aspect_ratio'] as String?;
       final instructionImageSize = instruction['image_size'] as String?;
@@ -232,7 +255,8 @@ class ImageGenService {
     String? instructionImageSize,
     CancelToken? cancelToken,
   }) async {
-    final isRoutmy = settings.apiType == ImageGenApiType.routmy ||
+    final isRoutmy =
+        settings.apiType == ImageGenApiType.routmy ||
         settings.apiType == ImageGenApiType.ruRoutmy;
     final refs = isRoutmy
         ? await _buildRoutmyRefs(
@@ -252,9 +276,21 @@ class ImageGenService {
 
     switch (settings.apiType) {
       case ImageGenApiType.openai:
-        return _generateOpenai(settings, prompt, llmEndpoint, llmApiKey, cancelToken);
+        return _generateOpenai(
+          settings,
+          prompt,
+          llmEndpoint,
+          llmApiKey,
+          cancelToken,
+        );
       case ImageGenApiType.gemini:
-        return _generateGemini(settings, prompt, llmEndpoint, llmApiKey, cancelToken);
+        return _generateGemini(
+          settings,
+          prompt,
+          llmEndpoint,
+          llmApiKey,
+          cancelToken,
+        );
       case ImageGenApiType.naistera:
         return _generateNaistera(settings, prompt, refs, cancelToken);
       case ImageGenApiType.routmy:
@@ -265,11 +301,19 @@ class ImageGenService {
   }
 
   Future<Uint8List> _generateOpenai(
-    ImageGenSettings settings, String prompt, String llmEndpoint, String llmApiKey, CancelToken? cancelToken,
+    ImageGenSettings settings,
+    String prompt,
+    String llmEndpoint,
+    String llmApiKey,
+    CancelToken? cancelToken,
   ) async {
-    final endpoint = settings.useSameEndpoint ? llmEndpoint : settings.customEndpoint;
+    final endpoint = settings.useSameEndpoint
+        ? llmEndpoint
+        : settings.customEndpoint;
     final apiKey = settings.useSameEndpoint ? llmApiKey : settings.customApiKey;
-    final model = settings.useSameEndpoint ? 'dall-e-3' : (settings.customModel.isEmpty ? 'dall-e-3' : settings.customModel);
+    final model = settings.useSameEndpoint
+        ? 'dall-e-3'
+        : (settings.customModel.isEmpty ? 'dall-e-3' : settings.customModel);
 
     return OpenaiImageProvider().generate(
       endpoint: endpoint,
@@ -283,11 +327,21 @@ class ImageGenService {
   }
 
   Future<Uint8List> _generateGemini(
-    ImageGenSettings settings, String prompt, String llmEndpoint, String llmApiKey, CancelToken? cancelToken,
+    ImageGenSettings settings,
+    String prompt,
+    String llmEndpoint,
+    String llmApiKey,
+    CancelToken? cancelToken,
   ) async {
-    final endpoint = settings.useSameEndpoint ? llmEndpoint : settings.customEndpoint;
+    final endpoint = settings.useSameEndpoint
+        ? llmEndpoint
+        : settings.customEndpoint;
     final apiKey = settings.useSameEndpoint ? llmApiKey : settings.customApiKey;
-    final model = settings.useSameEndpoint ? 'imagen-3.0-generate-002' : (settings.customModel.isEmpty ? 'imagen-3.0-generate-002' : settings.customModel);
+    final model = settings.useSameEndpoint
+        ? 'imagen-3.0-generate-002'
+        : (settings.customModel.isEmpty
+              ? 'imagen-3.0-generate-002'
+              : settings.customModel);
 
     return GeminiImageProvider().generate(
       endpoint: endpoint,
@@ -301,7 +355,10 @@ class ImageGenService {
   }
 
   Future<Uint8List> _generateNaistera(
-    ImageGenSettings settings, String prompt, List<Map<String, String>> refs, CancelToken? cancelToken,
+    ImageGenSettings settings,
+    String prompt,
+    List<Map<String, String>> refs,
+    CancelToken? cancelToken,
   ) async {
     return NaisteraImageProvider().generate(
       apiKey: settings.naisteraApiKey,
@@ -314,8 +371,10 @@ class ImageGenService {
   }
 
   Future<Uint8List> _generateRoutmy(
-    ImageGenSettings settings, String prompt,
-    List<Map<String, String>> refs, CancelToken? cancelToken,
+    ImageGenSettings settings,
+    String prompt,
+    List<Map<String, String>> refs,
+    CancelToken? cancelToken,
   ) async {
     return RoutmyImageProvider(baseUrl: RoutMyConstants.baseUrl).generate(
       apiKey: settings.routmyApiKey,
@@ -324,14 +383,18 @@ class ImageGenService {
       aspectRatio: settings.routmyAspectRatio,
       imageSize: settings.routmyImageSize,
       quality: settings.routmyQuality,
-      referenceImages: refs.isNotEmpty ? refs.map((r) => r['image']!).where((s) => s.isNotEmpty).toList() : null,
+      referenceImages: refs.isNotEmpty
+          ? refs.map((r) => r['image']!).where((s) => s.isNotEmpty).toList()
+          : null,
       cancelToken: cancelToken,
     );
   }
 
   Future<Uint8List> _generateRuRoutmy(
-    ImageGenSettings settings, String prompt,
-    List<Map<String, String>> refs, CancelToken? cancelToken,
+    ImageGenSettings settings,
+    String prompt,
+    List<Map<String, String>> refs,
+    CancelToken? cancelToken,
   ) async {
     return RoutmyImageProvider(baseUrl: RuRoutMyConstants.baseUrl).generate(
       apiKey: settings.ruRoutmyApiKey,
@@ -340,7 +403,9 @@ class ImageGenService {
       aspectRatio: settings.ruRoutmyAspectRatio,
       imageSize: settings.ruRoutmyImageSize,
       quality: settings.ruRoutmyQuality,
-      referenceImages: refs.isNotEmpty ? refs.map((r) => r['image']!).where((s) => s.isNotEmpty).toList() : null,
+      referenceImages: refs.isNotEmpty
+          ? refs.map((r) => r['image']!).where((s) => s.isNotEmpty).toList()
+          : null,
       cancelToken: cancelToken,
     );
   }
@@ -357,20 +422,29 @@ class ImageGenService {
 
     if (settings.apiType == ImageGenApiType.naistera) {
       if (settings.naisteraSendCharAvatar && character?.avatarPath != null) {
-        refs.add({'name': character!.name, 'image': _fileToBase64(character.avatarPath!)});
+        refs.add({
+          'name': character!.name,
+          'image': _fileToBase64(character.avatarPath!),
+        });
       }
       if (settings.naisteraSendUserAvatar && persona?.avatarPath != null) {
-        refs.add({'name': persona!.name, 'image': _fileToBase64(persona.avatarPath!)});
+        refs.add({
+          'name': persona!.name,
+          'image': _fileToBase64(persona.avatarPath!),
+        });
       }
       for (final ref in settings.additionalReferences) {
-        if (ref.matchMode == 'always' || promptLower.contains(ref.name.toLowerCase())) {
-          refs.add({'name': ref.name, 'image': _extractBase64FromDataUrl(ref.imageData)});
+        if (ref.matchMode == 'always' ||
+            promptLower.contains(ref.name.toLowerCase())) {
+          refs.add({
+            'name': ref.name,
+            'image': _extractBase64FromDataUrl(ref.imageData),
+          });
         }
       }
     }
 
     // routmy / ruRoutmy refs are built asynchronously (resized) — see _buildRoutmyRefs
-    
 
     if (settings.imageContextEnabled && recentImageContexts != null) {
       final count = settings.imageContextCount.clamp(1, 3);
@@ -400,8 +474,12 @@ class ImageGenService {
     final promptLower = prompt.toLowerCase();
     final isRu = settings.apiType == ImageGenApiType.ruRoutmy;
 
-    final sendChar = isRu ? settings.ruRoutmySendCharAvatar : settings.routmySendCharAvatar;
-    final sendUser = isRu ? settings.ruRoutmySendUserAvatar : settings.routmySendUserAvatar;
+    final sendChar = isRu
+        ? settings.ruRoutmySendCharAvatar
+        : settings.routmySendCharAvatar;
+    final sendUser = isRu
+        ? settings.ruRoutmySendUserAvatar
+        : settings.routmySendUserAvatar;
 
     if (sendChar && character?.avatarPath != null) {
       final img = await _fileToBase64Resized(character!.avatarPath!);
@@ -412,7 +490,8 @@ class ImageGenService {
       if (img.isNotEmpty) refs.add({'name': persona.name, 'image': img});
     }
     for (final ref in settings.routmyAdditionalRefs) {
-      if (ref.matchMode == 'always' || promptLower.contains(ref.name.toLowerCase())) {
+      if (ref.matchMode == 'always' ||
+          promptLower.contains(ref.name.toLowerCase())) {
         final raw = _extractBase64FromDataUrl(ref.imageData);
         if (raw.isNotEmpty) refs.add({'name': ref.name, 'image': raw});
       }
@@ -455,7 +534,10 @@ class ImageGenService {
       if (!file.existsSync()) return '';
       final bytes = file.readAsBytesSync();
 
-      final decoded = await compute(_decodeAndResizeJpeg, _ResizeArgs(bytes, maxSide, jpegQuality));
+      final decoded = await compute(
+        _decodeAndResizeJpeg,
+        _ResizeArgs(bytes, maxSide, jpegQuality),
+      );
       if (decoded == null) return base64Encode(bytes);
       return base64Encode(decoded);
     } catch (_) {
@@ -568,7 +650,9 @@ Uint8List? _decodeAndResizeJpeg(_ResizeArgs args) {
       height: src.height > src.width ? args.maxSide : -1,
       interpolation: img.Interpolation.linear,
     );
-    return Uint8List.fromList(img.encodeJpg(resized, quality: args.jpegQuality));
+    return Uint8List.fromList(
+      img.encodeJpg(resized, quality: args.jpegQuality),
+    );
   } catch (_) {
     return null;
   }

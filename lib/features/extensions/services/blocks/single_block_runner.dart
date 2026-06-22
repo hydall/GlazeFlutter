@@ -49,6 +49,16 @@ class SingleBlockRunner {
     final placeholderId = prepared.placeholderId;
     final placeholder = prepared.placeholder;
 
+    if (cancelToken.isCancelled) {
+      return statusTracker.markStoppedForPlaceholder(
+        charId: charId,
+        sessionId: sessionId,
+        messageId: messageId,
+        placeholderId: placeholderId,
+        placeholder: placeholder,
+      );
+    }
+
     refreshPanelForMessage(charId, sessionId, messageId, swipeId);
 
     final context = BlockContext(
@@ -68,7 +78,17 @@ class SingleBlockRunner {
     );
 
     try {
-      return await handlerFor(blockConfig.type).handle(context);
+      final result = await handlerFor(blockConfig.type).handle(context);
+      if (cancelToken.isCancelled && result == null) {
+        return statusTracker.markStoppedForPlaceholder(
+          charId: charId,
+          sessionId: sessionId,
+          messageId: messageId,
+          placeholderId: placeholderId,
+          placeholder: placeholder,
+        );
+      }
+      return result;
     } catch (e) {
       if (!cancelToken.isCancelled) {
         debugPrint('[ExtPostGen] Error in block "${blockConfig.name}": $e');
@@ -81,7 +101,13 @@ class SingleBlockRunner {
           errorMessage: e.toString(),
         );
       }
-      return null;
+      return statusTracker.markStoppedForPlaceholder(
+        charId: charId,
+        sessionId: sessionId,
+        messageId: messageId,
+        placeholderId: placeholderId,
+        placeholder: placeholder,
+      );
     }
   }
 }
