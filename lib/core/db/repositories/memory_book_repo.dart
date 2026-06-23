@@ -119,6 +119,17 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  Future<void> copyForSessionBranch({
+    required String fromSessionId,
+    required String toSessionId,
+  }) async {
+    final source = await getBySessionId(fromSessionId);
+    if (source == null) return;
+    await put(
+      source.copyWith(id: 'memorybook_$toSessionId', sessionId: toSessionId),
+    );
+  }
+
   @override
   Future<void> deleteBySessionId(String sessionId) {
     return (delete(

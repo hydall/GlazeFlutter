@@ -222,6 +222,12 @@ class ChatSessionService {
       updatedAt: currentTimestampSeconds(),
     );
     await repo.put(session);
+    await _ref
+        .read(memoryBookRepoProvider)
+        .copyForSessionBranch(
+          fromSessionId: current.id,
+          toSessionId: session.id,
+        );
     saveCurrentSessionIndex(charId, nextIndex);
     return session;
   }

@@ -239,6 +239,49 @@ void main() {
     expect(updated.settings.queryMaxChars, 1250);
   });
 
+  test('memory book can be copied to branched session', () async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    final container = ProviderContainer(
+      overrides: [appDbProvider.overrideWithValue(db)],
+    );
+    addTearDown(container.dispose);
+    addTearDown(db.close);
+
+    final repo = container.read(memoryBookRepoProvider);
+    await repo.put(
+      const MemoryBook(
+        id: 'memorybook_char_0',
+        sessionId: 'char_0',
+        entries: [
+          MemoryEntry(
+            id: 'mem_1',
+            content: 'important fact',
+            messageIds: ['m1'],
+          ),
+        ],
+        pendingDrafts: [
+          MemoryDraft(id: 'draft_1', messageIds: ['m2']),
+        ],
+        settings: MemoryBookSettings(batchSize: 7),
+        lastProcessedMessageCount: 12,
+      ),
+    );
+
+    await repo.copyForSessionBranch(
+      fromSessionId: 'char_0',
+      toSessionId: 'char_1',
+    );
+
+    final copied = await repo.getBySessionId('char_1');
+    expect(copied, isNotNull);
+    expect(copied!.id, 'memorybook_char_1');
+    expect(copied.sessionId, 'char_1');
+    expect(copied.entries.single.content, 'important fact');
+    expect(copied.pendingDrafts.single.id, 'draft_1');
+    expect(copied.settings.batchSize, 7);
+    expect(copied.lastProcessedMessageCount, 12);
+  });
+
   test('legacy memory entries recover messageRange from range title', () {
     final entry = MemoryEntry.fromJson({
       'id': 'mem_legacy',
