@@ -600,7 +600,7 @@ if (messageData.isEditing) classes.push('editing');
       if (existingHost && existingHost.shadowRoot) {
         const glazeMsg = existingHost.shadowRoot.querySelector('.glaze-message');
         if (glazeMsg) {
-          glazeMsg.innerHTML = this.formatter.format(text, isUser);
+          this._writeShadowContent(existingHost, text, isUser, false);
           if (reasoning && reasoning.trim()) {
             let reasoningEl = sectionEl.querySelector('.msg-reasoning');
             if (reasoningEl) {

@@ -180,7 +180,8 @@ export class Formatter {
       // Self-closing tags (br, hr, img) and paired tags are fine;
       // single occurrence of a non-self-closing tag is orphan — escape it.
       const selfClosing = new Set(['br', 'hr', 'img', 'input', 'meta', 'link']);
-      if (count === 1 && !selfClosing.has(name)) {
+      const isExplicitSelfClosing = /\/\s*>$/.test(match);
+      if (count === 1 && !selfClosing.has(name) && !isExplicitSelfClosing) {
         return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
       const isBlock = blockTags.has(name);
@@ -281,6 +282,7 @@ export class Formatter {
 
     // 12. Restore HTML Tags
     html = html.replace(/\x01T_(?:BLOCK_)?(\d+)\x01/g, (_, i) => tagBlocks[parseInt(i)]);
+    html = html.replace(/(<svg\b[^>]*>)\s*<p>([\s\S]*?)<\/p>\s*(<\/svg>)/gi, '$1$2$3');
 
     // 12b. Restore list blocks
     html = html.replace(/\x01LB_BLOCK_(\d+)\x01/g, (_, i) => listBlocks[parseInt(i)]);
