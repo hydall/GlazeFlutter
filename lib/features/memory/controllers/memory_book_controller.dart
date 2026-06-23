@@ -25,6 +25,7 @@ class MemoryBookController {
   bool _loading = true;
   bool _isReindexing = false;
   final Map<String, bool> _generatingDrafts = {};
+  final Set<String> _activeDraftIds = {};
   final Map<String, DateTime> _genStartTimes = {};
   final Map<String, CancelToken> _cancelTokens = {};
   Timer? _genElapsedTimer;
@@ -116,10 +117,18 @@ class MemoryBookController {
       _ => 'memory_mode_fast'.tr(),
     };
     final interval = s.autoCreateInterval;
-    final autoCreate = s.autoCreateEnabled ? 'memory_books_summary_auto_on'.tr() : 'memory_books_summary_auto_off'.tr();
-    final autoGen = s.autoGenerateEnabled ? 'memory_books_summary_auto_text'.tr() : 'memory_books_summary_manual_text'.tr();
-    final delayed = s.useDelayedAutomation ? 'memory_books_summary_delayed'.tr() : 'memory_books_summary_immediate'.tr();
-    final target = s.injectionTarget == 'macro' ? 'memory_injection_macro'.tr() : 'memory_injection_hard_block'.tr();
+    final autoCreate = s.autoCreateEnabled
+        ? 'memory_books_summary_auto_on'.tr()
+        : 'memory_books_summary_auto_off'.tr();
+    final autoGen = s.autoGenerateEnabled
+        ? 'memory_books_summary_auto_text'.tr()
+        : 'memory_books_summary_manual_text'.tr();
+    final delayed = s.useDelayedAutomation
+        ? 'memory_books_summary_delayed'.tr()
+        : 'memory_books_summary_immediate'.tr();
+    final target = s.injectionTarget == 'macro'
+        ? 'memory_injection_macro'.tr()
+        : 'memory_injection_hard_block'.tr();
     final vectorThreshold = s.vectorThreshold.toStringAsFixed(2);
     final maxEntries = s.maxInjectedEntries;
     final packing = switch (s.memoryPackingMode) {
@@ -173,7 +182,9 @@ class MemoryBookController {
       return 'memory_books_no_stable_messages'.tr();
     }
     if (plan.eligibleMessageCount == 0) {
-      return 'memory_books_waiting_for_messages'.tr(args: ['${globalSettings.autoCreateLagMessages}']);
+      return 'memory_books_waiting_for_messages'.tr(
+        args: ['${globalSettings.autoCreateLagMessages}'],
+      );
     }
     if (plan.uncoveredMessageCount == 0) {
       return 'memory_books_all_covered'.tr();
@@ -197,7 +208,7 @@ class MemoryBookController {
               d.content.isEmpty &&
               (d.status == 'pending_generation' ||
                   d.status == 'needs_regeneration') &&
-              _generatingDrafts[d.id] != true,
+              !_activeDraftIds.contains(d.id),
         )
         .toList();
 
@@ -218,12 +229,10 @@ class MemoryBookController {
     required void Function() onComplete,
     required void Function(String error) onError,
   }) async {
-    if (_book == null || _generatingDrafts[draftId] == true) return;
+    if (_book == null || _activeDraftIds.contains(draftId)) return;
     final chatState = _ref.read(chatProvider(_charId));
     if (chatState.value?.isGenerating == true) {
-      onError(
-        'memory_books_chat_generation_active'.tr(),
-      );
+      onError('memory_books_chat_generation_active'.tr());
       return;
     }
     final draftIndex = _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
@@ -247,6 +256,7 @@ class MemoryBookController {
     final cancelToken = CancelToken();
     _cancelTokens[draftId] = cancelToken;
 
+    _activeDraftIds.add(draftId);
     _generatingDrafts[draftId] = true;
     _genStartTimes[draftId] = DateTime.now();
     _startGenElapsedTimer();
@@ -265,10 +275,13 @@ class MemoryBookController {
       final updatedDrafts = [..._book!.pendingDrafts];
       updatedDrafts[draftIndex] = result;
       _book = _book!.copyWith(pendingDrafts: updatedDrafts);
+      _activeDraftIds.remove(draftId);
       _generatingDrafts.remove(draftId);
       _genStartTimes.remove(draftId);
       _stopGenElapsedTimer();
-      _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
+      if (_generatingDrafts.isEmpty) {
+        _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
+      }
       await save();
       onComplete();
     } catch (e) {
@@ -279,10 +292,13 @@ class MemoryBookController {
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
       _book = _book!.copyWith(pendingDrafts: updatedDrafts);
+      _activeDraftIds.remove(draftId);
       _generatingDrafts.remove(draftId);
       _genStartTimes.remove(draftId);
       _stopGenElapsedTimer();
-      _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
+      if (_generatingDrafts.isEmpty) {
+        _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
+      }
       await save();
       onError(e.toString());
     } finally {
@@ -292,6 +308,7 @@ class MemoryBookController {
 
   void cancelDraftGeneration(String draftId) {
     _cancelTokens[draftId]?.cancel();
+    _activeDraftIds.remove(draftId);
     _generatingDrafts.remove(draftId);
     if (_generatingDrafts.isEmpty) {
       _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
@@ -310,20 +327,24 @@ class MemoryBookController {
               d.content.isEmpty &&
               (d.status == 'pending_generation' ||
                   d.status == 'needs_regeneration') &&
-              _generatingDrafts[d.id] != true,
+              !_activeDraftIds.contains(d.id),
         )
         .toList();
     final batchSize = globalSettings.batchSize;
     final toGenerate = needsGen.take(batchSize).toList();
+    if (toGenerate.isEmpty) return;
 
-    for (final draft in toGenerate) {
-      await generateDraft(
-        draft.id,
-        onStart: onStart,
-        onComplete: onComplete,
-        onError: onError,
-      );
-    }
+    await Future.wait(
+      toGenerate.map(
+        (draft) => generateDraft(
+          draft.id,
+          onStart: onStart,
+          onComplete: () {},
+          onError: onError,
+        ),
+      ),
+    );
+    onComplete();
   }
 
   Future<void> approveDraft(String draftId) async {
@@ -473,11 +494,13 @@ class MemoryBookController {
             ? 'content'
             : 'content',
       );
-      return 'memory_books_reindex_result'.tr(namedArgs: {
-        'indexed': '${result.indexed}',
-        'skipped': '${result.skipped}',
-        'failed': '${result.failed}',
-      });
+      return 'memory_books_reindex_result'.tr(
+        namedArgs: {
+          'indexed': '${result.indexed}',
+          'skipped': '${result.skipped}',
+          'failed': '${result.failed}',
+        },
+      );
     } catch (e) {
       return 'memory_books_reindex_failed'.tr(args: ['$e']);
     } finally {
@@ -597,7 +620,7 @@ class MemoryBookController {
               d.content.isEmpty &&
               (d.status == 'pending_generation' ||
                   d.status == 'needs_regeneration') &&
-              _generatingDrafts[d.id] != true,
+              !_activeDraftIds.contains(d.id),
         )
         .toList();
   }
