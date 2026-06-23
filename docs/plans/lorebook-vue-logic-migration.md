@@ -1,11 +1,11 @@
 # Lorebook logic migration: Vue → Flutter (1-to-1)
 
-> Status: **planning only — not yet implemented.** The UX/UI port of
-> `LorebookSheet.vue` (list / entries / edit-entry screens) is already done. This
-> document plans the *engine + data-model* migration so the Vue lorebook features that
-> are currently **missing** in Dart actually drive generation. It must **add** missing
-> behaviour **without removing** existing Dart-only features (per-book limits, the
-> coverage/badge system, `keySearchMode`, `vectorTopK`, hybrid keyword/vector merge).
+> Status: **done — implemented.** The proposed fields (`minActivations`,
+> `maxDepth`, `maxRecursionSteps`, `insertionStrategy`) now exist in
+> `lib/core/models/lorebook.dart`. The UX/UI port of `LorebookSheet.vue`
+> (list / entries / edit-entry screens) is also done. This document is
+> retained for history; see `docs/ARCHITECTURE.md` § 3 for the current
+> lorebook system.
 
 ## Context / problem
 

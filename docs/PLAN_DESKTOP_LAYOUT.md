@@ -1,5 +1,9 @@
 # Port the Vue PC (desktop) layout to Flutter
 
+> Status: done — implemented in `lib/shared/shell/desktop/` (`desktop_shell.dart`,
+> `desktop_left_sidebar.dart`, `desktop_right_sidebar.dart`, etc.). Activates at
+> width ≥ 768; `router.dart` redirects `/` → `/characters` on desktop.
+
 ## Context
 
 Glaze's Vue app has a rich **desktop layout** (`src/App.vue`, `DesktopLeftSidebar.vue`,

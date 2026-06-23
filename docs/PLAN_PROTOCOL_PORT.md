@@ -1,6 +1,6 @@
 # Port Anthropic / Gemini / OpenRouter protocols from SillyTavern
 
-Status: in progress.
+Status: done — all protocols implemented. Transport layer lives in `lib/core/llm/transport/`, message converters in `lib/core/llm/converters/`. Schema v23 added `api_configs.protocol`. See `docs/ARCHITECTURE.md` § 1.
 Source of truth in SillyTavern:
 - `src/prompt-converters.js` — pure converters (claude/google/openrouter caching/etc).
 - `src/endpoints/backends/chat-completions.js` — per-provider HTTP/SSE transport.

@@ -41,17 +41,20 @@ lib/
 │   ├── constants/
 │   │   └── image_gen_patterns.dart     # IMG-tag regex constants
 │   ├── db/
-│   │   ├── app_db.dart                 # AppDatabase singleton (11 tables, schema v22)
+│   │   ├── app_db.dart                 # AppDatabase singleton (14 tables, schema v34)
 │   │   ├── tables.dart                 # Drift table class definitions
 │   │   └── repositories/              # One repo per table (CRUD only)
 │   │       ├── api_config_repo.dart
 │   │       ├── character_repo.dart
+│   │       ├── character_folder_repo.dart
 │   │       ├── chat_repo.dart
 │   │       ├── embedding_repo.dart
 │   │       ├── extension_presets_repository.dart
+│   │       ├── global_variables_repo.dart
 │   │       ├── info_blocks_repository.dart
 │   │       ├── lorebook_repo.dart
 │   │       ├── memory_book_repo.dart
+│   │       ├── memory_catalog_repo.dart
 │   │       ├── persona_repo.dart
 │   │       ├── preset_repo.dart
 │   │       └── summary_repo.dart
@@ -102,8 +105,29 @@ lib/
 │   │   ├── tokenizer.dart            # estimateTokens() with LRU cache, base64 stripping
 │   │   ├── macro_engine.dart         # SillyTavern-compatible macro replacement engine
 │   │   └── vector_math.dart          # cosineSimilarity, findTopK, findTopKMulti, BLOB helpers
+│   ├── llm/converters/               # Protocol-specific message converters (pure)
+│   │   ├── claude_messages.dart      # Anthropic /v1/messages shape
+│   │   ├── gemini_messages.dart      # Google Gemini shape
+│   │   ├── openrouter_messages.dart  # OpenRouter (Anthropic/OpenAI passthrough)
+│   │   ├── message_merger.dart       # Consecutive same-role message merging
+│   │   ├── attachment_encoder.dart   # Image/file → provider attachment payload
+│   │   ├── cache_breakpoint_marker.dart # Anthropic/OpenRouter cache_control placement
+│   │   └── thinking_budget.dart      # Extended-thinking budget mapping per protocol
+│   ├── llm/transport/                # LLM HTTP/SSE transports (one per protocol)
+│   │   ├── chat_transport.dart       # Abstract ChatTransport interface
+│   │   ├── chat_transport_request.dart # Shared request value object
+│   │   ├── llm_protocol.dart         # Protocol enum (openai/anthropic/gemini/openrouter)
+│   │   ├── transport_factory.dart    # ApiConfig.protocol → ChatTransport
+│   │   ├── openai_chat_transport.dart
+│   │   ├── anthropic_chat_transport.dart
+│   │   ├── gemini_chat_transport.dart
+│   │   └── openrouter_chat_transport.dart
 │   ├── navigation/
 │   │   └── router.dart               # GoRouter routes + shell (used by app.dart)
+│   ├── platform/                     # Platform-specific integrations
+│   │   ├── haptics.dart              # Haptic feedback helpers
+│   │   ├── system_settings.dart      # OS settings (wallpaper, dark mode)
+│   │   └── wallpaper.dart            # Device wallpaper fetch
 │   ├── services/                     # Business logic services (no UI, no Riverpod ref)
 │   │   ├── character_importer.dart   # Parses PNG/JSON/YAML V1/V2 character cards
 │   │   ├── character_exporter.dart   # Exports character to PNG (tEXt chunk) or JSON
@@ -283,7 +307,16 @@ lib/
 ├── shared/
 │   ├── shell/
 │   │   ├── shell_screen.dart         # Bottom nav shell (GoRouter StatefulNavigationShell)
-│   │   └── nav_height_provider.dart  # navHeightProvider: nav bar height for layout
+│   │   ├── nav_height_provider.dart  # navHeightProvider: nav bar height for layout
+│   │   ├── shell_header_provider.dart
+│   │   └── desktop/                  # Desktop (≥768px) three-column layout
+│   │       ├── desktop_shell.dart    # Shell wrapper; left/center/right columns
+│   │       ├── desktop_layout_provider.dart
+│   │       ├── desktop_left_sidebar.dart  # Chat list + nav (replaces bottom nav)
+│   │       ├── desktop_right_sidebar.dart # Tools / MagicDrawer
+│   │       ├── desktop_window_view.dart
+│   │       ├── desktop_floating_provider.dart
+│   │       └── desktop_glossary_popup.dart
 │   ├── theme/                        # ThemePreset, storage, provider, fonts, app_colors, app_theme
 │   ├── utils/
 │   │   └── color_utils.dart
@@ -298,11 +331,11 @@ GoRouter lives in `router.dart`, not `app.dart`. Shell tabs and overlay routes:
 
 | Route | Screen |
 |-------|--------|
-| `/` | `ChatHistoryScreen` |
+| `/` | `ChatHistoryScreen` (mobile); redirects to `/characters` on desktop (width ≥ 768, non-mobile force) |
 | `/characters` | `CharacterListScreen` |
-| `/tools` (+ nested `api`, `personas`, `presets`, `regex`, `lorebooks`, `embeddings`) | `ToolsScreen` |
+| `/tools` (+ nested `api`, `personas`, `presets`, `regex`, `lorebooks`, `lorebooks/settings`, `embeddings`) | `ToolsScreen` |
 | `/menu` (+ `settings`, `themes`, `about`, `glossary`) | `MenuScreen` |
-| `/chat/:charId` | `ChatScreen` |
+| `/chat/:charId` | `ChatScreen` (query params: `?session=`, `?new=1`, `?msg=`) |
 | `/character/create`, `/character/:charId`, `…/edit`, `…/gallery` | Character CRUD overlays |
 | `/sync` | `SyncSheet` |
 | `/extensions`, `/extensions/preset-editor/:presetId` | Extensions screens |
@@ -559,21 +592,24 @@ expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` ar
 
 **File:** `lib/core/db/app_db.dart` + `lib/core/db/repositories/`
 
-### Tables (11 total, schema v22)
+### Tables (14 total, schema v34)
 
 | Table | Repo | Notes |
 |-------|------|-------|
-| `Characters` | `character_repo.dart` | watchAll(); v18 `picksHash`, v19 `createdAt`, v13 `extensionsJson`. `updateExtensionsJson` is the atomic read-modify-write helper for the JS `character` variable scope. |
+| `Characters` | `character_repo.dart` | watchAll(); v18 `picksHash`, v19 `createdAt`, v13 `extensionsJson`, v32 `tokenCount`, v33 `variantGroupId`/`variantName`/`variantOrder`, v34 `hidden`. `updateExtensionsJson` is the atomic read-modify-write helper for the JS `character` variable scope. |
+| `CharacterFolders` | `character_folder_repo.dart` | v31; local character folders (composite PK `{folderId, charId}`) |
+| `CharacterFolderMembers` | `character_folder_repo.dart` | v31; folder membership (composite PK + 2 indexes) |
 | `ChatSessions` | `chat_repo.dart` | Largest repo (~250 lines); patch via `patchChatData`. `updateSessionVarsJson` is the atomic helper for the JS `chat` variable scope. |
 | `Presets` | `preset_repo.dart` | JSON blob per preset |
-| `ApiConfigs` | `api_config_repo.dart` | v21: `cacheControlTtl` |
+| `ApiConfigs` | `api_config_repo.dart` | v21: `cacheControlTtl`; v23: `protocol`; v24: `topK`/`frequencyPenalty`/`presencePenalty`; v25: `cacheBreakpointMode`/`sessionIdMode` |
 | `Personas` | `persona_repo.dart` | |
 | `Lorebooks` | `lorebook_repo.dart` | entries + settings as JSON |
 | `Embeddings` | `embedding_repo.dart` | `entryId`, `vectorsBlob`, `retrievalHintsJson`, `errorJson` |
-| `ChatSummaries` | `summary_repo.dart` | one per session |
+| `ChatSummaries` | `summary_repo.dart` | v30: `enabled`; one per session |
 | `MemoryBookRows` | `memory_book_repo.dart` | |
+| `MemoryCatalogRows` | `memory_catalog_repo.dart` | v29; rebuildable per-session Memory Catalog state |
 | `ExtensionPresets` | `extension_presets_repository.dart` | v20 |
-| `InfoBlocks` | `info_blocks_repository.dart` | v20; v22 adds `status` TEXT (default `'done'`) + `order` INTEGER (default 0) |
+| `InfoBlocks` | `info_blocks_repository.dart` | v20; v22 adds `status` TEXT (default `'done'`) + `order` INTEGER (default 0); v27 adds `swipe_id` |
 
 ### Write Rule
 **Never** do `getChat → mutate → saveChat`. Use `patchChatData` to serialize reads.
@@ -651,7 +687,7 @@ The extensions feature ships two surfaces that share a single Dart-side
    chat is open.
 
 Formal invariants: `docs/INVARIANTS.md` INV-EG1–INV-EG8 and
-INV-JS1–INV-JS6. Refactor/module layout history lives in `docs/refactor_plan.md`.
+INV-JS1–INV-JS6.
 
 ### Block chain (post-generation)
 
@@ -878,4 +914,4 @@ Resolved (kept for history; details in git / PR notes):
 - **Chat ↔ memory draft mutex** — `memory_active_drafts_provider` + `MemoryBookController` (INV-M3/INV-M4).
 - **Session vars on abort/error** — only success path persists isolate vars (INV-C5).
 - **Memory injection token budget** — `memory_budget.dart` + INV-PS4.
-- **JS extensions MVP** — `window.glaze` SDK, headless `JsEngineService`, capability permissions, periodic/afterUser triggers, interactive panels, audioplayers-backed audio, big/medium/small connection profiles, wired `CommandRegistry`, lifecycle-paused periodic scheduler. Current module boundaries are documented in § 9 and `docs/refactor_plan.md`.
+- **JS extensions MVP** — `window.glaze` SDK, headless `JsEngineService`, capability permissions, periodic/afterUser triggers, interactive panels, audioplayers-backed audio, big/medium/small connection profiles, wired `CommandRegistry`, lifecycle-paused periodic scheduler. Current module boundaries are documented in § 9.

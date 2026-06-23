@@ -7,7 +7,6 @@
 >
 > * `docs/ARCHITECTURE.md` § 9 (Extensions + JS Bridge SDK)
 > * `docs/INVARIANTS.md` INV-EG1–INV-EG8 and INV-JS1–INV-JS6
-> * `docs/refactor_plan.md` (large-object refactor and final module layout)
 
 ---
 
@@ -36,8 +35,7 @@
 | 19 | `executeCommand` wired registry (`/trigger` / `/getvar` / `/setvar` / `/inject` / `/toast`) | ✓ |
 | 20 | Connection profiles (big/medium/small → `ApiConfig`) | ✓ |
 
-См. `docs/ARCHITECTURE.md` § 9 для текущего состояния bridge surface и
-`docs/refactor_plan.md` для итоговой раскладки модулей.
+См. `docs/ARCHITECTURE.md` § 9 для текущего состояния bridge surface.
 
 ---
 

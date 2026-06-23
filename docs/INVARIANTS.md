@@ -47,7 +47,7 @@ isolate only reach the database on the success branch (`stream_generation_servic
 `writeAssistant` call with `pendingSessionVars`).
 
 `currentSessionVars` lives only inside the isolate's local scope during
-`buildPrompt()` (`lib/core/llm/prompt_builder.dart:195`) — nothing is persisted
+`buildPrompt()` (`lib/core/llm/prompt_builder.dart:279`) — nothing is persisted
 before the success branch, so there is no rollback to perform. The fix in PR-B
 (C11) was simply to stop **adding** `pendingSessionVars` to the error write paths
 where they were being leaked into the database despite the abort.
@@ -333,14 +333,14 @@ Within a single `MacroEngine.replaceMacros()` call, macros resolve in this order
 
 ### INV-PS8: Recursive lorebook scan is bounded
 
-`LorebookScanner` limits recursion to `maxIterations = 5` when `recursiveScan` is enabled,
+`scanLorebooks()` limits recursion to `maxIterations = 5` when `recursiveScan` is enabled,
 or `1` when disabled. This prevents infinite loops from circular entry references.
 
 ### INV-PS9: Block-level append-to-last-user-message
 
 `PresetBlock.appendToLastMessage = true` causes the block's content (after macro expansion) to be **appended to the last user-role message in the chat history** at prompt-assembly time.
 
-Rules (enforced in `lib/core/llm/prompt_builder.dart:_assembleMessages` via `_applyAppendToLastMessage`):
+Rules (enforced in `lib/core/llm/prompt_builder.dart:_assembleMessages` via `applyAppendToLastMessage`):
 
 1. The block's own `role` is irrelevant in this mode — the content is always merged into the **last** user message found in `historyMsgs`. Block role may be `system`, `user`, or `assistant`; the merged message keeps the user role.
 2. Macros (`{{lorebooks}}`, `{{summary}}`, etc.) are expanded **before** append, in `resolveBlockContent()` — see INV-PS7. A block like `<lorebooks>{{lorebooks}}</lorebooks><summary>{{summary}}</summary>` expands to fully-rendered text and is appended as-is.

@@ -1,7 +1,7 @@
 # GlazeFlutter
 
 Native LLM frontend for AI roleplay. Flutter rewrite of [Glaze](https://github.com/hydall/Glaze).
-**Stack:** Flutter 3.41 + Riverpod 2 + Drift (SQLite) + GoRouter. **Language:** Dart only. **License:** AGPL-3.0.
+**Stack:** Flutter 3.44 + Riverpod 2 + Drift (SQLite) + GoRouter. **Language:** Dart only. **License:** AGPL-3.0.
 
 Architecture: `docs/ARCHITECTURE.md`. Workflow (git, PRs, Trello): `docs/WORKFLOW.md`.
 
@@ -169,7 +169,7 @@ When editing files matching a pattern below, READ the corresponding rule file FI
 - Branch (`feat/xxx`) off `master`, push to `origin`, open a PR — see `docs/WORKFLOW.md` for branching, Trello, and cleanup checklists.
 - Open PRs only against upstream repository `hydall/GlazeFlutter` (base: `hydall/GlazeFlutter:master`), not against fork repos.
 - Run `dart run build_runner build` after changing any freezed/drift model.
-- Single responsibility: split a class before it grows past ~150 lines (thin orchestrators, fat specialists, constructor injection). Details: `docs/CODE_STYLE.md`.
+- Single responsibility: split a class before it grows past ~200-250 lines (thin orchestrators, fat specialists, constructor injection). Details: `docs/CODE_STYLE.md`.
 
 ## Do NOT
 

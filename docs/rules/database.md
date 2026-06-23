@@ -64,7 +64,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **32**
+Current version: **34**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -82,6 +82,8 @@ Migration history:
 - v30: added `chat_summaries.enabled` BOOL DEFAULT 1 (+ backfill NULL → 1)
 - v31: added `character_folders` + `character_folder_members` tables (local character folders; composite PK `{folderId, charId}` enforces no-duplicate-within-folder)
 - v32: added `characters.tokenCount` INTEGER DEFAULT 0 (cached estimated token count; computed on import/save, backfilled in background for existing rows)
+- v33: added `characters.variantGroupId` TEXT + `characters.variantName` TEXT + `characters.variantOrder` INTEGER (character variations: rows sharing `variant_group_id` collapse to one list card; backfill sets each existing character's group to its own `char_id`)
+- v34: added `characters.hidden` BOOL DEFAULT 0 (hideable characters: excludes a character/group from the My Characters list)
 
 ---
 
