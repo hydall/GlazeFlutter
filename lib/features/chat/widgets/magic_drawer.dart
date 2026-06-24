@@ -40,6 +40,7 @@ import '../services/magic_drawer_layout_service.dart';
 import '../services/magic_drawer_stats_service.dart';
 import 'magic_drawer_widgets.dart';
 import 'memory_books_sheet.dart';
+import 'studio_menu_dialog.dart';
 import 'prompt_preview_screen.dart';
 import 'summary_sheet.dart';
 import '../state/token_breakdown_cache.dart';
@@ -124,6 +125,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       id: 'ext-blocks',
       label: 'Ext Blocks',
       icon: Icons.extension_outlined,
+    ),
+    MagicDrawerItemDef(
+      id: 'studio',
+      label: 'menu_studio'.tr(),
+      icon: Icons.movie_filter_outlined,
     ),
   ];
 
@@ -500,7 +506,24 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         widget.onClose?.call();
         if (mounted) await _showExtBlocksSheet();
         return;
+      case 'studio':
+        widget.onClose?.call();
+        if (mounted) await _showStudioMenu();
+        return;
     }
+  }
+
+  Future<void> _showStudioMenu() async {
+    final session = ref.read(chatProvider(widget.charId)).value?.session;
+    if (session == null) return;
+    await showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      builder: (_) => StudioMenuDialog(
+        charId: widget.charId,
+        sessionId: session.id,
+      ),
+    );
   }
 
   Future<void> _showExtBlocksSheet() async {

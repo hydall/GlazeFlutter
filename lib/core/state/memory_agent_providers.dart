@@ -15,6 +15,7 @@ import '../llm/memory_post_turn_service.dart';
 import '../llm/memory_consolidation_service.dart';
 import '../llm/memory_agentic_service.dart';
 import '../llm/memory_studio_service.dart';
+import '../llm/studio_decomposition_service.dart';
 import 'memory_settings_provider.dart';
 
 /// Provider for the memory needs classifier service.
@@ -86,4 +87,10 @@ final memoryAgenticServiceProvider = Provider<MemoryAgenticService>((ref) {
 /// Studio Mode pipeline service (Phase 11). Multi-stage RP pipeline.
 final memoryStudioServiceProvider = Provider<MemoryStudioService>((ref) {
   return MemoryStudioService(ref);
+});
+
+/// LLM preset decomposition service for Studio Mode.
+final studioDecompositionServiceProvider =
+    Provider<StudioDecompositionService>((ref) {
+  return StudioDecompositionService(ref);
 });

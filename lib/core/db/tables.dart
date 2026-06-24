@@ -276,6 +276,24 @@ class MemoryConsolidationRows extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('StudioConfigRow')
+@TableIndex(name: 'idx_studio_config_session', columns: {#sessionId})
+class StudioConfigRows extends Table {
+  @override
+  String get tableName => 'studio_config_rows';
+
+  TextColumn get sessionId => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(false))();
+  TextColumn get agentsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get sourcePresetId => text().withDefault(const Constant(''))();
+  TextColumn get sourcePresetHash => text().withDefault(const Constant(''))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sessionId};
+}
+
 @DataClassName('PresetRow')
 class Presets extends Table {
   @override

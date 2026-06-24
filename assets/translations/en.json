@@ -1548,6 +1548,7 @@
     "dev_mode_disabled": "Developer mode disabled",
     "menu_menu_title": "Menu",
     "menu_dev_header": "Dev",
+    "menu_studio": "Studio",
     "menu_hide_build_date_watermark": "Hide build date watermark",
     "menu_menu_group_demo": "MenuGroup Demo",
     "menu_test_error_dialog": "Test Error Dialog",

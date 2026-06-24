@@ -127,12 +127,6 @@ class StreamGenerationService {
       final hasInlineTags =
           reasoningTagStart.isNotEmpty && reasoningTagEnd.isNotEmpty;
 
-      final accumulator = StreamAccumulator(
-        tagStart: reasoningTagStart,
-        tagEnd: reasoningTagEnd,
-        hasInlineTags: hasInlineTags,
-      );
-
       final apiMessages = promptResult.messages
           .where((m) => m.content.trim().isNotEmpty)
           .map((m) => m.toApiMap())
@@ -140,15 +134,114 @@ class StreamGenerationService {
       final previousApiMessages = _lastRequestsBySession[session.id];
       _rememberRequest(session.id, apiMessages);
 
-      final startGenTime = DateTime.now();
-      final transport = pickChatTransport(apiConfig.protocol);
-      ChatState? finalState;
       final coverage = promptResult.memoryCoverage.isNotEmpty
           ? promptResult.memoryCoverage
           : payload.memoryCoverage;
       final memoryDiagnostics = coverage['diagnostics'];
       final triggeredLorebooks = promptResult.triggeredLorebooks;
       final triggeredMemories = promptResult.triggeredMemories;
+
+      final studioConfig = await _ref
+          .read(memoryStudioServiceProvider)
+          .getEnabledConfig(session.id);
+      if (_isAborted()) {
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
+      }
+      if (studioConfig != null) {
+        final startGenTime = DateTime.now();
+        final studioResult = await _ref
+            .read(memoryStudioServiceProvider)
+            .runPipeline(
+              config: studioConfig,
+              promptResult: promptResult,
+              apiConfig: apiConfig,
+              sessionId: session.id,
+              cancelToken: cancelToken,
+            );
+        if (_isAborted() || studioResult.status == 'aborted') {
+          return ChatState(
+            session: saveSession ?? session,
+            isGenerating: false,
+            visibleStartIndex: vsi,
+          );
+        }
+        if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
+          final message = studioResult.error ?? 'Studio failed: ${studioResult.status}';
+          if (regenTargetId != null && saveSession != null) {
+            return _writer.writeRegenError(
+              errorText: message,
+              saveSession: saveSession,
+              regenTargetId: regenTargetId,
+              visibleStartIndex: vsi,
+            );
+          }
+          return _writer.writeError(
+            errorText: message,
+            currentSession: session,
+            visibleStartIndex: vsi,
+          );
+        }
+
+        final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
+        final finalState = _writer.writeAssistant(
+          text: studioResult.response,
+          reasoning: null,
+          currentSession: saveSession ?? session,
+          isAborted: _isAborted,
+          pendingSessionVars: pendingSessionVars,
+          genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
+          tokens: estimateTokens(studioResult.response),
+          rawResponse: studioResult.response,
+          previousSwipes: previousSwipes,
+          previousSwipeId: previousSwipeId,
+          previousReasoning: previousReasoning,
+          previousGenTime: previousGenTime,
+          previousTokens: previousTokens,
+          previousSwipesMeta: previousSwipesMeta,
+          guidanceText: guidanceText,
+          memoryCoverage: coverage,
+          isAllReasoning: false,
+          triggeredLorebooks: triggeredLorebooks,
+          triggeredMemories: triggeredMemories,
+          regenTargetId: regenTargetId,
+          visibleStartIndex: vsi,
+        );
+        if (memoryDiagnostics is Map<String, dynamic> &&
+            finalState.session != null) {
+          final messageId = _lastAssistantId(finalState.session!, regenTargetId);
+          _ref.read(lastMemoryActivityProvider(_charId).notifier).state =
+              MemoryActivityState(
+            sessionId: finalState.session!.id,
+            messageId: messageId,
+            diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
+            updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+          );
+        } else {
+          _ref.read(lastMemoryActivityProvider(_charId).notifier).state = null;
+        }
+        if (finalState.session != null) {
+          unawaited(
+            _ref
+                .read(memoryPostTurnServiceProvider)
+                .runPostTurn(finalState.session!.id),
+          );
+        }
+        return finalState;
+      }
+
+      final accumulator = StreamAccumulator(
+        tagStart: reasoningTagStart,
+        tagEnd: reasoningTagEnd,
+        hasInlineTags: hasInlineTags,
+      );
+
+      final startGenTime = DateTime.now();
+      final transport = pickChatTransport(apiConfig.protocol);
+      ChatState? finalState;
 
       bool frameScheduled = false;
 

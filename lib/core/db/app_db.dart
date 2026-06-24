@@ -27,6 +27,7 @@ part 'app_db.g.dart';
     MemorySalienceRows,
     MemoryCadenceRows,
     MemoryConsolidationRows,
+    StudioConfigRows,
     ExtensionPresets,
     InfoBlocks,
   ],
@@ -37,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 35;
+  int get schemaVersion => 36;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -397,6 +398,15 @@ class AppDatabase extends _$AppDatabase {
         }
         if (!tableNames.contains('memory_consolidation_rows')) {
           await m.createTable(memoryConsolidationRows);
+        }
+      }
+      if (from < 36) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('studio_config_rows')) {
+          await m.createTable(studioConfigRows);
         }
       }
     },

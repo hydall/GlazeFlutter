@@ -643,11 +643,6 @@ class _MemoryGenerationSettingsSheetState
               label: Text('memory_mode_agentic'.tr()),
               icon: Icon(Icons.smart_toy_outlined),
             ),
-            ButtonSegment(
-              value: 'studio',
-              label: Text('memory_mode_studio'.tr()),
-              icon: Icon(Icons.movie_filter_outlined),
-            ),
           ],
           selected: {_memoryMode},
           onSelectionChanged: (s) => setState(() => _memoryMode = s.first),
@@ -663,8 +658,6 @@ class _MemoryGenerationSettingsSheetState
               ? 'memory_mode_deep_desc'.tr()
               : _memoryMode == 'agentic'
               ? 'memory_mode_agentic_desc'.tr()
-              : _memoryMode == 'studio'
-              ? 'memory_mode_studio_desc'.tr()
               : 'memory_mode_fast_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),

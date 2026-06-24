@@ -1585,6 +1585,7 @@
     "memory_mode_agentic": "Агентный",
     "memory_mode_studio": "Студия",
     "menu_dev_header": "Разработка",
+    "menu_studio": "Студия",
     "menu_hide_build_date_watermark": "Скрыть водяной знак даты сборки",
     "menu_menu_group_demo": "Демо MenuGroup",
     "menu_menu_title": "Меню",

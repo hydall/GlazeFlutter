@@ -228,6 +228,12 @@ class ChatSessionService {
           fromSessionId: current.id,
           toSessionId: session.id,
         );
+    await _ref
+        .read(studioConfigRepoProvider)
+        .copyForSessionBranch(
+          fromSessionId: current.id,
+          toSessionId: session.id,
+        );
     await saveCurrentSessionIndex(charId, nextIndex);
     return session;
   }

@@ -1,346 +1,272 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/memory_book.dart';
-import 'memory_selector.dart';
+import '../models/api_config.dart';
+import '../models/studio_config.dart';
+import '../state/db_provider.dart';
+import '../../features/settings/api_list_provider.dart';
 import 'memory_studio_mode.dart';
-import 'prompt_block_router.dart';
+import 'prompt_builder.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
-import '../state/memory_settings_provider.dart';
-import '../../features/settings/api_list_provider.dart';
 
-/// Studio Mode pipeline service (Phase 11).
+/// Session-bound Studio pipeline.
 ///
-/// Multi-stage / multi-agent RP pipeline. Explicit opt-in only.
-/// Pipeline: memoryCurator → scenarioWriter → director → mainResponder
-///
-/// Each stage receives only the preset shards it needs + compact briefs
-/// from earlier stages. The final responder is the only stage that produces
-/// the actual RP response.
-///
-/// All intermediate activity is ephemeral (not persisted) by default.
-/// Proposed writes require explicit user confirmation.
+/// The Studio menu stores a user-editable [StudioConfig]. At generation time
+/// this service runs enabled agents in order. Intermediate agents produce
+/// compact briefs; the last enabled agent produces the actual RP response.
 class MemoryStudioService {
   final Ref _ref;
 
   MemoryStudioService(this._ref);
 
-  /// Run the Studio pipeline. Returns the final response + stage briefs.
+  Future<StudioConfig?> getEnabledConfig(String sessionId) async {
+    final config = await _ref.read(studioConfigRepoProvider).getBySessionId(
+          sessionId,
+        );
+    if (config == null || !config.enabled) return null;
+    final enabledAgents = config.agents.where((a) => a.enabled).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+    if (enabledAgents.isEmpty) return null;
+    return config.copyWith(agents: enabledAgents);
+  }
+
+  /// Run configured Studio agents. Returns the final response + agent briefs.
   Future<StudioPipelineResult> runPipeline({
-    required MemoryBookSettings settings,
-    required String currentText,
-    required List<MemoryEntry> memoryEntries,
-    required MemorySelection memorySelection,
-    required Set<String> visibleMessageIds,
-    required List<PresetBlockInfo> presetBlocks,
-    required String charName,
-    required String charDescription,
-    required String userName,
-    required String personaPrompt,
+    required StudioConfig config,
+    required PromptResult promptResult,
+    required ApiConfig apiConfig,
+    required String sessionId,
     CancelToken? cancelToken,
   }) async {
-    const policy = MemoryStudioPolicy(MemoryStudioSettings(
-      experimentalEnabled: true,
-    ));
-    if (!policy.isAvailable) {
-      return StudioPipelineResult(
-        status: 'disabled',
-        response: '',
-      );
-    }
-
     final token = cancelToken ?? CancelToken();
     if (token.isCancelled) {
-      return StudioPipelineResult(status: 'aborted', response: '');
+      return const StudioPipelineResult(status: 'aborted', response: '');
     }
 
     try {
-      final pipeline = policy.defaultPipeline();
+      final agents = config.agents.where((a) => a.enabled).toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
+      if (agents.isEmpty) {
+        return const StudioPipelineResult(status: 'disabled', response: '');
+      }
+
       final briefs = <StudioStageBrief>[];
-
-      // Memory context for the pipeline
-      final memoryContext = memorySelection.entries
-          .map((e) => '--- ${e.title} ---\n${e.content}')
-          .join('\n\n');
-
-      // Stage 1: Memory Curator
-      if (pipeline.any((p) => p.stage == StudioStage.memoryCurator)) {
-        final curatorShards = PromptBlockRouter.filterForStage(
-          StudioStage.memoryCurator,
-          presetBlocks,
-        );
-        final curatorBrief = await _runStage(
-          stage: StudioStage.memoryCurator,
-          settings: settings,
-          prompt: _buildCuratorPrompt(
-            currentText: currentText,
-            memoryContext: memoryContext,
-            shards: curatorShards,
-            charName: charName,
-          ),
+      for (var i = 0; i < agents.length; i++) {
+        if (token.isCancelled) {
+          return const StudioPipelineResult(status: 'aborted', response: '');
+        }
+        final agent = agents[i];
+        final isFinal = i == agents.length - 1;
+        final text = await _runAgent(
+          agent: agent,
+          promptResult: promptResult,
+          apiConfig: apiConfig,
+          priorBriefs: briefs,
+          sessionId: sessionId,
           cancelToken: token,
+          isFinalResponse: isFinal,
         );
-        briefs.add(StudioStageBrief(
-          stage: StudioStage.memoryCurator,
-          brief: curatorBrief,
-          disposition: MemoryStudioOutputDisposition.ephemeral,
-        ));
+        if (token.isCancelled) {
+          return const StudioPipelineResult(status: 'aborted', response: '');
+        }
+
+        if (isFinal) {
+          return StudioPipelineResult(
+            status: 'ok',
+            response: text,
+            stageBriefs: briefs,
+          );
+        }
+
+        briefs.add(
+          StudioStageBrief(
+            agentId: agent.id,
+            agentName: agent.name,
+            brief: text,
+            disposition: MemoryStudioOutputDisposition.ephemeral,
+          ),
+        );
       }
 
-      // Stage 2: Scenario Writer
-      if (pipeline.any((p) => p.stage == StudioStage.scenarioWriter)) {
-        final scenarioShards = PromptBlockRouter.filterForStage(
-          StudioStage.scenarioWriter,
-          presetBlocks,
-        );
-        final curatorBrief = briefs
-            .where((b) => b.stage == StudioStage.memoryCurator)
-            .map((b) => b.brief)
-            .join('\n');
-        final scenarioBrief = await _runStage(
-          stage: StudioStage.scenarioWriter,
-          settings: settings,
-          prompt: _buildScenarioPrompt(
-            currentText: currentText,
-            curatorBrief: curatorBrief,
-            shards: scenarioShards,
-            charName: charName,
-          ),
-          cancelToken: token,
-        );
-        briefs.add(StudioStageBrief(
-          stage: StudioStage.scenarioWriter,
-          brief: scenarioBrief,
-          disposition: MemoryStudioOutputDisposition.ephemeral,
-        ));
-      }
-
-      // Stage 3: Director
-      if (pipeline.any((p) => p.stage == StudioStage.director)) {
-        final directorShards = PromptBlockRouter.filterForStage(
-          StudioStage.director,
-          presetBlocks,
-        );
-        final priorBriefs = briefs.map((b) => '${b.stage.name}: ${b.brief}').join('\n');
-        final directorBrief = await _runStage(
-          stage: StudioStage.director,
-          settings: settings,
-          prompt: _buildDirectorPrompt(
-            currentText: currentText,
-            priorBriefs: priorBriefs,
-            shards: directorShards,
-            charName: charName,
-          ),
-          cancelToken: token,
-        );
-        briefs.add(StudioStageBrief(
-          stage: StudioStage.director,
-          brief: directorBrief,
-          disposition: MemoryStudioOutputDisposition.ephemeral,
-        ));
-      }
-
-      // Stage 4: Main Responder
-      final responseShards = PromptBlockRouter.filterForStage(
-        StudioStage.mainResponder,
-        presetBlocks,
-      );
-      final allBriefs = briefs.map((b) => '${b.stage.name}: ${b.brief}').join('\n');
-      final response = await _runStage(
-        stage: StudioStage.mainResponder,
-        settings: settings,
-        prompt: _buildMainResponderPrompt(
-          currentText: currentText,
-          allBriefs: allBriefs,
-          shards: responseShards,
-          charName: charName,
-          charDescription: charDescription,
-          userName: userName,
-          personaPrompt: personaPrompt,
-        ),
-        cancelToken: token,
-        isFinalResponse: true,
-      );
-
-      return StudioPipelineResult(
-        status: 'ok',
-        response: response,
-        stageBriefs: briefs,
-      );
+      return const StudioPipelineResult(status: 'disabled', response: '');
     } on TimeoutException {
-      return StudioPipelineResult(
-        status: 'timeout',
-        response: '',
-        stageBriefs: const [],
-      );
+      return const StudioPipelineResult(status: 'timeout', response: '');
     } catch (e) {
-      if (token.isCancelled ||
-          (e is DioException && CancelToken.isCancel(e))) {
-        return StudioPipelineResult(status: 'aborted', response: '');
+      if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
+        return const StudioPipelineResult(status: 'aborted', response: '');
       }
-      return StudioPipelineResult(
-        status: 'error',
-        response: '',
-        error: '$e',
-      );
+      return StudioPipelineResult(status: 'error', response: '', error: '$e');
     }
   }
 
-  Future<String> _runStage({
-    required StudioStage stage,
-    required MemoryBookSettings settings,
-    required String prompt,
+  Future<String> _runAgent({
+    required StudioAgent agent,
+    required PromptResult promptResult,
+    required ApiConfig apiConfig,
+    required List<StudioStageBrief> priorBriefs,
+    required String sessionId,
     required CancelToken cancelToken,
-    bool isFinalResponse = false,
+    required bool isFinalResponse,
   }) async {
-    final isCustom = settings.sidecarSource == 'custom';
-    String endpoint;
-    String apiKey;
-    String model;
-    String protocol;
-
-    if (isCustom) {
-      endpoint = settings.sidecarEndpoint;
-      apiKey = settings.sidecarApiKey;
-      model = settings.sidecarModel;
-      protocol = LlmProtocol.openai;
-    } else {
-      await _ref.read(apiListProvider.future);
-      final chatConfig = _ref.read(activeApiConfigProvider);
-      if (chatConfig == null) {
-        throw Exception('No chat API config available for studio');
-      }
-      endpoint = chatConfig.endpoint ?? '';
-      apiKey = chatConfig.apiKey ?? '';
-      model = settings.sidecarModel.isNotEmpty
-          ? settings.sidecarModel
-          : (chatConfig.model ?? '');
-      protocol = chatConfig.protocol;
-    }
-
-    if (endpoint.isEmpty || model.isEmpty) {
-      throw Exception('Studio API not configured');
+    final resolved = await _resolveAgentConfig(agent, apiConfig);
+    if (resolved.endpoint.isEmpty || resolved.model.isEmpty) {
+      throw Exception('Studio agent "${agent.name}" API is not configured');
     }
 
     final completer = Completer<String>();
-    final transport = pickChatTransport(protocol);
+    final transport = pickChatTransport(resolved.protocol);
+    final messages = _buildAgentMessages(
+      agent: agent,
+      promptResult: promptResult,
+      priorBriefs: priorBriefs,
+      isFinalResponse: isFinalResponse,
+    );
 
-    transport.stream(
+    unawaited(transport.stream(
       request: ChatTransportRequest(
-        endpoint: endpoint,
-        apiKey: apiKey,
-        model: model,
-        messages: [
-          {'role': 'user', 'content': prompt},
-        ],
-        maxTokens: isFinalResponse ? 2000 : 500,
-        temperature: isFinalResponse ? 0.8 : 0.3,
-        topP: 1.0,
+        endpoint: resolved.endpoint,
+        apiKey: resolved.apiKey,
+        model: resolved.model,
+        messages: messages,
+        maxTokens: agent.maxTokens,
+        temperature: agent.temperature,
+        topP: resolved.topP,
+        topK: resolved.topK,
+        frequencyPenalty: resolved.frequencyPenalty,
+        presencePenalty: resolved.presencePenalty,
         stream: false,
+        requestReasoning: false,
+        omitTemperature: resolved.omitTemperature,
+        omitTopP: resolved.omitTopP,
+        omitReasoning: true,
+        omitReasoningEffort: true,
+        sessionId: sessionId,
+        cacheControlTtl: resolved.cacheControlTtl,
+        cacheBreakpointMode: resolved.cacheBreakpointMode,
+        sessionIdMode: resolved.sessionIdMode,
       ),
       cancelToken: cancelToken,
       onComplete: (text, _, {rawResponseJson}) {
-        if (!completer.isCompleted) completer.complete(text);
+        if (!completer.isCompleted) completer.complete(text.trim());
       },
       onError: (error) {
         if (!completer.isCompleted) completer.completeError(error);
       },
-    );
+    ));
 
     return completer.future.timeout(
-      Duration(milliseconds: settings.sidecarTimeoutMs * 3),
+      Duration(milliseconds: agent.timeoutMs.clamp(1000, 120000)),
     );
   }
 
-  String _buildCuratorPrompt({
-    required String currentText,
-    required String memoryContext,
-    required List<PresetBlockShard> shards,
-    required String charName,
-  }) {
-    final shardText = shards.isEmpty
-        ? ''
-        : '\n\nRelevant instructions:\n${shards.map((s) => s.content).join('\n')}';
-    return '''You are a memory curator for an RP session with $charName.
-Select and summarize the most relevant memories for the current scene.
+  Future<_ResolvedAgentConfig> _resolveAgentConfig(
+    StudioAgent agent,
+    ApiConfig current,
+  ) async {
+    if (agent.modelSource == 'custom') {
+      return _ResolvedAgentConfig(
+        endpoint: agent.endpoint,
+        apiKey: current.apiKey,
+        model: agent.model,
+        protocol: LlmProtocol.openai,
+      );
+    }
 
-User message: $currentText
-
-Available memories:
-$memoryContext$shardText
-
-Provide a brief (2-3 sentence) summary of the most relevant memory context for this response. Focus on facts, promises, relationships, and unresolved threads.''';
+    await _ref.read(apiListProvider.future);
+    final active = _ref.read(activeApiConfigProvider) ?? current;
+    return _ResolvedAgentConfig.fromApiConfig(active);
   }
 
-  String _buildScenarioPrompt({
-    required String currentText,
-    required String curatorBrief,
-    required List<PresetBlockShard> shards,
-    required String charName,
+  List<Map<String, dynamic>> _buildAgentMessages({
+    required StudioAgent agent,
+    required PromptResult promptResult,
+    required List<StudioStageBrief> priorBriefs,
+    required bool isFinalResponse,
   }) {
-    final shardText = shards.isEmpty
-        ? ''
-        : '\n\nRelevant instructions:\n${shards.map((s) => s.content).join('\n')}';
-    return '''You are a scenario writer for an RP session with $charName.
-Review the current scene and identify active arcs, obligations, and plot threads.
+    final baseMessages = promptResult.messages
+        .where((m) => m.content.trim().isNotEmpty)
+        .map((m) => m.toApiMap())
+        .toList();
+    final briefText = priorBriefs
+        .map((b) => '${b.agentName}:\n${b.brief}')
+        .join('\n\n---\n\n');
 
-User message: $currentText
+    final control = StringBuffer()
+      ..writeln(agent.promptShard.trim())
+      ..writeln()
+      ..writeln(isFinalResponse
+          ? 'You are the final responder. Produce only the in-character RP response.'
+          : 'You are an intermediate Studio agent. Produce a compact brief for later agents. Do not write the final RP response.');
+    if (briefText.isNotEmpty) {
+      control
+        ..writeln()
+        ..writeln('Prior Studio briefs:')
+        ..writeln(briefText);
+    }
 
-Memory curator's summary:
-$curatorBrief$shardText
-
-Provide a brief (2-3 sentence) summary of active arcs and what should happen next for continuity.''';
+    return [
+      {'role': _normalizeRole(agent.role), 'content': control.toString()},
+      ...baseMessages,
+    ];
   }
 
-  String _buildDirectorPrompt({
-    required String currentText,
-    required String priorBriefs,
-    required List<PresetBlockShard> shards,
-    required String charName,
-  }) {
-    final shardText = shards.isEmpty
-        ? ''
-        : '\n\nRelevant instructions:\n${shards.map((s) => s.content).join('\n')}';
-    return '''You are a director for an RP session with $charName.
-Plan the tone, pacing, and emotional continuity for the next response.
-
-User message: $currentText
-
-Stage briefs so far:
-$priorBriefs$shardText
-
-Provide a brief (2-3 sentence) direction for the response: tone, pacing, emotional beats, and continuity risks to avoid.''';
+  String _normalizeRole(String role) {
+    const allowed = {'system', 'user', 'assistant'};
+    return allowed.contains(role) ? role : 'system';
   }
+}
 
-  String _buildMainResponderPrompt({
-    required String currentText,
-    required String allBriefs,
-    required List<PresetBlockShard> shards,
-    required String charName,
-    required String charDescription,
-    required String userName,
-    required String personaPrompt,
-  }) {
-    final shardText = shards.isEmpty
-        ? ''
-        : '\n\nRelevant instructions:\n${shards.map((s) => s.content).join('\n')}';
-    return '''You are $charName responding to $userName in an RP session.
+class _ResolvedAgentConfig {
+  final String endpoint;
+  final String apiKey;
+  final String model;
+  final String protocol;
+  final double topP;
+  final int topK;
+  final double frequencyPenalty;
+  final double presencePenalty;
+  final bool omitTemperature;
+  final bool omitTopP;
+  final String cacheControlTtl;
+  final String cacheBreakpointMode;
+  final String sessionIdMode;
 
-Character: $charName
-Description: $charDescription
-${personaPrompt.isNotEmpty ? "Persona ($userName): $personaPrompt" : ''}
+  const _ResolvedAgentConfig({
+    required this.endpoint,
+    required this.apiKey,
+    required this.model,
+    required this.protocol,
+    this.topP = 1.0,
+    this.topK = 0,
+    this.frequencyPenalty = 0.0,
+    this.presencePenalty = 0.0,
+    this.omitTemperature = false,
+    this.omitTopP = false,
+    this.cacheControlTtl = 'off',
+    this.cacheBreakpointMode = 'depth',
+    this.sessionIdMode = 'openrouter',
+  });
 
-Stage briefs:
-$allBriefs$shardText
-
-User message: $currentText
-
-Write $charName's response. Stay in character. Follow the director's tone and pacing guidance. Maintain continuity with the memories and scenario briefs.''';
+  factory _ResolvedAgentConfig.fromApiConfig(ApiConfig config) {
+    return _ResolvedAgentConfig(
+      endpoint: config.endpoint,
+      apiKey: config.apiKey,
+      model: config.model,
+      protocol: config.protocol,
+      topP: config.topP,
+      topK: config.topK,
+      frequencyPenalty: config.frequencyPenalty,
+      presencePenalty: config.presencePenalty,
+      omitTemperature: config.omitTemperature,
+      omitTopP: config.omitTopP,
+      cacheControlTtl: config.cacheControlTtl,
+      cacheBreakpointMode: config.cacheBreakpointMode,
+      sessionIdMode: config.sessionIdMode,
+    );
   }
 }
 
@@ -359,12 +285,14 @@ class StudioPipelineResult {
 }
 
 class StudioStageBrief {
-  final StudioStage stage;
+  final String agentId;
+  final String agentName;
   final String brief;
   final MemoryStudioOutputDisposition disposition;
 
   const StudioStageBrief({
-    required this.stage,
+    required this.agentId,
+    required this.agentName,
     required this.brief,
     required this.disposition,
   });
