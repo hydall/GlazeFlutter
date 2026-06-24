@@ -70,14 +70,14 @@ class MemoryInjectionService {
   final EmbeddingRepo _embeddingRepo;
   final MemoryCatalogRepo _catalogRepo;
   final EmbeddingService _embeddingService;
-  final Ref _ref;
+  final MemoryGlobalSettings Function() _readGlobalSettings;
 
   MemoryInjectionService(
     this._repo,
     this._embeddingRepo,
     this._catalogRepo,
     this._embeddingService,
-    this._ref,
+    this._readGlobalSettings,
   );
 
   /// Build injection candidates + diagnostics. Returns the raw selection
@@ -156,7 +156,7 @@ class MemoryInjectionService {
       return finish(const MemorySelection());
     }
 
-    final gs = _ref.read(memoryGlobalSettingsProvider);
+    final gs = _readGlobalSettings();
     if (!gs.enabled || !book.settings.enabled) {
       return finish(const MemorySelection());
     }
@@ -653,7 +653,7 @@ final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
     ref.watch(embeddingRepoProvider),
     ref.watch(memoryCatalogRepoProvider),
     EmbeddingService(),
-    ref,
+    () => ref.read(memoryGlobalSettingsProvider),
   );
 });
 
