@@ -20,6 +20,7 @@ import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
 import 'memory_embedding_service.dart';
 import 'memory_excerpt_selector.dart';
+import 'memory_formatting.dart';
 import 'memory_selector.dart';
 import 'retrieval_query_builder.dart';
 import 'vector_math.dart';
@@ -69,14 +70,14 @@ class MemoryInjectionService {
   final EmbeddingRepo _embeddingRepo;
   final MemoryCatalogRepo _catalogRepo;
   final EmbeddingService _embeddingService;
-  final Ref _ref;
+  final MemoryGlobalSettings Function() _readGlobalSettings;
 
   MemoryInjectionService(
     this._repo,
     this._embeddingRepo,
     this._catalogRepo,
     this._embeddingService,
-    this._ref,
+    this._readGlobalSettings,
   );
 
   /// Build injection candidates + diagnostics. Returns the raw selection
@@ -155,7 +156,7 @@ class MemoryInjectionService {
       return finish(const MemorySelection());
     }
 
-    final gs = _ref.read(memoryGlobalSettingsProvider);
+    final gs = _readGlobalSettings();
     if (!gs.enabled || !book.settings.enabled) {
       return finish(const MemorySelection());
     }
@@ -282,7 +283,7 @@ class MemoryInjectionService {
         : MemoryExcerptSelector.fullEntries(selection);
     final maxInjectionTokens = selection.budgetTokens;
     final totalTokens = excerptSelection.totalTokens;
-    final macroContent = _formatMemoryItems(
+    final macroContent = formatMemoryItems(
       excerptSelection.items,
       includeContextHeader: false,
     );
@@ -292,7 +293,7 @@ class MemoryInjectionService {
       contentParts.add('Summary excerpt:\n$summaryExcerpt');
     }
     contentParts.add(
-      _formatMemoryItems(excerptSelection.items, includeContextHeader: true),
+      formatMemoryItems(excerptSelection.items, includeContextHeader: true),
     );
 
     final injectionTarget = settings.injectionTarget == 'macro'
@@ -652,7 +653,7 @@ final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
     ref.watch(embeddingRepoProvider),
     ref.watch(memoryCatalogRepoProvider),
     EmbeddingService(),
-    ref,
+    () => ref.read(memoryGlobalSettingsProvider),
   );
 });
 
@@ -662,34 +663,3 @@ final memoryEmbeddingServiceProvider = Provider<MemoryEmbeddingService>((ref) {
     EmbeddingService(),
   );
 });
-
-String _formatMemoryItems(
-  List<MemoryInjectionItem> items, {
-  required bool includeContextHeader,
-}) {
-  final parts = <String>[];
-  if (includeContextHeader) parts.add('Memory context:');
-  for (final item in items) {
-    final title = item.entry.title.isNotEmpty
-        ? item.entry.title
-        : _formatMemoryRange(item.entry) ?? 'Memory';
-    final range = _formatMemoryRange(item.entry);
-    final heading = range == null
-        ? 'Memory: $title'
-        : 'Memory: $title ($range)';
-    if (item.excerpt) {
-      parts.add(
-        '$heading\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
-      );
-    } else {
-      parts.add('$heading\n${item.text.trim()}');
-    }
-  }
-  return parts.where((part) => part.trim().isNotEmpty).join('\n\n');
-}
-
-String? _formatMemoryRange(MemoryEntry entry) {
-  final range = entry.messageRange;
-  if (range == null) return null;
-  return '${range.start}-${range.end}';
-}

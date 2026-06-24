@@ -45,6 +45,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     ref.read(chatRepoProvider).put(session).catchError((Object e) {
       debugPrint('[ChatNotifier] failed to persist session: $e');
     });
+    ChatSessionService.updateCache(session);
   }
 
   @override
@@ -60,6 +61,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       final fixed = _fixupSwipesWithImageResults(existing);
       if (!identical(fixed, existing)) {
         await ref.read(chatRepoProvider).put(fixed);
+        ChatSessionService.updateCache(fixed);
         if (!ref.mounted) return const ChatState();
       }
       final start = fixed.messages.length > ChatState.initialPageSize

@@ -400,6 +400,7 @@ class SyncWorld {
     extensionPresets,
     extensionsSettings,
     infoBlocks,
+    (_) async {},
   );
 }
 

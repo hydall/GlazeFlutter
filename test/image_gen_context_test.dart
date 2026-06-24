@@ -1,15 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:glaze_flutter/features/image_gen/services/image_gen_service.dart';
+import 'package:glaze_flutter/features/image_gen/services/image_tag_markup.dart';
 
 void main() {
-  group('ImageGenService image context helpers', () {
+  group('ImageTagMarkup image context helpers', () {
     test('normalizeImageResultPayload strips instruction suffix', () {
       expect(
-        ImageGenService.normalizeImageResultPayload(r'C:\img\a.png|{"prompt":"x"}'),
+        ImageTagMarkup.normalizeImageResultPayload(r'C:\img\a.png|{"prompt":"x"}'),
         r'C:\img\a.png',
       );
-      expect(ImageGenService.normalizeImageResultPayload(r'C:\img\b.png'), r'C:\img\b.png');
+      expect(ImageTagMarkup.normalizeImageResultPayload(r'C:\img\b.png'), r'C:\img\b.png');
     });
 
     test('collectRecentImageResultPaths scans newest contents first', () {
@@ -19,7 +19,7 @@ void main() {
       const htmlNew =
           '<img src="[IMG:RESULT:/new.png|{}]">';
 
-      final paths = ImageGenService.collectRecentImageResultPaths(
+      final paths = ImageTagMarkup.collectRecentImageResultPaths(
         [htmlNew, htmlMid, htmlOld],
         maxPaths: 3,
       );
@@ -28,7 +28,7 @@ void main() {
     });
 
     test('collectRecentImageResultPaths respects maxPaths', () {
-      final paths = ImageGenService.collectRecentImageResultPaths(
+      final paths = ImageTagMarkup.collectRecentImageResultPaths(
         [
           '[IMG:RESULT:/a.png]',
           '[IMG:RESULT:/b.png]',

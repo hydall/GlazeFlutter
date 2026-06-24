@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/state/db_provider.dart';
+import '../chat_session_service.dart';
 import '../chat_state.dart';
 
 class ChatDraftController {
@@ -23,6 +24,7 @@ class ChatDraftController {
     final updatedSession = current.session!.copyWith(draft: draftText);
     await _ref.read(chatRepoProvider).put(updatedSession);
     if (!_ref.mounted) return;
+    ChatSessionService.updateCache(updatedSession);
     _setState(AsyncData(ChatState(
       session: updatedSession,
       isGenerating: current.isGenerating,

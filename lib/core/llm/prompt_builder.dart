@@ -6,7 +6,6 @@ import '../models/preset.dart';
 import '../models/chat_message.dart';
 import '../models/api_config.dart';
 import '../models/lorebook.dart';
-import '../models/memory_book.dart';
 import 'macro_engine.dart';
 import 'history_assembler.dart';
 import 'context_calculator.dart';
@@ -14,12 +13,13 @@ import 'lorebook_coverage.dart';
 import 'lorebook_scanner.dart';
 import 'lorebook_merger.dart';
 import 'prompt_block_resolver.dart';
+import 'prompt_regex_applicator.dart';
 import 'fallback_prompt_builder.dart';
-import 'regex_service.dart';
 import 'tokenizer.dart';
 import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
 import 'memory_excerpt_selector.dart';
+import 'memory_formatting.dart';
 import 'memory_selector.dart';
 
 const _deferredMemoryPlaceholder = '[[GLAZE_DEFERRED_MEMORY_CONTEXT]]';
@@ -941,109 +941,28 @@ PromptResult _assembleMessages({
   );
   var finalMemorySelection = payload.memorySelection;
   MemoryExcerptSelection? finalExcerptSelection;
-  // Set when the user picked `injectionTarget: 'macro'` but the active preset
-  // has no `{{memory}}` placeholder. In that case memory is silently dropped
-  // (no macro to fill, and we don't force a hard block). Surface it in the
-  // diagnostics so the Memory Activity card can warn the user.
   var memoryMacroMissing = false;
 
   // Deferred memory finalization: refilter the v2 selection against the
   // visible window now that the cutoff is known, then inject the hard
   // block and update the breakdown with the post-cutoff memory cost.
   if (hasDeferredMemorySelection && payload.memorySelection != null) {
-    final selection = payload.memorySelection!;
-    final refiltered = _refilterMemorySelection(
-      selection,
-      visibleMessageIds: breakdown.visibleMessageIds,
-      chunkBudgeting: payload.memoryPackingMode == 'chunk_first',
+    final result = _finalizeDeferredMemory(
+      payload: payload,
+      baseBreakdown: breakdown,
+      messages: messages,
+      appendedEntries: appendedEntries,
+      attributionBlocks: attributionBlocks,
+      historyOnly: historyOnly,
+      macroTokens: macroTokens,
+      calculator: calculator,
+      lorebookReserve: lorebookReserve,
+      vectorLoreTokens: vectorLoreTokens,
     );
-    finalMemorySelection = refiltered;
-    final useExcerptPacking =
-        payload.memoryExcerptingEnabled ||
-        payload.memoryPackingMode == 'chunk_first';
-    final excerpted = !useExcerptPacking
-        ? MemoryExcerptSelector.fullEntries(refiltered)
-        : MemoryExcerptSelector.select(
-            refiltered,
-            packingMode: payload.memoryPackingMode,
-            maxExcerptTokensPerEntry: payload.memoryExcerptTokensPerChunk,
-            maxExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
-            chunkFirstTopEntries: payload.chunkFirstTopEntries,
-            chunkFirstTopChunks: payload.chunkFirstTopChunks,
-          );
-    finalExcerptSelection = excerpted;
-    if (excerpted.items.isNotEmpty) {
-      final rebuilt = _buildMemoryContentFromSelection(
-        refiltered,
-        excerptSelection: excerpted,
-        summaryExcerpt: payload.summaryContent,
-      );
-      var memoryContent = rebuilt.content;
-      var memoryMacroContent = rebuilt.macroContent;
-      final replacedMacro = _replaceDeferredMemoryPlaceholders(
-        messages,
-        rebuilt.macroContent,
-      );
-      if (replacedMacro) {
-        memoryContent = rebuilt.macroContent;
-        memoryMacroContent = rebuilt.macroContent;
-        historyOnly = messages
-            .where((m) => m.isHistory)
-            .toList(growable: false);
-        macroTokens['memory'] = estimateTokens(memoryMacroContent);
-      } else if (payload.memoryInjectionTarget == 'hard_block') {
-        memoryContent = rebuilt.content;
-        final hasMemoryBlock =
-            messages.any((m) => m.blockId == 'memory') ||
-            appendedEntries.any((b) => b.id == 'memory');
-        if (!hasMemoryBlock) {
-          _injectMemoryBlock(messages, attributionBlocks, rebuilt.content);
-        }
-      } else {
-        // injectionTarget == 'macro' but the preset has no {{memory}}
-        // placeholder, so the packed memory has nowhere to go and is dropped.
-        final hasMemoryBlock =
-            messages.any((m) => m.blockId == 'memory') ||
-            appendedEntries.any((b) => b.id == 'memory');
-        if (!hasMemoryBlock) {
-          memoryMacroMissing = true;
-        }
-      }
-      breakdown = _recomputeBreakdownWithMemory(
-        calculator: calculator,
-        baseBreakdown: breakdown,
-        attributionBlocks: attributionBlocks,
-        historyMessages: historyOnly,
-        lorebookReserveTokens: lorebookReserve,
-        macroTokens: macroTokens,
-        vectorLoreTokens: vectorLoreTokens,
-        memoryContent: memoryContent,
-        memoryMacroContent: memoryMacroContent,
-        visibleMessageIds: breakdown.visibleMessageIds,
-      );
-    } else if (refiltered.entries.isEmpty &&
-        _shouldInjectFactualContinuityGuard(payload)) {
-      const guard =
-          'Factual continuity note: The latest user message may refer to older context, but no reliable Memory Book entry was selected. Do not invent specific past events; ask for clarification or answer only from visible chat context.';
-      final hasMemoryBlock =
-          messages.any((m) => m.blockId == 'memory') ||
-          appendedEntries.any((b) => b.id == 'memory');
-      if (!hasMemoryBlock) {
-        _injectMemoryBlock(messages, attributionBlocks, guard);
-      }
-      breakdown = _recomputeBreakdownWithMemory(
-        calculator: calculator,
-        baseBreakdown: breakdown,
-        attributionBlocks: attributionBlocks,
-        historyMessages: historyOnly,
-        lorebookReserveTokens: lorebookReserve,
-        macroTokens: macroTokens,
-        vectorLoreTokens: vectorLoreTokens,
-        memoryContent: guard,
-        memoryMacroContent: '',
-        visibleMessageIds: breakdown.visibleMessageIds,
-      );
-    }
+    breakdown = result.breakdown;
+    finalMemorySelection = result.finalMemorySelection;
+    finalExcerptSelection = result.finalExcerptSelection;
+    memoryMacroMissing = result.memoryMacroMissing;
   }
 
   final finalMessages = <PromptMessage>[];
@@ -1061,72 +980,22 @@ PromptResult _assembleMessages({
     }
   }
 
-  final regexCtx = RegexApplyContext(
-    char: char,
-    persona: persona,
-    sessionVars: currentSessionVars,
-    globalVars: currentGlobalVars,
-  );
-
   final presetRegexes = preset.regexes.where((r) => !r.disabled).toList();
   final globalRegexes = payload.globalRegexes
       .where((r) => !r.disabled)
       .toList();
   final regexScripts = [...presetRegexes, ...globalRegexes];
 
-  for (int i = 0; i < finalMessages.length; i++) {
-    final msg = finalMessages[i];
-    if (msg.isHistory) {
-      final placement = msg.role == 'user' ? 1 : 2;
-      final depth =
-          finalMessages.where((m) => m.isHistory).length -
-          1 -
-          finalMessages.sublist(0, i).where((m) => m.isHistory).length;
-      final ctx = RegexApplyContext(
-        char: char,
-        persona: persona,
-        sessionVars: currentSessionVars,
-        globalVars: currentGlobalVars,
-        depth: depth,
-      );
-      finalMessages[i] = PromptMessage(
-        role: msg.role,
-        content: applyRegexes(
-          msg.content,
-          placement,
-          2,
-          regexScripts,
-          ctx,
-          isPrompt: true,
-        ),
-        blockId: msg.blockId,
-        isLorebook: msg.isLorebook,
-        blockName: msg.blockName,
-        isHistory: msg.isHistory,
-        isDepth: msg.isDepth,
-        depth: msg.depth,
-      );
-    } else {
-      final placement = msg.isLorebook ? 5 : 4;
-      finalMessages[i] = PromptMessage(
-        role: msg.role,
-        content: applyRegexes(
-          msg.content,
-          placement,
-          2,
-          regexScripts,
-          regexCtx,
-          isPrompt: true,
-        ),
-        blockId: msg.blockId,
-        isLorebook: msg.isLorebook,
-        blockName: msg.blockName,
-        isHistory: msg.isHistory,
-        isDepth: msg.isDepth,
-        depth: msg.depth,
-      );
-    }
-  }
+  final finalMessagesWithRegex = regexScripts.isEmpty
+      ? finalMessages
+      : applyPromptRegexes(
+          messages: finalMessages,
+          char: char,
+          persona: persona,
+          sessionVars: currentSessionVars,
+          globalVars: currentGlobalVars,
+          regexScripts: regexScripts,
+        );
 
   final finalMemoryCoverage = _finalizeMemoryCoverage(
     payload.memoryCoverage,
@@ -1136,13 +1005,154 @@ PromptResult _assembleMessages({
   );
 
   return PromptResult(
-    messages: finalMessages,
+    messages: finalMessagesWithRegex,
     breakdown: breakdown,
     sessionVars: currentSessionVars,
     globalVars: currentGlobalVars,
     triggeredLorebooks: triggeredLorebooks,
     triggeredMemories: triggeredMemories,
     memoryCoverage: finalMemoryCoverage,
+  );
+}
+
+/// Result of deferred memory finalization. [messages], [attributionBlocks],
+/// and [macroTokens] are mutated in place by the caller; this record returns
+/// only the values that are reassigned.
+class _DeferredMemoryResult {
+  final TokenBreakdown breakdown;
+  final MemorySelection? finalMemorySelection;
+  final MemoryExcerptSelection? finalExcerptSelection;
+  final bool memoryMacroMissing;
+
+  const _DeferredMemoryResult({
+    required this.breakdown,
+    required this.finalMemorySelection,
+    required this.finalExcerptSelection,
+    required this.memoryMacroMissing,
+  });
+}
+
+/// Refilters the v2 memory selection against the visible window now that the
+/// cutoff is known, then injects the hard block (or replaces the deferred
+/// `{{memory}}` macro placeholder) and recomputes the breakdown with the
+/// post-cutoff memory cost.
+///
+/// Mutates [messages] (memory block insertion / placeholder replacement),
+/// [attributionBlocks] (memory static block), and [macroTokens] (memory macro
+/// token count) in place. Returns the updated breakdown and selections.
+_DeferredMemoryResult _finalizeDeferredMemory({
+  required PromptPayload payload,
+  required TokenBreakdown baseBreakdown,
+  required List<PromptMessage> messages,
+  required List<_ResolvedRelativeBlock> appendedEntries,
+  required List<StaticBlock> attributionBlocks,
+  required List<PromptMessage> historyOnly,
+  required Map<String, int> macroTokens,
+  required ContextCalculator calculator,
+  required int lorebookReserve,
+  required int vectorLoreTokens,
+}) {
+  var breakdown = baseBreakdown;
+  final selection = payload.memorySelection!;
+  final refiltered = _refilterMemorySelection(
+    selection,
+    visibleMessageIds: breakdown.visibleMessageIds,
+    chunkBudgeting: payload.memoryPackingMode == 'chunk_first',
+  );
+  MemorySelection? finalMemorySelection = refiltered;
+  MemoryExcerptSelection? finalExcerptSelection;
+  var memoryMacroMissing = false;
+
+  final useExcerptPacking =
+      payload.memoryExcerptingEnabled ||
+      payload.memoryPackingMode == 'chunk_first';
+  final excerpted = !useExcerptPacking
+      ? MemoryExcerptSelector.fullEntries(refiltered)
+      : MemoryExcerptSelector.select(
+          refiltered,
+          packingMode: payload.memoryPackingMode,
+          maxExcerptTokensPerEntry: payload.memoryExcerptTokensPerChunk,
+          maxExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
+          chunkFirstTopEntries: payload.chunkFirstTopEntries,
+          chunkFirstTopChunks: payload.chunkFirstTopChunks,
+        );
+  finalExcerptSelection = excerpted;
+
+  var historyMsgs = historyOnly;
+
+  if (excerpted.items.isNotEmpty) {
+    final rebuilt = _buildMemoryContentFromSelection(
+      refiltered,
+      excerptSelection: excerpted,
+      summaryExcerpt: payload.summaryContent,
+    );
+    var memoryContent = rebuilt.content;
+    var memoryMacroContent = rebuilt.macroContent;
+    final replacedMacro = _replaceDeferredMemoryPlaceholders(
+      messages,
+      rebuilt.macroContent,
+    );
+    if (replacedMacro) {
+      memoryContent = rebuilt.macroContent;
+      memoryMacroContent = rebuilt.macroContent;
+      historyMsgs = messages.where((m) => m.isHistory).toList(growable: false);
+      macroTokens['memory'] = estimateTokens(memoryMacroContent);
+    } else if (payload.memoryInjectionTarget == 'hard_block') {
+      memoryContent = rebuilt.content;
+      final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+          appendedEntries.any((b) => b.id == 'memory');
+      if (!hasMemoryBlock) {
+        _injectMemoryBlock(messages, attributionBlocks, rebuilt.content);
+      }
+    } else {
+      // injectionTarget == 'macro' but the preset has no {{memory}}
+      // placeholder, so the packed memory has nowhere to go and is dropped.
+      final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+          appendedEntries.any((b) => b.id == 'memory');
+      if (!hasMemoryBlock) {
+        memoryMacroMissing = true;
+      }
+    }
+    breakdown = _recomputeBreakdownWithMemory(
+      calculator: calculator,
+      baseBreakdown: breakdown,
+      attributionBlocks: attributionBlocks,
+      historyMessages: historyMsgs,
+      lorebookReserveTokens: lorebookReserve,
+      macroTokens: macroTokens,
+      vectorLoreTokens: vectorLoreTokens,
+      memoryContent: memoryContent,
+      memoryMacroContent: memoryMacroContent,
+      visibleMessageIds: breakdown.visibleMessageIds,
+    );
+  } else if (refiltered.entries.isEmpty &&
+      _shouldInjectFactualContinuityGuard(payload)) {
+    const guard =
+        'Factual continuity note: The latest user message may refer to older context, but no reliable Memory Book entry was selected. Do not invent specific past events; ask for clarification or answer only from visible chat context.';
+    final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+        appendedEntries.any((b) => b.id == 'memory');
+    if (!hasMemoryBlock) {
+      _injectMemoryBlock(messages, attributionBlocks, guard);
+    }
+    breakdown = _recomputeBreakdownWithMemory(
+      calculator: calculator,
+      baseBreakdown: breakdown,
+      attributionBlocks: attributionBlocks,
+      historyMessages: historyMsgs,
+      lorebookReserveTokens: lorebookReserve,
+      macroTokens: macroTokens,
+      vectorLoreTokens: vectorLoreTokens,
+      memoryContent: guard,
+      memoryMacroContent: '',
+      visibleMessageIds: breakdown.visibleMessageIds,
+    );
+  }
+
+  return _DeferredMemoryResult(
+    breakdown: breakdown,
+    finalMemorySelection: finalMemorySelection,
+    finalExcerptSelection: finalExcerptSelection,
+    memoryMacroMissing: memoryMacroMissing,
   );
 }
 
@@ -1262,44 +1272,13 @@ _RebuiltMemoryContent _buildMemoryContentFromSelection(
   String? summaryExcerpt,
 }) {
   final injected = excerptSelection ?? MemoryExcerptSelector.select(selection);
-  final macro = _formatMemoryItems(injected.items, includeContextHeader: false);
+  final macro = formatMemoryItems(injected.items, includeContextHeader: false);
   final parts = <String>[];
   if (summaryExcerpt != null && summaryExcerpt.isNotEmpty) {
     parts.add('Summary excerpt:\n$summaryExcerpt');
   }
-  parts.add(_formatMemoryItems(injected.items, includeContextHeader: true));
+  parts.add(formatMemoryItems(injected.items, includeContextHeader: true));
   return _RebuiltMemoryContent(parts.join('\n\n'), macro);
-}
-
-String _formatMemoryItems(
-  List<MemoryInjectionItem> items, {
-  required bool includeContextHeader,
-}) {
-  final parts = <String>[];
-  if (includeContextHeader) parts.add('Memory context:');
-  for (final item in items) {
-    final title = item.entry.title.isNotEmpty
-        ? item.entry.title
-        : _formatMemoryRange(item.entry) ?? 'Memory';
-    final range = _formatMemoryRange(item.entry);
-    final heading = range == null
-        ? 'Memory: $title'
-        : 'Memory: $title ($range)';
-    if (item.excerpt) {
-      parts.add(
-        '$heading\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
-      );
-    } else {
-      parts.add('$heading\n${item.text.trim()}');
-    }
-  }
-  return parts.where((part) => part.trim().isNotEmpty).join('\n\n');
-}
-
-String? _formatMemoryRange(MemoryEntry entry) {
-  final range = entry.messageRange;
-  if (range == null) return null;
-  return '${range.start}-${range.end}';
 }
 
 bool _replaceDeferredMemoryPlaceholders(

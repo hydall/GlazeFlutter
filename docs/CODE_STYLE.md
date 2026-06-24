@@ -59,6 +59,10 @@ review:
 | Widget owns lifecycle plus bridge callbacks/listeners | Keep lifecycle in the widget; extract callback/listener/sync objects with explicit dependencies | `chat_webview_widget.dart` delegates init, build listeners, sync dispatch, panel refresh, and callback wiring |
 | Screen has independent sections/dialogs | Move distinct sections and complex dialogs under a feature subdirectory; keep old import path as an export only when needed | `preset_editor_screen.dart` exports `screens/preset_editor/preset_editor_screen.dart`, sections live under `screens/preset_editor/sections/` |
 | WebView script became a god-file | Use ES module entrypoints that expose the same `window.*` compatibility surface | `bridge/index.js`, `renderer/index.js`, and `formatter/index.js` import focused modules and assign `window.Bridge` / `window.Renderer` / `window.Formatter` |
+| Service mixes orchestration with pure text transforms | Extract the pure transforms to a static helper class; the service delegates | `image_gen_service.dart` delegates `[IMG:*]` tag parsing/rewriting to `image_tag_markup.dart` (`ImageTagMarkup`) |
+| Giant function does assembly + side-effect passes | Extract each pass to a named top-level function or specialist; the orchestrator calls them in order | `prompt_builder.dart` `_assembleMessages` delegates regex application to `prompt_regex_applicator.dart` and memory finalization to `_finalizeDeferredMemory()` |
+| God-object service accumulates multiple domains | Extract cohesive domain clusters into separate classes; inject them via constructor | `sync_engine.dart` delegates binary asset sync to `sync_binary_asset_syncer.dart` and image stripping to `sync_image_stripper.dart` |
+| Component depends on Riverpod `Ref` (upward dependency) | Inject the needed value/callback via constructor; wire from the provider layer | `MemoryInjectionService` takes `MemoryGlobalSettings Function()` instead of `Ref`; `SyncEngine` takes `saveLorebookActivations` callback |
 
 Avoid creating one class per tiny function. Prefer a few domain files with clear
 ownership over many shallow wrappers.
