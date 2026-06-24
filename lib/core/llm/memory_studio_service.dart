@@ -99,6 +99,7 @@ class MemoryStudioService {
     required ApiConfig apiConfig,
     required String sessionId,
     CancelToken? cancelToken,
+    void Function(String text)? onFinalResponseUpdate,
   }) async {
     final token = cancelToken ?? CancelToken();
     if (token.isCancelled) {
@@ -144,6 +145,7 @@ class MemoryStudioService {
           sessionId: sessionId,
           cancelToken: token,
           isFinalResponse: isFinal,
+          onFinalResponseUpdate: onFinalResponseUpdate,
         );
         if (token.isCancelled) {
           _log(
@@ -209,6 +211,7 @@ class MemoryStudioService {
     required String sessionId,
     required CancelToken cancelToken,
     required bool isFinalResponse,
+    void Function(String text)? onFinalResponseUpdate,
   }) async {
     final resolved = await _resolveAgentConfig(agent, apiConfig, sessionId);
     if (resolved.endpoint.isEmpty || resolved.model.isEmpty) {
@@ -318,6 +321,9 @@ class MemoryStudioService {
         cancelToken: agentCancelToken,
         onUpdate: (delta, reasoningDelta) {
           if (delta.isNotEmpty) output.write(delta);
+          if (isFinalResponse && delta.isNotEmpty) {
+            onFinalResponseUpdate?.call(output.toString().trimLeft());
+          }
           if (reasoningDelta != null && reasoningDelta.isNotEmpty) {
             reasoning.write(reasoningDelta);
           }
@@ -330,6 +336,14 @@ class MemoryStudioService {
           idleTimer?.cancel();
           if (shouldStream && output.isEmpty && text.isNotEmpty) {
             output.write(text);
+          }
+          if (isFinalResponse) {
+            final accumulated = output.toString().trimLeft();
+            if (accumulated.isNotEmpty) {
+              onFinalResponseUpdate?.call(accumulated);
+            } else if (text.isNotEmpty) {
+              onFinalResponseUpdate?.call(text.trimLeft());
+            }
           }
           _log(
             'agent complete session=$sessionId name="${agent.name}" '

@@ -164,6 +164,8 @@ class StreamGenerationService {
           'agents=${studioConfig.agents.length}',
         );
         final startGenTime = DateTime.now();
+        bool studioFrameScheduled = false;
+        var latestStudioText = '';
         final studioResult = await _ref
             .read(memoryStudioServiceProvider)
             .runPipeline(
@@ -172,6 +174,19 @@ class StreamGenerationService {
               apiConfig: apiConfig,
               sessionId: session.id,
               cancelToken: cancelToken,
+              onFinalResponseUpdate: (text) {
+                if (_isAborted()) return;
+                latestStudioText = text;
+                if (!studioFrameScheduled) {
+                  studioFrameScheduled = true;
+                  SchedulerBinding.instance.scheduleFrameCallback((_) {
+                    studioFrameScheduled = false;
+                    if (_isAborted()) return;
+                    _ref.read(streamingStateProvider(_charId).notifier).state =
+                        StreamingState(text: latestStudioText);
+                  });
+                }
+              },
             );
         if (_isAborted() || studioResult.status == 'aborted') {
           return ChatState(
