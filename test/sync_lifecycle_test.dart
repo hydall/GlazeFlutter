@@ -487,6 +487,7 @@ class SyncWorld {
     FakeExtensionPresetStore(),
     FakeExtensionsSettingsStore(),
     FakeInfoBlockStore(),
+    (_) async {},
   );
 }
 

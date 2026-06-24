@@ -1,16 +1,15 @@
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:glaze_flutter/core/constants/image_gen_patterns.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../cloud_adapter.dart';
 import '../sync_models.dart';
+import 'sync_binary_asset_syncer.dart';
 import 'sync_conflict.dart';
 import 'sync_queue.dart';
+import 'sync_image_stripper.dart';
 import 'sync_serialization.dart';
 import '../../../core/models/character.dart';
-import '../../../core/models/gallery_entry.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/models/chat_message.dart';
@@ -19,8 +18,6 @@ import '../../../core/models/api_config.dart';
 import '../../../core/models/preset.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../sync_repo_interfaces.dart';
-import '../../../core/state/lorebook_provider.dart'
-    show saveLorebookActivations;
 import '../../../features/extensions/models/extension_preset.dart';
 import '../../../features/extensions/models/extensions_settings.dart';
 import '../../../features/extensions/models/info_block.dart';
@@ -50,6 +47,8 @@ class SyncEngine {
   final SyncExtensionsSettingsStore _extensionsSettingsStore;
   final SyncInfoBlockStore _infoBlockStore;
   final SyncQueue _queue = SyncQueue();
+  final Future<void> Function(LorebookActivations) _saveLorebookActivations;
+  late final SyncBinaryAssetSyncer _binarySyncer;
   bool _includeApiKeys = false;
 
   SyncEngine(
@@ -68,7 +67,15 @@ class SyncEngine {
     this._extensionPresetRepo,
     this._extensionsSettingsStore,
     this._infoBlockStore,
-  );
+    this._saveLorebookActivations,
+  ) {
+    _binarySyncer = SyncBinaryAssetSyncer(
+      _adapter,
+      _characterRepo,
+      _personaRepo,
+      _imageStorage,
+    );
+  }
 
   Future<void> pushEntities({
     required void Function(SyncProgress) onProgress,
@@ -579,11 +586,11 @@ class SyncEngine {
     await _adapter.upload(entry.path, json);
 
     if (entry.type == 'character') {
-      await _pushCharacterAvatar(entry.id);
-      await _pushCharacterGallery(entry.id);
+      await _binarySyncer.pushCharacterAvatar(entry.id);
+      await _binarySyncer.pushCharacterGallery(entry.id);
     }
     if (entry.type == 'persona') {
-      await _pushPersonaAvatar(entry.id);
+      await _binarySyncer.pushPersonaAvatar(entry.id);
     }
   }
 
@@ -599,17 +606,17 @@ class SyncEngine {
     await _applyCloudEntity(entry.type, entry.id, cloudData);
 
     if (entry.type == 'character') {
-      await _pullCharacterAvatar(entry.id);
-      await _pullCharacterGallery(entry.id);
+      await _binarySyncer.pullCharacterAvatar(entry.id);
+      await _binarySyncer.pullCharacterGallery(entry.id);
     }
     if (entry.type == 'persona') {
-      await _pullPersonaAvatar(entry.id);
+      await _binarySyncer.pullPersonaAvatar(entry.id);
     }
     if (entry.type == 'chat') {
       final charId = cloudData['characterId'] as String?;
       if (charId != null) {
-        await _sanitizeInvalidAvatarPath(charId);
-        await _pullCharacterAvatar(charId);
+        await _binarySyncer.sanitizeInvalidAvatarPath(charId);
+        await _binarySyncer.pullCharacterAvatar(charId);
       }
     }
   }
@@ -679,7 +686,7 @@ class SyncEngine {
         case 'chat':
           final s = await _chatRepo.getById(id);
           if (s == null) return null;
-          return _stripImagesFromSession(s.toJson());
+          return stripImagesFromSession(s.toJson());
         case 'memory_book':
           final mb = await _memoryBookRepo.getBySessionId(id);
           if (mb == null) return null;
@@ -837,20 +844,6 @@ class SyncEngine {
     await _personaRepo.put(persona);
   }
 
-  bool _localAvatarFileExists(String? avatarPath) {
-    if (avatarPath == null || avatarPath.isEmpty) return false;
-    final abs = _imageStorage.absolutePath(avatarPath);
-    if (abs == null) return false;
-    return File(abs).existsSync();
-  }
-
-  Future<void> _sanitizeInvalidAvatarPath(String charId) async {
-    final c = await _characterRepo.getById(charId);
-    if (c == null || c.avatarPath == null || c.avatarPath!.isEmpty) return;
-    if (_localAvatarFileExists(c.avatarPath)) return;
-    await _characterRepo.put(c.copyWith(avatarPath: null));
-  }
-
   Future<void> _applySingleton<T>(
     Map<String, dynamic> data,
     T Function(Map<String, dynamic>) fromJson,
@@ -950,7 +943,7 @@ class SyncEngine {
       }
     }
     final activations = LorebookActivations(character: charMap, chat: chatMap);
-    await saveLorebookActivations(activations);
+    await _saveLorebookActivations(activations);
   }
 
   /// Applies cloud api_presets while preserving local API keys and embedding
@@ -1057,204 +1050,5 @@ class SyncEngine {
       }
     } catch (_) {}
   }
-
-  Future<void> _pushCharacterAvatar(String charId) async {
-    try {
-      final c = await _characterRepo.getById(charId);
-      if (c?.avatarPath == null) return;
-      final file = File(_imageStorage.absolutePath(c!.avatarPath)!);
-      if (!await file.exists()) return;
-      final bytes = await file.readAsBytes();
-      final ext = c.avatarPath!.split('.').last;
-      await _adapter.uploadBinary(
-        galleryCloudPath(charId, 'avatar', ext),
-        bytes,
-      );
-    } catch (_) {}
-  }
-
-  Future<void> _pullCharacterAvatar(String charId) async {
-    try {
-      final c = await _characterRepo.getById(charId);
-      if (c == null) return;
-
-      await _sanitizeInvalidAvatarPath(charId);
-      final current = await _characterRepo.getById(charId);
-      if (current == null) return;
-
-      for (final ext in ['png', 'jpg', 'webp', 'gif']) {
-        try {
-          final imgCloudPath = galleryCloudPath(charId, 'avatar', ext);
-          final bytes = await _adapter.downloadBinary(imgCloudPath);
-          if (bytes.isNotEmpty) {
-            final localPath = await _imageStorage.saveBytes(
-              bytes,
-              'avatars',
-              charId,
-              ext,
-            );
-            await _characterRepo.put(current.copyWith(avatarPath: localPath));
-            return;
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _pushPersonaAvatar(String personaId) async {
-    try {
-      final p = await _personaRepo.getById(personaId);
-      if (p?.avatarPath == null) return;
-      final file = File(_imageStorage.absolutePath(p!.avatarPath)!);
-      if (!await file.exists()) return;
-      final bytes = await file.readAsBytes();
-      final ext = p.avatarPath!.split('.').last;
-      await _adapter.ensureFolder('$cloudBase/persona_avatars/$personaId');
-      await _adapter.uploadBinary(
-        personaAvatarCloudPath(personaId, ext),
-        bytes,
-      );
-    } catch (_) {}
-  }
-
-  Future<void> _pullPersonaAvatar(String personaId) async {
-    try {
-      final p = await _personaRepo.getById(personaId);
-      if (p == null) return;
-
-      for (final ext in ['png', 'jpg', 'webp', 'gif']) {
-        try {
-          final imgCloudPath = personaAvatarCloudPath(personaId, ext);
-          final bytes = await _adapter.downloadBinary(imgCloudPath);
-          if (bytes.isNotEmpty) {
-            final relativePath = await _imageStorage.saveBytes(
-              bytes,
-              'avatars',
-              personaId,
-              ext,
-            );
-            await _personaRepo.put(p.copyWith(avatarPath: relativePath));
-            return;
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _pushCharacterGallery(String charId) async {
-    try {
-      final c = await _characterRepo.getById(charId);
-      if (c == null) return;
-      await _adapter.ensureFolder('$cloudBase/gallery/$charId');
-      for (final entry in c.gallery) {
-        final absPath = _imageStorage.absolutePath(entry.imagePath);
-        if (absPath == null) continue;
-        final file = File(absPath);
-        if (!await file.exists()) continue;
-        final bytes = await file.readAsBytes();
-        final ext = entry.imagePath.split('.').last;
-        await _adapter.uploadBinary(
-          galleryCloudPath(charId, entry.id, ext),
-          bytes,
-        );
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _pullCharacterGallery(String charId) async {
-    try {
-      final c = await _characterRepo.getById(charId);
-      if (c == null) return;
-
-      final updatedGallery = <GalleryEntry>[];
-      for (final entry in c.gallery) {
-        var pulled = false;
-        for (final ext in ['png', 'jpg', 'webp', 'gif']) {
-          try {
-            final imgCloudPath = galleryCloudPath(charId, entry.id, ext);
-            final bytes = await _adapter.downloadBinary(imgCloudPath);
-            if (bytes.isNotEmpty) {
-              final destPath = await _imageStorage.saveBytes(
-                bytes,
-                'gallery/$charId',
-                entry.id,
-                ext,
-              );
-              updatedGallery.add(entry.copyWith(imagePath: destPath));
-              pulled = true;
-              break;
-            }
-          } catch (_) {}
-        }
-        if (!pulled) {
-          final absPath = _imageStorage.absolutePath(entry.imagePath);
-          if (absPath != null && await File(absPath).exists()) {
-            updatedGallery.add(entry);
-          }
-        }
-      }
-
-      if (updatedGallery.length != c.gallery.length ||
-          !_galleriesEqual(updatedGallery, c.gallery)) {
-        await _characterRepo.put(c.copyWith(gallery: updatedGallery));
-      }
-    } catch (_) {}
-  }
-
-  bool _galleriesEqual(List<GalleryEntry> a, List<GalleryEntry> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i].id != b[i].id || a[i].imagePath != b[i].imagePath) return false;
-    }
-    return true;
-  }
 }
 
-final _imgResultRegex = ImgGenPatterns.imgResultStripRegex;
-final _imgErrorRegex = ImgGenPatterns.imgErrorStripRegex;
-final _imgGenRegex = ImgGenPatterns.imgGenStripRegex;
-final _base64DataUrlRegex = ImgGenPatterns.base64DataUrlRegex;
-final _imgTagRegex = ImgGenPatterns.imgTagDataSrcRegex;
-
-Map<String, dynamic> _stripImagesFromSession(Map<String, dynamic> json) {
-  final messages = json['messages'];
-  if (messages is! List) return json;
-  final stripped = messages.map((m) {
-    if (m is! Map<String, dynamic>) return m;
-    var modified = false;
-    final content = m['content'];
-    String? cleanedContent;
-    if (content is String && content.length >= 10) {
-      cleanedContent = _stripImageContent(content);
-      if (!identical(cleanedContent, content)) modified = true;
-    }
-    List<dynamic>? cleanedSwipes;
-    final swipes = m['swipes'];
-    if (swipes is List && swipes.isNotEmpty) {
-      cleanedSwipes = swipes.map((s) {
-        if (s is String && s.length >= 10) {
-          final c = _stripImageContent(s);
-          if (!identical(c, s)) modified = true;
-          return c;
-        }
-        return s;
-      }).toList();
-    }
-    if (!modified) return m;
-    final result = <String, dynamic>{...m};
-    if (cleanedContent != null) result['content'] = cleanedContent;
-    if (cleanedSwipes != null) result['swipes'] = cleanedSwipes;
-    return result;
-  }).toList();
-  return {...json, 'messages': stripped};
-}
-
-String _stripImageContent(String text) {
-  var result = text;
-  result = result.replaceAll(_imgResultRegex, '');
-  result = result.replaceAll(_imgErrorRegex, '');
-  result = result.replaceAll(_imgGenRegex, '');
-  result = result.replaceAll(_imgTagRegex, '');
-  result = result.replaceAll(_base64DataUrlRegex, '');
-  return result;
-}

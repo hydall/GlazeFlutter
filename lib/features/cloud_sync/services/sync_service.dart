@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/generation_notification_service.dart';
+import '../../../core/models/lorebook.dart';
 import '../sync_repo_interfaces.dart';
 import 'dropbox/dropbox_adapter.dart';
 import 'dropbox/dropbox_auth.dart';
@@ -28,6 +29,7 @@ class SyncService {
   final SyncExtensionPresetStore _extensionPresetRepo;
   final SyncExtensionsSettingsStore _extensionsSettingsStore;
   final SyncInfoBlockStore _infoBlockStore;
+  final Future<void> Function(LorebookActivations) _saveLorebookActivations;
 
   SyncProvider _provider = SyncProvider.dropbox;
   SyncStatus _status = SyncStatus.idle;
@@ -86,7 +88,9 @@ class SyncService {
     required this._extensionPresetRepo,
     required this._extensionsSettingsStore,
     required this._infoBlockStore,
-  });
+    required Future<void> Function(LorebookActivations) saveLorebookActivations,
+    // ignore: prefer_initializing_formals
+  }) : _saveLorebookActivations = saveLorebookActivations;
 
   CloudAdapter get _adapter {
     switch (_provider) {
@@ -128,6 +132,7 @@ class SyncService {
         _extensionPresetRepo,
         _extensionsSettingsStore,
         _infoBlockStore,
+        _saveLorebookActivations,
       );
 
   Future<void> init() async {
