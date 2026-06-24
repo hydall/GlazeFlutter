@@ -49,7 +49,7 @@ abstract class StudioAgent with _$StudioAgent {
     @Default('') String endpoint,
     @Default(4000) int timeoutMs,
     @Default(0.3) double temperature,
-    @Default(500) int maxTokens,
+    @Default(8000) int maxTokens,
     @Default('') String sourceBlockNames,
   }) = _StudioAgent;
 

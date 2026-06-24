@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
 
 import '../../../core/llm/history_assembler.dart';
+import '../../../core/llm/memory_studio_service.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
@@ -17,6 +18,7 @@ import '../../../core/llm/transport/openai_chat_transport.dart';
 import '../../../core/llm/transport/openrouter_chat_transport.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/api_config.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/glaze_tab_bar.dart';
@@ -39,6 +41,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   ApiConfig? _apiConfig;
   String? _sessionId;
   Map<String, dynamic>? _requestBody;
+  StudioRequestPreview? _studioRequest;
   bool _loading = true;
   _SectionFilter _filter = _SectionFilter.all;
   int _dataTabIndex = 0;
@@ -70,13 +73,20 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       _sessionId = session.id;
 
       final result = await buildPromptInIsolate(payload);
+      final studioConfig = await ref
+          .read(memoryStudioServiceProvider)
+          .getEnabledConfig(session.id);
+      final studioRequest = studioConfig != null
+          ? ref.read(studioLastRequestProvider(session.id))
+          : null;
 
       ref.read(cachedTokenBreakdownProvider(widget.charId).notifier).state =
           result.breakdown;
       if (mounted) {
         setState(() {
           _result = result;
-          _requestBody = _buildRequestBody();
+          _studioRequest = studioRequest;
+          _requestBody = studioRequest?.body ?? _buildRequestBody();
           _loading = false;
         });
       }
@@ -147,7 +157,10 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       headerBottom: GlazeTabBar(
         tabs: [
           GlazeTabItem(label: 'tab_request'.tr(), icon: Icons.upload_rounded),
-          GlazeTabItem(label: 'tab_response'.tr(), icon: Icons.download_rounded),
+          GlazeTabItem(
+            label: 'tab_response'.tr(),
+            icon: Icons.download_rounded,
+          ),
         ],
         activeIndex: _dataTabIndex,
         onChanged: (i) => setState(() => _dataTabIndex = i),
@@ -183,7 +196,10 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
                 SliverToBoxAdapter(
                   child: _SummaryBar(
                     result: _result!,
-                    contextSize: _apiConfig!.contextSize,
+                    contextSize:
+                        _studioRequest?.contextSize ?? _apiConfig!.contextSize,
+                    tokenOverride: _studioRequest?.tokenEstimate,
+                    messageCountOverride: _previewMessages.length,
                   ),
                 ),
                 SliverToBoxAdapter(child: _SectionTitle(_protocolLabel)),
@@ -196,7 +212,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
                   ),
               ],
               SliverToBoxAdapter(
-                child: _SectionTitle('Messages (${_result!.messages.length})'),
+                child: _SectionTitle('Messages (${_previewMessages.length})'),
               ),
               SliverToBoxAdapter(
                 child: Padding(
@@ -323,7 +339,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
 
     // Model lives in the URL (not the body) for Gemini, so surface it from the
     // config to keep it visible across every protocol.
-    final model = _apiConfig?.model;
+    final model = _studioRequest?.model ?? _apiConfig?.model;
     if (model != null && model.isNotEmpty) {
       items.add(_ParamItem(label: 'model', value: model));
     }
@@ -353,7 +369,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   }
 
   List<PromptMessage> get _filteredMessages {
-    final msgs = _result?.messages ?? [];
+    final msgs = _previewMessages;
     return switch (_filter) {
       _SectionFilter.all => msgs,
       _SectionFilter.system =>
@@ -366,12 +382,27 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
     };
   }
 
+  List<PromptMessage> get _previewMessages {
+    final studio = _studioRequest;
+    if (studio != null) {
+      return studio.messages
+          .map(
+            (m) => PromptMessage(
+              role: m['role']?.toString() ?? 'user',
+              content: m['content']?.toString() ?? '',
+            ),
+          )
+          .toList(growable: false);
+    }
+    return _result?.messages ?? const [];
+  }
+
   void _copyContent() {
     String textToCopy = '';
     if (_dataTabIndex == 0) {
       if (_previewTabIndex == 0) {
         if (_result == null) return;
-        final json = _result!.messages.map((m) {
+        final json = _previewMessages.map((m) {
           final map = <String, dynamic>{'role': m.role, 'content': m.content};
           if (m.isLorebook) map['lorebook'] = true;
           if (m.blockName != null) map['block'] = m.blockName;
@@ -455,8 +486,9 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       );
 
       return switch (cfg.protocol) {
-        LlmProtocol.anthropic =>
-          AnthropicChatTransport.buildRequest(request).body,
+        LlmProtocol.anthropic => AnthropicChatTransport.buildRequest(
+          request,
+        ).body,
         LlmProtocol.gemini => GeminiChatTransport.buildRequest(request).body,
         LlmProtocol.openrouter => OpenAiChatTransport.buildBody(
           OpenRouterChatTransport.buildRouterRequest(request),
@@ -478,6 +510,9 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   /// section header.
   String get _protocolLabel {
     final protocol = _apiConfig?.protocol;
+    if (_studioRequest != null) {
+      return '${LlmProtocol.labels[_studioRequest!.protocol] ?? _studioRequest!.protocol} Studio: ${_studioRequest!.agentName}';
+    }
     if (protocol == null) return 'label_generation_params'.tr();
     return LlmProtocol.labels[protocol] ?? protocol;
   }
@@ -486,11 +521,18 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
 class _SummaryBar extends StatelessWidget {
   final PromptResult result;
   final int contextSize;
-  const _SummaryBar({required this.result, required this.contextSize});
+  final int? tokenOverride;
+  final int? messageCountOverride;
+  const _SummaryBar({
+    required this.result,
+    required this.contextSize,
+    this.tokenOverride,
+    this.messageCountOverride,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final total = result.breakdown.totalTokens;
+    final total = tokenOverride ?? result.breakdown.totalTokens;
     final pct = contextSize > 0
         ? (total / contextSize * 100).clamp(0, 100)
         : 0.0;
@@ -533,7 +575,7 @@ class _SummaryBar extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                '${result.messages.length} msgs',
+                '${messageCountOverride ?? result.messages.length} msgs',
                 style: TextStyle(
                   fontSize: 12,
                   color: context.cs.onSurfaceVariant,

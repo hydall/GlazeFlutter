@@ -137,6 +137,8 @@ class ChatMessageMapper {
       if (m.reasoning != null && m.reasoning!.isNotEmpty)
         'reasoning': m.reasoning,
       if (m.studioOutputs.isNotEmpty) 'studioOutputs': m.studioOutputs,
+      if (m.memoryCoverage['studioOutputsExpanded'] == true)
+        'studioOutputsExpanded': true,
       'isHidden': m.isHidden,
       if (isLast) 'isLast': true,
       'messageIndex': ?messageIndex,

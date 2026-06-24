@@ -11,9 +11,20 @@ import '../state/db_provider.dart';
 import '../../features/settings/api_list_provider.dart';
 import 'memory_studio_mode.dart';
 import 'prompt_builder.dart';
+import 'tokenizer.dart';
+import 'transport/anthropic_chat_transport.dart';
 import 'transport/chat_transport_request.dart';
+import 'transport/gemini_chat_transport.dart';
 import 'transport/llm_protocol.dart';
+import 'transport/openai_chat_transport.dart';
+import 'transport/openrouter_chat_transport.dart';
 import 'transport/transport_factory.dart';
+
+final studioStreamingOutputsProvider = StateProvider.family
+    .autoDispose<List<Map<String, dynamic>>, String>((ref, _) => const []);
+
+final studioLastRequestProvider =
+    StateProvider.family<StudioRequestPreview?, String>((ref, _) => null);
 
 final studioRuntimeStateProvider = StateProvider<StudioRuntimeState>(
   (_) => const StudioRuntimeState.idle(),
@@ -43,6 +54,28 @@ class StudioRuntimeState {
       index = 0,
       total = 0,
       canFinishAgent = false;
+}
+
+class StudioRequestPreview {
+  final String agentId;
+  final String agentName;
+  final String protocol;
+  final String model;
+  final int tokenEstimate;
+  final int contextSize;
+  final List<Map<String, dynamic>> messages;
+  final Map<String, dynamic> body;
+
+  const StudioRequestPreview({
+    required this.agentId,
+    required this.agentName,
+    required this.protocol,
+    required this.model,
+    required this.tokenEstimate,
+    required this.contextSize,
+    required this.messages,
+    required this.body,
+  });
 }
 
 /// Session-bound Studio pipeline.
@@ -118,6 +151,8 @@ class MemoryStudioService {
         'pipeline start session=$sessionId agents=${agents.length} '
         'baseMessages=${promptResult.messages.length}',
       );
+      _ref.read(studioStreamingOutputsProvider(sessionId).notifier).state =
+          const [];
 
       final briefs = <StudioStageBrief>[];
       for (var i = 0; i < agents.length; i++) {
@@ -146,6 +181,13 @@ class MemoryStudioService {
           cancelToken: token,
           isFinalResponse: isFinal,
           onFinalResponseUpdate: onFinalResponseUpdate,
+          onIntermediateUpdate: (text) {
+            _updateStreamingBrief(
+              sessionId: sessionId,
+              agent: agent,
+              brief: text,
+            );
+          },
         );
         if (token.isCancelled) {
           _log(
@@ -212,6 +254,7 @@ class MemoryStudioService {
     required CancelToken cancelToken,
     required bool isFinalResponse,
     void Function(String text)? onFinalResponseUpdate,
+    void Function(String text)? onIntermediateUpdate,
   }) async {
     final resolved = await _resolveAgentConfig(agent, apiConfig, sessionId);
     if (resolved.endpoint.isEmpty || resolved.model.isEmpty) {
@@ -221,16 +264,52 @@ class MemoryStudioService {
     final completer = Completer<String>();
     final finishCompleter = Completer<void>();
     _finishCurrentAgent = finishCompleter;
-    final transport = pickChatTransport(resolved.protocol);
     final messages = _buildAgentMessages(
       agent: agent,
       promptResult: promptResult,
       priorBriefs: priorBriefs,
       isFinalResponse: isFinalResponse,
     );
+    final shouldStream = resolved.stream;
+    final request = ChatTransportRequest(
+      endpoint: resolved.endpoint,
+      apiKey: resolved.apiKey,
+      model: resolved.model,
+      messages: messages,
+      maxTokens: agent.maxTokens,
+      temperature: agent.temperature,
+      topP: resolved.topP,
+      topK: resolved.topK,
+      frequencyPenalty: resolved.frequencyPenalty,
+      presencePenalty: resolved.presencePenalty,
+      stream: shouldStream,
+      requestReasoning: false,
+      omitTemperature: resolved.omitTemperature,
+      omitTopP: resolved.omitTopP,
+      omitReasoning: true,
+      omitReasoningEffort: true,
+      sessionId: sessionId,
+      cacheControlTtl: resolved.cacheControlTtl,
+      cacheBreakpointMode: resolved.cacheBreakpointMode,
+      sessionIdMode: resolved.sessionIdMode,
+    );
+    _ref
+        .read(studioLastRequestProvider(sessionId).notifier)
+        .state = StudioRequestPreview(
+      agentId: agent.id,
+      agentName: agent.name,
+      protocol: resolved.protocol,
+      model: resolved.model,
+      tokenEstimate: estimateTokens(
+        messages.map((m) => m['content']?.toString() ?? '').join('\n'),
+      ),
+      contextSize: resolved.contextSize,
+      messages: messages,
+      body: _buildRequestPreviewBody(resolved.protocol, request),
+    );
+    final transport = pickChatTransport(resolved.protocol);
     final startedAt = DateTime.now();
     final timeoutMs = _effectiveTimeoutMs(agent, isFinalResponse);
-    final shouldStream = resolved.stream;
     final output = StringBuffer();
     final reasoning = StringBuffer();
     Timer? idleTimer;
@@ -296,33 +375,14 @@ class MemoryStudioService {
 
     unawaited(
       transport.stream(
-        request: ChatTransportRequest(
-          endpoint: resolved.endpoint,
-          apiKey: resolved.apiKey,
-          model: resolved.model,
-          messages: messages,
-          maxTokens: agent.maxTokens,
-          temperature: agent.temperature,
-          topP: resolved.topP,
-          topK: resolved.topK,
-          frequencyPenalty: resolved.frequencyPenalty,
-          presencePenalty: resolved.presencePenalty,
-          stream: shouldStream,
-          requestReasoning: false,
-          omitTemperature: resolved.omitTemperature,
-          omitTopP: resolved.omitTopP,
-          omitReasoning: true,
-          omitReasoningEffort: true,
-          sessionId: sessionId,
-          cacheControlTtl: resolved.cacheControlTtl,
-          cacheBreakpointMode: resolved.cacheBreakpointMode,
-          sessionIdMode: resolved.sessionIdMode,
-        ),
+        request: request,
         cancelToken: agentCancelToken,
         onUpdate: (delta, reasoningDelta) {
           if (delta.isNotEmpty) output.write(delta);
           if (isFinalResponse && delta.isNotEmpty) {
             onFinalResponseUpdate?.call(output.toString().trimLeft());
+          } else if (!isFinalResponse && delta.isNotEmpty) {
+            onIntermediateUpdate?.call(output.toString().trimLeft());
           }
           if (reasoningDelta != null && reasoningDelta.isNotEmpty) {
             reasoning.write(reasoningDelta);
@@ -343,6 +403,13 @@ class MemoryStudioService {
               onFinalResponseUpdate?.call(accumulated);
             } else if (text.isNotEmpty) {
               onFinalResponseUpdate?.call(text.trimLeft());
+            }
+          } else {
+            final accumulated = output.toString().trimLeft();
+            if (accumulated.isNotEmpty) {
+              onIntermediateUpdate?.call(accumulated);
+            } else if (text.isNotEmpty) {
+              onIntermediateUpdate?.call(text.trimLeft());
             }
           }
           _log(
@@ -545,6 +612,49 @@ class MemoryStudioService {
     return agent.timeoutMs.clamp(1000, 120000);
   }
 
+  void _updateStreamingBrief({
+    required String sessionId,
+    required StudioAgent agent,
+    required String brief,
+  }) {
+    final trimmed = brief.trimLeft();
+    if (trimmed.isEmpty) return;
+    final notifier = _ref.read(
+      studioStreamingOutputsProvider(sessionId).notifier,
+    );
+    final current = notifier.state;
+    final next = <Map<String, dynamic>>[];
+    var replaced = false;
+    for (final item in current) {
+      if (item['id'] == agent.id) {
+        next.add({'id': agent.id, 'name': agent.name, 'content': trimmed});
+        replaced = true;
+      } else {
+        next.add(Map<String, dynamic>.from(item));
+      }
+    }
+    if (!replaced) {
+      next.add({'id': agent.id, 'name': agent.name, 'content': trimmed});
+    }
+    notifier.state = next;
+  }
+
+  Map<String, dynamic> _buildRequestPreviewBody(
+    String protocol,
+    ChatTransportRequest request,
+  ) {
+    return switch (protocol) {
+      LlmProtocol.anthropic => AnthropicChatTransport.buildRequest(
+        request,
+      ).body,
+      LlmProtocol.gemini => GeminiChatTransport.buildRequest(request).body,
+      LlmProtocol.openrouter => OpenAiChatTransport.buildBody(
+        OpenRouterChatTransport.buildRouterRequest(request),
+      ),
+      _ => OpenAiChatTransport.buildBody(request),
+    };
+  }
+
   void _log(String message) {
     debugPrint('[Studio] $message');
   }
@@ -565,6 +675,7 @@ class _ResolvedAgentConfig {
   final String cacheControlTtl;
   final String cacheBreakpointMode;
   final String sessionIdMode;
+  final int contextSize;
 
   const _ResolvedAgentConfig({
     required this.endpoint,
@@ -581,6 +692,7 @@ class _ResolvedAgentConfig {
     this.cacheControlTtl = 'off',
     this.cacheBreakpointMode = 'depth',
     this.sessionIdMode = 'openrouter',
+    this.contextSize = 32000,
   });
 
   factory _ResolvedAgentConfig.fromApiConfig(
@@ -602,6 +714,7 @@ class _ResolvedAgentConfig {
       cacheControlTtl: config.cacheControlTtl,
       cacheBreakpointMode: config.cacheBreakpointMode,
       sessionIdMode: config.sessionIdMode,
+      contextSize: config.contextSize,
     );
   }
 }

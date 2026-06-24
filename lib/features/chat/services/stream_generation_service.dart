@@ -166,6 +166,30 @@ class StreamGenerationService {
         final startGenTime = DateTime.now();
         bool studioFrameScheduled = false;
         var latestStudioText = '';
+        var latestStudioOutputs = const <Map<String, dynamic>>[];
+        void scheduleStudioStreamingUpdate() {
+          if (studioFrameScheduled) return;
+          studioFrameScheduled = true;
+          SchedulerBinding.instance.scheduleFrameCallback((_) {
+            studioFrameScheduled = false;
+            if (_isAborted()) return;
+            _ref
+                .read(streamingStateProvider(_charId).notifier)
+                .state = StreamingState(
+              text: latestStudioText,
+              studioOutputs: latestStudioOutputs,
+            );
+          });
+        }
+
+        final studioOutputsSub = _ref.listen<List<Map<String, dynamic>>>(
+          studioStreamingOutputsProvider(session.id),
+          (_, next) {
+            if (_isAborted()) return;
+            latestStudioOutputs = next;
+            scheduleStudioStreamingUpdate();
+          },
+        );
         final studioResult = await _ref
             .read(memoryStudioServiceProvider)
             .runPipeline(
@@ -177,17 +201,10 @@ class StreamGenerationService {
               onFinalResponseUpdate: (text) {
                 if (_isAborted()) return;
                 latestStudioText = text;
-                if (!studioFrameScheduled) {
-                  studioFrameScheduled = true;
-                  SchedulerBinding.instance.scheduleFrameCallback((_) {
-                    studioFrameScheduled = false;
-                    if (_isAborted()) return;
-                    _ref.read(streamingStateProvider(_charId).notifier).state =
-                        StreamingState(text: latestStudioText);
-                  });
-                }
+                scheduleStudioStreamingUpdate();
               },
             );
+        studioOutputsSub.close();
         if (_isAborted() || studioResult.status == 'aborted') {
           return ChatState(
             session: saveSession ?? session,

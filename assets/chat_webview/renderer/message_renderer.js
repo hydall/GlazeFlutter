@@ -70,7 +70,7 @@ export class Renderer {
 
   _createSection(messageData) {
     const {
-      id, role, text, reasoning, studioOutputs,
+      id, role, text, reasoning, studioOutputs, studioOutputsExpanded,
       isError, isHidden, isLast, isTyping,
       guidanceText, guidanceType,
       imagePath, imageHidden,
@@ -116,7 +116,7 @@ if (messageData.isEditing) classes.push('editing');
       stack.appendChild(this._createReasoningBlock(reasoning, this._isUser(role)));
     }
     if (studioOutputs && studioOutputs.length) {
-      stack.appendChild(this._createStudioOutputsBlock(id, studioOutputs, this._isUser(role)));
+      stack.appendChild(this._createStudioOutputsBlock(id, studioOutputs, this._isUser(role), studioOutputsExpanded));
     }
 
     const wrapper = document.createElement('div');
@@ -298,7 +298,7 @@ if (messageData.isEditing) classes.push('editing');
     return block;
   }
 
-  _createStudioOutputsBlock(messageId, outputs, isUser) {
+  _createStudioOutputsBlock(messageId, outputs, isUser, expanded = false) {
     const panel = document.createElement('div');
     panel.className = 'msg-studio-outputs';
 
@@ -309,7 +309,7 @@ if (messageData.isEditing) classes.push('editing');
 
     for (const output of outputs || []) {
       const item = document.createElement('div');
-      item.className = 'msg-studio-output collapsed';
+      item.className = expanded ? 'msg-studio-output' : 'msg-studio-output collapsed';
       item.dataset.outputId = output.id || '';
 
       const header = document.createElement('div');
@@ -653,7 +653,7 @@ if (messageData.isEditing) classes.push('editing');
   }
 
   /* ----- Public mutation API ----- */
-  updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate, studioOutputs = null) {
+  updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate, studioOutputs = null, studioOutputsExpanded = false) {
     if (!sectionEl) return;
     const body = sectionEl.querySelector('.msg-body');
     if (!body) return;
@@ -673,7 +673,7 @@ if (messageData.isEditing) classes.push('editing');
               if (rHost) this._writeShadowContent(rHost, reasoning, isUser, false);
             }
           }
-          this._syncStudioOutputs(sectionEl, studioOutputs, isUser);
+          this._syncStudioOutputs(sectionEl, studioOutputs, isUser, studioOutputsExpanded);
           return;
         }
       }
@@ -715,7 +715,7 @@ if (messageData.isEditing) classes.push('editing');
       reasoningEl.remove();
     }
 
-    this._syncStudioOutputs(sectionEl, studioOutputs, isUser);
+    this._syncStudioOutputs(sectionEl, studioOutputs, isUser, studioOutputsExpanded);
 
     if (animate) {
       sectionEl.classList.add('swipe-animating');
@@ -735,7 +735,7 @@ if (messageData.isEditing) classes.push('editing');
     }
   }
 
-  _syncStudioOutputs(sectionEl, studioOutputs, isUser) {
+  _syncStudioOutputs(sectionEl, studioOutputs, isUser, expanded = false) {
     if (studioOutputs === null) return;
     const contentStack = sectionEl.querySelector('.msg-content-stack');
     if (!contentStack) return;
@@ -745,6 +745,7 @@ if (messageData.isEditing) classes.push('editing');
         sectionEl.dataset.messageId,
         studioOutputs,
         isUser,
+        expanded,
       );
       if (existing) existing.replaceWith(replacement);
       else {

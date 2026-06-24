@@ -127,7 +127,11 @@ class ChatWebViewBuildListeners {
     ref.listen<StreamingState>(streamingStateProvider(charId), (prev, next) {
       final b = bridge;
       if (b == null || !ready()) return;
-      if (next.text.isEmpty && next.reasoning == null) return;
+      if (next.text.isEmpty &&
+          next.reasoning == null &&
+          next.studioOutputs.isEmpty) {
+        return;
+      }
 
       final regenId = regenTargetId;
       if (regenId != null) {
@@ -138,6 +142,10 @@ class ChatWebViewBuildListeners {
             content: next.text,
             reasoning: next.reasoning ?? original.reasoning,
             isTyping: true,
+            studioOutputs: next.studioOutputs,
+            memoryCoverage: next.studioOutputsExpanded
+                ? const {'studioOutputsExpanded': true}
+                : const {},
           );
           b.updateMessage(updated);
           syncState.regenStreamingSent = true;
@@ -152,6 +160,10 @@ class ChatWebViewBuildListeners {
         reasoning: next.reasoning,
         timestamp: DateTime.now().millisecondsSinceEpoch,
         isTyping: true,
+        studioOutputs: next.studioOutputs,
+        memoryCoverage: next.studioOutputsExpanded
+            ? const {'studioOutputsExpanded': true}
+            : const {},
       );
 
       if (!syncState.streamingSent) {

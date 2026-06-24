@@ -385,7 +385,8 @@ export class Bridge {
       isUser,
       !!msg.isTyping,
       animate,
-      msg.studioOutputs !== undefined ? msg.studioOutputs : null
+      msg.studioOutputs !== undefined ? msg.studioOutputs : null,
+      !!msg.studioOutputsExpanded
     );
     this._imgGenTimer.ensureRunning();
 
