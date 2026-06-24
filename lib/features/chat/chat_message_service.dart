@@ -6,6 +6,7 @@ import '../../core/models/chat_message.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import 'chat_session_service.dart';
 
 class ChatMessageService {
   final Ref _ref;
@@ -273,6 +274,7 @@ class ChatMessageService {
         duration: 5000,
       );
     });
+    ChatSessionService.updateCache(updated);
     return updated;
   }
 }

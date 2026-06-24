@@ -453,14 +453,15 @@ void main() {
   });
 
   // ===========================================================================
-  // Group 3: Integration — ChatSessionService cache divergence (remaining issue)
+  // Group 3: Integration — ChatSessionService cache coherence
   // ===========================================================================
   //
-  // This test documents a SEPARATE issue from the epoch guard: code paths
-  // that call chatRepo.put without ChatSessionService.updateCache leave
-  // stale entries in the static cache. This is not fixed by the epoch guard.
+  // All internal chatRepo.put call sites now call ChatSessionService.updateCache.
+  // This test verifies that:
+  //   1. External put without updateCache still leaves stale cache (known gap)
+  //   2. Calling updateCache after put fixes the cache
 
-  group('Integration: ChatSessionService cache divergence (remaining issue)', () {
+  group('Integration: ChatSessionService cache coherence', () {
     late AppDatabase db;
     late ProviderContainer container;
 
@@ -477,7 +478,7 @@ void main() {
       await db.close();
     });
 
-    test('switchToSession returns stale cached data after chatRepo.put without updateCache', () async {
+    test('updateCache after put ensures switchToSession returns fresh data', () async {
       await _seedData(container, 'c1', sessionCount: 2);
       final sessionSvc = container.read(_sessionSvcProvider);
       final chatRepo = container.read(chatRepoProvider);
@@ -486,8 +487,40 @@ void main() {
       final session1 = await sessionSvc.switchToSession('c1', 1);
       expect(session1.messages.first.content, 'Session 1 message');
 
-      // Modify session 1 in the DB directly (simulating a code path that
-      // edits messages without calling ChatSessionService.updateCache).
+      // Modify session 1 and properly call updateCache.
+      final modified = session1.copyWith(
+        messages: [
+          ChatMessage(
+            id: 'm_1_edited',
+            role: 'assistant',
+            content: 'EDITED content',
+            timestamp: 1,
+          ),
+        ],
+      );
+      await chatRepo.put(modified);
+      ChatSessionService.updateCache(modified);
+
+      // Switch away to session 0, then back to session 1.
+      await sessionSvc.switchToSession('c1', 0);
+      final cachedAgain = await sessionSvc.switchToSession('c1', 1);
+
+      // FIXED: cache returns the updated session.
+      expect(cachedAgain.messages.first.content, 'EDITED content',
+          reason: 'Cache returns fresh data — updateCache was called');
+    });
+
+    test('external put without updateCache leaves stale cache (known gap)', () async {
+      await _seedData(container, 'c1', sessionCount: 2);
+      final sessionSvc = container.read(_sessionSvcProvider);
+      final chatRepo = container.read(chatRepoProvider);
+
+      // First switch to session 1 — populates the cache.
+      final session1 = await sessionSvc.switchToSession('c1', 1);
+
+      // Modify session 1 in the DB directly WITHOUT calling updateCache.
+      // This simulates an external code path (e.g. sync pull) that writes
+      // to the DB but doesn't know about the static cache.
       final modified = session1.copyWith(
         messages: [
           ChatMessage(
@@ -504,12 +537,11 @@ void main() {
       await sessionSvc.switchToSession('c1', 0);
       final cachedAgain = await sessionSvc.switchToSession('c1', 1);
 
-      // Known issue: cache returns the OLD session, not the edited one.
-      // This is a separate bug from the epoch guard — it requires all
-      // chatRepo.put call sites to also call ChatSessionService.updateCache.
+      // Known gap: external put without updateCache leaves stale cache.
+      // All INTERNAL call sites now call updateCache, but external paths
+      // (sync pull, import) must also call clearCache or updateCache.
       expect(cachedAgain.messages.first.content, 'Session 1 message',
-          reason: 'Known issue: cache returns stale data — updateCache was '
-              'not called by the external put path');
+          reason: 'Known gap: external put without updateCache leaves stale cache');
     });
   });
 

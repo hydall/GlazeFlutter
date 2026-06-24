@@ -11,6 +11,7 @@ import '../../core/state/db_provider.dart';
 import '../../core/utils/time_helpers.dart';
 import '../image_gen/services/image_tag_markup.dart';
 import 'chat_generation_service.dart';
+import 'chat_session_service.dart';
 import 'chat_state.dart';
 
 class ImageRecoveryService {
@@ -305,6 +306,7 @@ class ImageRecoveryService {
       updatedAt: currentTimestampSeconds(),
     );
     await _ref.read(chatRepoProvider).put(updatedSession);
+    ChatSessionService.updateCache(updatedSession);
     _setState(AsyncData(current.copyWith(session: updatedSession)));
   }
 }

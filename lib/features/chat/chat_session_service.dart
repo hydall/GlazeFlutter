@@ -253,6 +253,7 @@ class ChatSessionService {
     );
     final clearedSession = session.copyWith(messages: initialMessages);
     await _ref.read(chatRepoProvider).put(clearedSession);
+    updateCache(clearedSession);
     return clearedSession;
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/chat/chat_session_service.dart';
 import '../models/chat_message.dart';
 import 'db_provider.dart';
 
@@ -11,6 +12,7 @@ class ChatSessionOps extends AsyncNotifier<List<ChatSession>> {
 
   Future<void> saveSession(ChatSession session) async {
     await ref.read(chatRepoProvider).put(session);
+    ChatSessionService.updateCache(session);
     ref.invalidateSelf();
   }
 

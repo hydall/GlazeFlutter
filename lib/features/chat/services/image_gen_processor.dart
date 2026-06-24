@@ -11,6 +11,7 @@ import '../../../shared/widgets/glaze_toast.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../../settings/api_list_provider.dart';
 import '../../image_gen/services/image_tag_markup.dart';
+import '../chat_session_service.dart';
 import '../chat_state.dart';
 
 class ImageGenProcessor {
@@ -149,6 +150,7 @@ class ImageGenProcessor {
       updatedAt: currentTimestampSeconds(),
     );
     await _ref.read(chatRepoProvider).put(finalSession);
+    ChatSessionService.updateCache(finalSession);
     _onStateUpdate(currentState.copyWith(session: finalSession, isGeneratingImage: false));
   }
 
