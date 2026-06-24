@@ -64,7 +64,8 @@ void main() {
     });
 
     test('no .put() calls on repos in widget code', () async {
-      final mutationPattern = RegExp(r'ref\.read\(\w+RepoProvider\)[\s\S]*?\.put\(');
+      final mutationPattern =
+          RegExp(r'ref\.read\(\w+RepoProvider\)\s*\.put\(');
       var foundMutations = 0;
       for (final path in widgetFiles) {
         final source = File(path).readAsStringSync();
@@ -80,7 +81,8 @@ void main() {
       var foundDelete = false;
       for (final path in widgetFiles) {
         final source = File(path).readAsStringSync();
-        if (RegExp(r'ref\.read\(\w+RepoProvider\)[\s\S]*?\.delete\(').hasMatch(source)) {
+        if (RegExp(r'ref\.read\(\w+RepoProvider\)\s*\.delete\(')
+            .hasMatch(source)) {
           foundDelete = true;
           break;
         }

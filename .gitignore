@@ -162,6 +162,7 @@ package-lock.json
 
 # Local planning docs
 /refactor_plan.md
+/refactor_plan_v2.md
 /archival_memory_extension_plan.md
 
 # ===========================

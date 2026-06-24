@@ -36,7 +36,8 @@ void main() {
           case bool:
             if (entry.key == 'enterToSend' ||
                 entry.key == 'showOurPicks' ||
-                entry.key == 'gz_force_mobile_layout') {
+                entry.key == 'gz_force_mobile_layout' ||
+                entry.key == 'batterySaver') {
               expect(
                 _getBoolDefault(defaults, entry.key),
                 isTrue,
