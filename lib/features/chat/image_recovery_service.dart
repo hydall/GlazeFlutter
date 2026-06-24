@@ -9,7 +9,7 @@ import '../../core/constants/image_gen_patterns.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/utils/time_helpers.dart';
-import '../image_gen/image_gen_provider.dart';
+import '../image_gen/services/image_tag_markup.dart';
 import 'chat_generation_service.dart';
 import 'chat_state.dart';
 
@@ -150,16 +150,13 @@ class ImageRecoveryService {
     final lastMsg = session.messages[lastIdx];
     if (lastMsg.role != 'assistant') return;
 
-    final notifier = _ref.read(imageGenSettingsProvider.notifier);
-    final service = await notifier.getServiceAsync();
-
-    final hasRetryableContent = service.hasImageGenTags(lastMsg.content)
+    final hasRetryableContent = ImageTagMarkup.hasImageGenTags(lastMsg.content)
         || lastMsg.content.contains('[IMG:ERROR:')
         || lastMsg.content.contains('[IMG:RESULT:');
     if (!hasRetryableContent) return;
 
-    final resetContent = service.resetErrorTags(lastMsg.content);
-    if (resetContent == lastMsg.content && !service.hasImageGenTags(resetContent)) return;
+    final resetContent = ImageTagMarkup.resetErrorTags(lastMsg.content);
+    if (resetContent == lastMsg.content && !ImageTagMarkup.hasImageGenTags(resetContent)) return;
 
     final newMessages = List<ChatMessage>.from(session.messages);
     final swipeIdx = lastMsg.swipeId;
