@@ -112,6 +112,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     with SingleTickerProviderStateMixin {
   bool _sessionApplied = false;
   bool _sessionSwitchPending = false;
+  int _applyEpoch = 0;
   // True once `_ChatBody` (and the keep-alive WebView) has been rendered at
   // least once. After that, an in-chat session switch overlays a spinner
   // instead of destroying the body, so the WebView is never recreated.
@@ -152,6 +153,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _applySessionPreference() async {
     if (_sessionApplied) return;
     _sessionApplied = true;
+    final epoch = ++_applyEpoch;
     final needsSwitch =
         widget.forceNewSession || widget.initialSessionIndex != null;
     if (needsSwitch && mounted) {
@@ -161,7 +163,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       // Wait for chatProvider's initial build to complete before switching,
       // otherwise the build's final state may overwrite our switchSession.
       await ref.read(chatProvider(widget.charId).future);
-      if (!mounted) return;
+      if (!mounted || epoch != _applyEpoch) return;
       final notifier = ref.read(chatProvider(widget.charId).notifier);
       if (widget.forceNewSession) {
         await notifier.createNewSession();
@@ -170,16 +172,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             .switchSession(widget.initialSessionIndex!)
             .timeout(const Duration(seconds: 30));
       }
+      if (!mounted || epoch != _applyEpoch) return;
     } on TimeoutException catch (e) {
-      if (mounted) {
+      if (mounted && epoch == _applyEpoch) {
         GlazeErrorDialog.show(context, e, prefix: 'Failed to open chat session');
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && epoch == _applyEpoch) {
         GlazeErrorDialog.show(context, e, prefix: 'Failed to open chat session');
       }
     } finally {
-      if (mounted && _sessionSwitchPending) {
+      if (mounted && epoch == _applyEpoch && _sessionSwitchPending) {
         setState(() => _sessionSwitchPending = false);
       }
     }

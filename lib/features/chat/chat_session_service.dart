@@ -104,7 +104,7 @@ class ChatSessionService {
     final cached = _cache[cacheKey];
     if (cached != null) {
       _touchCacheKey(cacheKey);
-      saveCurrentSessionIndex(charId, sessionIndex);
+      await saveCurrentSessionIndex(charId, sessionIndex);
       _prefetchAdjacent(charId, sessionIndex);
       return cached;
     }
@@ -121,14 +121,14 @@ class ChatSessionService {
       }
       _cache[target.id] = target;
       _touchCacheKey(target.id);
-      saveCurrentSessionIndex(charId, sessionIndex);
+      await saveCurrentSessionIndex(charId, sessionIndex);
       _prefetchAdjacent(charId, target.sessionIndex);
       return target;
     }
 
     _cache[cacheKey] = session;
     _touchCacheKey(cacheKey);
-    saveCurrentSessionIndex(charId, sessionIndex);
+    await saveCurrentSessionIndex(charId, sessionIndex);
     _prefetchAdjacent(charId, sessionIndex);
     return session;
   }
@@ -202,7 +202,7 @@ class ChatSessionService {
       messages: initialMessages,
     );
     await repo.put(session);
-    saveCurrentSessionIndex(charId, nextIndex);
+    await saveCurrentSessionIndex(charId, nextIndex);
     return session;
   }
 
@@ -228,7 +228,7 @@ class ChatSessionService {
           fromSessionId: current.id,
           toSessionId: session.id,
         );
-    saveCurrentSessionIndex(charId, nextIndex);
+    await saveCurrentSessionIndex(charId, nextIndex);
     return session;
   }
 
@@ -275,19 +275,17 @@ class ChatSessionService {
     );
   }
 
-  void saveCurrentSessionIndex(String charId, int index) {
+  Future<void> saveCurrentSessionIndex(String charId, int index) async {
     if (!_ref.mounted) return;
     final charRepo = _ref.read(characterRepoProvider);
-    () async {
-      try {
-        final character = await charRepo.getById(charId);
-        if (character != null) {
-          await charRepo.put(character.copyWith(currentSessionIndex: index));
-        }
-      } catch (e) {
-        debugPrint('[ChatSessionService] saveCurrentSessionIndex error: $e');
+    try {
+      final character = await charRepo.getById(charId);
+      if (character != null) {
+        await charRepo.put(character.copyWith(currentSessionIndex: index));
       }
-    }();
+    } catch (e) {
+      debugPrint('[ChatSessionService] saveCurrentSessionIndex error: $e');
+    }
   }
 
   Future<int> _nextSessionIndex(String charId) async {
