@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/studio_decomposition_service.dart';
+import '../../../core/llm/studio_request_preset.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/preset.dart';
@@ -41,8 +42,8 @@ class StudioMenuDialog extends ConsumerStatefulWidget {
 class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   StudioConfig? _config;
   _StudioContextInfo _contextInfo = const _StudioContextInfo();
-  String? _selectedPresetId;
-  String? _selectedFinalPresetId;
+  String? _selectedAgentStudioPresetId;
+  String? _selectedFinalStudioPresetId;
   String? _selectedBuildApiConfigId;
   String? _selectedRunApiConfigId;
   bool _loading = true;
@@ -67,8 +68,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         setState(() {
           _config = config;
           _contextInfo = contextInfo;
-          _selectedPresetId = contextInfo.preset?.id;
-          _selectedFinalPresetId = contextInfo.finalPreset?.id;
+          _selectedAgentStudioPresetId = contextInfo.agentStudioPresetId;
+          _selectedFinalStudioPresetId = contextInfo.finalStudioPresetId;
           _selectedBuildApiConfigId = contextInfo.buildApiConfig?.id;
           _selectedRunApiConfigId = contextInfo.runApiConfig?.id;
           _loading = false;
@@ -120,7 +121,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         enabled: true,
         agents: agents,
         sourcePresetId: preset.id,
-        finalPresetId: contextInfo.finalPreset?.id ?? preset.id,
+        finalPresetId: '',
+        agentStudioPresetId: contextInfo.agentStudioPresetId,
+        finalStudioPresetId: contextInfo.finalStudioPresetId,
         sourcePresetHash: StudioDecompositionService.computePresetHash(
           preset.blocks.where((b) => b.enabled).toList(),
         ),
@@ -164,24 +167,19 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       ref.read(presetConnectionsProvider),
     );
 
-    final selectedPresetId =
-        _selectedPresetId ??
-        (config?.sourcePresetId.isNotEmpty == true
-            ? config!.sourcePresetId
+    final preset = effectivePreset;
+    final agentStudioPresetId =
+        _selectedAgentStudioPresetId ??
+        (config?.agentStudioPresetId.isNotEmpty == true
+            ? config!.agentStudioPresetId
             : null) ??
-        effectivePreset?.id;
-    final preset =
-        presets.where((p) => p.id == selectedPresetId).firstOrNull ??
-        effectivePreset;
-    final selectedFinalPresetId =
-        _selectedFinalPresetId ??
-        (config?.finalPresetId.isNotEmpty == true
-            ? config!.finalPresetId
+        defaultAgentStudioPresetId;
+    final finalStudioPresetId =
+        _selectedFinalStudioPresetId ??
+        (config?.finalStudioPresetId.isNotEmpty == true
+            ? config!.finalStudioPresetId
             : null) ??
-        selectedPresetId;
-    final finalPreset =
-        presets.where((p) => p.id == selectedFinalPresetId).firstOrNull ??
-        preset;
+        defaultFinalStudioPresetId;
 
     final apiConfigs = await ref.read(apiListProvider.future);
     final activeApi = ref.read(activeApiConfigProvider);
@@ -209,11 +207,11 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         activeApi;
 
     return _StudioContextInfo(
-      presets: presets,
       apiConfigs: apiConfigs.where((c) => c.mode != 'embedding').toList(),
       preset: preset,
-      finalPreset: finalPreset,
       presetLabel: preset?.name ?? 'No preset available',
+      agentStudioPresetId: agentStudioPresetId,
+      finalStudioPresetId: finalStudioPresetId,
       buildApiConfig: buildApiConfig,
       runApiConfig: runApiConfig,
       buildModelLabel: _apiLabel(buildApiConfig),
@@ -233,10 +231,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     setState(() => _contextInfo = contextInfo);
     if (persistSelection && _config != null) {
       final updated = _config!.copyWith(
-        sourcePresetId: contextInfo.preset?.id ?? '',
         buildApiConfigId: contextInfo.buildApiConfig?.id ?? '',
         runApiConfigId: contextInfo.runApiConfig?.id ?? '',
-        finalPresetId: contextInfo.finalPreset?.id ?? '',
+        agentStudioPresetId: contextInfo.agentStudioPresetId,
+        finalStudioPresetId: contextInfo.finalStudioPresetId,
         updatedAt: currentTimestampSeconds(),
       );
       await ref.read(studioConfigRepoProvider).upsert(updated);
@@ -439,9 +437,27 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _presetSelector(),
+          _buildSourcePresetInfo(),
           const SizedBox(height: 8),
-          _finalPresetSelector(),
+          _studioRequestPresetSelector(
+            label: 'Agent Studio preset',
+            value: _selectedAgentStudioPresetId,
+            fallbackId: _contextInfo.agentStudioPresetId,
+            onChanged: (value) async {
+              setState(() => _selectedAgentStudioPresetId = value);
+              await _refreshContextInfo(persistSelection: true);
+            },
+          ),
+          const SizedBox(height: 8),
+          _studioRequestPresetSelector(
+            label: 'Final Studio preset',
+            value: _selectedFinalStudioPresetId,
+            fallbackId: _contextInfo.finalStudioPresetId,
+            onChanged: (value) async {
+              setState(() => _selectedFinalStudioPresetId = value);
+              await _refreshContextInfo(persistSelection: true);
+            },
+          ),
           const SizedBox(height: 8),
           _apiSelector(
             label: 'Build model',
@@ -467,59 +483,42 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
-  Widget _presetSelector() {
-    final effectiveValue =
-        _contextInfo.presets.any((preset) => preset.id == _selectedPresetId)
-        ? _selectedPresetId
-        : null;
-    return DropdownButtonFormField<String>(
-      initialValue: effectiveValue,
-      isExpanded: true,
+  Widget _buildSourcePresetInfo() {
+    return InputDecorator(
       decoration: const InputDecoration(
-        labelText: 'Agent preset',
+        labelText: 'Build source preset',
         isDense: true,
         border: OutlineInputBorder(),
       ),
-      items: _contextInfo.presets
-          .map(
-            (preset) =>
-                DropdownMenuItem(value: preset.id, child: Text(preset.name)),
-          )
-          .toList(),
-      hint: Text(_contextInfo.presetLabel),
-      onChanged: (value) async {
-        setState(() => _selectedPresetId = value);
-        await _refreshContextInfo(persistSelection: true);
-      },
+      child: Text(_contextInfo.presetLabel, overflow: TextOverflow.ellipsis),
     );
   }
 
-  Widget _finalPresetSelector() {
+  Widget _studioRequestPresetSelector({
+    required String label,
+    required String? value,
+    required String fallbackId,
+    required Future<void> Function(String?) onChanged,
+  }) {
     final effectiveValue =
-        _contextInfo.presets.any(
-          (preset) => preset.id == _selectedFinalPresetId,
-        )
-        ? _selectedFinalPresetId
-        : null;
+        studioRequestPresets.any((preset) => preset.id == value)
+        ? value
+        : fallbackId;
     return DropdownButtonFormField<String>(
       initialValue: effectiveValue,
       isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: 'Final preset',
+      decoration: InputDecoration(
+        labelText: label,
         isDense: true,
-        border: OutlineInputBorder(),
+        border: const OutlineInputBorder(),
       ),
-      items: _contextInfo.presets
+      items: studioRequestPresets
           .map(
             (preset) =>
                 DropdownMenuItem(value: preset.id, child: Text(preset.name)),
           )
           .toList(),
-      hint: Text(_contextInfo.finalPreset?.name ?? _contextInfo.presetLabel),
-      onChanged: (value) async {
-        setState(() => _selectedFinalPresetId = value);
-        await _refreshContextInfo(persistSelection: true);
-      },
+      onChanged: onChanged,
     );
   }
 
@@ -915,24 +914,24 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 }
 
 class _StudioContextInfo {
-  final List<Preset> presets;
   final List<ApiConfig> apiConfigs;
   final Preset? preset;
-  final Preset? finalPreset;
   final ApiConfig? buildApiConfig;
   final ApiConfig? runApiConfig;
   final String presetLabel;
+  final String agentStudioPresetId;
+  final String finalStudioPresetId;
   final String buildModelLabel;
   final String runModelLabel;
 
   const _StudioContextInfo({
-    this.presets = const [],
     this.apiConfigs = const [],
     this.preset,
-    this.finalPreset,
     this.buildApiConfig,
     this.runApiConfig,
     this.presetLabel = 'Loading preset...',
+    this.agentStudioPresetId = defaultAgentStudioPresetId,
+    this.finalStudioPresetId = defaultFinalStudioPresetId,
     this.buildModelLabel = 'Loading model...',
     this.runModelLabel = 'Loading model...',
   });

@@ -145,47 +145,6 @@ class PromptPayload {
     this.arcContent,
     this.entitiesContent,
   });
-
-  PromptPayload copyWithPreset(Preset? preset) {
-    return PromptPayload(
-      character: character,
-      persona: persona,
-      preset: preset,
-      history: history,
-      sessionId: sessionId,
-      apiConfig: apiConfig,
-      sessionVars: sessionVars,
-      globalVars: globalVars,
-      summaryContent: summaryContent,
-      summaryPrefix: summaryPrefix,
-      memoryContent: memoryContent,
-      memoryMacroContent: memoryMacroContent,
-      memoryInjectionTarget: memoryInjectionTarget,
-      guidanceText: guidanceText,
-      lorebooks: lorebooks,
-      lorebookSettings: lorebookSettings,
-      lorebookActivations: lorebookActivations,
-      vectorEntries: vectorEntries,
-      authorsNote: authorsNote,
-      characterDepthPrompt: characterDepthPrompt,
-      characterDepthPromptDepth: characterDepthPromptDepth,
-      characterDepthPromptRole: characterDepthPromptRole,
-      memoryCoverage: memoryCoverage,
-      globalRegexes: globalRegexes,
-      preScannedEntries: preScannedEntries,
-      triggeredMemories: triggeredMemories,
-      runtimePromptBlocks: runtimePromptBlocks,
-      memorySelection: memorySelection,
-      memoryExcerptingEnabled: memoryExcerptingEnabled,
-      memoryPackingMode: memoryPackingMode,
-      memoryExcerptTokensPerChunk: memoryExcerptTokensPerChunk,
-      memoryExcerptChunksPerEntry: memoryExcerptChunksPerEntry,
-      chunkFirstTopEntries: chunkFirstTopEntries,
-      chunkFirstTopChunks: chunkFirstTopChunks,
-      arcContent: arcContent,
-      entitiesContent: entitiesContent,
-    );
-  }
 }
 
 class PromptResult {
@@ -904,6 +863,7 @@ PromptResult _assembleMessages({
           PromptMessage(
             role: block.role,
             blockId: block.id,
+            blockName: block.name,
             content: content,
             isSummary: block.isSummary,
           ),

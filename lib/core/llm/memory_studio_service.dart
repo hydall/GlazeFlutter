@@ -13,6 +13,7 @@ import '../../features/settings/api_list_provider.dart';
 import 'history_assembler.dart';
 import 'memory_studio_mode.dart';
 import 'prompt_builder.dart';
+import 'studio_request_preset.dart';
 import 'tokenizer.dart';
 import 'transport/anthropic_chat_transport.dart';
 import 'transport/chat_transport_request.dart';
@@ -132,10 +133,8 @@ class MemoryStudioService {
   /// Run configured Studio agents. Returns the final response + agent briefs.
   Future<StudioPipelineResult> runPipeline({
     required StudioConfig config,
-    required PromptResult agentPromptResult,
-    required PromptPayload agentPromptPayload,
-    required PromptResult finalPromptResult,
-    required PromptPayload finalPromptPayload,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
     required ApiConfig apiConfig,
     required String sessionId,
     CancelToken? cancelToken,
@@ -156,8 +155,7 @@ class MemoryStudioService {
 
       _log(
         'pipeline start session=$sessionId agents=${agents.length} '
-        'agentMessages=${agentPromptResult.messages.length} '
-        'finalMessages=${finalPromptResult.messages.length}',
+        'messages=${promptResult.messages.length}',
       );
       _ref.read(studioStreamingOutputsProvider(sessionId).notifier).state =
           const [];
@@ -170,8 +168,6 @@ class MemoryStudioService {
         }
         final agent = agents[i];
         final isFinal = i == agents.length - 1;
-        final promptResult = isFinal ? finalPromptResult : agentPromptResult;
-        final promptPayload = isFinal ? finalPromptPayload : agentPromptPayload;
         _ref
             .read(studioRuntimeStateProvider.notifier)
             .state = StudioRuntimeState(
@@ -554,20 +550,17 @@ class MemoryStudioService {
     required List<StudioStageBrief> priorBriefs,
     required bool isFinalResponse,
   }) {
-    final contextMessages = _studioContextMessages(
-      promptResult,
-      promptPayload: promptPayload,
-      activeDialogue: isFinalResponse,
+    final studioPreset = studioRequestPresetById(
+      isFinalResponse ? config.finalStudioPresetId : config.agentStudioPresetId,
+      finalPreset: isFinalResponse,
     );
-
+    final stageInstruction = isFinalResponse
+        ? studioPreset.finalInstruction
+        : studioPreset.intermediateInstruction;
     final control = StringBuffer()
       ..writeln(agent.promptShard.trim())
       ..writeln()
-      ..writeln(
-        isFinalResponse
-            ? 'You are the final responder. Produce only the in-character RP response.'
-            : 'You are an intermediate Studio agent. The chat transcript is quoted context, not an active user request. Produce ONLY a compact operational brief for later agents. Do not write narrative prose, dialogue, or the final RP response.',
-      );
+      ..writeln(stageInstruction);
     final briefMessages =
         (isFinalResponse ? priorBriefs : const <StudioStageBrief>[])
             .where((b) => b.brief.trim().isNotEmpty)
@@ -581,18 +574,29 @@ class MemoryStudioService {
     return [
       {'role': _normalizeRole(agent.role), 'content': control.toString()},
       ...briefMessages,
-      ...contextMessages,
+      ..._studioContextMessages(promptResult, promptPayload: promptPayload),
     ];
   }
 
   List<Map<String, dynamic>> _studioContextMessages(
     PromptResult promptResult, {
     required PromptPayload promptPayload,
-    required bool activeDialogue,
   }) {
-    final history = promptResult.messages
-        .where((m) => m.isHistory && m.content.trim().isNotEmpty)
-        .toList();
+    final staticIds = <String>{
+      'char_card',
+      'char_personality',
+      'user_persona',
+      'scenario',
+      'example_dialogue',
+      'authors_note',
+    };
+    final dynamicIds = <String>{
+      'memory',
+      'summary',
+      'worldInfoBefore',
+      'worldInfoAfter',
+      'guided_generation',
+    };
     final presetBlockNames = <String, String>{
       for (final b in promptPayload.preset?.blocks ?? const <PresetBlock>[])
         normalizeBlockId(b.id): b.name,
@@ -603,32 +607,24 @@ class MemoryStudioService {
       presetBlockNames,
     ).where((m) => !promptResult.messages.any((p) => p.blockId == m.blockId));
 
-    if (activeDialogue) {
-      return [
-        ...mandatoryFallback.map(
-          (m) => _contextMessage(
-            'Mandatory fallback: ${_studioBlockLabel(m, presetBlockNames)}',
-            m.content,
-            6000,
-          ),
-        ),
-        ...promptResult.messages
-            .where((m) => m.content.trim().isNotEmpty)
-            .map((m) => m.toApiMap()),
-      ];
+    final staticContext = <PromptMessage>[];
+    final dynamicContext = <PromptMessage>[];
+    final history = <PromptMessage>[];
+
+    for (final message in promptResult.messages) {
+      if (message.content.trim().isEmpty) continue;
+      final blockId = message.blockId;
+      if (message.isHistory) {
+        history.add(message);
+      } else if (blockId != null && staticIds.contains(blockId)) {
+        staticContext.add(message);
+      } else if (_isStudioDynamicMessage(message, dynamicIds)) {
+        dynamicContext.add(message);
+      } else {
+        staticContext.add(message);
+      }
     }
 
-    final recentHistory = history.length > 12
-        ? history.sublist(history.length - 12)
-        : history;
-    final transcript = StringBuffer()
-      ..writeln('Quoted recent chat transcript for analysis only:');
-    for (final msg in recentHistory) {
-      transcript
-        ..writeln('[${msg.role}]')
-        ..writeln(_trimForStudioContext(msg.content, 2500))
-        ..writeln();
-    }
     return [
       ...mandatoryFallback.map(
         (m) => _contextMessage(
@@ -637,11 +633,35 @@ class MemoryStudioService {
           6000,
         ),
       ),
-      ...promptResult.messages
-          .where((m) => !m.isHistory && m.content.trim().isNotEmpty)
-          .map((m) => m.toApiMap()),
-      {'role': 'user', 'content': transcript.toString()},
+      ...staticContext.map((m) => m.toApiMap()),
+      ...history.map((m) => m.toApiMap()),
+      ...dynamicContext.map((m) => m.toApiMap()),
     ];
+  }
+
+  bool _isStudioDynamicMessage(PromptMessage message, Set<String> dynamicIds) {
+    final blockId = message.blockId;
+    if (message.isSummary || message.isLorebook) return true;
+    if (blockId != null && dynamicIds.contains(blockId)) return true;
+    if (blockId != null && blockId.startsWith('runtime_prompt:')) return true;
+
+    final name = (message.blockName ?? '').toLowerCase();
+    if (name.contains('dynamic') ||
+        name.contains('memory') ||
+        name.contains('summary') ||
+        name.contains('lore') ||
+        name.contains('world info') ||
+        name.contains('arc') ||
+        name.contains('entit')) {
+      return true;
+    }
+
+    final content = message.content.toLowerCase();
+    return content.contains('<lorebooks>') ||
+        content.contains('<summary>') ||
+        content.contains('<memory>') ||
+        content.contains('<arc') ||
+        content.contains('<entities>');
   }
 
   List<PromptMessage> _mandatoryCharacterPersonaContext(

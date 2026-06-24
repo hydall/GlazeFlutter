@@ -15,7 +15,6 @@ import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/active_selection_provider.dart';
-import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
@@ -164,32 +163,7 @@ class StreamGenerationService {
           'studio intercept char=$_charId session=${session.id} '
           'agents=${studioConfig.agents.length}',
         );
-        final presets = await _ref.read(presetRepoProvider).getAll();
-        final agentPreset = studioConfig.sourcePresetId.isNotEmpty
-            ? presets
-                  .where((p) => p.id == studioConfig.sourcePresetId)
-                  .firstOrNull
-            : null;
-        final finalPreset = studioConfig.finalPresetId.isNotEmpty
-            ? presets
-                  .where((p) => p.id == studioConfig.finalPresetId)
-                  .firstOrNull
-            : null;
-        final agentPayload = payload.copyWithPreset(
-          agentPreset ?? payload.preset,
-        );
-        final finalPayload = payload.copyWithPreset(
-          finalPreset ?? agentPreset ?? payload.preset,
-        );
-        final agentPromptResult = await buildPromptInIsolate(agentPayload);
-        if (_isAborted()) {
-          return ChatState(
-            session: saveSession ?? session,
-            isGenerating: false,
-            visibleStartIndex: vsi,
-          );
-        }
-        final finalPromptResult = await buildPromptInIsolate(finalPayload);
+        final promptResult = await buildPromptInIsolate(payload);
         if (_isAborted()) {
           return ChatState(
             session: saveSession ?? session,
@@ -230,10 +204,8 @@ class StreamGenerationService {
             .read(memoryStudioServiceProvider)
             .runPipeline(
               config: studioConfig,
-              agentPromptResult: agentPromptResult,
-              agentPromptPayload: agentPayload,
-              finalPromptResult: finalPromptResult,
-              finalPromptPayload: finalPayload,
+              promptResult: promptResult,
+              promptPayload: payload,
               apiConfig: apiConfig,
               sessionId: session.id,
               cancelToken: cancelToken,
