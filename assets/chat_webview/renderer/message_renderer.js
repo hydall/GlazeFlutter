@@ -70,7 +70,7 @@ export class Renderer {
 
   _createSection(messageData) {
     const {
-      id, role, text, reasoning,
+      id, role, text, reasoning, studioOutputs,
       isError, isHidden, isLast, isTyping,
       guidanceText, guidanceType,
       imagePath, imageHidden,
@@ -82,6 +82,7 @@ export class Renderer {
     section.dataset.messageId = id;
     section.dataset.rawText = text || '';
     if (reasoning) section.dataset.reasoning = reasoning;
+    if (studioOutputs && studioOutputs.length) section.dataset.studioOutputs = JSON.stringify(studioOutputs);
     if (isLast && this._roleKey(role) === 'char') section.dataset.isLast = 'true';
     if (messageData.personaName) section.dataset.personaName = messageData.personaName;
     if (messageData.messageIndex != null) section.dataset.messageIndex = String(messageData.messageIndex);
@@ -113,6 +114,9 @@ if (messageData.isEditing) classes.push('editing');
     /* --- Reasoning (inside content stack so it flows with the bubble) --- */
     if (reasoning && reasoning.trim()) {
       stack.appendChild(this._createReasoningBlock(reasoning, this._isUser(role)));
+    }
+    if (studioOutputs && studioOutputs.length) {
+      stack.appendChild(this._createStudioOutputsBlock(id, studioOutputs, this._isUser(role)));
     }
 
     const wrapper = document.createElement('div');
@@ -292,6 +296,63 @@ if (messageData.isEditing) classes.push('editing');
     block.appendChild(header);
     block.appendChild(content);
     return block;
+  }
+
+  _createStudioOutputsBlock(messageId, outputs, isUser) {
+    const panel = document.createElement('div');
+    panel.className = 'msg-studio-outputs';
+
+    const title = document.createElement('div');
+    title.className = 'msg-studio-title';
+    title.textContent = 'Studio Agents';
+    panel.appendChild(title);
+
+    for (const output of outputs || []) {
+      const item = document.createElement('div');
+      item.className = 'msg-studio-output collapsed';
+      item.dataset.outputId = output.id || '';
+
+      const header = document.createElement('div');
+      header.className = 'msg-studio-output-header';
+      header.dataset.action = 'toggle-studio-output';
+
+      const name = document.createElement('span');
+      name.className = 'msg-studio-output-name';
+      name.textContent = output.name || 'Studio Agent';
+      header.appendChild(name);
+
+      const actions = document.createElement('span');
+      actions.className = 'msg-studio-output-actions';
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'msg-studio-output-edit';
+      edit.dataset.action = 'studio-output-edit';
+      edit.dataset.outputId = output.id || '';
+      edit.dataset.messageId = messageId;
+      edit.title = 'Edit Studio output';
+      edit.innerHTML = ICON.edit;
+      actions.appendChild(edit);
+      actions.insertAdjacentHTML('beforeend', ICON.chevron);
+      header.appendChild(actions);
+
+      const content = document.createElement('div');
+      content.className = 'msg-studio-output-content';
+      const wrap = document.createElement('div');
+      wrap.className = 'msg-transition-wrapper';
+      const inner = document.createElement('div');
+      inner.className = 'msg-studio-output-inner';
+      const shadowHost = this._createContentContainer();
+      inner.appendChild(shadowHost);
+      this._writeShadowContent(shadowHost, output.content || '', isUser, false);
+      wrap.appendChild(inner);
+      content.appendChild(wrap);
+
+      item.appendChild(header);
+      item.appendChild(content);
+      panel.appendChild(item);
+    }
+
+    return panel;
   }
 
   /* ----- Error window ----- */
@@ -588,7 +649,7 @@ if (messageData.isEditing) classes.push('editing');
   }
 
   /* ----- Public mutation API ----- */
-  updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate) {
+  updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate, studioOutputs = null) {
     if (!sectionEl) return;
     const body = sectionEl.querySelector('.msg-body');
     if (!body) return;
@@ -608,6 +669,7 @@ if (messageData.isEditing) classes.push('editing');
               if (rHost) this._writeShadowContent(rHost, reasoning, isUser, false);
             }
           }
+          this._syncStudioOutputs(sectionEl, studioOutputs, isUser);
           return;
         }
       }
@@ -649,6 +711,8 @@ if (messageData.isEditing) classes.push('editing');
       reasoningEl.remove();
     }
 
+    this._syncStudioOutputs(sectionEl, studioOutputs, isUser);
+
     if (animate) {
       sectionEl.classList.add('swipe-animating');
       const dir = sectionEl.dataset.swipeDirection || 'left';
@@ -667,10 +731,37 @@ if (messageData.isEditing) classes.push('editing');
     }
   }
 
+  _syncStudioOutputs(sectionEl, studioOutputs, isUser) {
+    if (studioOutputs === null) return;
+    const contentStack = sectionEl.querySelector('.msg-content-stack');
+    if (!contentStack) return;
+    const existing = sectionEl.querySelector('.msg-studio-outputs');
+    if (studioOutputs && studioOutputs.length) {
+      const replacement = this._createStudioOutputsBlock(
+        sectionEl.dataset.messageId,
+        studioOutputs,
+        isUser,
+      );
+      if (existing) existing.replaceWith(replacement);
+      else {
+        const reasoningEl = sectionEl.querySelector('.msg-reasoning');
+        const anchor = reasoningEl ? reasoningEl.nextSibling : contentStack.firstChild;
+        contentStack.insertBefore(replacement, anchor);
+      }
+      sectionEl.dataset.studioOutputs = JSON.stringify(studioOutputs);
+    } else if (existing) {
+      existing.remove();
+      delete sectionEl.dataset.studioOutputs;
+    }
+  }
+
   updateMessage(messageId, newText, isUser = false, reasoning = null) {
     const el = document.querySelector(`[data-message-id="${messageId}"]`);
     if (el) {
-      this.updateMessageContent(el, newText, reasoning || el.dataset.reasoning || null, isUser, false, false);
+      let studioOutputs = null;
+      try { studioOutputs = el.dataset.studioOutputs ? JSON.parse(el.dataset.studioOutputs) : null; }
+      catch (_) { studioOutputs = null; }
+      this.updateMessageContent(el, newText, reasoning || el.dataset.reasoning || null, isUser, false, false, studioOutputs);
     }
   }
 

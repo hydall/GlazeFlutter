@@ -165,6 +165,11 @@ export class InteractionDispatch {
       'ext-block-regen-image': (e, el) => bridge._sendToFlutter('onExtBlockRegenImage', [el.dataset.blockId, el.dataset.messageId]),
       'ext-block-edit': (e, el) => bridge._sendToFlutter('onExtBlockEdit', [el.dataset.blockId, el.dataset.messageId]),
       'ext-block-delete': (e, el) => bridge._sendToFlutter('onExtBlockDelete', [el.dataset.blockId, el.dataset.messageId]),
+      'studio-output-edit': (e, el) => bridge._sendToFlutter('onStudioOutputEdit', [el.dataset.outputId, el.dataset.messageId]),
+      'toggle-studio-output': (e, el) => {
+        if (e.target.closest('.msg-studio-output-edit')) return;
+        el.closest('.msg-studio-output')?.classList.toggle('collapsed');
+      },
       'toggle-hidden': (e, el) => bridge._sendToFlutter('onToggleHidden', [el.dataset.messageId]),
       'toggle-image-hidden': (e, el) => {
         const section = el.closest('.message-section');

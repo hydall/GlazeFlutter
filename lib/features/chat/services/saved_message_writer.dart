@@ -37,6 +37,7 @@ class SavedMessageWriter {
     bool isAllReasoning = false,
     List<TriggeredEntry> triggeredLorebooks = const [],
     List<TriggeredEntry> triggeredMemories = const [],
+    List<Map<String, dynamic>> studioOutputs = const [],
     String? regenTargetId,
     int visibleStartIndex = 0,
   }) {
@@ -61,9 +62,12 @@ class SavedMessageWriter {
       // Persist triggered entries per swipe so each variation shows its own
       // lorebook/memory activations (restored on swipe in ChatMessageService).
       if (triggeredLorebooks.isNotEmpty)
-        'triggeredLorebooks': triggeredLorebooks.map((e) => e.toJson()).toList(),
+        'triggeredLorebooks': triggeredLorebooks
+            .map((e) => e.toJson())
+            .toList(),
       if (triggeredMemories.isNotEmpty)
         'triggeredMemories': triggeredMemories.map((e) => e.toJson()).toList(),
+      if (studioOutputs.isNotEmpty) 'studioOutputs': studioOutputs,
     };
     if (guidanceText != null && guidanceText.isNotEmpty) {
       currentSwipeMeta['guidanceText'] = guidanceText;
@@ -115,6 +119,7 @@ class SavedMessageWriter {
           memoryCoverage: persistedMemoryCoverage,
           triggeredLorebooks: triggeredLorebooks,
           triggeredMemories: triggeredMemories,
+          studioOutputs: studioOutputs,
         );
         final updatedMessages = [...currentSession.messages];
         updatedMessages[idx] = updated;
@@ -155,6 +160,7 @@ class SavedMessageWriter {
       memoryCoverage: persistedMemoryCoverage,
       triggeredLorebooks: triggeredLorebooks,
       triggeredMemories: triggeredMemories,
+      studioOutputs: studioOutputs,
     );
     final finalMessages = [...currentSession.messages, assistantMsg];
     final now = currentTimestampSeconds();

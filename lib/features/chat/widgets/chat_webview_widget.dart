@@ -460,6 +460,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     bridge.onSelectionAction = callbacks.onSelectionAction;
     bridge.onSelectionChange = callbacks.onSelectionChange;
     bridge.onEditSave = callbacks.onEditSave;
+    bridge.onStudioOutputEdit = callbacks.onStudioOutputEdit;
     bridge.onEditCancel = callbacks.onEditCancel;
     bridge.onEditFocusChange = callbacks.onEditFocusChange;
     bridge.onImageClick = callbacks.onImageClick;

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
+import '../../../core/llm/memory_studio_service.dart';
 import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/transport/chat_transport_request.dart';
 import '../../../core/llm/transport/transport_factory.dart';
@@ -170,7 +171,8 @@ class StreamGenerationService {
           );
         }
         if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
-          final message = studioResult.error ?? 'Studio failed: ${studioResult.status}';
+          final message =
+              studioResult.error ?? 'Studio failed: ${studioResult.status}';
           if (regenTargetId != null && saveSession != null) {
             return _writer.writeRegenError(
               errorText: message,
@@ -207,14 +209,19 @@ class StreamGenerationService {
           isAllReasoning: false,
           triggeredLorebooks: triggeredLorebooks,
           triggeredMemories: triggeredMemories,
+          studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
           regenTargetId: regenTargetId,
           visibleStartIndex: vsi,
         );
         if (memoryDiagnostics is Map<String, dynamic> &&
             finalState.session != null) {
-          final messageId = _lastAssistantId(finalState.session!, regenTargetId);
-          _ref.read(lastMemoryActivityProvider(_charId).notifier).state =
-              MemoryActivityState(
+          final messageId = _lastAssistantId(
+            finalState.session!,
+            regenTargetId,
+          );
+          _ref
+              .read(lastMemoryActivityProvider(_charId).notifier)
+              .state = MemoryActivityState(
             sessionId: finalState.session!.id,
             messageId: messageId,
             diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
@@ -457,5 +464,13 @@ class StreamGenerationService {
       if (message.role == 'assistant') return message.id;
     }
     return null;
+  }
+
+  static List<Map<String, dynamic>> _studioOutputsToJson(
+    List<StudioStageBrief> briefs,
+  ) {
+    return briefs
+        .map((b) => {'id': b.agentId, 'name': b.agentName, 'content': b.brief})
+        .toList(growable: false);
   }
 }

@@ -1,4 +1,11 @@
-typedef MessageContextCallback = void Function(int index, String messageId, bool isUser, bool isSystem, String content);
+typedef MessageContextCallback =
+    void Function(
+      int index,
+      String messageId,
+      bool isUser,
+      bool isSystem,
+      String content,
+    );
 typedef SwipeCallback = void Function(String id, String direction);
 typedef GreetingCallback = void Function(String id, int direction);
 typedef RegenerateCallback = void Function(String id);
@@ -7,10 +14,13 @@ typedef InjectClickCallback = void Function(String id);
 typedef MemoryClickCallback = void Function(String id);
 typedef GuidedSwipeCallback = void Function(String id, String guidanceText);
 typedef EditSaveCallback = void Function(String id, String text);
+typedef StudioOutputEditCallback =
+    void Function(String outputId, String messageId);
 typedef EditCancelCallback = void Function(String id);
 typedef EditFocusCallback = void Function(String id, bool focused);
 typedef ImgActionCallback = void Function(String instruction, String messageId);
-typedef ImgOptionsCallback = void Function(String src, String instruction, String messageId);
+typedef ImgOptionsCallback =
+    void Function(String src, String instruction, String messageId);
 typedef ImgVoidCallback = void Function();
 typedef HeaderScrollCallback = void Function(bool hidden);
 typedef ScrollToBottomVisibilityCallback = void Function(bool visible);
@@ -42,11 +52,13 @@ class MessageActionsCallbacks {
 
 class EditActionsCallbacks {
   final EditSaveCallback? onEditSave;
+  final StudioOutputEditCallback? onStudioOutputEdit;
   final EditCancelCallback? onEditCancel;
   final EditFocusCallback? onEditFocusChange;
 
   const EditActionsCallbacks({
     this.onEditSave,
+    this.onStudioOutputEdit,
     this.onEditCancel,
     this.onEditFocusChange,
   });
@@ -74,10 +86,7 @@ class ScrollCallbacks {
   final HeaderScrollCallback? onHeaderScroll;
   final ScrollToBottomVisibilityCallback? onScrollToBottomVisibility;
 
-  const ScrollCallbacks({
-    this.onHeaderScroll,
-    this.onScrollToBottomVisibility,
-  });
+  const ScrollCallbacks({this.onHeaderScroll, this.onScrollToBottomVisibility});
 }
 
 class MiscCallbacks {

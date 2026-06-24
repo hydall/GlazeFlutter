@@ -49,6 +49,7 @@ void main() {
         'onStop',
         'onSelectionAction',
         'onEditSave',
+        'onStudioOutputEdit',
         'onEditCancel',
         'onImageClick',
         'onGuidedSwipe',
@@ -70,7 +71,7 @@ void main() {
       }
     });
 
-    test('Bridge controller has 22 callback properties', () {
+    test('Bridge controller has expected callback properties', () {
       final callbackProps = [
         'onReady',
         'onLoadMore',
@@ -83,6 +84,7 @@ void main() {
         'onChangeGreeting',
         'onSelectionAction',
         'onEditSave',
+        'onStudioOutputEdit',
         'onEditCancel',
         'onGuidedSwipe',
         'onMemoryClick',
@@ -143,67 +145,76 @@ void main() {
       );
     });
 
-    test('bridge _setupHandlers registers addJavaScriptHandler for each callback', () {
-      // After C6 split, the registry of handler names lives in
-      // bridge_handlers.dart (a data-driven table) and the host
-      // iterates that map to register each addJavaScriptHandler. We
-      // verify the registry covers every callback name and that the
-      // host actually wires it up.
-      final expectedHandlers = [
-        'onWebViewReady',
-        'onLoadMore',
-        'onHeaderScroll',
-        'onLinkClick',
-        'onImageClick',
-        'onMessageContext',
-        'onSwipe',
-        'onRegenerate',
-        'onChangeGreeting',
-        'onSelectionAction',
-        'onEditSave',
-        'onEditCancel',
-        'onGuidedSwipe',
-        'onMemoryClick',
-        'onToggleHidden',
-        'onSelectionChange',
-        'onInjectClick',
-        'onImgRetry',
-        'onImgFind',
-        'onImgRegen',
-        'onImgCancel',
-        'onStop',
-      ];
-      for (final name in expectedHandlers) {
-        expect(
-          bridgeHandlersSource,
-          contains("'$name':"),
-          reason: 'bridge_handlers.dart must declare handler "$name"',
-        );
+    test(
+      'bridge _setupHandlers registers addJavaScriptHandler for each callback',
+      () {
+        // After C6 split, the registry of handler names lives in
+        // bridge_handlers.dart (a data-driven table) and the host
+        // iterates that map to register each addJavaScriptHandler. We
+        // verify the registry covers every callback name and that the
+        // host actually wires it up.
+        final expectedHandlers = [
+          'onWebViewReady',
+          'onLoadMore',
+          'onHeaderScroll',
+          'onLinkClick',
+          'onImageClick',
+          'onMessageContext',
+          'onSwipe',
+          'onRegenerate',
+          'onChangeGreeting',
+          'onSelectionAction',
+          'onEditSave',
+          'onStudioOutputEdit',
+          'onEditCancel',
+          'onGuidedSwipe',
+          'onMemoryClick',
+          'onToggleHidden',
+          'onSelectionChange',
+          'onInjectClick',
+          'onImgRetry',
+          'onImgFind',
+          'onImgRegen',
+          'onImgCancel',
+          'onStop',
+        ];
+        for (final name in expectedHandlers) {
+          expect(
+            bridgeHandlersSource,
+            contains("'$name':"),
+            reason: 'bridge_handlers.dart must declare handler "$name"',
+          );
+          expect(
+            bridgeControllerSource,
+            contains('addJavaScriptHandler'),
+            reason: 'host must register handlers via addJavaScriptHandler',
+          );
+        }
+        // The host must actually wire up the registry — verify the
+        // setupHandlers method iterates the bridgeHandlers map.
         expect(
           bridgeControllerSource,
-          contains('addJavaScriptHandler'),
-          reason: 'host must register handlers via addJavaScriptHandler',
+          contains('for (final entry in bridgeHandlers.entries)'),
+          reason: 'host setupHandlers must iterate the bridgeHandlers registry',
         );
-      }
-      // The host must actually wire up the registry — verify the
-      // setupHandlers method iterates the bridgeHandlers map.
-      expect(
-        bridgeControllerSource,
-        contains('for (final entry in bridgeHandlers.entries)'),
-        reason:
-            'host setupHandlers must iterate the bridgeHandlers registry',
-      );
-    });
+      },
+    );
 
-    test('image callbacks (retry/find/regen) have (String, String) signature', () {
-      for (final name in ['onImgRetry', 'onImgFind', 'onImgRegen']) {
-        expect(
-          bridgeControllerSource,
-          contains('void Function(String instruction, String messageId)? $name;'),
-          reason: '$name must accept (String instruction, String messageId) parameters',
-        );
-      }
-    });
+    test(
+      'image callbacks (retry/find/regen) have (String, String) signature',
+      () {
+        for (final name in ['onImgRetry', 'onImgFind', 'onImgRegen']) {
+          expect(
+            bridgeControllerSource,
+            contains(
+              'void Function(String instruction, String messageId)? $name;',
+            ),
+            reason:
+                '$name must accept (String instruction, String messageId) parameters',
+          );
+        }
+      },
+    );
 
     test('onImgCancel and onStop have no-arg signature', () {
       expect(

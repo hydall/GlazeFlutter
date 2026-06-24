@@ -54,7 +54,28 @@ class ChatMessageOpsController {
     _setState(AsyncData(current.copyWith(session: updated)));
   }
 
-  Future<ChatSession> _applyRunOnEditRegexes(ChatSession session, int index) async {
+  Future<void> editStudioOutput(
+    int index,
+    String outputId,
+    String newContent,
+  ) async {
+    if (!_ref.mounted) return;
+    final current = _getState().value;
+    if (current == null || current.session == null) return;
+    final updated = _messageSvc.editStudioOutput(
+      current.session!,
+      index,
+      outputId,
+      newContent,
+    );
+    if (!_ref.mounted) return;
+    _setState(AsyncData(current.copyWith(session: updated)));
+  }
+
+  Future<ChatSession> _applyRunOnEditRegexes(
+    ChatSession session,
+    int index,
+  ) async {
     if (index < 0 || index >= session.messages.length) return session;
     final scripts = await _ref.read(activeRegexesProvider.future);
     final editScripts = scripts.where((r) => r.runOnEdit).toList();
@@ -72,11 +93,7 @@ class ChatMessageOpsController {
       _ref.read(personaConnectionsProvider),
     );
     final depth = session.messages.length - 1 - index;
-    final ctx = RegexApplyContext(
-      char: char,
-      persona: persona,
-      depth: depth,
-    );
+    final ctx = RegexApplyContext(char: char, persona: persona, depth: depth);
     final content = applyRegexes(
       msg.content,
       placement,
@@ -101,7 +118,11 @@ class ChatMessageOpsController {
     if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
-    final updated = _messageSvc.moveMessage(current.session!, fromIndex, toIndex);
+    final updated = _messageSvc.moveMessage(
+      current.session!,
+      fromIndex,
+      toIndex,
+    );
     _invalidateHistory();
     _setState(AsyncData(current.copyWith(session: updated)));
   }
@@ -146,7 +167,9 @@ class ChatMessageOpsController {
     if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
-    final cleared = await ChatSessionService(_ref).clearChat(_charId, current.session!);
+    final cleared = await ChatSessionService(
+      _ref,
+    ).clearChat(_charId, current.session!);
     if (!_ref.mounted) return;
     _invalidateHistory();
     _setState(AsyncData(ChatState(session: cleared)));

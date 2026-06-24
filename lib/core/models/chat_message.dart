@@ -24,22 +24,22 @@ class TriggeredEntry {
   });
 
   factory TriggeredEntry.fromJson(Map<String, dynamic> json) => TriggeredEntry(
-        id: json['id'] as String? ?? '',
-        name: json['name'] as String? ?? '',
-        lorebookName: json['lorebookName'] as String? ?? '',
-        lorebookId: json['lorebookId'] as String? ?? '',
-        source: json['source'] as String? ?? 'keyword',
-        pattern: json['pattern'] as String? ?? '',
-      );
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    lorebookName: json['lorebookName'] as String? ?? '',
+    lorebookId: json['lorebookId'] as String? ?? '',
+    source: json['source'] as String? ?? 'keyword',
+    pattern: json['pattern'] as String? ?? '',
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'lorebookName': lorebookName,
-        'lorebookId': lorebookId,
-        'source': source,
-        'pattern': pattern,
-      };
+    'id': id,
+    'name': name,
+    'lorebookName': lorebookName,
+    'lorebookId': lorebookId,
+    'source': source,
+    'pattern': pattern,
+  };
 }
 
 @freezed
@@ -71,6 +71,7 @@ abstract class ChatMessage with _$ChatMessage {
     @Default([]) List<TriggeredEntry> triggeredMemories,
     @Default([]) List<Map<String, dynamic>> swipesMeta,
     @Default({}) Map<String, dynamic> memoryCoverage,
+    @Default([]) List<Map<String, dynamic>> studioOutputs,
     String? time,
   }) = _ChatMessage;
 

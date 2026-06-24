@@ -535,7 +535,7 @@ void main() {
     test('_executeUpdateMessage contains update logic', () {
       expect(bridgeJs, contains('_executeUpdateMessage(msg)'));
       final idx = bridgeJs.indexOf('_executeUpdateMessage(msg) {');
-      final methodBody = bridgeJs.substring(idx, idx + 800);
+      final methodBody = bridgeJs.substring(idx, idx + 1200);
       expect(methodBody, contains('updateMessageContent'));
     });
 

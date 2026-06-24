@@ -136,6 +136,7 @@ class ChatMessageMapper {
       if (m.isTyping) 'isTyping': true,
       if (m.reasoning != null && m.reasoning!.isNotEmpty)
         'reasoning': m.reasoning,
+      if (m.studioOutputs.isNotEmpty) 'studioOutputs': m.studioOutputs,
       'isHidden': m.isHidden,
       if (isLast) 'isLast': true,
       'messageIndex': ?messageIndex,

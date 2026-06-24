@@ -24,7 +24,8 @@ import '../../core/state/memory_settings_provider.dart';
 import '../../core/state/memory_agent_providers.dart';
 import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
-import '../../shared/shell/desktop/desktop_layout_provider.dart' show isDesktopLayout;
+import '../../shared/shell/desktop/desktop_layout_provider.dart'
+    show isDesktopLayout;
 import 'widgets/message_actions.dart';
 import '../../shared/theme/theme_font_provider.dart';
 import '../../shared/theme/theme_preset.dart';
@@ -52,6 +53,7 @@ import 'widgets/magic_drawer.dart';
 import 'widgets/memory_activity_card.dart';
 import 'widgets/quick_replies_panel.dart';
 import 'widgets/chat_webview_widget.dart';
+import 'widgets/ext_block_dialogs.dart';
 import 'widgets/triggered_items_sheet.dart';
 import 'widgets/webview_callbacks.dart';
 import '../../core/models/chat_message.dart';
@@ -176,11 +178,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (!mounted || epoch != _applyEpoch) return;
     } on TimeoutException catch (e) {
       if (mounted && epoch == _applyEpoch) {
-        GlazeErrorDialog.show(context, e, prefix: 'Failed to open chat session');
+        GlazeErrorDialog.show(
+          context,
+          e,
+          prefix: 'Failed to open chat session',
+        );
       }
     } catch (e) {
       if (mounted && epoch == _applyEpoch) {
-        GlazeErrorDialog.show(context, e, prefix: 'Failed to open chat session');
+        GlazeErrorDialog.show(
+          context,
+          e,
+          prefix: 'Failed to open chat session',
+        );
       }
     } finally {
       if (mounted && epoch == _applyEpoch && _sessionSwitchPending) {
@@ -261,131 +271,130 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       // second `PopScope` would fire alongside `onBack` and still navigate away
       // even after we dismissed an overlay. All back handling lives in `onBack`.
       child: GlazeScaffold(
-          extendBodyBehindHeader: true,
-          resizeToAvoidBottomInset: false,
-          hideHeader: _isHeaderHidden,
-          title: title,
-          titleWidget: _search.showSearch
-              ? TextField(
-                  controller: _search.searchController,
-                  autofocus: true,
-                  style: TextStyle(color: context.cs.onSurface, fontSize: 16),
-                  decoration: InputDecoration(
-                    hintText: 'search_messages'.tr(),
-                    hintStyle: TextStyle(
-                      color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
-                    ),
-                    border: InputBorder.none,
-                    isDense: true,
-                    suffixIcon: _search.searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(
-                              Icons.close,
-                              color: context.cs.onSurface,
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              _search.closeSearch();
-                            },
-                          )
-                        : null,
+        extendBodyBehindHeader: true,
+        resizeToAvoidBottomInset: false,
+        hideHeader: _isHeaderHidden,
+        title: title,
+        titleWidget: _search.showSearch
+            ? TextField(
+                controller: _search.searchController,
+                autofocus: true,
+                style: TextStyle(color: context.cs.onSurface, fontSize: 16),
+                decoration: InputDecoration(
+                  hintText: 'search_messages'.tr(),
+                  hintStyle: TextStyle(
+                    color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
                   ),
-                  onChanged: (q) {
-                    _search.search(q, chatState?.messages ?? []);
+                  border: InputBorder.none,
+                  isDense: true,
+                  suffixIcon: _search.searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(
+                            Icons.close,
+                            color: context.cs.onSurface,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            _search.closeSearch();
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: (q) {
+                  _search.search(q, chatState?.messages ?? []);
+                },
+              )
+            : (character != null
+                  ? ChatHeader(
+                      character: character,
+                      sessionName: sessionName,
+                      currentSessionIndex: sessionIndex,
+                    )
+                  : null),
+        onBack: () {
+          // Dismiss any open overlay first; only navigate up when nothing is
+          // open. Order mirrors the precedence the back gesture should follow.
+          if (_drawerCtrl.inputFocus.hasFocus) {
+            _drawerCtrl.inputFocus.unfocus();
+            return;
+          }
+          // Covers both the open magic drawer / quick replies panel and the
+          // brief keyboard→drawer transition window; closeDrawer handles both.
+          if (_drawerCtrl.drawerOpen || _drawerCtrl.switchingToDrawer) {
+            _drawerCtrl.closeDrawer();
+            return;
+          }
+          if (_search.showSearch) {
+            _search.closeSearch();
+            return;
+          }
+          context.go('/');
+        },
+        actions: _search.showSearch
+            ? const []
+            : [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  color: context.cs.primary,
+                  onPressed: () {
+                    _search.openSearch();
                   },
-                )
-              : (character != null
-                    ? ChatHeader(
-                        character: character,
-                        sessionName: sessionName,
-                        currentSessionIndex: sessionIndex,
-                      )
-                    : null),
-          onBack: () {
-            // Dismiss any open overlay first; only navigate up when nothing is
-            // open. Order mirrors the precedence the back gesture should follow.
-            if (_drawerCtrl.inputFocus.hasFocus) {
-              _drawerCtrl.inputFocus.unfocus();
-              return;
+                ),
+              ],
+        body: chatStateAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
+          data: (state) {
+            // The index comparison only gates the INITIAL navigation to a
+            // requested session (deep link / history open). Once that initial
+            // session has been applied (`_sessionApplied`), in-chat switches
+            // like branchSession produce a session with a *different*
+            // sessionIndex than `initialSessionIndex` — comparing against it
+            // forever would leave the spinner stuck after branching until an
+            // app restart. After the initial apply, only `_sessionSwitchPending`
+            // gates the spinner.
+            final awaitingTargetSession =
+                _sessionSwitchPending ||
+                (!_sessionApplied &&
+                    widget.initialSessionIndex != null &&
+                    state.session?.sessionIndex != widget.initialSessionIndex);
+            // Only replace the body with a full-screen spinner on the very
+            // first open, when the WebView hasn't been built yet. For an
+            // in-chat switch (e.g. after importing a chat, which re-navigates
+            // to /chat/<id>?session=N) the keep-alive WebView is already
+            // mounted; destroying and recreating `_ChatBody` here would not
+            // re-run WebView init reliably and left a grey, unresponsive page
+            // until restart. Keep the body mounted and overlay the spinner so
+            // the WebView's own `_applySessionSwitch` handles the transition.
+            if (awaitingTargetSession && !_everBuiltBody) {
+              return const Center(child: CircularProgressIndicator());
             }
-            // Covers both the open magic drawer / quick replies panel and the
-            // brief keyboard→drawer transition window; closeDrawer handles both.
-            if (_drawerCtrl.drawerOpen || _drawerCtrl.switchingToDrawer) {
-              _drawerCtrl.closeDrawer();
-              return;
-            }
-            if (_search.showSearch) {
-              _search.closeSearch();
-              return;
-            }
-            context.go('/');
-          },
-          actions: _search.showSearch
-              ? const []
-              : [
-                  IconButton(
-                    icon: const Icon(Icons.search),
-                    color: context.cs.primary,
-                    onPressed: () {
-                      _search.openSearch();
-                    },
-                  ),
-                ],
-          body: chatStateAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
-            data: (state) {
-              // The index comparison only gates the INITIAL navigation to a
-              // requested session (deep link / history open). Once that initial
-              // session has been applied (`_sessionApplied`), in-chat switches
-              // like branchSession produce a session with a *different*
-              // sessionIndex than `initialSessionIndex` — comparing against it
-              // forever would leave the spinner stuck after branching until an
-              // app restart. After the initial apply, only `_sessionSwitchPending`
-              // gates the spinner.
-              final awaitingTargetSession =
-                  _sessionSwitchPending ||
-                  (!_sessionApplied &&
-                      widget.initialSessionIndex != null &&
-                      state.session?.sessionIndex !=
-                          widget.initialSessionIndex);
-              // Only replace the body with a full-screen spinner on the very
-              // first open, when the WebView hasn't been built yet. For an
-              // in-chat switch (e.g. after importing a chat, which re-navigates
-              // to /chat/<id>?session=N) the keep-alive WebView is already
-              // mounted; destroying and recreating `_ChatBody` here would not
-              // re-run WebView init reliably and left a grey, unresponsive page
-              // until restart. Keep the body mounted and overlay the spinner so
-              // the WebView's own `_applySessionSwitch` handles the transition.
-              if (awaitingTargetSession && !_everBuiltBody) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              _everBuiltBody = true;
-              return Stack(
-                children: [
-                  _ChatBody(
-                    charId: charId,
-                    state: state,
-                    drawerCtrl: _drawerCtrl,
-                    search: _search,
-                    keyboardHeight: keyboardHeight,
-                    onScrollDirection: _onScrollDirection,
-                    virtualKeyboardSend: virtualKeyboardSend,
-                    enterToSend: enterToSend,
-                    targetMessageId: widget.targetMessageId,
-                  ),
-                  if (awaitingTargetSession)
-                    const Positioned.fill(
-                      child: IgnorePointer(
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
+            _everBuiltBody = true;
+            return Stack(
+              children: [
+                _ChatBody(
+                  charId: charId,
+                  state: state,
+                  drawerCtrl: _drawerCtrl,
+                  search: _search,
+                  keyboardHeight: keyboardHeight,
+                  onScrollDirection: _onScrollDirection,
+                  virtualKeyboardSend: virtualKeyboardSend,
+                  enterToSend: enterToSend,
+                  targetMessageId: widget.targetMessageId,
+                ),
+                if (awaitingTargetSession)
+                  const Positioned.fill(
+                    child: IgnorePointer(
+                      child: Center(child: CircularProgressIndicator()),
                     ),
-                ],
-              );
-            },
-          ),
+                  ),
+              ],
+            );
+          },
         ),
-      );
+      ),
+    );
   }
 }
 
@@ -534,7 +543,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       } catch (_) {
         final withoutScheme = src.replaceFirst('file://', '');
         if (Platform.isWindows) return withoutScheme.replaceFirst('/', '');
-        return withoutScheme.startsWith('/') ? withoutScheme : '/$withoutScheme';
+        return withoutScheme.startsWith('/')
+            ? withoutScheme
+            : '/$withoutScheme';
       }
     }
     return src;
@@ -644,7 +655,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// Regenerate → re-run image generation for the owning message. The
   /// Regenerate entry is hidden when there is no owning message (e.g. inline
   /// janitor `![](url)` images, which carry no messageId).
-  void _showImageOptionsSheet(String src, String instruction, String messageId) {
+  void _showImageOptionsSheet(
+    String src,
+    String instruction,
+    String messageId,
+  ) {
     final messages = widget.state.messages;
     final idx = messageId.isEmpty
         ? -1
@@ -779,7 +794,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     void resync() {
       if (!mounted) return;
       unawaited(
-        _webViewStateKey.currentState?.applyBottomInset(_lastMessageListBottom) ??
+        _webViewStateKey.currentState?.applyBottomInset(
+              _lastMessageListBottom,
+            ) ??
             Future<void>.value(),
       );
     }
@@ -891,7 +908,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         final effectiveBottomInset = panelHeight + (safeBottom * (1 - factor));
         // The memory activity card floats under the header (top of the chat).
         // Hidden entirely when memory books are disabled globally.
-        final showMemoryCard = memoryActivity != null &&
+        final showMemoryCard =
+            memoryActivity != null &&
             memoryActivity.hasDiagnostics &&
             memoryEnabled;
         // When the card is dismissed its widget unmounts, so the size notifier
@@ -910,7 +928,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
 
         final animatedBottomPanelInset =
             panelHeight + (safeBottom * (1 - factor));
-        final renderDrawer = !isDesktopLayout(context) &&
+        final renderDrawer =
+            !isDesktopLayout(context) &&
             (widget.drawerCtrl.drawerOpen || progress > 0.001);
 
         return Stack(
@@ -1121,6 +1140,27 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                 .state =
                             null;
                       },
+                      onStudioOutputEdit: (outputId, messageId) async {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == messageId,
+                        );
+                        if (idx < 0) return;
+                        final output = widget.state.messages[idx].studioOutputs
+                            .where((o) => o['id'] == outputId)
+                            .firstOrNull;
+                        if (output == null) return;
+                        final newContent = await ExtBlockDialogs.promptEdit(
+                          context: context,
+                          blockName:
+                              output['name'] as String? ?? 'Studio Agent',
+                          initialContent: output['content'] as String? ?? '',
+                        );
+                        if (!mounted) return;
+                        if (newContent == null) return;
+                        await ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .editStudioOutput(idx, outputId, newContent);
+                      },
                       onEditCancel: (id) {
                         ref
                                 .read(
@@ -1278,9 +1318,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                   child: AnimatedSlide(
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOutCubic,
-                    offset: showScrollBtn
-                        ? Offset.zero
-                        : const Offset(0, 0.2),
+                    offset: showScrollBtn ? Offset.zero : const Offset(0, 0.2),
                     child: GestureDetector(
                       onTap: _scrollToBottom,
                       child: Container(
