@@ -1,26 +1,18 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
 
 import '../utils/platform_paths.dart';
 
-import '../models/character.dart';
-import '../models/persona.dart';
-import '../models/preset.dart';
 import '../models/chat_message.dart';
-import '../models/api_config.dart';
-import '../models/lorebook.dart';
-import '../models/memory_book.dart';
-import 'context_calculator.dart';
 import 'glaze_matcher.dart';
-import 'history_assembler.dart';
-import 'lorebook_scanner.dart';
 import 'memory_budget.dart';
 import 'memory_excerpt_selector.dart';
 import 'memory_formatting.dart';
 import 'memory_selector.dart';
 import 'prompt_builder.dart';
 import 'prompt_inputs.dart';
+import 'prompt_worker_codec.dart';
 import 'tokenizer.dart';
 
 /// Long-lived isolate worker that runs buildPrompt off the main thread.
@@ -105,9 +97,9 @@ class PromptWorker {
   }
 
   Future<PromptResult> buildPrompt(PromptPayload payload) async {
-    final json = jsonEncode(_serializePayload(payload));
+    final json = jsonEncode(serializePayload(payload));
     final response = await _send('buildPrompt', json) as String;
-    return _deserializeResult(jsonDecode(response) as Map<String, dynamic>);
+    return deserializeResult(jsonDecode(response) as Map<String, dynamic>);
   }
 
   /// Builds a complete prompt from raw inputs. This runs memory injection,
@@ -115,7 +107,7 @@ class PromptWorker {
   Future<PromptResult> buildFromInputs(PromptInputs inputs) async {
     final json = jsonEncode(inputs.toJson());
     final response = await _send('buildFromInputs', json) as String;
-    return _deserializeResult(jsonDecode(response) as Map<String, dynamic>);
+    return deserializeResult(jsonDecode(response) as Map<String, dynamic>);
   }
 
   void dispose() {
@@ -125,228 +117,6 @@ class PromptWorker {
     _instance = null;
   }
 }
-
-// ---- Serialization (main thread side) ----
-
-Map<String, dynamic> _serializePayload(PromptPayload p) => {
-  'character': p.character.toJson(),
-  'persona': p.persona?.toJson(),
-  'preset': p.preset?.toJson(),
-  'history': p.history.map((m) => m.toJson()).toList(),
-  'sessionId': p.sessionId,
-  'apiConfig': p.apiConfig.toJson(),
-  'sessionVars': p.sessionVars,
-  'globalVars': p.globalVars,
-  'summaryContent': p.summaryContent,
-  'summaryPrefix': p.summaryPrefix,
-  'memoryContent': p.memoryContent,
-  'memoryMacroContent': p.memoryMacroContent,
-  'memoryInjectionTarget': p.memoryInjectionTarget,
-  'guidanceText': p.guidanceText,
-  'lorebooks': p.lorebooks.map((l) => l.toJson()).toList(),
-  'lorebookSettings': p.lorebookSettings.toJson(),
-  'lorebookActivations': p.lorebookActivations.toJson(),
-  'vectorEntries': p.vectorEntries.map((e) => e.toJson()).toList(),
-  'authorsNote': p.authorsNote?.toJson(),
-  'characterDepthPrompt': p.characterDepthPrompt,
-  'characterDepthPromptDepth': p.characterDepthPromptDepth,
-  'characterDepthPromptRole': p.characterDepthPromptRole,
-  'memoryCoverage': p.memoryCoverage,
-  'globalRegexes': p.globalRegexes.map((r) => r.toJson()).toList(),
-  'preScannedEntries': p.preScannedEntries?.map((e) => e.toJson()).toList(),
-  'triggeredMemories': p.triggeredMemories.map((t) => t.toJson()).toList(),
-  'runtimePromptBlocks': p.runtimePromptBlocks
-      .map((block) => block.toJson())
-      .toList(),
-  'memorySelection': _serializeMemorySelection(p.memorySelection),
-  'memoryExcerptingEnabled': p.memoryExcerptingEnabled,
-  'memoryPackingMode': p.memoryPackingMode,
-  'memoryExcerptTokensPerChunk': p.memoryExcerptTokensPerChunk,
-  'memoryExcerptChunksPerEntry': p.memoryExcerptChunksPerEntry,
-  'chunkFirstTopEntries': p.chunkFirstTopEntries,
-  'chunkFirstTopChunks': p.chunkFirstTopChunks,
-};
-
-PromptResult _deserializeResult(Map<String, dynamic> json) {
-  return PromptResult(
-    messages: (json['messages'] as List)
-        .map((m) => PromptMessage.fromJson(m as Map<String, dynamic>))
-        .toList(),
-    breakdown: TokenBreakdown.fromJson(
-      json['breakdown'] as Map<String, dynamic>,
-    ),
-    sessionVars: Map<String, String>.from(json['sessionVars'] as Map),
-    globalVars: Map<String, String>.from(json['globalVars'] as Map),
-    triggeredLorebooks: (json['triggeredLorebooks'] as List? ?? [])
-        .map((t) => TriggeredEntry.fromJson(t as Map<String, dynamic>))
-        .toList(),
-    triggeredMemories: (json['triggeredMemories'] as List? ?? [])
-        .map((t) => TriggeredEntry.fromJson(t as Map<String, dynamic>))
-        .toList(),
-    memoryCoverage: Map<String, dynamic>.from(
-      json['memoryCoverage'] as Map? ?? {},
-    ),
-  );
-}
-
-// ---- Deserialization (isolate side) ----
-
-PromptPayload _deserializePayload(Map<String, dynamic> json) {
-  return PromptPayload(
-    character: Character.fromJson(json['character'] as Map<String, dynamic>),
-    persona: json['persona'] != null
-        ? Persona.fromJson(json['persona'] as Map<String, dynamic>)
-        : null,
-    preset: json['preset'] != null
-        ? Preset.fromJson(json['preset'] as Map<String, dynamic>)
-        : null,
-    history: (json['history'] as List)
-        .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
-        .toList(),
-    sessionId: json['sessionId'] as String?,
-    apiConfig: ApiConfig.fromJson(json['apiConfig'] as Map<String, dynamic>),
-    sessionVars: Map<String, String>.from(json['sessionVars'] as Map? ?? {}),
-    globalVars: Map<String, String>.from(json['globalVars'] as Map? ?? {}),
-    summaryContent: json['summaryContent'] as String?,
-    summaryPrefix: json['summaryPrefix'] as String?,
-    memoryContent: json['memoryContent'] as String?,
-    memoryMacroContent: json['memoryMacroContent'] as String?,
-    memoryInjectionTarget: _migrateInjectionTarget(
-      json['memoryInjectionTarget'] as String?,
-    ),
-    guidanceText: json['guidanceText'] as String?,
-    lorebooks: (json['lorebooks'] as List)
-        .map((l) => Lorebook.fromJson(l as Map<String, dynamic>))
-        .toList(),
-    lorebookSettings: LorebookGlobalSettings.fromJson(
-      json['lorebookSettings'] as Map<String, dynamic>,
-    ),
-    lorebookActivations: LorebookActivations.fromJson(
-      json['lorebookActivations'] as Map<String, dynamic>,
-    ),
-    vectorEntries: (json['vectorEntries'] as List)
-        .map((e) => LorebookEntry.fromJson(e as Map<String, dynamic>))
-        .toList(),
-    authorsNote: json['authorsNote'] != null
-        ? AuthorsNote.fromJson(json['authorsNote'] as Map<String, dynamic>)
-        : null,
-    characterDepthPrompt: json['characterDepthPrompt'] as String? ?? '',
-    characterDepthPromptDepth: json['characterDepthPromptDepth'] as int? ?? 4,
-    characterDepthPromptRole:
-        json['characterDepthPromptRole'] as String? ?? 'system',
-    memoryCoverage: Map<String, dynamic>.from(
-      json['memoryCoverage'] as Map? ?? {},
-    ),
-    globalRegexes: (json['globalRegexes'] as List)
-        .map((r) => PresetRegex.fromJson(r as Map<String, dynamic>))
-        .toList(),
-    preScannedEntries: json['preScannedEntries'] != null
-        ? (json['preScannedEntries'] as List)
-              .map((e) => ScannedEntry.fromJson(e as Map<String, dynamic>))
-              .toList()
-        : null,
-    triggeredMemories: (json['triggeredMemories'] as List? ?? [])
-        .map((t) => TriggeredEntry.fromJson(t as Map<String, dynamic>))
-        .toList(),
-    runtimePromptBlocks: (json['runtimePromptBlocks'] as List? ?? [])
-        .map(
-          (block) => RuntimePromptBlock.fromJson(block as Map<String, dynamic>),
-        )
-        .toList(),
-    memorySelection: _deserializeMemorySelection(
-      json['memorySelection'] as Map<String, dynamic>?,
-    ),
-    memoryExcerptingEnabled: json['memoryExcerptingEnabled'] as bool? ?? true,
-    memoryPackingMode: json['memoryPackingMode'] as String? ?? 'hybrid',
-    memoryExcerptTokensPerChunk:
-        json['memoryExcerptTokensPerChunk'] as int? ??
-        defaultMemoryExcerptTokensPerEntry,
-    memoryExcerptChunksPerEntry:
-        json['memoryExcerptChunksPerEntry'] as int? ??
-        defaultMemoryExcerptChunksPerEntry,
-    chunkFirstTopEntries: json['chunkFirstTopEntries'] as int? ?? 3,
-    chunkFirstTopChunks: json['chunkFirstTopChunks'] as int? ?? 1,
-  );
-}
-
-Map<String, dynamic> _serializeResult(PromptResult r) => {
-  'messages': r.messages.map((m) => m.toJson()).toList(),
-  'breakdown': r.breakdown.toJson(),
-  'sessionVars': r.sessionVars,
-  'globalVars': r.globalVars,
-  'triggeredLorebooks': r.triggeredLorebooks.map((t) => t.toJson()).toList(),
-  'triggeredMemories': r.triggeredMemories.map((t) => t.toJson()).toList(),
-  'memoryCoverage': r.memoryCoverage,
-};
-
-Map<String, dynamic>? _serializeMemorySelection(MemorySelection? selection) {
-  if (selection == null) return null;
-  return {
-    'selectionMode': selection.selectionMode,
-    'entries': selection.entries.map((entry) => entry.toJson()).toList(),
-    'allScores': selection.allScores.map(_serializeMemoryScore).toList(),
-    'totalTokens': selection.totalTokens,
-    'budgetTokens': selection.budgetTokens,
-    'entryCap': selection.entryCap,
-    'budgetTrimmed': selection.budgetTrimmed,
-    'excludedBySourceWindow': selection.excludedBySourceWindow,
-  };
-}
-
-Map<String, dynamic> _serializeMemoryScore(MemoryCandidateScore score) => {
-  'entry': score.entry.toJson(),
-  'score': score.score,
-  'keywordScore': score.keywordScore,
-  'vectorScore': score.vectorScore,
-  'recencyScore': score.recencyScore,
-  'importanceScore': score.importanceScore,
-  'catalogScore': score.catalogScore,
-  'diversityPenalty': score.diversityPenalty,
-  'matchedKeys': score.matchedKeys,
-  'catalogMatchedTerms': score.catalogMatchedTerms,
-  'vectorMatchedChunks': score.vectorMatchedChunks,
-  'excludedBySourceWindow': score.excludedBySourceWindow,
-  'exclusionReason': score.exclusionReason,
-};
-
-MemorySelection? _deserializeMemorySelection(Map<String, dynamic>? json) {
-  if (json == null) return null;
-  return MemorySelection(
-    selectionMode: json['selectionMode'] as String? ?? 'v2',
-    entries: (json['entries'] as List? ?? [])
-        .map((entry) => MemoryEntry.fromJson(entry as Map<String, dynamic>))
-        .toList(),
-    allScores: (json['allScores'] as List? ?? [])
-        .map((score) => _deserializeMemoryScore(score as Map<String, dynamic>))
-        .toList(),
-    totalTokens: json['totalTokens'] as int? ?? 0,
-    budgetTokens: json['budgetTokens'] as int?,
-    entryCap: json['entryCap'] as int? ?? 0,
-    budgetTrimmed: json['budgetTrimmed'] as bool? ?? false,
-    excludedBySourceWindow: json['excludedBySourceWindow'] as int? ?? 0,
-  );
-}
-
-MemoryCandidateScore _deserializeMemoryScore(Map<String, dynamic> json) =>
-    MemoryCandidateScore(
-      entry: MemoryEntry.fromJson(json['entry'] as Map<String, dynamic>),
-      score: (json['score'] as num?)?.toDouble() ?? 0,
-      keywordScore: (json['keywordScore'] as num?)?.toDouble() ?? 0,
-      vectorScore: (json['vectorScore'] as num?)?.toDouble() ?? 0,
-      recencyScore: (json['recencyScore'] as num?)?.toDouble() ?? 0,
-      importanceScore: (json['importanceScore'] as num?)?.toDouble() ?? 0,
-      catalogScore: (json['catalogScore'] as num?)?.toDouble() ?? 0,
-      diversityPenalty: (json['diversityPenalty'] as num?)?.toDouble() ?? 0,
-      matchedKeys: (json['matchedKeys'] as List? ?? []).cast<String>(),
-      catalogMatchedTerms: (json['catalogMatchedTerms'] as List? ?? [])
-          .cast<String>(),
-      vectorMatchedChunks: (json['vectorMatchedChunks'] as List? ?? [])
-          .cast<String>(),
-      excludedBySourceWindow: json['excludedBySourceWindow'] as bool? ?? false,
-      exclusionReason: json['exclusionReason'] as String?,
-    );
-
-// ---- Isolate entry point (top-level function) ----
 
 void _isolateEntryPoint(List<dynamic> args) {
   final commandSendPort = args[0] as SendPort;
@@ -370,18 +140,18 @@ void _isolateEntryPoint(List<dynamic> args) {
           responseSendPort.send([id, 'ok']);
 
         case 'buildPrompt':
-          final payload = _deserializePayload(
+          final payload = deserializePayload(
             jsonDecode(data as String) as Map<String, dynamic>,
           );
           final result = buildPrompt(payload);
-          responseSendPort.send([id, jsonEncode(_serializeResult(result))]);
+          responseSendPort.send([id, jsonEncode(serializeResult(result))]);
 
         case 'buildFromInputs':
           final inputs = PromptInputs.fromJson(
             jsonDecode(data as String) as Map<String, dynamic>,
           );
           final result2 = _buildFromInputs(inputs);
-          responseSendPort.send([id, jsonEncode(_serializeResult(result2))]);
+          responseSendPort.send([id, jsonEncode(serializeResult(result2))]);
 
         default:
           responseSendPort.send([
@@ -568,10 +338,3 @@ bool _glazeMatch(String key, String text) {
   return glazeCheckMatch(key, text, false, WholeWordMode.glaze);
 }
 
-/// Translates the legacy `summary_block` / `summary_macro` enum values
-/// (pre-{{memory}}-split) to `hard_block` / `macro`.
-String _migrateInjectionTarget(String? raw) {
-  if (raw == 'summary_block') return 'hard_block';
-  if (raw == 'summary_macro') return 'macro';
-  return raw ?? 'hard_block';
-}
