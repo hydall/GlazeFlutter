@@ -19,6 +19,7 @@ import 'editing_message_provider.dart';
 
 import '../../core/state/character_provider.dart';
 import '../../core/llm/regex_service.dart';
+import '../../core/llm/memory_studio_service.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/memory_settings_provider.dart';
 import '../../core/state/memory_agent_providers.dart';
@@ -392,6 +393,67 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _StudioRuntimeCard extends StatelessWidget {
+  final StudioRuntimeState runtime;
+  final VoidCallback onFinish;
+
+  const _StudioRuntimeCard({required this.runtime, required this.onFinish});
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = runtime.total > 0
+        ? '${runtime.index + 1}/${runtime.total}'
+        : '';
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: context.cs.surface.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.35)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: context.cs.primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Studio $progress: ${runtime.agentName ?? 'Agent'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.cs.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: onFinish,
+              icon: const Icon(Icons.skip_next_rounded, size: 18),
+              label: const Text('Finish agent'),
+            ),
+          ],
         ),
       ),
     );
@@ -810,6 +872,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final isEditingMessage =
         ref.watch(editingMessageIdProvider(widget.charId)) != null;
     final memoryActivity = ref.watch(lastMemoryActivityProvider(widget.charId));
+    final studioRuntime = ref.watch(studioRuntimeStateProvider);
     final memoryEnabled = ref.watch(
       memoryGlobalSettingsProvider.select((s) => s.enabled),
     );
@@ -1267,6 +1330,18 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                 ),
               ),
             ),
+            if (studioRuntime.canFinishAgent)
+              Positioned(
+                left: 12,
+                right: 12,
+                top: messageListTop,
+                child: _StudioRuntimeCard(
+                  runtime: studioRuntime,
+                  onFinish: () => ref
+                      .read(chatProvider(widget.charId).notifier)
+                      .finishCurrentStudioAgent(),
+                ),
+              ),
             // Top gradient for fade effect under the header
             Positioned(
               top: 0,
@@ -1541,6 +1616,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                     isGenerating: widget.state.isGenerating,
                                     isGeneratingImage:
                                         widget.state.isGeneratingImage,
+                                    onFinishAgent: studioRuntime.canFinishAgent
+                                        ? () => ref
+                                              .read(
+                                                chatProvider(
+                                                  widget.charId,
+                                                ).notifier,
+                                              )
+                                              .finishCurrentStudioAgent()
+                                        : null,
                                     onStop:
                                         (widget.state.isGenerating ||
                                             widget.state.isGeneratingImage)

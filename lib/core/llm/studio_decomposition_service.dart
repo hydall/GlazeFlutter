@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:crypto/crypto.dart';
 
@@ -43,6 +44,16 @@ class StudioDecompositionService {
     final enabledBlocks = preset.blocks.where((b) => b.enabled).toList();
     if (enabledBlocks.isEmpty) return const [];
     final preservedMetaBlocks = _preservedMetaBlocks(enabledBlocks);
+    final totalChars = enabledBlocks.fold<int>(
+      0,
+      (sum, b) => sum + b.content.length,
+    );
+    _log(
+      'build start session=$sessionId preset="${preset.name}" '
+      'blocks=${enabledBlocks.length} chars=$totalChars '
+      'preservedMeta=${preservedMetaBlocks.length} '
+      'model=${apiConfig?.model ?? '<active>'}',
+    );
 
     // Build the blocks summary for the LLM
     final blocksSummary = enabledBlocks
@@ -93,37 +104,191 @@ Rules:
 - Preserve named meta-agents, invisible directors, ghosts, companions, OOC interfaces, and operational checklists as explicit agent instructions. Do not collapse them to a one-line mention.
 - If a block defines a named entity such as Lumia/Ghost in the Machine, one agent promptShard must retain its name, nature, silent-operation rules, OOC interface, and non-exposure rules.''';
 
-    final raw = await _callLlm(
-      prompt,
-      apiConfig: apiConfig,
-      cancelToken: cancelToken,
-    );
-    if (raw == null) return const [];
+    final String? raw;
+    try {
+      raw = await _callLlm(
+        prompt,
+        apiConfig: apiConfig,
+        cancelToken: cancelToken,
+      );
+    } on TimeoutException {
+      _log('build timeout session=$sessionId; using fallback agents');
+      return _fallbackAgents(enabledBlocks, preservedMetaBlocks, sessionId);
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) return const [];
+      rethrow;
+    }
+    if (raw == null) {
+      _log('build returned null session=$sessionId; using fallback agents');
+      return _fallbackAgents(enabledBlocks, preservedMetaBlocks, sessionId);
+    }
+    _log('build raw complete session=$sessionId chars=${raw.length}');
 
-    final decoded = jsonDecode(raw);
-    if (decoded is! List) return const [];
+    final decoded = _decodeAgentList(raw);
+    if (decoded == null) {
+      _log('build invalid JSON session=$sessionId; using fallback agents');
+      return _fallbackAgents(enabledBlocks, preservedMetaBlocks, sessionId);
+    }
 
     final now = currentTimestampSeconds();
     final agents = <StudioAgent>[];
     for (var i = 0; i < decoded.length; i++) {
-      final item = decoded[i] as Map<String, dynamic>;
+      final rawItem = decoded[i];
+      if (rawItem is! Map) continue;
+      final item = Map<String, dynamic>.from(rawItem);
       agents.add(
         StudioAgent(
           id: 'agent_${sessionId}_${i}_$now',
-          name: (item['name'] as String?) ?? 'Agent $i',
-          role: (item['role'] as String?) ?? 'system',
-          promptShard: (item['promptShard'] as String?) ?? '',
-          order: (item['order'] as int?) ?? i,
+          name: _stringField(item['name'], fallback: 'Agent $i'),
+          role: _stringField(item['role'], fallback: 'system'),
+          promptShard: _stringField(item['promptShard']),
+          order: _intField(item['order'], fallback: i),
           enabled: true,
-          sourceBlockNames: (item['sourceBlockNames'] as String?) ?? '',
+          sourceBlockNames: _stringField(item['sourceBlockNames']),
           modelSource: 'current',
           temperature: i == decoded.length - 1 ? 0.8 : 0.3,
           maxTokens: i == decoded.length - 1 ? 2000 : 500,
+          timeoutMs: i == decoded.length - 1 ? 90000 : 60000,
         ),
       );
     }
 
+    if (agents.isEmpty) {
+      _log('build decoded no agents session=$sessionId; using fallback agents');
+      return _fallbackAgents(enabledBlocks, preservedMetaBlocks, sessionId);
+    }
+
     agents.sort((a, b) => a.order.compareTo(b.order));
+    final result = _applyPreservedMetaBlocks(
+      agents,
+      preservedMetaBlocks,
+      sessionId,
+      now,
+    );
+    _log('build complete session=$sessionId agents=${result.length}');
+    return result;
+  }
+
+  List<dynamic>? _decodeAgentList(String raw) {
+    final candidates = <String>{raw.trim(), ..._jsonPayloadCandidates(raw)};
+
+    for (final candidate in candidates) {
+      if (candidate.isEmpty) continue;
+      try {
+        final decoded = jsonDecode(candidate);
+        if (decoded is List) return decoded;
+        if (decoded is Map && decoded['agents'] is List) {
+          return decoded['agents'] as List<dynamic>;
+        }
+      } on FormatException {
+        // Try the next candidate. Some providers wrap JSON in prose/markdown.
+      }
+    }
+    return null;
+  }
+
+  Iterable<String> _jsonPayloadCandidates(String raw) sync* {
+    final trimmed = raw.trim();
+    final fenced = RegExp(
+      r'```(?:json)?\s*([\s\S]*?)\s*```',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (fenced != null) yield fenced.group(1)!.trim();
+
+    final arrayStart = trimmed.indexOf('[');
+    final arrayEnd = trimmed.lastIndexOf(']');
+    if (arrayStart >= 0 && arrayEnd > arrayStart) {
+      yield trimmed.substring(arrayStart, arrayEnd + 1).trim();
+    }
+
+    final objectStart = trimmed.indexOf('{');
+    final objectEnd = trimmed.lastIndexOf('}');
+    if (objectStart >= 0 && objectEnd > objectStart) {
+      yield trimmed.substring(objectStart, objectEnd + 1).trim();
+    }
+  }
+
+  String _stringField(dynamic value, {String fallback = ''}) {
+    if (value is String) return value.trim();
+    if (value is Iterable) {
+      return value
+          .map((v) => v.toString().trim())
+          .where((v) => v.isNotEmpty)
+          .join(', ');
+    }
+    if (value == null) return fallback;
+    final text = value.toString().trim();
+    return text.isEmpty ? fallback : text;
+  }
+
+  int _intField(dynamic value, {required int fallback}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  List<StudioAgent> _fallbackAgents(
+    List<PresetBlock> enabledBlocks,
+    List<({String name, String role, String content})> preservedMetaBlocks,
+    String sessionId,
+  ) {
+    final now = currentTimestampSeconds();
+    final systemBlocks = enabledBlocks
+        .where((b) => b.role.toLowerCase() == 'system')
+        .map((b) => b.name)
+        .where((name) => name.trim().isNotEmpty)
+        .join(', ');
+    final otherBlocks = enabledBlocks
+        .where((b) => b.role.toLowerCase() != 'system')
+        .map((b) => b.name)
+        .where((name) => name.trim().isNotEmpty)
+        .join(', ');
+    final agents = <StudioAgent>[
+      StudioAgent(
+        id: 'agent_${sessionId}_fallback_memory_$now',
+        name: 'Memory Curator',
+        role: 'system',
+        promptShard:
+            'Review memory context and recent chat. Produce a concise continuity brief with facts, unresolved threads, emotional state, and constraints relevant to the next reply.',
+        order: 0,
+        enabled: true,
+        modelSource: 'current',
+        temperature: 0.3,
+        maxTokens: 500,
+        timeoutMs: 60000,
+        sourceBlockNames: otherBlocks,
+      ),
+      StudioAgent(
+        id: 'agent_${sessionId}_fallback_director_$now',
+        name: 'Scene Director',
+        role: 'system',
+        promptShard:
+            'Extract and enforce tone, genre, pacing, formatting, safety-permission, anti-loop, and quality-control instructions from the preset. Produce only actionable guidance for the final responder.',
+        order: 1,
+        enabled: true,
+        modelSource: 'current',
+        temperature: 0.3,
+        maxTokens: 700,
+        timeoutMs: 60000,
+        sourceBlockNames: enabledBlocks.map((b) => b.name).join(', '),
+      ),
+      StudioAgent(
+        id: 'agent_${sessionId}_fallback_responder_$now',
+        name: 'Main Responder',
+        role: 'system',
+        promptShard:
+            'Write the final RP response using the full assembled chat prompt, character/scenario instructions, memory brief, and prior Studio agent briefs. Preserve character voice, formatting requirements, and narrative constraints.',
+        order: 2,
+        enabled: true,
+        modelSource: 'current',
+        temperature: 0.8,
+        maxTokens: 2000,
+        timeoutMs: 90000,
+        sourceBlockNames: systemBlocks,
+      ),
+    ];
+
     return _applyPreservedMetaBlocks(
       agents,
       preservedMetaBlocks,
@@ -307,7 +472,7 @@ Rules:
           messages: [
             {'role': 'user', 'content': prompt},
           ],
-          maxTokens: 2000,
+          maxTokens: 4000,
           temperature: 0.3,
           topP: 1.0,
           stream: false,
@@ -322,6 +487,10 @@ Rules:
       ),
     );
 
-    return completer.future.timeout(const Duration(seconds: 30));
+    return completer.future.timeout(const Duration(seconds: 90));
+  }
+
+  void _log(String message) {
+    debugPrint('[StudioBuild] $message');
   }
 }

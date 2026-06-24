@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -134,6 +135,11 @@ class StreamGenerationService {
           .toList();
       final previousApiMessages = _lastRequestsBySession[session.id];
       _rememberRequest(session.id, apiMessages);
+      _log(
+        'base prompt ready char=$_charId session=${session.id} '
+        'messages=${apiMessages.length} model=${apiConfig.model} '
+        'protocol=${apiConfig.protocol}',
+      );
 
       final coverage = promptResult.memoryCoverage.isNotEmpty
           ? promptResult.memoryCoverage
@@ -153,6 +159,10 @@ class StreamGenerationService {
         );
       }
       if (studioConfig != null) {
+        _log(
+          'studio intercept char=$_charId session=${session.id} '
+          'agents=${studioConfig.agents.length}',
+        );
         final startGenTime = DateTime.now();
         final studioResult = await _ref
             .read(memoryStudioServiceProvider)
@@ -173,6 +183,10 @@ class StreamGenerationService {
         if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
           final message =
               studioResult.error ?? 'Studio failed: ${studioResult.status}';
+          _log(
+            'studio failed char=$_charId session=${session.id} '
+            'status=${studioResult.status} error=$message',
+          );
           if (regenTargetId != null && saveSession != null) {
             return _writer.writeRegenError(
               errorText: message,
@@ -189,6 +203,11 @@ class StreamGenerationService {
         }
 
         final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
+        _log(
+          'studio write assistant char=$_charId session=${session.id} '
+          'elapsedMs=$elapsed chars=${studioResult.response.length} '
+          'briefs=${studioResult.stageBriefs.length}',
+        );
         final finalState = _writer.writeAssistant(
           text: studioResult.response,
           reasoning: null,
@@ -239,6 +258,8 @@ class StreamGenerationService {
         }
         return finalState;
       }
+
+      _log('studio not active char=$_charId session=${session.id}');
 
       final accumulator = StreamAccumulator(
         tagStart: reasoningTagStart,
@@ -472,5 +493,9 @@ class StreamGenerationService {
     return briefs
         .map((b) => {'id': b.agentId, 'name': b.agentName, 'content': b.brief})
         .toList(growable: false);
+  }
+
+  static void _log(String message) {
+    debugPrint('[StudioGen] $message');
   }
 }

@@ -11,6 +11,7 @@ import '../../core/services/generation_notification_service.dart';
 import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
+import '../../core/state/memory_agent_providers.dart';
 import '../chat_history/chat_history_provider.dart';
 import '../memory/state/memory_active_drafts_provider.dart';
 import 'abort_handler.dart';
@@ -111,6 +112,8 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   void abortImageGeneration() => _abortHandler.abortImageGeneration();
   void abortGeneration() => _abortHandler.abortGeneration();
+  void finishCurrentStudioAgent() =>
+      ref.read(memoryStudioServiceProvider).finishCurrentAgent();
   void cancelImageGeneration() => _abortHandler.cancelImageGeneration();
   Future<void> retryImageGeneration() async =>
       _imageRecoverySvc.retryImageGeneration();

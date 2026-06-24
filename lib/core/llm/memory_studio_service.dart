@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/api_config.dart';
 import '../models/studio_config.dart';
@@ -13,6 +15,36 @@ import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
 
+final studioRuntimeStateProvider = StateProvider<StudioRuntimeState>(
+  (_) => const StudioRuntimeState.idle(),
+);
+
+class StudioRuntimeState {
+  final String? sessionId;
+  final String? agentId;
+  final String? agentName;
+  final int index;
+  final int total;
+  final bool canFinishAgent;
+
+  const StudioRuntimeState({
+    required this.sessionId,
+    required this.agentId,
+    required this.agentName,
+    required this.index,
+    required this.total,
+    required this.canFinishAgent,
+  });
+
+  const StudioRuntimeState.idle()
+    : sessionId = null,
+      agentId = null,
+      agentName = null,
+      index = 0,
+      total = 0,
+      canFinishAgent = false;
+}
+
 /// Session-bound Studio pipeline.
 ///
 /// The Studio menu stores a user-editable [StudioConfig]. At generation time
@@ -20,17 +52,43 @@ import 'transport/transport_factory.dart';
 /// compact briefs; the last enabled agent produces the actual RP response.
 class MemoryStudioService {
   final Ref _ref;
+  Completer<void>? _finishCurrentAgent;
 
   MemoryStudioService(this._ref);
 
+  void finishCurrentAgent() {
+    final completer = _finishCurrentAgent;
+    if (completer == null || completer.isCompleted) {
+      _log('finish current agent ignored: no active agent');
+      return;
+    }
+    _log('finish current agent requested');
+    completer.complete();
+  }
+
   Future<StudioConfig?> getEnabledConfig(String sessionId) async {
-    final config = await _ref.read(studioConfigRepoProvider).getBySessionId(
-          sessionId,
-        );
-    if (config == null || !config.enabled) return null;
+    _log('load config session=$sessionId');
+    final config = await _ref
+        .read(studioConfigRepoProvider)
+        .getBySessionId(sessionId);
+    if (config == null) {
+      _log('config missing session=$sessionId');
+      return null;
+    }
+    if (!config.enabled) {
+      _log('config disabled session=$sessionId agents=${config.agents.length}');
+      return null;
+    }
     final enabledAgents = config.agents.where((a) => a.enabled).toList()
       ..sort((a, b) => a.order.compareTo(b.order));
-    if (enabledAgents.isEmpty) return null;
+    if (enabledAgents.isEmpty) {
+      _log('config has no enabled agents session=$sessionId');
+      return null;
+    }
+    _log(
+      'config enabled session=$sessionId agents=${enabledAgents.length} '
+      'runApi=${config.runApiConfigId.isEmpty ? '<active>' : config.runApiConfigId}',
+    );
     return config.copyWith(agents: enabledAgents);
   }
 
@@ -51,16 +109,33 @@ class MemoryStudioService {
       final agents = config.agents.where((a) => a.enabled).toList()
         ..sort((a, b) => a.order.compareTo(b.order));
       if (agents.isEmpty) {
+        _log('pipeline disabled: no enabled agents session=$sessionId');
         return const StudioPipelineResult(status: 'disabled', response: '');
       }
+
+      _log(
+        'pipeline start session=$sessionId agents=${agents.length} '
+        'baseMessages=${promptResult.messages.length}',
+      );
 
       final briefs = <StudioStageBrief>[];
       for (var i = 0; i < agents.length; i++) {
         if (token.isCancelled) {
+          _log('pipeline aborted before agent index=$i session=$sessionId');
           return const StudioPipelineResult(status: 'aborted', response: '');
         }
         final agent = agents[i];
         final isFinal = i == agents.length - 1;
+        _ref
+            .read(studioRuntimeStateProvider.notifier)
+            .state = StudioRuntimeState(
+          sessionId: sessionId,
+          agentId: agent.id,
+          agentName: agent.name,
+          index: i,
+          total: agents.length,
+          canFinishAgent: true,
+        );
         final text = await _runAgent(
           agent: agent,
           promptResult: promptResult,
@@ -71,10 +146,17 @@ class MemoryStudioService {
           isFinalResponse: isFinal,
         );
         if (token.isCancelled) {
+          _log(
+            'pipeline aborted after agent="${agent.name}" session=$sessionId',
+          );
           return const StudioPipelineResult(status: 'aborted', response: '');
         }
 
         if (isFinal) {
+          _log(
+            'pipeline complete session=$sessionId finalAgent="${agent.name}" '
+            'chars=${text.length} briefs=${briefs.length}',
+          );
           return StudioPipelineResult(
             status: 'ok',
             response: text,
@@ -90,16 +172,32 @@ class MemoryStudioService {
             disposition: MemoryStudioOutputDisposition.ephemeral,
           ),
         );
+        _log(
+          'brief stored session=$sessionId agent="${agent.name}" '
+          'chars=${text.length} briefs=${briefs.length}',
+        );
       }
 
+      _log('pipeline disabled: loop ended session=$sessionId');
       return const StudioPipelineResult(status: 'disabled', response: '');
-    } on TimeoutException {
-      return const StudioPipelineResult(status: 'timeout', response: '');
+    } on TimeoutException catch (e) {
+      _log('pipeline timeout session=$sessionId error=${e.message}');
+      return StudioPipelineResult(
+        status: 'timeout',
+        response: '',
+        error: e.message?.isNotEmpty == true ? e.message : 'Studio timed out',
+      );
     } catch (e) {
       if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
+        _log('pipeline aborted by cancel session=$sessionId');
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
+      _log('pipeline error session=$sessionId error=$e');
       return StudioPipelineResult(status: 'error', response: '', error: '$e');
+    } finally {
+      _finishCurrentAgent = null;
+      _ref.read(studioRuntimeStateProvider.notifier).state =
+          const StudioRuntimeState.idle();
     }
   }
 
@@ -118,6 +216,8 @@ class MemoryStudioService {
     }
 
     final completer = Completer<String>();
+    final finishCompleter = Completer<void>();
+    _finishCurrentAgent = finishCompleter;
     final transport = pickChatTransport(resolved.protocol);
     final messages = _buildAgentMessages(
       agent: agent,
@@ -125,42 +225,151 @@ class MemoryStudioService {
       priorBriefs: priorBriefs,
       isFinalResponse: isFinalResponse,
     );
+    final startedAt = DateTime.now();
+    final timeoutMs = _effectiveTimeoutMs(agent, isFinalResponse);
+    final shouldStream = resolved.stream;
+    final output = StringBuffer();
+    final reasoning = StringBuffer();
+    Timer? idleTimer;
+    CancelToken? agentCancelToken;
+    var finishRequested = false;
+    void completeWithAccumulated(String reason) {
+      if (completer.isCompleted) return;
+      final text = output.toString().trim();
+      _log(
+        'agent finish accumulated session=$sessionId name="${agent.name}" '
+        'reason=$reason chars=${text.length}',
+      );
+      completer.complete(text);
+    }
 
-    unawaited(transport.stream(
-      request: ChatTransportRequest(
-        endpoint: resolved.endpoint,
-        apiKey: resolved.apiKey,
-        model: resolved.model,
-        messages: messages,
-        maxTokens: agent.maxTokens,
-        temperature: agent.temperature,
-        topP: resolved.topP,
-        topK: resolved.topK,
-        frequencyPenalty: resolved.frequencyPenalty,
-        presencePenalty: resolved.presencePenalty,
-        stream: false,
-        requestReasoning: false,
-        omitTemperature: resolved.omitTemperature,
-        omitTopP: resolved.omitTopP,
-        omitReasoning: true,
-        omitReasoningEffort: true,
-        sessionId: sessionId,
-        cacheControlTtl: resolved.cacheControlTtl,
-        cacheBreakpointMode: resolved.cacheBreakpointMode,
-        sessionIdMode: resolved.sessionIdMode,
-      ),
-      cancelToken: cancelToken,
-      onComplete: (text, _, {rawResponseJson}) {
-        if (!completer.isCompleted) completer.complete(text.trim());
-      },
-      onError: (error) {
-        if (!completer.isCompleted) completer.completeError(error);
-      },
-    ));
+    void resetAgentTimer() {
+      idleTimer?.cancel();
+      idleTimer = Timer(Duration(milliseconds: timeoutMs), () {
+        if (shouldStream && (output.isNotEmpty || reasoning.isNotEmpty)) {
+          completeWithAccumulated('idle_timeout');
+          agentCancelToken?.cancel('Studio agent idle timeout');
+        } else if (!completer.isCompleted) {
+          completer.completeError(
+            TimeoutException(
+              'Studio agent "${agent.name}" timed out after ${timeoutMs}ms',
+            ),
+          );
+        }
+      });
+    }
 
-    return completer.future.timeout(
-      Duration(milliseconds: agent.timeoutMs.clamp(1000, 120000)),
+    final inputChars = messages.fold<int>(
+      0,
+      (sum, m) => sum + (m['content']?.toString().length ?? 0),
     );
+    _log(
+      'agent start session=$sessionId name="${agent.name}" '
+      'final=$isFinalResponse source=${agent.modelSource} '
+      'protocol=${resolved.protocol} model=${resolved.model} '
+      'messages=${messages.length} inputChars=$inputChars '
+      'stream=$shouldStream maxTokens=${agent.maxTokens} temp=${agent.temperature} '
+      'timeoutMs=$timeoutMs persistedTimeoutMs=${agent.timeoutMs}',
+    );
+
+    agentCancelToken = CancelToken();
+    unawaited(
+      cancelToken.whenCancel.then((_) {
+        if (!(agentCancelToken?.isCancelled ?? true)) {
+          agentCancelToken?.cancel('Studio pipeline cancelled');
+        }
+      }),
+    );
+    unawaited(
+      finishCompleter.future.then((_) {
+        finishRequested = true;
+        completeWithAccumulated('manual_finish');
+        if (!(agentCancelToken?.isCancelled ?? true)) {
+          agentCancelToken?.cancel('Studio agent manually finished');
+        }
+      }),
+    );
+    resetAgentTimer();
+
+    unawaited(
+      transport.stream(
+        request: ChatTransportRequest(
+          endpoint: resolved.endpoint,
+          apiKey: resolved.apiKey,
+          model: resolved.model,
+          messages: messages,
+          maxTokens: agent.maxTokens,
+          temperature: agent.temperature,
+          topP: resolved.topP,
+          topK: resolved.topK,
+          frequencyPenalty: resolved.frequencyPenalty,
+          presencePenalty: resolved.presencePenalty,
+          stream: shouldStream,
+          requestReasoning: false,
+          omitTemperature: resolved.omitTemperature,
+          omitTopP: resolved.omitTopP,
+          omitReasoning: true,
+          omitReasoningEffort: true,
+          sessionId: sessionId,
+          cacheControlTtl: resolved.cacheControlTtl,
+          cacheBreakpointMode: resolved.cacheBreakpointMode,
+          sessionIdMode: resolved.sessionIdMode,
+        ),
+        cancelToken: agentCancelToken,
+        onUpdate: (delta, reasoningDelta) {
+          if (delta.isNotEmpty) output.write(delta);
+          if (reasoningDelta != null && reasoningDelta.isNotEmpty) {
+            reasoning.write(reasoningDelta);
+          }
+          if (delta.isNotEmpty || reasoningDelta?.isNotEmpty == true) {
+            resetAgentTimer();
+          }
+        },
+        onComplete: (text, _, {rawResponseJson}) {
+          final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
+          idleTimer?.cancel();
+          if (shouldStream && output.isEmpty && text.isNotEmpty) {
+            output.write(text);
+          }
+          _log(
+            'agent complete session=$sessionId name="${agent.name}" '
+            'elapsedMs=$elapsed chars=${text.trim().length} '
+            'rawJson=${rawResponseJson?.length ?? 0}',
+          );
+          if (!completer.isCompleted) {
+            final accumulated = output.toString().trim();
+            completer.complete(
+              shouldStream && accumulated.isNotEmpty
+                  ? accumulated
+                  : text.trim(),
+            );
+          }
+        },
+        onError: (error) {
+          final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
+          idleTimer?.cancel();
+          if (finishRequested && completer.isCompleted) return;
+          if (shouldStream &&
+              (agentCancelToken?.isCancelled ?? false) &&
+              output.isNotEmpty) {
+            completeWithAccumulated('cancel_with_streamed_text');
+            return;
+          }
+          _log(
+            'agent error session=$sessionId name="${agent.name}" '
+            'elapsedMs=$elapsed error=$error',
+          );
+          if (!completer.isCompleted) completer.completeError(error);
+        },
+      ),
+    );
+
+    return completer.future.whenComplete(() {
+      idleTimer?.cancel();
+      if (identical(_finishCurrentAgent, finishCompleter)) {
+        _finishCurrentAgent = null;
+      }
+    });
   }
 
   Future<_ResolvedAgentConfig> _resolveAgentConfig(
@@ -170,7 +379,8 @@ class MemoryStudioService {
   ) async {
     if (agent.modelSource == 'custom') {
       await _ref.read(apiListProvider.future);
-      final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
+      final apiConfigs =
+          _ref.read(apiListProvider).value ?? const <ApiConfig>[];
       final selected = apiConfigs.where((c) => c.id == agent.model).firstOrNull;
       if (selected != null) return _ResolvedAgentConfig.fromApiConfig(selected);
       return _ResolvedAgentConfig(
@@ -178,6 +388,7 @@ class MemoryStudioService {
         apiKey: current.apiKey,
         model: agent.model,
         protocol: LlmProtocol.openai,
+        stream: current.stream,
       );
     }
 
@@ -192,9 +403,9 @@ class MemoryStudioService {
   }
 
   Future<String> _readRunApiConfigId(String sessionId) async {
-    final config = await _ref.read(studioConfigRepoProvider).getBySessionId(
-          sessionId,
-        );
+    final config = await _ref
+        .read(studioConfigRepoProvider)
+        .getBySessionId(sessionId);
     return config?.runApiConfigId ?? '';
   }
 
@@ -215,9 +426,11 @@ class MemoryStudioService {
     final control = StringBuffer()
       ..writeln(agent.promptShard.trim())
       ..writeln()
-      ..writeln(isFinalResponse
-          ? 'You are the final responder. Produce only the in-character RP response.'
-          : 'You are an intermediate Studio agent. Produce a compact brief for later agents. Do not write the final RP response.');
+      ..writeln(
+        isFinalResponse
+            ? 'You are the final responder. Produce only the in-character RP response.'
+            : 'You are an intermediate Studio agent. Produce a compact brief for later agents. Do not write the final RP response.',
+      );
     if (briefText.isNotEmpty) {
       control
         ..writeln()
@@ -235,6 +448,16 @@ class MemoryStudioService {
     const allowed = {'system', 'user', 'assistant'};
     return allowed.contains(role) ? role : 'system';
   }
+
+  int _effectiveTimeoutMs(StudioAgent agent, bool isFinalResponse) {
+    final fallback = isFinalResponse ? 90000 : 60000;
+    if (agent.timeoutMs <= 4000) return fallback;
+    return agent.timeoutMs.clamp(1000, 120000);
+  }
+
+  void _log(String message) {
+    debugPrint('[Studio] $message');
+  }
 }
 
 class _ResolvedAgentConfig {
@@ -248,6 +471,7 @@ class _ResolvedAgentConfig {
   final double presencePenalty;
   final bool omitTemperature;
   final bool omitTopP;
+  final bool stream;
   final String cacheControlTtl;
   final String cacheBreakpointMode;
   final String sessionIdMode;
@@ -263,6 +487,7 @@ class _ResolvedAgentConfig {
     this.presencePenalty = 0.0,
     this.omitTemperature = false,
     this.omitTopP = false,
+    this.stream = false,
     this.cacheControlTtl = 'off',
     this.cacheBreakpointMode = 'depth',
     this.sessionIdMode = 'openrouter',
@@ -280,6 +505,7 @@ class _ResolvedAgentConfig {
       presencePenalty: config.presencePenalty,
       omitTemperature: config.omitTemperature,
       omitTopP: config.omitTopP,
+      stream: config.stream,
       cacheControlTtl: config.cacheControlTtl,
       cacheBreakpointMode: config.cacheBreakpointMode,
       sessionIdMode: config.sessionIdMode,
