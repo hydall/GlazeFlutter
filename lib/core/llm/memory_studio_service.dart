@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/api_config.dart';
+import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
 import '../../features/settings/api_list_provider.dart';
+import 'history_assembler.dart';
 import 'memory_studio_mode.dart';
 import 'prompt_builder.dart';
 import 'tokenizer.dart';
@@ -29,6 +31,17 @@ final studioLastRequestProvider =
 final studioRuntimeStateProvider = StateProvider<StudioRuntimeState>(
   (_) => const StudioRuntimeState.idle(),
 );
+
+const _mandatoryBlockIds = {'char_card', 'char_personality', 'user_persona'};
+
+bool isStudioSelectableBlock(PresetBlock block) {
+  final id = normalizeBlockId(block.id);
+  if (!block.enabled || block.isStashed) return false;
+  if (id == 'chat_history') return false;
+  if (_mandatoryBlockIds.contains(id)) return false;
+  if (block.role.toLowerCase() != 'system') return false;
+  return true;
+}
 
 class StudioRuntimeState {
   final String? sessionId;
@@ -129,6 +142,7 @@ class MemoryStudioService {
   Future<StudioPipelineResult> runPipeline({
     required StudioConfig config,
     required PromptResult promptResult,
+    required PromptPayload promptPayload,
     required ApiConfig apiConfig,
     required String sessionId,
     CancelToken? cancelToken,
@@ -175,7 +189,9 @@ class MemoryStudioService {
         final text = await _runAgent(
           agent: agent,
           promptResult: promptResult,
+          promptPayload: promptPayload,
           apiConfig: apiConfig,
+          config: config,
           priorBriefs: briefs,
           sessionId: sessionId,
           cancelToken: token,
@@ -248,7 +264,9 @@ class MemoryStudioService {
   Future<String> _runAgent({
     required StudioAgent agent,
     required PromptResult promptResult,
+    required PromptPayload promptPayload,
     required ApiConfig apiConfig,
+    required StudioConfig config,
     required List<StudioStageBrief> priorBriefs,
     required String sessionId,
     required CancelToken cancelToken,
@@ -267,6 +285,8 @@ class MemoryStudioService {
     final messages = _buildAgentMessages(
       agent: agent,
       promptResult: promptResult,
+      promptPayload: promptPayload,
+      config: config,
       priorBriefs: priorBriefs,
       isFinalResponse: isFinalResponse,
     );
@@ -503,16 +523,19 @@ class MemoryStudioService {
   List<Map<String, dynamic>> _buildAgentMessages({
     required StudioAgent agent,
     required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required StudioConfig config,
     required List<StudioStageBrief> priorBriefs,
     required bool isFinalResponse,
   }) {
     final contextMessages = _studioContextMessages(
       promptResult,
+      promptPayload: promptPayload,
+      selectedBlockIds: config.selectedBlockIdsInitialized
+          ? config.selectedBlockIds
+          : _defaultStudioBlockIds(promptPayload.preset),
       activeDialogue: isFinalResponse,
     );
-    final briefText = priorBriefs
-        .map((b) => '${b.agentName}:\n${b.brief}')
-        .join('\n\n---\n\n');
 
     final control = StringBuffer()
       ..writeln(agent.promptShard.trim())
@@ -522,21 +545,26 @@ class MemoryStudioService {
             ? 'You are the final responder. Produce only the in-character RP response.'
             : 'You are an intermediate Studio agent. The chat transcript is quoted context, not an active user request. Produce ONLY a compact operational brief for later agents. Do not write narrative prose, dialogue, or the final RP response.',
       );
-    if (briefText.isNotEmpty) {
-      control
-        ..writeln()
-        ..writeln('Prior Studio briefs:')
-        ..writeln(briefText);
-    }
+    final briefMessages = priorBriefs
+        .where((b) => b.brief.trim().isNotEmpty)
+        .map(
+          (b) => {
+            'role': 'system',
+            'content': 'Studio agent brief: ${b.agentName}\n${b.brief}',
+          },
+        );
 
     return [
       {'role': _normalizeRole(agent.role), 'content': control.toString()},
+      ...briefMessages,
       ...contextMessages,
     ];
   }
 
   List<Map<String, dynamic>> _studioContextMessages(
     PromptResult promptResult, {
+    required PromptPayload promptPayload,
+    required List<String> selectedBlockIds,
     required bool activeDialogue,
   }) {
     final history = promptResult.messages
@@ -545,31 +573,92 @@ class MemoryStudioService {
     final nonHistory = promptResult.messages
         .where((m) => !m.isHistory && m.content.trim().isNotEmpty)
         .toList();
+    final presetBlockNames = <String, String>{
+      for (final b in promptPayload.preset?.blocks ?? const <PresetBlock>[])
+        normalizeBlockId(b.id): b.name,
+    };
 
-    final memoryAndLore = nonHistory.where((m) {
-      final name = '${m.blockName ?? ''} ${m.blockId ?? ''}'.toLowerCase();
-      return m.isLorebook ||
-          m.isSummary ||
-          name.contains('memory') ||
-          name.contains('lorebook') ||
-          name.contains('summary');
+    final mandatoryContext = _mandatoryCharacterPersonaContext(
+      promptResult,
+      promptPayload,
+      presetBlockNames,
+    );
+    final selectedIds = selectedBlockIds.toSet();
+    final includedRawBlockIds = {...selectedIds, ..._mandatoryBlockIds};
+    final selectedArcMacro = _selectedRawBlocksContainMacro(
+      promptPayload.preset,
+      includedRawBlockIds,
+      'arc',
+    );
+    final selectedEntitiesMacro = _selectedRawBlocksContainMacro(
+      promptPayload.preset,
+      includedRawBlockIds,
+      'entities',
+    );
+    final selectedBlocks = nonHistory.where((m) {
+      final id = m.blockId;
+      if (id == null || !selectedIds.contains(id)) return false;
+      if (_mandatoryBlockIds.contains(id)) return false;
+      if (_isRetrievedContextBlock(m)) return false;
+      return true;
     }).toList();
 
-    final context = StringBuffer()
-      ..writeln('Studio context summary:')
-      ..writeln(
-        'Use the conversation history and compact contextual notes below. Do not reproduce diagnostics, ledgers, checklists, or planning scaffolds in the final answer.',
-      );
-    if (memoryAndLore.isNotEmpty) {
-      context
-        ..writeln()
-        ..writeln('Context notes:');
-      for (final msg in memoryAndLore.take(8)) {
-        context
-          ..writeln('--- ${msg.blockName ?? msg.blockId ?? msg.role} ---')
-          ..writeln(_trimForStudioContext(msg.content, 2500));
-      }
-    }
+    final retrievedContext = nonHistory
+        .where(_isRetrievedContextBlock)
+        .toList();
+
+    final stableMessages = <Map<String, dynamic>>[
+      {
+        'role': 'system',
+        'content':
+            'Studio stable context follows as separate blocks. Character card and persona are mandatory for every agent.',
+      },
+      ...mandatoryContext.map(
+        (m) => _contextMessage(
+          'Mandatory: ${_studioBlockLabel(m, presetBlockNames)}',
+          m.content,
+          6000,
+        ),
+      ),
+      ...selectedBlocks.map(
+        (m) => _contextMessage(
+          'Selected preset block: ${_studioBlockLabel(m, presetBlockNames)}',
+          m.content,
+          5000,
+        ),
+      ),
+    ];
+
+    final retrievedMessages = <Map<String, dynamic>>[
+      {
+        'role': 'system',
+        'content':
+            'Studio retrieved context follows after chat history as separate blocks. Use memory books, lorebooks, summaries, arc, and entity facts as supporting context. Do not reproduce diagnostics, ledgers, checklists, or planning scaffolds in the final answer.',
+      },
+      ...retrievedContext
+          .take(12)
+          .map(
+            (m) => _contextMessage(
+              'Retrieved: ${_studioBlockLabel(m, presetBlockNames)}',
+              m.content,
+              3500,
+            ),
+          ),
+      if (!selectedArcMacro &&
+          (promptPayload.arcContent ?? '').trim().isNotEmpty)
+        _contextMessage(
+          'Arc Memory ({{arc}})',
+          promptPayload.arcContent!,
+          2500,
+        ),
+      if (!selectedEntitiesMacro &&
+          (promptPayload.entitiesContent ?? '').trim().isNotEmpty)
+        _contextMessage(
+          'Entity Memory ({{entities}})',
+          promptPayload.entitiesContent!,
+          2500,
+        ),
+    ];
 
     final recentHistory = history.length > 12
         ? history.sublist(history.length - 12)
@@ -584,15 +673,139 @@ class MemoryStudioService {
           ..writeln();
       }
       return [
-        {'role': 'system', 'content': context.toString()},
+        ...stableMessages,
         {'role': 'user', 'content': transcript.toString()},
+        ...retrievedMessages,
       ];
     }
 
     return [
-      {'role': 'system', 'content': context.toString()},
+      ...stableMessages,
       ...recentHistory.map((m) => m.toApiMap()),
+      ...retrievedMessages,
     ];
+  }
+
+  List<PromptMessage> _mandatoryCharacterPersonaContext(
+    PromptResult promptResult,
+    PromptPayload promptPayload,
+    Map<String, String> presetBlockNames,
+  ) {
+    final existing = promptResult.messages
+        .where((m) => _mandatoryBlockIds.contains(m.blockId))
+        .where((m) => m.content.trim().isNotEmpty)
+        .toList();
+    final found = existing.map((m) => m.blockId).whereType<String>().toSet();
+    final fallback = <PromptMessage>[...existing];
+    if (!found.contains('char_card')) {
+      final character = promptPayload.character;
+      final parts = <String>[
+        'Name: ${character.name}',
+        if ((character.description ?? '').trim().isNotEmpty)
+          'Description:\n${character.description}',
+        if ((character.scenario ?? '').trim().isNotEmpty)
+          'Scenario:\n${character.scenario}',
+        if ((character.systemPrompt ?? '').trim().isNotEmpty)
+          'System prompt:\n${character.systemPrompt}',
+        if ((character.postHistoryInstructions ?? '').trim().isNotEmpty)
+          'Post-history instructions:\n${character.postHistoryInstructions}',
+        if ((character.mesExample ?? '').trim().isNotEmpty)
+          'Example dialogue:\n${character.mesExample}',
+      ];
+      fallback.add(
+        PromptMessage(
+          role: 'system',
+          content: parts.join('\n\n'),
+          blockId: 'char_card',
+          blockName: presetBlockNames['char_card'] ?? 'Character Card',
+        ),
+      );
+    }
+    if (!found.contains('char_personality') &&
+        (promptPayload.character.personality ?? '').trim().isNotEmpty) {
+      fallback.add(
+        PromptMessage(
+          role: 'system',
+          content: promptPayload.character.personality!,
+          blockId: 'char_personality',
+          blockName: presetBlockNames['char_personality'] ?? 'Personality',
+        ),
+      );
+    }
+    if (!found.contains('user_persona')) {
+      final persona = promptPayload.persona;
+      if (persona != null && (persona.prompt ?? '').trim().isNotEmpty) {
+        fallback.add(
+          PromptMessage(
+            role: 'system',
+            content: 'Name: ${persona.name}\n\n${persona.prompt}',
+            blockId: 'user_persona',
+            blockName: presetBlockNames['user_persona'] ?? 'User Persona',
+          ),
+        );
+      }
+    }
+    return fallback;
+  }
+
+  bool _isRetrievedContextBlock(PromptMessage m) {
+    final name = '${m.blockName ?? ''} ${m.blockId ?? ''}'.toLowerCase();
+    return m.isLorebook ||
+        m.isSummary ||
+        name.contains('memory') ||
+        name.contains('lorebook') ||
+        name.contains('summary') ||
+        name.contains('arc') ||
+        name.contains('entities') ||
+        name.contains('entity');
+  }
+
+  Map<String, dynamic> _contextMessage(
+    String label,
+    String content,
+    int maxChars,
+  ) {
+    return {
+      'role': 'system',
+      'content': '[$label]\n${_trimForStudioContext(content, maxChars)}',
+    };
+  }
+
+  String _studioBlockLabel(
+    PromptMessage msg,
+    Map<String, String> presetBlockNames,
+  ) {
+    if ((msg.blockName ?? '').trim().isNotEmpty) return msg.blockName!;
+    final id = msg.blockId;
+    if (id != null && (presetBlockNames[id] ?? '').trim().isNotEmpty) {
+      return presetBlockNames[id]!;
+    }
+    return id ?? msg.role;
+  }
+
+  List<String> _defaultStudioBlockIds(Preset? preset) {
+    if (preset == null) return const [];
+    return preset.blocks
+        .where(isStudioSelectableBlock)
+        .map((b) => normalizeBlockId(b.id))
+        .toSet()
+        .toList(growable: false);
+  }
+
+  bool _selectedRawBlocksContainMacro(
+    Preset? preset,
+    Set<String> selectedIds,
+    String macroName,
+  ) {
+    if (preset == null || selectedIds.isEmpty) return false;
+    final pattern = RegExp(
+      RegExp.escape('{{$macroName}}'),
+      caseSensitive: false,
+    );
+    return preset.blocks.any((block) {
+      final id = normalizeBlockId(block.id);
+      return selectedIds.contains(id) && pattern.hasMatch(block.content);
+    });
   }
 
   String _trimForStudioContext(String text, int maxChars) {

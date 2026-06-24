@@ -195,6 +195,7 @@ class StreamGenerationService {
             .runPipeline(
               config: studioConfig,
               promptResult: promptResult,
+              promptPayload: payload,
               apiConfig: apiConfig,
               sessionId: session.id,
               cancelToken: cancelToken,

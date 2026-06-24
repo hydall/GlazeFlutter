@@ -18,6 +18,8 @@ abstract class StudioConfig with _$StudioConfig {
     @Default('') String sourcePresetHash,
     @Default('') String buildApiConfigId,
     @Default('') String runApiConfigId,
+    @Default([]) List<String> selectedBlockIds,
+    @Default(false) bool selectedBlockIdsInitialized,
     @Default(0) int createdAt,
     @Default(0) int updatedAt,
   }) = _StudioConfig;

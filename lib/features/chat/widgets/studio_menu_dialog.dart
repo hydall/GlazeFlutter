@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/studio_decomposition_service.dart';
+import '../../../core/llm/memory_studio_service.dart';
+import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/preset.dart';
@@ -123,6 +125,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         ),
         buildApiConfigId: buildApiConfig.id,
         runApiConfigId: contextInfo.runApiConfig?.id ?? '',
+        selectedBlockIds: _defaultSelectedBlockIds(preset),
+        selectedBlockIdsInitialized: true,
         createdAt: now,
         updatedAt: now,
       );
@@ -365,6 +369,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           child: _buildContextInfoCard(),
         ),
         Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: _buildBlockSelectionCard(),
+        ),
+        Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
@@ -445,6 +453,79 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               await _refreshContextInfo(persistSelection: true);
             },
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBlockSelectionCard() {
+    final preset = _contextInfo.preset;
+    if (_config == null || preset == null) return const SizedBox.shrink();
+    final blocks = preset.blocks.where(isStudioSelectableBlock).toList();
+    if (blocks.isEmpty) return const SizedBox.shrink();
+    final selected = _effectiveSelectedBlockIds().toSet();
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        title: const Text('Studio context blocks'),
+        subtitle: Text(
+          '${selected.length}/${blocks.length} preset system blocks. Character card and persona are always included.',
+          style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              children: [
+                TextButton(
+                  onPressed: () => _updateSelectedBlockIds(
+                    blocks.map((b) => normalizeBlockId(b.id)).toList(),
+                  ),
+                  child: const Text('All'),
+                ),
+                TextButton(
+                  onPressed: () => _updateSelectedBlockIds(
+                    blocks
+                        .where((b) => b.isStatic)
+                        .map((b) => normalizeBlockId(b.id))
+                        .toList(),
+                  ),
+                  child: const Text('Static'),
+                ),
+                TextButton(
+                  onPressed: () => _updateSelectedBlockIds(const []),
+                  child: const Text('None'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          ...blocks.map((block) {
+            final id = normalizeBlockId(block.id);
+            return CheckboxListTile(
+              value: selected.contains(id),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(block.name.isNotEmpty ? block.name : id),
+              subtitle: Text(
+                '$id • ${block.role}${block.isStatic ? ' • static' : ''}',
+                style: const TextStyle(fontSize: 11),
+              ),
+              onChanged: (enabled) {
+                final next = selected.toSet();
+                if (enabled == true) {
+                  next.add(id);
+                } else {
+                  next.remove(id);
+                }
+                _updateSelectedBlockIds(next.toList());
+              },
+            );
+          }),
         ],
       ),
     );
@@ -853,6 +934,36 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         ],
       ),
     );
+  }
+
+  List<String> _defaultSelectedBlockIds(Preset preset) {
+    return preset.blocks
+        .where(isStudioSelectableBlock)
+        .map((b) => normalizeBlockId(b.id))
+        .toSet()
+        .toList(growable: false);
+  }
+
+  List<String> _effectiveSelectedBlockIds() {
+    final config = _config;
+    final preset = _contextInfo.preset;
+    if (config == null) return const [];
+    if (config.selectedBlockIdsInitialized || preset == null) {
+      return config.selectedBlockIds;
+    }
+    return _defaultSelectedBlockIds(preset);
+  }
+
+  Future<void> _updateSelectedBlockIds(List<String> ids) async {
+    final config = _config;
+    if (config == null) return;
+    final updated = config.copyWith(
+      selectedBlockIds: ids.toSet().toList(growable: false),
+      selectedBlockIdsInitialized: true,
+      updatedAt: currentTimestampSeconds(),
+    );
+    await ref.read(studioConfigRepoProvider).upsert(updated);
+    if (mounted) setState(() => _config = updated);
   }
 
   void _updateAgent(StudioAgent updated) {

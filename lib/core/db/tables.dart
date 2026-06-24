@@ -175,7 +175,8 @@ class MemoryEntityRows extends Table {
   TextColumn get chatSessionId => text()();
   TextColumn get memoryEntryId => text()();
   TextColumn get name => text()();
-  TextColumn get entityType => text().withDefault(const Constant('character'))();
+  TextColumn get entityType =>
+      text().withDefault(const Constant('character'))();
   TextColumn get aliasesJson => text().withDefault(const Constant('[]'))();
   TextColumn get description => text().withDefault(const Constant(''))();
   RealColumn get salienceAvg => real().withDefault(const Constant(0.0))();
@@ -289,6 +290,10 @@ class StudioConfigRows extends Table {
   TextColumn get sourcePresetHash => text().withDefault(const Constant(''))();
   TextColumn get buildApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get selectedBlockIdsJson =>
+      text().withDefault(const Constant('[]'))();
+  BoolColumn get selectedBlockIdsInitialized =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get createdAt => integer().withDefault(const Constant(0))();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();
 

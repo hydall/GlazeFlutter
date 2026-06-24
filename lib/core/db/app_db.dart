@@ -38,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 38;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -415,10 +415,31 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('build_api_config_id')) {
-          await m.addColumn(studioConfigRows, studioConfigRows.buildApiConfigId);
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.buildApiConfigId,
+          );
         }
         if (!colNames.contains('run_api_config_id')) {
           await m.addColumn(studioConfigRows, studioConfigRows.runApiConfigId);
+        }
+      }
+      if (from < 38) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('selected_block_ids_json')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.selectedBlockIdsJson,
+          );
+        }
+        if (!colNames.contains('selected_block_ids_initialized')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.selectedBlockIdsInitialized,
+          );
         }
       }
     },
