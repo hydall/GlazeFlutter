@@ -168,7 +168,10 @@ export class InteractionDispatch {
       'studio-output-edit': (e, el) => bridge._sendToFlutter('onStudioOutputEdit', [el.dataset.outputId, el.dataset.messageId]),
       'toggle-studio-output': (e, el) => {
         if (e.target.closest('.msg-studio-output-edit')) return;
-        el.closest('.msg-studio-output')?.classList.toggle('collapsed');
+        e.preventDefault();
+        e.stopPropagation();
+        const item = el.closest('.msg-studio-output');
+        if (item) item.classList.toggle('collapsed');
       },
       'toggle-hidden': (e, el) => bridge._sendToFlutter('onToggleHidden', [el.dataset.messageId]),
       'toggle-image-hidden': (e, el) => {

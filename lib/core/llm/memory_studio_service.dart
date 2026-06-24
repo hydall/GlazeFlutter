@@ -415,10 +415,7 @@ class MemoryStudioService {
     required List<StudioStageBrief> priorBriefs,
     required bool isFinalResponse,
   }) {
-    final baseMessages = promptResult.messages
-        .where((m) => m.content.trim().isNotEmpty)
-        .map((m) => m.toApiMap())
-        .toList();
+    final contextMessages = _studioContextMessages(promptResult);
     final briefText = priorBriefs
         .map((b) => '${b.agentName}:\n${b.brief}')
         .join('\n\n---\n\n');
@@ -440,8 +437,56 @@ class MemoryStudioService {
 
     return [
       {'role': _normalizeRole(agent.role), 'content': control.toString()},
-      ...baseMessages,
+      ...contextMessages,
     ];
+  }
+
+  List<Map<String, dynamic>> _studioContextMessages(PromptResult promptResult) {
+    final history = promptResult.messages
+        .where((m) => m.isHistory && m.content.trim().isNotEmpty)
+        .toList();
+    final nonHistory = promptResult.messages
+        .where((m) => !m.isHistory && m.content.trim().isNotEmpty)
+        .toList();
+
+    final memoryAndLore = nonHistory.where((m) {
+      final name = '${m.blockName ?? ''} ${m.blockId ?? ''}'.toLowerCase();
+      return m.isLorebook ||
+          m.isSummary ||
+          name.contains('memory') ||
+          name.contains('lorebook') ||
+          name.contains('summary');
+    }).toList();
+
+    final context = StringBuffer()
+      ..writeln('Studio context summary:')
+      ..writeln(
+        'Use the conversation history and compact contextual notes below. Do not reproduce diagnostics, ledgers, checklists, or planning scaffolds in the final answer.',
+      );
+    if (memoryAndLore.isNotEmpty) {
+      context
+        ..writeln()
+        ..writeln('Context notes:');
+      for (final msg in memoryAndLore.take(8)) {
+        context
+          ..writeln('--- ${msg.blockName ?? msg.blockId ?? msg.role} ---')
+          ..writeln(_trimForStudioContext(msg.content, 2500));
+      }
+    }
+
+    final recentHistory = history.length > 12
+        ? history.sublist(history.length - 12)
+        : history;
+    return [
+      {'role': 'system', 'content': context.toString()},
+      ...recentHistory.map((m) => m.toApiMap()),
+    ];
+  }
+
+  String _trimForStudioContext(String text, int maxChars) {
+    final trimmed = text.trim();
+    if (trimmed.length <= maxChars) return trimmed;
+    return '${trimmed.substring(0, maxChars)}...';
   }
 
   String _normalizeRole(String role) {

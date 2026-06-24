@@ -622,7 +622,10 @@
   color: var(--text-gray);
   overflow: hidden;
 }
-.msg-studio-output.collapsed .reasoning-arrow { transform: rotate(-90deg); }
+.msg-studio-output-content .msg-transition-wrapper { overflow: hidden; }
+.msg-studio-output-caret { display: inline-flex; transition: transform 0.3s ease; }
+.msg-studio-output-caret svg { width: 14px; height: 14px; fill: currentColor; }
+.msg-studio-output.collapsed .msg-studio-output-caret { transform: rotate(-90deg); }
 
 /* ============================================================
  * Content stack / body

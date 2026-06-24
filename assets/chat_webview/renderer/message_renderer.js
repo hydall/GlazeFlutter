@@ -315,6 +315,7 @@ if (messageData.isEditing) classes.push('editing');
       const header = document.createElement('div');
       header.className = 'msg-studio-output-header';
       header.dataset.action = 'toggle-studio-output';
+      header.dataset.outputId = output.id || '';
 
       const name = document.createElement('span');
       name.className = 'msg-studio-output-name';
@@ -332,7 +333,10 @@ if (messageData.isEditing) classes.push('editing');
       edit.title = 'Edit Studio output';
       edit.innerHTML = ICON.edit;
       actions.appendChild(edit);
-      actions.insertAdjacentHTML('beforeend', ICON.chevron);
+      const caret = document.createElement('span');
+      caret.className = 'msg-studio-output-caret';
+      caret.innerHTML = ICON.chevron;
+      actions.appendChild(caret);
       header.appendChild(actions);
 
       const content = document.createElement('div');
