@@ -38,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 36;
+  int get schemaVersion => 37;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -407,6 +407,18 @@ class AppDatabase extends _$AppDatabase {
         final tableNames = tables.map((r) => r.read<String>('name')).toSet();
         if (!tableNames.contains('studio_config_rows')) {
           await m.createTable(studioConfigRows);
+        }
+      }
+      if (from < 37) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('build_api_config_id')) {
+          await m.addColumn(studioConfigRows, studioConfigRows.buildApiConfigId);
+        }
+        if (!colNames.contains('run_api_config_id')) {
+          await m.addColumn(studioConfigRows, studioConfigRows.runApiConfigId);
         }
       }
     },

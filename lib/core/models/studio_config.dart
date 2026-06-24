@@ -16,6 +16,8 @@ abstract class StudioConfig with _$StudioConfig {
     @Default([]) List<StudioAgent> agents,
     @Default('') String sourcePresetId,
     @Default('') String sourcePresetHash,
+    @Default('') String buildApiConfigId,
+    @Default('') String runApiConfigId,
     @Default(0) int createdAt,
     @Default(0) int updatedAt,
   }) = _StudioConfig;

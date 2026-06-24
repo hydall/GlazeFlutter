@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:crypto/crypto.dart';
 
+import '../models/api_config.dart';
 import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../utils/time_helpers.dart';
@@ -36,6 +37,7 @@ class StudioDecompositionService {
   Future<List<StudioAgent>> decompose({
     required Preset preset,
     required String sessionId,
+    ApiConfig? apiConfig,
     CancelToken? cancelToken,
   }) async {
     final enabledBlocks = preset.blocks.where((b) => b.enabled).toList();
@@ -82,7 +84,11 @@ Rules:
 - Formatting blocks (HTML, comics, images) go to the main responder
 - Variable blocks (setvar) go to the main responder''';
 
-    final raw = await _callLlm(prompt, cancelToken: cancelToken);
+    final raw = await _callLlm(
+      prompt,
+      apiConfig: apiConfig,
+      cancelToken: cancelToken,
+    );
     if (raw == null) return const [];
 
     final decoded = jsonDecode(raw);
@@ -126,7 +132,11 @@ Rules:
     return sha1.convert(utf8.encode(input)).toString();
   }
 
-  Future<String?> _callLlm(String prompt, {CancelToken? cancelToken}) async {
+  Future<String?> _callLlm(
+    String prompt, {
+    ApiConfig? apiConfig,
+    CancelToken? cancelToken,
+  }) async {
     final settings = _ref.read(memoryGlobalSettingsProvider);
     final isCustom = settings.sidecarSource == 'custom';
     String endpoint;
@@ -134,7 +144,12 @@ Rules:
     String model;
     String protocol;
 
-    if (isCustom) {
+    if (apiConfig != null) {
+      endpoint = apiConfig.endpoint;
+      apiKey = apiConfig.apiKey;
+      model = apiConfig.model;
+      protocol = apiConfig.protocol;
+    } else if (isCustom) {
       endpoint = settings.sidecarEndpoint;
       apiKey = settings.sidecarApiKey;
       model = settings.sidecarModel;

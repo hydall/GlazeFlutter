@@ -112,7 +112,7 @@ class MemoryStudioService {
     required CancelToken cancelToken,
     required bool isFinalResponse,
   }) async {
-    final resolved = await _resolveAgentConfig(agent, apiConfig);
+    final resolved = await _resolveAgentConfig(agent, apiConfig, sessionId);
     if (resolved.endpoint.isEmpty || resolved.model.isEmpty) {
       throw Exception('Studio agent "${agent.name}" API is not configured');
     }
@@ -166,8 +166,13 @@ class MemoryStudioService {
   Future<_ResolvedAgentConfig> _resolveAgentConfig(
     StudioAgent agent,
     ApiConfig current,
+    String sessionId,
   ) async {
     if (agent.modelSource == 'custom') {
+      await _ref.read(apiListProvider.future);
+      final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
+      final selected = apiConfigs.where((c) => c.id == agent.model).firstOrNull;
+      if (selected != null) return _ResolvedAgentConfig.fromApiConfig(selected);
       return _ResolvedAgentConfig(
         endpoint: agent.endpoint,
         apiKey: current.apiKey,
@@ -177,8 +182,20 @@ class MemoryStudioService {
     }
 
     await _ref.read(apiListProvider.future);
-    final active = _ref.read(activeApiConfigProvider) ?? current;
+    final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    final configRunId = await _readRunApiConfigId(sessionId);
+    final selected = configRunId.isNotEmpty
+        ? apiConfigs.where((c) => c.id == configRunId).firstOrNull
+        : null;
+    final active = selected ?? _ref.read(activeApiConfigProvider) ?? current;
     return _ResolvedAgentConfig.fromApiConfig(active);
+  }
+
+  Future<String> _readRunApiConfigId(String sessionId) async {
+    final config = await _ref.read(studioConfigRepoProvider).getBySessionId(
+          sessionId,
+        );
+    return config?.runApiConfigId ?? '';
   }
 
   List<Map<String, dynamic>> _buildAgentMessages({

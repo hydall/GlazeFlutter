@@ -27,6 +27,8 @@ class StudioConfigRepo {
         agentsJson: Value(jsonEncode(config.agents.map((a) => a.toJson()).toList())),
         sourcePresetId: Value(config.sourcePresetId),
         sourcePresetHash: Value(config.sourcePresetHash),
+        buildApiConfigId: Value(config.buildApiConfigId),
+        runApiConfigId: Value(config.runApiConfigId),
         createdAt: Value(config.createdAt),
         updatedAt: Value(currentTimestampSeconds()),
       ),
@@ -69,6 +71,8 @@ class StudioConfigRepo {
       agents: agents,
       sourcePresetId: row.sourcePresetId,
       sourcePresetHash: row.sourcePresetHash,
+      buildApiConfigId: row.buildApiConfigId,
+      runApiConfigId: row.runApiConfigId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );
