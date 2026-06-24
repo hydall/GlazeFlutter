@@ -662,9 +662,9 @@ class _MemoryGenerationSettingsSheetState
               : _memoryMode == 'deep'
               ? 'memory_mode_deep_desc'.tr()
               : _memoryMode == 'agentic'
-              ? 'Experimental. LLM-guided memory search. Adds latency and cost.'
+              ? 'memory_mode_agentic_desc'.tr()
               : _memoryMode == 'studio'
-              ? 'Experimental. Multi-stage RP pipeline. Highest latency and cost.'
+              ? 'memory_mode_studio_desc'.tr()
               : 'memory_mode_fast_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),

@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../state/memory_activity_provider.dart';
+import 'memory_graph_panel.dart';
 
 class MemoryActivityCard extends StatefulWidget {
   final MemoryActivityState activity;
   final bool expanded;
   final VoidCallback onToggle;
+  final String? sessionId;
 
   const MemoryActivityCard({
     super.key,
     required this.activity,
     required this.expanded,
     required this.onToggle,
+    this.sessionId,
   });
 
   @override
@@ -126,28 +130,48 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                   ),
                 if (widget.expanded) ...[
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                  Row(
                     children: [
-                      _MemoryActivityChip(label: 'skipped $skippedCount'),
-                      _MemoryActivityChip(label: 'latency ${latencyMs}ms'),
-                      _MemoryActivityChip(
-                        label: _budgetLabel(diagnostics['budget']),
+                      Expanded(
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _MemoryActivityChip(label: 'skipped $skippedCount'),
+                            _MemoryActivityChip(label: 'latency ${latencyMs}ms'),
+                            _MemoryActivityChip(
+                              label: _budgetLabel(diagnostics['budget']),
+                            ),
+                            if (diagnostics['classifierStatus'] != null &&
+                                diagnostics['classifierStatus'] != 'disabled')
+                              _MemoryActivityChip(
+                                label:
+                                    'classifier ${diagnostics['classifierStatus']}',
+                              ),
+                            if (diagnostics['sidecarStatus'] != null &&
+                                diagnostics['sidecarStatus'] != 'disabled')
+                              _MemoryActivityChip(
+                                label: 'sidecar ${diagnostics['sidecarStatus']}',
+                              ),
+                            if (diagnostics['prewarmHit'] == true)
+                              const _MemoryActivityChip(label: 'prewarm hit'),
+                          ],
+                        ),
                       ),
-                      if (diagnostics['classifierStatus'] != null &&
-                          diagnostics['classifierStatus'] != 'disabled')
-                        _MemoryActivityChip(
-                          label:
-                              'classifier ${diagnostics['classifierStatus']}',
+                      if (widget.sessionId != null &&
+                          widget.sessionId!.isNotEmpty)
+                        IconButton(
+                          onPressed: () => showDialog(
+                            context: context,
+                            builder: (_) => MemoryGraphPanel(
+                              sessionId: widget.sessionId!,
+                            ),
+                          ),
+                          icon: const Icon(Icons.account_tree_outlined,
+                              size: 18),
+                          tooltip: 'Memory Graph',
+                          visualDensity: VisualDensity.compact,
                         ),
-                      if (diagnostics['sidecarStatus'] != null &&
-                          diagnostics['sidecarStatus'] != 'disabled')
-                        _MemoryActivityChip(
-                          label: 'sidecar ${diagnostics['sidecarStatus']}',
-                        ),
-                      if (diagnostics['prewarmHit'] == true)
-                        const _MemoryActivityChip(label: 'prewarm hit'),
                     ],
                   ),
                   const SizedBox(height: 8),

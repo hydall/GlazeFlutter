@@ -104,6 +104,8 @@ class PromptPayload {
   final int memoryExcerptChunksPerEntry;
   final int chunkFirstTopEntries;
   final int chunkFirstTopChunks;
+  final String? arcContent;
+  final String? entitiesContent;
 
   const PromptPayload({
     required this.character,
@@ -140,6 +142,8 @@ class PromptPayload {
     this.memoryExcerptChunksPerEntry = defaultMemoryExcerptChunksPerEntry,
     this.chunkFirstTopEntries = 3,
     this.chunkFirstTopChunks = 1,
+    this.arcContent,
+    this.entitiesContent,
   });
 }
 
@@ -274,6 +278,8 @@ PromptResult buildPrompt(PromptPayload payload) {
     guidanceText: payload.guidanceText,
     macroName: char.macroName,
     memoryContent: payload.memoryMacroContent,
+    arcContent: payload.arcContent,
+    entitiesContent: payload.entitiesContent,
   );
 
   var currentSessionVars = Map<String, String>.from(payload.sessionVars);

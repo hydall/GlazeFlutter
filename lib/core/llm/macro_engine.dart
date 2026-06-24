@@ -81,6 +81,8 @@ class MacroContext {
     Object? memoryContent = _sentinel,
     Object? lorebooksContent = _sentinel,
     Object? guidanceText = _sentinel,
+    Object? arcContent = _sentinel,
+    Object? entitiesContent = _sentinel,
   }) {
     return MacroContext(
       charName: charName,
@@ -101,6 +103,8 @@ class MacroContext {
       lorebooksContent: identical(lorebooksContent, _sentinel) ? this.lorebooksContent : lorebooksContent as String?,
       guidanceText: identical(guidanceText, _sentinel) ? this.guidanceText : guidanceText as String?,
       macroName: macroName,
+      arcContent: identical(arcContent, _sentinel) ? this.arcContent : arcContent as String?,
+      entitiesContent: identical(entitiesContent, _sentinel) ? this.entitiesContent : entitiesContent as String?,
     );
   }
 
@@ -125,6 +129,8 @@ class MacroContext {
     'lorebooksContent': lorebooksContent,
     'guidanceText': guidanceText,
     'macroName': macroName,
+    'arcContent': arcContent,
+    'entitiesContent': entitiesContent,
   };
 
   factory MacroContext.fromJson(Map<String, dynamic> json) => MacroContext(
@@ -146,6 +152,8 @@ class MacroContext {
     lorebooksContent: json['lorebooksContent'] as String?,
     guidanceText: json['guidanceText'] as String?,
     macroName: json['macroName'] as String?,
+    arcContent: json['arcContent'] as String?,
+    entitiesContent: json['entitiesContent'] as String?,
   );
 }
 

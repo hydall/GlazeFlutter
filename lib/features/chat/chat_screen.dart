@@ -1330,6 +1330,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       child: MemoryActivityCard(
                         activity: memoryActivity,
                         expanded: _showMemoryActivity,
+                        sessionId: widget.state.session?.id,
                         onToggle: () {
                           setState(() {
                             _showMemoryActivity = !_showMemoryActivity;
