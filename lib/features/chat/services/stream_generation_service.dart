@@ -166,6 +166,7 @@ class StreamGenerationService {
         final startGenTime = DateTime.now();
         bool studioFrameScheduled = false;
         var latestStudioText = '';
+        String? latestStudioReasoning;
         var latestStudioOutputs = const <Map<String, dynamic>>[];
         void scheduleStudioStreamingUpdate() {
           if (studioFrameScheduled) return;
@@ -177,6 +178,7 @@ class StreamGenerationService {
                 .read(streamingStateProvider(_charId).notifier)
                 .state = StreamingState(
               text: latestStudioText,
+              reasoning: latestStudioReasoning,
               studioOutputs: latestStudioOutputs,
             );
           });
@@ -199,9 +201,10 @@ class StreamGenerationService {
               apiConfig: apiConfig,
               sessionId: session.id,
               cancelToken: cancelToken,
-              onFinalResponseUpdate: (text) {
+              onFinalResponseUpdate: (text, reasoning) {
                 if (_isAborted()) return;
                 latestStudioText = text;
+                latestStudioReasoning = reasoning;
                 scheduleStudioStreamingUpdate();
               },
             );
@@ -243,7 +246,9 @@ class StreamGenerationService {
         );
         final finalState = _writer.writeAssistant(
           text: studioResult.response,
-          reasoning: null,
+          reasoning: studioResult.reasoning.isNotEmpty
+              ? studioResult.reasoning
+              : null,
           currentSession: saveSession ?? session,
           isAborted: _isAborted,
           pendingSessionVars: pendingSessionVars,

@@ -146,7 +146,7 @@ class MemoryStudioService {
     required ApiConfig apiConfig,
     required String sessionId,
     CancelToken? cancelToken,
-    void Function(String text)? onFinalResponseUpdate,
+    void Function(String text, String? reasoning)? onFinalResponseUpdate,
   }) async {
     final token = cancelToken ?? CancelToken();
     if (token.isCancelled) {
@@ -186,7 +186,7 @@ class MemoryStudioService {
           total: agents.length,
           canFinishAgent: true,
         );
-        final text = await _runAgent(
+        final agentResult = await _runAgent(
           agent: agent,
           promptResult: promptResult,
           promptPayload: promptPayload,
@@ -215,11 +215,13 @@ class MemoryStudioService {
         if (isFinal) {
           _log(
             'pipeline complete session=$sessionId finalAgent="${agent.name}" '
-            'chars=${text.length} briefs=${briefs.length}',
+            'chars=${agentResult.text.length} reasoning=${agentResult.reasoning.length} '
+            'briefs=${briefs.length}',
           );
           return StudioPipelineResult(
             status: 'ok',
-            response: text,
+            response: agentResult.text,
+            reasoning: agentResult.reasoning,
             stageBriefs: briefs,
           );
         }
@@ -228,13 +230,13 @@ class MemoryStudioService {
           StudioStageBrief(
             agentId: agent.id,
             agentName: agent.name,
-            brief: text,
+            brief: agentResult.text,
             disposition: MemoryStudioOutputDisposition.ephemeral,
           ),
         );
         _log(
           'brief stored session=$sessionId agent="${agent.name}" '
-          'chars=${text.length} briefs=${briefs.length}',
+          'chars=${agentResult.text.length} briefs=${briefs.length}',
         );
       }
 
@@ -261,7 +263,7 @@ class MemoryStudioService {
     }
   }
 
-  Future<String> _runAgent({
+  Future<_StudioAgentRunResult> _runAgent({
     required StudioAgent agent,
     required PromptResult promptResult,
     required PromptPayload promptPayload,
@@ -271,7 +273,7 @@ class MemoryStudioService {
     required String sessionId,
     required CancelToken cancelToken,
     required bool isFinalResponse,
-    void Function(String text)? onFinalResponseUpdate,
+    void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
     final resolved = await _resolveAgentConfig(agent, apiConfig, sessionId);
@@ -279,7 +281,7 @@ class MemoryStudioService {
       throw Exception('Studio agent "${agent.name}" API is not configured');
     }
 
-    final completer = Completer<String>();
+    final completer = Completer<_StudioAgentRunResult>();
     final finishCompleter = Completer<void>();
     _finishCurrentAgent = finishCompleter;
     final messages = _buildAgentMessages(
@@ -303,11 +305,14 @@ class MemoryStudioService {
       frequencyPenalty: resolved.frequencyPenalty,
       presencePenalty: resolved.presencePenalty,
       stream: shouldStream,
-      requestReasoning: false,
+      requestReasoning: isFinalResponse ? resolved.requestReasoning : false,
+      reasoningEffort: isFinalResponse ? resolved.reasoningEffort : null,
       omitTemperature: resolved.omitTemperature,
       omitTopP: resolved.omitTopP,
-      omitReasoning: true,
-      omitReasoningEffort: true,
+      omitReasoning: isFinalResponse ? resolved.omitReasoning : true,
+      omitReasoningEffort: isFinalResponse
+          ? resolved.omitReasoningEffort
+          : true,
       sessionId: sessionId,
       cacheControlTtl: resolved.cacheControlTtl,
       cacheBreakpointMode: resolved.cacheBreakpointMode,
@@ -338,11 +343,14 @@ class MemoryStudioService {
     void completeWithAccumulated(String reason) {
       if (completer.isCompleted) return;
       final text = output.toString().trim();
+      final reasoningText = isFinalResponse ? reasoning.toString().trim() : '';
       _log(
         'agent finish accumulated session=$sessionId name="${agent.name}" '
-        'reason=$reason chars=${text.length}',
+        'reason=$reason chars=${text.length} reasoning=${reasoningText.length}',
       );
-      completer.complete(text);
+      completer.complete(
+        _StudioAgentRunResult(text: text, reasoning: reasoningText),
+      );
     }
 
     void resetAgentTimer() {
@@ -400,18 +408,27 @@ class MemoryStudioService {
         onUpdate: (delta, reasoningDelta) {
           if (delta.isNotEmpty) output.write(delta);
           if (isFinalResponse && delta.isNotEmpty) {
-            onFinalResponseUpdate?.call(output.toString().trimLeft());
+            onFinalResponseUpdate?.call(
+              output.toString().trimLeft(),
+              reasoning.isNotEmpty ? reasoning.toString() : null,
+            );
           } else if (!isFinalResponse && delta.isNotEmpty) {
             onIntermediateUpdate?.call(output.toString().trimLeft());
           }
           if (reasoningDelta != null && reasoningDelta.isNotEmpty) {
             reasoning.write(reasoningDelta);
+            if (isFinalResponse) {
+              onFinalResponseUpdate?.call(
+                output.toString().trimLeft(),
+                reasoning.toString(),
+              );
+            }
           }
           if (delta.isNotEmpty || reasoningDelta?.isNotEmpty == true) {
             resetAgentTimer();
           }
         },
-        onComplete: (text, _, {rawResponseJson}) {
+        onComplete: (text, finalReasoning, {rawResponseJson}) {
           final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
           idleTimer?.cancel();
           if (shouldStream && output.isEmpty && text.isNotEmpty) {
@@ -419,10 +436,15 @@ class MemoryStudioService {
           }
           if (isFinalResponse) {
             final accumulated = output.toString().trimLeft();
+            final reasoningText = reasoning.isNotEmpty
+                ? reasoning.toString()
+                : finalReasoning?.trim().isNotEmpty == true
+                ? finalReasoning!.trim()
+                : null;
             if (accumulated.isNotEmpty) {
-              onFinalResponseUpdate?.call(accumulated);
+              onFinalResponseUpdate?.call(accumulated, reasoningText);
             } else if (text.isNotEmpty) {
-              onFinalResponseUpdate?.call(text.trimLeft());
+              onFinalResponseUpdate?.call(text.trimLeft(), reasoningText);
             }
           } else {
             final accumulated = output.toString().trimLeft();
@@ -439,10 +461,18 @@ class MemoryStudioService {
           );
           if (!completer.isCompleted) {
             final accumulated = output.toString().trim();
+            final reasoningText = isFinalResponse
+                ? reasoning.isNotEmpty
+                      ? reasoning.toString().trim()
+                      : finalReasoning?.trim() ?? ''
+                : '';
             completer.complete(
-              shouldStream && accumulated.isNotEmpty
-                  ? accumulated
-                  : text.trim(),
+              _StudioAgentRunResult(
+                text: shouldStream && accumulated.isNotEmpty
+                    ? accumulated
+                    : text.trim(),
+                reasoning: reasoningText,
+              ),
             );
           }
         },
@@ -884,6 +914,10 @@ class _ResolvedAgentConfig {
   final double presencePenalty;
   final bool omitTemperature;
   final bool omitTopP;
+  final bool requestReasoning;
+  final String? reasoningEffort;
+  final bool omitReasoning;
+  final bool omitReasoningEffort;
   final bool stream;
   final String cacheControlTtl;
   final String cacheBreakpointMode;
@@ -901,6 +935,10 @@ class _ResolvedAgentConfig {
     this.presencePenalty = 0.0,
     this.omitTemperature = false,
     this.omitTopP = false,
+    this.requestReasoning = false,
+    this.reasoningEffort,
+    this.omitReasoning = false,
+    this.omitReasoningEffort = false,
     this.stream = false,
     this.cacheControlTtl = 'off',
     this.cacheBreakpointMode = 'depth',
@@ -923,6 +961,10 @@ class _ResolvedAgentConfig {
       presencePenalty: config.presencePenalty,
       omitTemperature: config.omitTemperature,
       omitTopP: config.omitTopP,
+      requestReasoning: config.requestReasoning,
+      reasoningEffort: config.reasoningEffort,
+      omitReasoning: config.omitReasoning,
+      omitReasoningEffort: config.omitReasoningEffort,
       stream: config.stream,
       cacheControlTtl: config.cacheControlTtl,
       cacheBreakpointMode: config.cacheBreakpointMode,
@@ -935,15 +977,24 @@ class _ResolvedAgentConfig {
 class StudioPipelineResult {
   final String status;
   final String response;
+  final String reasoning;
   final List<StudioStageBrief> stageBriefs;
   final String? error;
 
   const StudioPipelineResult({
     required this.status,
     required this.response,
+    this.reasoning = '',
     this.stageBriefs = const [],
     this.error,
   });
+}
+
+class _StudioAgentRunResult {
+  final String text;
+  final String reasoning;
+
+  const _StudioAgentRunResult({required this.text, this.reasoning = ''});
 }
 
 class StudioStageBrief {
