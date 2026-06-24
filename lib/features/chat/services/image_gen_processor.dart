@@ -10,7 +10,7 @@ import '../../../core/utils/time_helpers.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../../settings/api_list_provider.dart';
-import '../../image_gen/services/image_gen_service.dart';
+import '../../image_gen/services/image_tag_markup.dart';
 import '../chat_state.dart';
 
 class ImageGenProcessor {
@@ -47,7 +47,7 @@ class ImageGenProcessor {
 
     final notifier = _ref.read(imageGenSettingsProvider.notifier);
     final service = await notifier.getServiceAsync();
-    if (!service.hasImageGenTags(lastMsg.content)) return;
+    if (!ImageTagMarkup.hasImageGenTags(lastMsg.content)) return;
 
     final apiConfigSync = _ref.read(activeApiConfigProvider);
     final ApiConfig apiConfig;
@@ -123,8 +123,8 @@ class ImageGenProcessor {
     if (_cancelToken?.isCancelled == true) {
       var cancelContent = updatedContent;
       int idx = 0;
-      while (service.hasImageGenTags(cancelContent)) {
-        cancelContent = service.replaceTagWithError(cancelContent, idx, 'Cancelled by user');
+      while (ImageTagMarkup.hasImageGenTags(cancelContent)) {
+        cancelContent = ImageTagMarkup.replaceTagWithError(cancelContent, idx, 'Cancelled by user');
         idx++;
       }
       final newMessages = List<ChatMessage>.from(session.messages);
@@ -155,7 +155,7 @@ class ImageGenProcessor {
   List<String> _collectRecentImageContexts(List<ChatMessage> messages) {
     final contexts = <String>[];
     for (int i = messages.length - 1; i >= 0 && contexts.length < 3; i--) {
-      final paths = ImageGenService.extractImageResultPaths(messages[i].content);
+      final paths = ImageTagMarkup.extractImageResultPaths(messages[i].content);
       contexts.addAll(paths);
     }
     return contexts.reversed.toList();

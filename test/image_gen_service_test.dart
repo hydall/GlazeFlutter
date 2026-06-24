@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/features/image_gen/services/image_gen_service.dart';
+import 'package:glaze_flutter/features/image_gen/services/image_tag_markup.dart';
 import 'package:glaze_flutter/features/image_gen/image_gen_models.dart';
 import 'package:glaze_flutter/core/services/image_storage_service.dart';
 
@@ -13,12 +14,12 @@ void main() {
 
   group('hasImageGenTags', () {
     test('detects [IMG:GEN] tag', () {
-      expect(service.hasImageGenTags('Hello [IMG:GEN:]'), isTrue);
+      expect(ImageTagMarkup.hasImageGenTags('Hello [IMG:GEN:]'), isTrue);
     });
 
     test('detects [IMG:GEN:json] tag', () {
       expect(
-        service.hasImageGenTags('Hello [IMG:GEN:{"prompt":"test"}]'),
+        ImageTagMarkup.hasImageGenTags('Hello [IMG:GEN:{"prompt":"test"}]'),
         isTrue,
       );
     });
@@ -26,21 +27,21 @@ void main() {
     test('detects data-iig-instruction with single quotes', () {
       const html =
           """<img data-iig-instruction='{"style":"manga","prompt":"test"}' src="[IMG:GEN]">""";
-      expect(service.hasImageGenTags(html), isTrue);
+      expect(ImageTagMarkup.hasImageGenTags(html), isTrue);
     });
 
     test('detects data-iig-instruction with double quotes', () {
       const html =
           '''<img data-iig-instruction="{"style":"manga","prompt":"test"}" src="[IMG:GEN]">''';
-      expect(service.hasImageGenTags(html), isTrue);
+      expect(ImageTagMarkup.hasImageGenTags(html), isTrue);
     });
 
     test('returns false for plain text', () {
-      expect(service.hasImageGenTags('Just a normal message'), isFalse);
+      expect(ImageTagMarkup.hasImageGenTags('Just a normal message'), isFalse);
     });
 
     test('returns false for empty string', () {
-      expect(service.hasImageGenTags(''), isFalse);
+      expect(ImageTagMarkup.hasImageGenTags(''), isFalse);
     });
 
     test('detects tag inside full HTML card', () {
@@ -50,13 +51,13 @@ void main() {
     <i>Caption text</i>
   </div>
 </div>""";
-      expect(service.hasImageGenTags(html), isTrue);
+      expect(ImageTagMarkup.hasImageGenTags(html), isTrue);
     });
   });
 
   group('extractImageGenInstructions', () {
     test('extracts from [IMG:GEN:json]', () {
-      final instructions = service.extractImageGenInstructions(
+      final instructions = ImageTagMarkup.extractImageGenInstructions(
         'Hello [IMG:GEN:{"prompt":"a sunset","style":"anime"}]',
       );
       expect(instructions.length, 1);
@@ -67,7 +68,7 @@ void main() {
     test('extracts from HTML single-quoted data-iig-instruction', () {
       const html =
           """<img data-iig-instruction='{"style":"cinematic manga","prompt":"SCENE_PROMPT: test scene","aspect_ratio":"9:16","image_size":"1K"}' src="[IMG:GEN]">""";
-      final instructions = service.extractImageGenInstructions(html);
+      final instructions = ImageTagMarkup.extractImageGenInstructions(html);
       expect(instructions.length, 1);
       expect(instructions[0]['style'], 'cinematic manga');
       expect(instructions[0]['prompt'], 'SCENE_PROMPT: test scene');
@@ -76,7 +77,7 @@ void main() {
     });
 
     test('extracts multiple tags', () {
-      final instructions = service.extractImageGenInstructions(
+      final instructions = ImageTagMarkup.extractImageGenInstructions(
         '[IMG:GEN:{"prompt":"first"}] and [IMG:GEN:{"prompt":"second"}]',
       );
       expect(instructions.length, 2);
@@ -85,7 +86,7 @@ void main() {
     });
 
     test('handles empty [IMG:GEN]', () {
-      final instructions = service.extractImageGenInstructions('[IMG:GEN:]');
+      final instructions = ImageTagMarkup.extractImageGenInstructions('[IMG:GEN:]');
       expect(instructions.length, 1);
       expect(instructions[0]['prompt'], '');
     });
@@ -103,7 +104,7 @@ void main() {
     <i>Caption text</i>
   </div>
 </div>""";
-      final instructions = service.extractImageGenInstructions(html);
+      final instructions = ImageTagMarkup.extractImageGenInstructions(html);
       expect(instructions.length, 1);
       expect(
         instructions[0]['prompt'],
@@ -116,7 +117,7 @@ void main() {
     test('JSON with CSS containerStyle is still parsed', () {
       const html =
           """<img data-iig-instruction='{"style":"manga","prompt":"test","containerStyle":"max-width:680px; background:rgba(15,15,28,0.94);"}' src="[IMG:GEN]">""";
-      final instructions = service.extractImageGenInstructions(html);
+      final instructions = ImageTagMarkup.extractImageGenInstructions(html);
       expect(instructions.length, 1);
       expect(instructions[0]['containerStyle'], isNotNull);
     });
@@ -124,7 +125,7 @@ void main() {
 
   group('replaceTagWithResult', () {
     test('replaces [IMG:GEN:json] with [IMG:RESULT:path|instruction]', () {
-      final result = service.replaceTagWithResult(
+      final result = ImageTagMarkup.replaceTagWithResult(
         'Hello [IMG:GEN:{"prompt":"test"}]',
         0,
         '/path/to/image.png',
@@ -136,7 +137,7 @@ void main() {
     test('replaces HTML data-iig-instruction tag', () {
       const html =
           """<img data-iig-instruction='{"style":"manga","prompt":"test"}' src="[IMG:GEN]">""";
-      final result = service.replaceTagWithResult(html, 0, '/saved/img.png');
+      final result = ImageTagMarkup.replaceTagWithResult(html, 0, '/saved/img.png');
       expect(result, contains('[IMG:RESULT:/saved/img.png|'));
       expect(result, isNot(contains('data-iig-instruction')));
     });
@@ -144,14 +145,14 @@ void main() {
     test('replaces whole HTML img tag with src IMG:GEN', () {
       const html =
           """<div><img src='[IMG:GEN:{"prompt":"test"}]' alt="scene"><i>caption</i></div>""";
-      final result = service.replaceTagWithResult(html, 0, '/saved/img.png');
+      final result = ImageTagMarkup.replaceTagWithResult(html, 0, '/saved/img.png');
       expect(result, contains('[IMG:RESULT:/saved/img.png|'));
       expect(result, isNot(contains('<img')));
       expect(result, contains('caption'));
     });
 
     test('only replaces the tag at given index', () {
-      final result = service.replaceTagWithResult(
+      final result = ImageTagMarkup.replaceTagWithResult(
         '[IMG:GEN:{"prompt":"first"}] and [IMG:GEN:{"prompt":"second"}]',
         0,
         '/img1.png',
@@ -163,7 +164,7 @@ void main() {
 
   group('replaceTagWithError', () {
     test('replaces tag with error JSON', () {
-      final result = service.replaceTagWithError(
+      final result = ImageTagMarkup.replaceTagWithError(
         '[IMG:GEN:{"prompt":"test"}]',
         0,
         'API timeout',
@@ -184,20 +185,20 @@ void main() {
         'error': '502',
         'instruction': '{"prompt":"test"}',
       });
-      final result = service.resetErrorTags('[IMG:ERROR:$errorJson]');
+      final result = ImageTagMarkup.resetErrorTags('[IMG:ERROR:$errorJson]');
       expect(result, contains('[IMG:GEN:{"prompt":"test"}]'));
       expect(result, isNot(contains('[IMG:ERROR')));
     });
 
     test('converts [IMG:ERROR:] without instruction to bare [IMG:GEN]', () {
       final errorJson = jsonEncode({'error': 'timeout'});
-      final result = service.resetErrorTags('[IMG:ERROR:$errorJson]');
+      final result = ImageTagMarkup.resetErrorTags('[IMG:ERROR:$errorJson]');
       expect(result, contains('[IMG:GEN]'));
       expect(result, isNot(contains('[IMG:ERROR')));
     });
 
     test('converts [IMG:RESULT:] with instruction back to [IMG:GEN:]', () {
-      final result = service.resetErrorTags(
+      final result = ImageTagMarkup.resetErrorTags(
         '[IMG:RESULT:/path/to/img.png|{"prompt":"scene"}]',
       );
       expect(result, contains('[IMG:GEN:{"prompt":"scene"}]'));
@@ -205,7 +206,7 @@ void main() {
     });
 
     test('converts [IMG:RESULT:] without instruction to bare [IMG:GEN]', () {
-      final result = service.resetErrorTags('[IMG:RESULT:/path/to/img.png]');
+      final result = ImageTagMarkup.resetErrorTags('[IMG:RESULT:/path/to/img.png]');
       expect(result, contains('[IMG:GEN]'));
       expect(result, isNot(contains('[IMG:RESULT')));
     });
@@ -217,7 +218,7 @@ void main() {
       });
       final text =
           '[IMG:ERROR:$errorJson] and [IMG:RESULT:/img.png|{"prompt":"second"}]';
-      final result = service.resetErrorTags(text);
+      final result = ImageTagMarkup.resetErrorTags(text);
       expect(result, contains('[IMG:GEN:{"prompt":"first"}]'));
       expect(result, contains('[IMG:GEN:{"prompt":"second"}]'));
       expect(result, isNot(contains('[IMG:ERROR')));
@@ -229,7 +230,7 @@ void main() {
     test('SCENE_PROMPT prefix is stripped and style is prepended', () {
       const json =
           '{"style":"cinematic manga","prompt":"SCENE_PROMPT: A group walks","aspect_ratio":"9:16"}';
-      final instructions = service.extractImageGenInstructions(
+      final instructions = ImageTagMarkup.extractImageGenInstructions(
         '[IMG:GEN:$json]',
       );
       final rawPrompt = instructions[0]['prompt'] as String;
@@ -256,9 +257,9 @@ void main() {
   <img data-iig-instruction='{"style":"cinematic manga","prompt":"SCENE_PROMPT: A group enters","aspect_ratio":"9:16","image_size":"1K"}' src="[IMG:GEN]">
 </div>""";
 
-      expect(service.hasImageGenTags(html), isTrue);
+      expect(ImageTagMarkup.hasImageGenTags(html), isTrue);
 
-      final instructions = service.extractImageGenInstructions(html);
+      final instructions = ImageTagMarkup.extractImageGenInstructions(html);
       expect(instructions.length, 1);
 
       final rawPrompt = instructions[0]['prompt'] as String;
@@ -279,7 +280,7 @@ void main() {
   <img data-iig-instruction='{"style":"manga","prompt":"test"}' src="[IMG:GEN]">
   <i>caption</i>
 </div>""";
-      final result = service.replaceTagWithResult(html, 0, '/img.png');
+      final result = ImageTagMarkup.replaceTagWithResult(html, 0, '/img.png');
       expect(result, contains('[IMG:RESULT:/img.png|'));
       expect(result, isNot(contains('data-iig-instruction')));
       expect(result, contains('caption'));
@@ -288,14 +289,14 @@ void main() {
     test('replaceTagWithError on HTML removes entire img tag', () {
       const html =
           """<img data-iig-instruction='{"prompt":"test"}' src="[IMG:GEN]">""";
-      final result = service.replaceTagWithError(html, 0, 'timeout');
+      final result = ImageTagMarkup.replaceTagWithError(html, 0, 'timeout');
       expect(result, contains('[IMG:ERROR:'));
       expect(result, isNot(contains('data-iig-instruction')));
     });
 
     test('replaceTagWithError removes whole img tag with src IMG:GEN', () {
       const html = """<img src="[IMG:GEN:{"prompt":"test"}]" alt="scene">""";
-      final result = service.replaceTagWithError(html, 0, 'timeout');
+      final result = ImageTagMarkup.replaceTagWithError(html, 0, 'timeout');
       expect(result, contains('[IMG:ERROR:'));
       expect(result, isNot(contains('<img')));
     });
@@ -303,7 +304,7 @@ void main() {
     test('no duplicate extraction from src=[IMG:GEN] inside HTML img tag', () {
       const html =
           """<img data-iig-instruction='{"prompt":"test"}' src="[IMG:GEN]">""";
-      final instructions = service.extractImageGenInstructions(html);
+      final instructions = ImageTagMarkup.extractImageGenInstructions(html);
       expect(instructions.length, 1);
     });
 

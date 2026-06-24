@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/db/repositories/info_blocks_repository.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/persona.dart';
-import '../../../image_gen/image_gen_provider.dart';
+import '../../../image_gen/services/image_tag_markup.dart';
 import '../../models/block_config.dart';
 import '../../models/block_run_status.dart';
 import '../../models/info_block.dart';
@@ -46,10 +46,7 @@ class ImageOnlyRerunner {
     final existing = rows.where((b) => b.blockId == blockId).firstOrNull;
     if (existing == null || existing.content.isEmpty) return;
 
-    final imageService = await ref
-        .read(imageGenSettingsProvider.notifier)
-        .getServiceAsync();
-    if (imageService
+    if (ImageTagMarkup
         .extractInstructionsFromImageContent(existing.content)
         .isEmpty) {
       return;

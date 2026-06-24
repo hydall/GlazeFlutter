@@ -10,7 +10,7 @@ import '../../../../core/models/character.dart';
 import '../../../../core/models/persona.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../../image_gen/image_gen_provider.dart';
-import '../../../image_gen/services/image_gen_service.dart';
+import '../../../image_gen/services/image_tag_markup.dart';
 import '../../models/block_config.dart';
 import '../../models/block_run_status.dart';
 import '../../models/info_block.dart';
@@ -82,7 +82,7 @@ class ImagePixelRenderer {
     final imageService = await ref
         .read(imageGenSettingsProvider.notifier)
         .getServiceAsync();
-    final instructions = imageService.extractInstructionsFromImageContent(
+    final instructions = ImageTagMarkup.extractInstructionsFromImageContent(
       sourceContent,
     );
     if (instructions.isEmpty) {
@@ -147,7 +147,7 @@ class ImagePixelRenderer {
                 )
                 .toList()
               ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        recentImageContexts = ImageGenService.collectRecentImageResultPaths(
+        recentImageContexts = ImageTagMarkup.collectRecentImageResultPaths(
           imageContents.map((b) => b.content),
           maxPaths: 3,
         );
@@ -194,8 +194,8 @@ class ImagePixelRenderer {
         sourceContent,
       );
       final content = hasResultToken
-          ? imageService.replaceExtBlockImageResult(sourceContent, filePath)
-          : imageService.replaceTagWithResult(sourceContent, 0, filePath);
+          ? ImageTagMarkup.replaceExtBlockImageResult(sourceContent, filePath)
+          : ImageTagMarkup.replaceTagWithResult(sourceContent, 0, filePath);
       await repo.updateContent(placeholderId, content);
       await repo.updateStatus(placeholderId, BlockRunStatus.done);
 
