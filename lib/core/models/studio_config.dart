@@ -45,6 +45,7 @@ abstract class StudioAgent with _$StudioAgent {
     @Default(true) bool enabled,
     @Default('current') String modelSource,
     @Default('') String model,
+    @Default('') String modelOverride,
     @Default('') String endpoint,
     @Default(4000) int timeoutMs,
     @Default(0.3) double temperature,

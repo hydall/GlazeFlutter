@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/studio_decomposition_service.dart';
+import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/preset.dart';
 import '../../../core/models/studio_config.dart';
@@ -11,6 +12,7 @@ import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/utils/time_helpers.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../settings/api_list_provider.dart';
 import '../chat_provider.dart';
 
@@ -44,6 +46,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   String? _selectedRunApiConfigId;
   bool _loading = true;
   bool _building = false;
+  final Map<String, List<String>> _modelsByApiConfigId = {};
+  final Set<String> _fetchingModelConfigIds = {};
   String? _error;
 
   @override
@@ -88,7 +92,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       final contextInfo = await _loadContextInfo(config: _config);
       final preset = contextInfo.preset;
       if (preset == null) {
-        throw Exception('No preset available. Create or select a preset first.');
+        throw Exception(
+          'No preset available. Create or select a preset first.',
+        );
       }
       final buildApiConfig = contextInfo.buildApiConfig;
       if (buildApiConfig == null) {
@@ -155,31 +161,37 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       ref.read(presetConnectionsProvider),
     );
 
-    final selectedPresetId = _selectedPresetId ??
+    final selectedPresetId =
+        _selectedPresetId ??
         (config?.sourcePresetId.isNotEmpty == true
             ? config!.sourcePresetId
             : null) ??
         effectivePreset?.id;
-    final preset = presets.where((p) => p.id == selectedPresetId).firstOrNull ??
+    final preset =
+        presets.where((p) => p.id == selectedPresetId).firstOrNull ??
         effectivePreset;
 
     final apiConfigs = await ref.read(apiListProvider.future);
     final activeApi = ref.read(activeApiConfigProvider);
-    final selectedBuildId = _selectedBuildApiConfigId ??
+    final selectedBuildId =
+        _selectedBuildApiConfigId ??
         (config?.buildApiConfigId.isNotEmpty == true
             ? config!.buildApiConfigId
             : null) ??
         activeApi?.id;
-    final selectedRunId = _selectedRunApiConfigId ??
+    final selectedRunId =
+        _selectedRunApiConfigId ??
         (config?.runApiConfigId.isNotEmpty == true
             ? config!.runApiConfigId
             : null) ??
         activeApi?.id;
-    final buildApiConfig = apiConfigs
+    final buildApiConfig =
+        apiConfigs
             .where((c) => c.id == selectedBuildId && c.mode != 'embedding')
             .firstOrNull ??
         activeApi;
-    final runApiConfig = apiConfigs
+    final runApiConfig =
+        apiConfigs
             .where((c) => c.id == selectedRunId && c.mode != 'embedding')
             .firstOrNull ??
         activeApi;
@@ -307,11 +319,11 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildContextInfoCard(),
-              const SizedBox(height: 24),
-              Icon(
-                Icons.movie_filter_outlined,
+          children: [
+            _buildContextInfoCard(),
+            const SizedBox(height: 24),
+            Icon(
+              Icons.movie_filter_outlined,
               size: 64,
               color: context.cs.primary.withValues(alpha: 0.5),
             ),
@@ -439,9 +451,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   }
 
   Widget _presetSelector() {
-    final effectiveValue = _contextInfo.presets.any(
-      (preset) => preset.id == _selectedPresetId,
-    )
+    final effectiveValue =
+        _contextInfo.presets.any((preset) => preset.id == _selectedPresetId)
         ? _selectedPresetId
         : null;
     return DropdownButtonFormField<String>(
@@ -454,10 +465,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       ),
       items: _contextInfo.presets
           .map(
-            (preset) => DropdownMenuItem(
-              value: preset.id,
-              child: Text(preset.name),
-            ),
+            (preset) =>
+                DropdownMenuItem(value: preset.id, child: Text(preset.name)),
           )
           .toList(),
       hint: Text(_contextInfo.presetLabel),
@@ -505,10 +514,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       padding: const EdgeInsets.only(top: 4),
       child: Text(
         text,
-        style: TextStyle(
-          fontSize: 11,
-          color: context.cs.onSurfaceVariant,
-        ),
+        style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
       ),
     );
   }
@@ -540,6 +546,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         _updateAgent(
           agent.copyWith(
             model: config.id,
+            modelOverride: '',
             endpoint: config.endpoint,
           ),
         );
@@ -558,9 +565,104 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 
   String _agentApiConfigLabel(StudioAgent agent) {
     final config = _agentApiConfig(agent);
-    if (config != null) return _apiLabel(config);
+    if (config != null) {
+      final label = _apiLabel(config);
+      return agent.modelOverride.isNotEmpty
+          ? '$label -> ${agent.modelOverride}'
+          : label;
+    }
     if (agent.modelSource == 'custom') return 'custom not set';
     return _contextInfo.runModelLabel;
+  }
+
+  Future<void> _fetchProviderModels(ApiConfig config) async {
+    setState(() => _fetchingModelConfigIds.add(config.id));
+    try {
+      final models = await pickChatTransport(
+        config.protocol,
+      ).fetchModels(endpoint: config.endpoint, apiKey: config.apiKey);
+      final ids =
+          models
+              .map((m) => m['id'])
+              .whereType<String>()
+              .where((id) => id.trim().isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
+      if (config.model.isNotEmpty && !ids.contains(config.model)) {
+        ids.insert(0, config.model);
+      }
+      if (!mounted) return;
+      setState(() => _modelsByApiConfigId[config.id] = ids);
+    } catch (e) {
+      if (mounted) GlazeErrorDialog.show(context, e, prefix: 'Fetch models');
+    } finally {
+      if (mounted) setState(() => _fetchingModelConfigIds.remove(config.id));
+    }
+  }
+
+  Widget _providerModelSelector(StudioAgent agent) {
+    final config = _agentApiConfig(agent);
+    if (config == null) return const SizedBox.shrink();
+    final fetched = _modelsByApiConfigId[config.id] ?? const <String>[];
+    final models = <String>[
+      if (config.model.isNotEmpty) config.model,
+      ...fetched,
+      if (agent.modelOverride.isNotEmpty) agent.modelOverride,
+    ].where((m) => m.trim().isNotEmpty).toSet().toList()..sort();
+    final selectedModel = agent.modelOverride.isNotEmpty
+        ? agent.modelOverride
+        : config.model.isNotEmpty
+        ? config.model
+        : null;
+    final isFetching = _fetchingModelConfigIds.contains(config.id);
+
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue:
+                selectedModel != null && models.contains(selectedModel)
+                ? selectedModel
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Provider model',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: models
+                .map(
+                  (model) => DropdownMenuItem(
+                    value: model,
+                    child: Text(model, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            hint: Text(config.model.isNotEmpty ? config.model : 'Fetch models'),
+            onChanged: (model) {
+              _updateAgent(
+                agent.copyWith(
+                  modelOverride: model == config.model ? '' : model ?? '',
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filledTonal(
+          tooltip: 'Fetch models',
+          onPressed: isFetching ? null : () => _fetchProviderModels(config),
+          icon: isFetching
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh, size: 18),
+        ),
+      ],
+    );
   }
 
   Widget _buildAgentTile(StudioAgent agent, int index) {
@@ -582,8 +684,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               isLast
                   ? Icons.edit_outlined
                   : index == 0
-                      ? Icons.psychology_outlined
-                      : Icons.tune_outlined,
+                  ? Icons.psychology_outlined
+                  : Icons.tune_outlined,
               size: 20,
               color: context.cs.primary,
             ),
@@ -622,9 +724,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               : 'Order: ${agent.order} • Model: ${_agentApiConfigLabel(agent)}',
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
-        children: [
-          _buildAgentDetails(agent),
-        ],
+        children: [_buildAgentDetails(agent)],
       ),
     );
   }
@@ -635,12 +735,14 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Prompt shard:',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: context.cs.onSurfaceVariant,
-              )),
+          Text(
+            'Prompt shard:',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 4),
           TextFormField(
             initialValue: agent.promptShard,
@@ -650,15 +752,18 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               contentPadding: EdgeInsets.all(12),
             ),
             style: const TextStyle(fontSize: 12),
-            onChanged: (value) => _updateAgent(agent.copyWith(promptShard: value)),
+            onChanged: (value) =>
+                _updateAgent(agent.copyWith(promptShard: value)),
           ),
           const SizedBox(height: 16),
-          Text('Model:',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: context.cs.onSurfaceVariant,
-              )),
+          Text(
+            'Model:',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 4),
           SegmentedButton<String>(
             segments: const [
@@ -678,6 +783,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           if (agent.modelSource == 'custom') ...[
             const SizedBox(height: 8),
             _customApiSelector(agent),
+            const SizedBox(height: 8),
+            _providerModelSelector(agent),
           ],
           const SizedBox(height: 8),
           Row(
@@ -691,7 +798,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                     isDense: true,
                   ),
                   style: const TextStyle(fontSize: 12),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   onChanged: (v) {
                     final temp = double.tryParse(v);
                     if (temp != null) {

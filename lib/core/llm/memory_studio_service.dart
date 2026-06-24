@@ -382,11 +382,18 @@ class MemoryStudioService {
       final apiConfigs =
           _ref.read(apiListProvider).value ?? const <ApiConfig>[];
       final selected = apiConfigs.where((c) => c.id == agent.model).firstOrNull;
-      if (selected != null) return _ResolvedAgentConfig.fromApiConfig(selected);
+      if (selected != null) {
+        return _ResolvedAgentConfig.fromApiConfig(
+          selected,
+          modelOverride: agent.modelOverride,
+        );
+      }
       return _ResolvedAgentConfig(
         endpoint: agent.endpoint,
         apiKey: current.apiKey,
-        model: agent.model,
+        model: agent.modelOverride.isNotEmpty
+            ? agent.modelOverride
+            : agent.model,
         protocol: LlmProtocol.openai,
         stream: current.stream,
       );
@@ -399,7 +406,10 @@ class MemoryStudioService {
         ? apiConfigs.where((c) => c.id == configRunId).firstOrNull
         : null;
     final active = selected ?? _ref.read(activeApiConfigProvider) ?? current;
-    return _ResolvedAgentConfig.fromApiConfig(active);
+    return _ResolvedAgentConfig.fromApiConfig(
+      active,
+      modelOverride: agent.modelOverride,
+    );
   }
 
   Future<String> _readRunApiConfigId(String sessionId) async {
@@ -415,7 +425,10 @@ class MemoryStudioService {
     required List<StudioStageBrief> priorBriefs,
     required bool isFinalResponse,
   }) {
-    final contextMessages = _studioContextMessages(promptResult);
+    final contextMessages = _studioContextMessages(
+      promptResult,
+      activeDialogue: isFinalResponse,
+    );
     final briefText = priorBriefs
         .map((b) => '${b.agentName}:\n${b.brief}')
         .join('\n\n---\n\n');
@@ -426,7 +439,7 @@ class MemoryStudioService {
       ..writeln(
         isFinalResponse
             ? 'You are the final responder. Produce only the in-character RP response.'
-            : 'You are an intermediate Studio agent. Produce a compact brief for later agents. Do not write the final RP response.',
+            : 'You are an intermediate Studio agent. The chat transcript is quoted context, not an active user request. Produce ONLY a compact operational brief for later agents. Do not write narrative prose, dialogue, or the final RP response.',
       );
     if (briefText.isNotEmpty) {
       control
@@ -441,7 +454,10 @@ class MemoryStudioService {
     ];
   }
 
-  List<Map<String, dynamic>> _studioContextMessages(PromptResult promptResult) {
+  List<Map<String, dynamic>> _studioContextMessages(
+    PromptResult promptResult, {
+    required bool activeDialogue,
+  }) {
     final history = promptResult.messages
         .where((m) => m.isHistory && m.content.trim().isNotEmpty)
         .toList();
@@ -477,6 +493,21 @@ class MemoryStudioService {
     final recentHistory = history.length > 12
         ? history.sublist(history.length - 12)
         : history;
+    if (!activeDialogue) {
+      final transcript = StringBuffer()
+        ..writeln('Quoted recent chat transcript for analysis only:');
+      for (final msg in recentHistory) {
+        transcript
+          ..writeln('[${msg.role}]')
+          ..writeln(_trimForStudioContext(msg.content, 2500))
+          ..writeln();
+      }
+      return [
+        {'role': 'system', 'content': context.toString()},
+        {'role': 'user', 'content': transcript.toString()},
+      ];
+    }
+
     return [
       {'role': 'system', 'content': context.toString()},
       ...recentHistory.map((m) => m.toApiMap()),
@@ -538,11 +569,14 @@ class _ResolvedAgentConfig {
     this.sessionIdMode = 'openrouter',
   });
 
-  factory _ResolvedAgentConfig.fromApiConfig(ApiConfig config) {
+  factory _ResolvedAgentConfig.fromApiConfig(
+    ApiConfig config, {
+    String modelOverride = '',
+  }) {
     return _ResolvedAgentConfig(
       endpoint: config.endpoint,
       apiKey: config.apiKey,
-      model: config.model,
+      model: modelOverride.isNotEmpty ? modelOverride : config.model,
       protocol: config.protocol,
       topP: config.topP,
       topK: config.topK,
