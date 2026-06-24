@@ -6,7 +6,6 @@ import '../models/preset.dart';
 import '../models/chat_message.dart';
 import '../models/api_config.dart';
 import '../models/lorebook.dart';
-import '../models/memory_book.dart';
 import 'macro_engine.dart';
 import 'history_assembler.dart';
 import 'context_calculator.dart';
@@ -20,6 +19,7 @@ import 'tokenizer.dart';
 import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
 import 'memory_excerpt_selector.dart';
+import 'memory_formatting.dart';
 import 'memory_selector.dart';
 
 const _deferredMemoryPlaceholder = '[[GLAZE_DEFERRED_MEMORY_CONTEXT]]';
@@ -1262,44 +1262,13 @@ _RebuiltMemoryContent _buildMemoryContentFromSelection(
   String? summaryExcerpt,
 }) {
   final injected = excerptSelection ?? MemoryExcerptSelector.select(selection);
-  final macro = _formatMemoryItems(injected.items, includeContextHeader: false);
+  final macro = formatMemoryItems(injected.items, includeContextHeader: false);
   final parts = <String>[];
   if (summaryExcerpt != null && summaryExcerpt.isNotEmpty) {
     parts.add('Summary excerpt:\n$summaryExcerpt');
   }
-  parts.add(_formatMemoryItems(injected.items, includeContextHeader: true));
+  parts.add(formatMemoryItems(injected.items, includeContextHeader: true));
   return _RebuiltMemoryContent(parts.join('\n\n'), macro);
-}
-
-String _formatMemoryItems(
-  List<MemoryInjectionItem> items, {
-  required bool includeContextHeader,
-}) {
-  final parts = <String>[];
-  if (includeContextHeader) parts.add('Memory context:');
-  for (final item in items) {
-    final title = item.entry.title.isNotEmpty
-        ? item.entry.title
-        : _formatMemoryRange(item.entry) ?? 'Memory';
-    final range = _formatMemoryRange(item.entry);
-    final heading = range == null
-        ? 'Memory: $title'
-        : 'Memory: $title ($range)';
-    if (item.excerpt) {
-      parts.add(
-        '$heading\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
-      );
-    } else {
-      parts.add('$heading\n${item.text.trim()}');
-    }
-  }
-  return parts.where((part) => part.trim().isNotEmpty).join('\n\n');
-}
-
-String? _formatMemoryRange(MemoryEntry entry) {
-  final range = entry.messageRange;
-  if (range == null) return null;
-  return '${range.start}-${range.end}';
 }
 
 bool _replaceDeferredMemoryPlaceholders(

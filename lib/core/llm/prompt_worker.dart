@@ -17,6 +17,7 @@ import 'history_assembler.dart';
 import 'lorebook_scanner.dart';
 import 'memory_budget.dart';
 import 'memory_excerpt_selector.dart';
+import 'memory_formatting.dart';
 import 'memory_selector.dart';
 import 'prompt_builder.dart';
 import 'prompt_inputs.dart';
@@ -479,7 +480,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     final topEntries = excerptSelection.entries;
 
     if (excerptSelection.items.isNotEmpty) {
-      final macroContent = _formatMemoryItems(
+      final macroContent = formatMemoryItems(
         excerptSelection.items,
         includeContextHeader: false,
       );
@@ -488,7 +489,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
         contentParts.add('Summary excerpt:\n${inputs.summaryContent}');
       }
       contentParts.add(
-        _formatMemoryItems(excerptSelection.items, includeContextHeader: true),
+        formatMemoryItems(excerptSelection.items, includeContextHeader: true),
       );
 
       memoryContent = contentParts.join('\n\n');
@@ -561,37 +562,6 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
 
   // 3. Build prompt (lorebook scanning happens inside buildPrompt)
   return buildPrompt(payload);
-}
-
-String _formatMemoryItems(
-  List<MemoryInjectionItem> items, {
-  required bool includeContextHeader,
-}) {
-  final parts = <String>[];
-  if (includeContextHeader) parts.add('Memory context:');
-  for (final item in items) {
-    final title = item.entry.title.isNotEmpty
-        ? item.entry.title
-        : _formatMemoryRange(item.entry) ?? 'Memory';
-    final range = _formatMemoryRange(item.entry);
-    final heading = range == null
-        ? 'Memory: $title'
-        : 'Memory: $title ($range)';
-    if (item.excerpt) {
-      parts.add(
-        '$heading\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
-      );
-    } else {
-      parts.add('$heading\n${item.text.trim()}');
-    }
-  }
-  return parts.where((part) => part.trim().isNotEmpty).join('\n\n');
-}
-
-String? _formatMemoryRange(MemoryEntry entry) {
-  final range = entry.messageRange;
-  if (range == null) return null;
-  return '${range.start}-${range.end}';
 }
 
 bool _glazeMatch(String key, String text) {
