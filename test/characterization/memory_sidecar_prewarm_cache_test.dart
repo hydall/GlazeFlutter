@@ -6,7 +6,8 @@ import 'package:glaze_flutter/core/llm/memory_selector.dart';
 MemorySidecarPrewarmKey _key({
   String sessionId = 'session1',
   String branchId = 'branchA',
-  int swipeId = 0,
+  String anchorMessageId = 'msg1',
+  int anchorSwipeId = 0,
   String settingsRevision = 'settings1',
   String memoryRevision = 'memory1',
   String historyRevision = 'history1',
@@ -14,7 +15,8 @@ MemorySidecarPrewarmKey _key({
   return MemorySidecarPrewarmKey(
     sessionId: sessionId,
     branchId: branchId,
-    swipeId: swipeId,
+    anchorMessageId: anchorMessageId,
+    anchorSwipeId: anchorSwipeId,
     settingsRevision: settingsRevision,
     memoryRevision: memoryRevision,
     historyRevision: historyRevision,
@@ -43,21 +45,41 @@ void main() {
   });
 
   test(
-    'invalidates on swipe regenerate edit settings memory or branch change',
+    'invalidates on settings memory or history revision change',
     () {
-      final variants = [
-        _key(swipeId: 1),
+      // Revision changes share the same cache key (session:anchor:swipe),
+      // so a mismatched revision evicts the stale entry.
+      final revisionVariants = [
         _key(historyRevision: 'history2'),
         _key(settingsRevision: 'settings2'),
         _key(memoryRevision: 'memory2'),
         _key(branchId: 'branchB'),
       ];
 
-      for (final changedKey in variants) {
+      for (final changedKey in revisionVariants) {
         final cache = MemorySidecarPrewarmCache();
         cache.put(_entry(_key()));
         expect(cache.takeIfFresh(changedKey), isNull);
         expect(cache.takeIfFresh(_key()), isNull);
+      }
+    },
+  );
+
+  test(
+    'different anchor (message/swipe) does not evict original (per-swipe keying)',
+    () {
+      // Swipe/message changes map to different cache keys, so the original
+      // entry survives (per-swipe coexistence).
+      final anchorVariants = [
+        _key(anchorSwipeId: 1),
+        _key(anchorMessageId: 'msg2'),
+      ];
+
+      for (final changedKey in anchorVariants) {
+        final cache = MemorySidecarPrewarmCache();
+        cache.put(_entry(_key()));
+        expect(cache.takeIfFresh(changedKey), isNull);
+        expect(cache.takeIfFresh(_key()), isNotNull);
       }
     },
   );
@@ -73,5 +95,29 @@ void main() {
 
     expect(cache.takeIfFresh(first), isNull);
     expect(cache.takeIfFresh(second), isNotNull);
+  });
+
+  test('per-swipe keying: different swipes coexist', () {
+    final cache = MemorySidecarPrewarmCache();
+    final swipe0 = _key(anchorSwipeId: 0);
+    final swipe1 = _key(anchorSwipeId: 1);
+    cache.put(_entry(swipe0));
+    cache.put(_entry(swipe1));
+
+    expect(cache.takeIfFresh(swipe0), isNotNull);
+    expect(cache.takeIfFresh(swipe1), isNotNull);
+  });
+
+  test('anchor invalidation removes only the targeted anchor', () {
+    final cache = MemorySidecarPrewarmCache();
+    final a = _key(anchorMessageId: 'msg1', anchorSwipeId: 0);
+    final b = _key(anchorMessageId: 'msg2', anchorSwipeId: 0);
+    cache.put(_entry(a));
+    cache.put(_entry(b));
+
+    cache.invalidateAnchor('session1', 'msg1', 0);
+
+    expect(cache.takeIfFresh(a), isNull);
+    expect(cache.takeIfFresh(b), isNotNull);
   });
 }

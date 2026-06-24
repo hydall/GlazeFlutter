@@ -28,6 +28,14 @@ class MemoryCandidateDiagnostics {
   final List<String> excerptMatchedTerms;
   final int excerptChunksTotal;
   final int excerptChunksInjected;
+  final double salienceScore;
+  final double emotionalScore;
+  final double entityScore;
+  final bool isCore;
+  final List<String> emotionalTags;
+  final List<String> narrativeFlags;
+  final String? sidecarSelectedReason;
+  final String? sidecarRejectedReason;
 
   const MemoryCandidateDiagnostics({
     required this.entryId,
@@ -54,6 +62,14 @@ class MemoryCandidateDiagnostics {
     this.excerptMatchedTerms = const [],
     this.excerptChunksTotal = 0,
     this.excerptChunksInjected = 0,
+    this.salienceScore = 0,
+    this.emotionalScore = 0,
+    this.entityScore = 0,
+    this.isCore = false,
+    this.emotionalTags = const [],
+    this.narrativeFlags = const [],
+    this.sidecarSelectedReason,
+    this.sidecarRejectedReason,
   });
 
   Map<String, dynamic> toJson() => {
@@ -81,6 +97,16 @@ class MemoryCandidateDiagnostics {
     'excerptMatchedTerms': excerptMatchedTerms,
     'excerptChunksTotal': excerptChunksTotal,
     'excerptChunksInjected': excerptChunksInjected,
+    'salienceScore': salienceScore,
+    'emotionalScore': emotionalScore,
+    'entityScore': entityScore,
+    'isCore': isCore,
+    'emotionalTags': emotionalTags,
+    'narrativeFlags': narrativeFlags,
+    if (sidecarSelectedReason != null)
+      'sidecarSelectedReason': sidecarSelectedReason,
+    if (sidecarRejectedReason != null)
+      'sidecarRejectedReason': sidecarRejectedReason,
   };
 }
 
@@ -101,6 +127,13 @@ class MemoryDiagnostics {
   final bool budgetTrimmed;
   final int excludedBySourceWindow;
   final int latencyMs;
+  final String? classifierStatus;
+  final int? classifierLatencyMs;
+  final bool? classifierNeedsMemory;
+  final double? classifierConfidence;
+  final String? sidecarStatus;
+  final int? sidecarLatencyMs;
+  final bool prewarmHit;
 
   const MemoryDiagnostics({
     required this.selectedEntryIds,
@@ -119,6 +152,13 @@ class MemoryDiagnostics {
     required this.budgetTrimmed,
     required this.excludedBySourceWindow,
     this.latencyMs = 0,
+    this.classifierStatus,
+    this.classifierLatencyMs,
+    this.classifierNeedsMemory,
+    this.classifierConfidence,
+    this.sidecarStatus,
+    this.sidecarLatencyMs,
+    this.prewarmHit = false,
   });
 
   factory MemoryDiagnostics.fromSelection(
@@ -132,6 +172,13 @@ class MemoryDiagnostics {
     MemoryExcerptSelection? excerptSelection,
     int excerptTokensPerChunk = defaultMemoryExcerptTokensPerEntry,
     int Function(String text)? chunkTokenCounter,
+    String? classifierStatus,
+    int? classifierLatencyMs,
+    bool? classifierNeedsMemory,
+    double? classifierConfidence,
+    String? sidecarStatus,
+    int? sidecarLatencyMs,
+    bool prewarmHit = false,
   }) {
     final selectedIds = (excerptSelection?.entries ?? selection.entries)
         .map((e) => e.id)
@@ -196,6 +243,12 @@ class MemoryDiagnostics {
               tokenCounter: chunkTokenCounter,
             ),
             excerptChunksInjected: item?.chunkIndexes.length ?? 0,
+            salienceScore: score.salienceScore,
+            emotionalScore: score.emotionalScore,
+            entityScore: score.entityScore,
+            isCore: score.isCore,
+            emotionalTags: score.emotionalTags,
+            narrativeFlags: score.narrativeFlags,
           );
         })
         .toList(growable: false);
@@ -227,6 +280,13 @@ class MemoryDiagnostics {
       budgetTrimmed: excerptSelection?.budgetTrimmed ?? selection.budgetTrimmed,
       excludedBySourceWindow: selection.excludedBySourceWindow,
       latencyMs: latencyMs,
+      classifierStatus: classifierStatus,
+      classifierLatencyMs: classifierLatencyMs,
+      classifierNeedsMemory: classifierNeedsMemory,
+      classifierConfidence: classifierConfidence,
+      sidecarStatus: sidecarStatus,
+      sidecarLatencyMs: sidecarLatencyMs,
+      prewarmHit: prewarmHit,
     );
   }
 
@@ -246,6 +306,16 @@ class MemoryDiagnostics {
     'budgetTrimmed': budgetTrimmed,
     'excludedBySourceWindow': excludedBySourceWindow,
     'latencyMs': latencyMs,
+    if (classifierStatus != null) 'classifierStatus': classifierStatus,
+    if (classifierLatencyMs != null)
+      'classifierLatencyMs': classifierLatencyMs,
+    if (classifierNeedsMemory != null)
+      'classifierNeedsMemory': classifierNeedsMemory,
+    if (classifierConfidence != null)
+      'classifierConfidence': classifierConfidence,
+    if (sidecarStatus != null) 'sidecarStatus': sidecarStatus,
+    if (sidecarLatencyMs != null) 'sidecarLatencyMs': sidecarLatencyMs,
+    'prewarmHit': prewarmHit,
     'candidates': candidates.map((c) => c.toJson()).toList(),
   };
 

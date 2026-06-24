@@ -76,7 +76,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 34);
+      expect(version, 35);
     });
 
     test(
@@ -110,7 +110,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 34);
+        expect(version.first.read<int>('user_version'), 35);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
         await upgraded.close();
@@ -135,6 +135,50 @@ void main() {
       expect(names, contains('token_count'));
       expect(names, contains('abstract_text'));
       expect(names, contains('stale'));
+    });
+
+    test('memory graph tables exist in current schema (v35)', () async {
+      final entityCols = await db
+          .customSelect("PRAGMA table_info('memory_entity_rows')")
+          .get();
+      final entityNames = entityCols.map((c) => c.read<String>('name')).toSet();
+      expect(entityNames, contains('chat_session_id'));
+      expect(entityNames, contains('memory_entry_id'));
+      expect(entityNames, contains('name'));
+      expect(entityNames, contains('entity_type'));
+      expect(entityNames, contains('salience_avg'));
+      expect(entityNames, contains('source_hash'));
+
+      final salienceCols = await db
+          .customSelect("PRAGMA table_info('memory_salience_rows')")
+          .get();
+      final salienceNames =
+          salienceCols.map((c) => c.read<String>('name')).toSet();
+      expect(salienceNames, contains('chat_session_id'));
+      expect(salienceNames, contains('memory_entry_id'));
+      expect(salienceNames, contains('score'));
+      expect(salienceNames, contains('emotional_tags_json'));
+      expect(salienceNames, contains('narrative_flags_json'));
+
+      final cadenceCols = await db
+          .customSelect("PRAGMA table_info('memory_cadence_rows')")
+          .get();
+      final cadenceNames =
+          cadenceCols.map((c) => c.read<String>('name')).toSet();
+      expect(cadenceNames, contains('chat_session_id'));
+      expect(cadenceNames, contains('assistant_messages_since_last_run'));
+      expect(cadenceNames, contains('last_run_kind'));
+
+      final consolidationCols = await db
+          .customSelect("PRAGMA table_info('memory_consolidation_rows')")
+          .get();
+      final consolidationNames =
+          consolidationCols.map((c) => c.read<String>('name')).toSet();
+      expect(consolidationNames, contains('chat_session_id'));
+      expect(consolidationNames, contains('tier'));
+      expect(consolidationNames, contains('summary'));
+      expect(consolidationNames, contains('status'));
+      expect(consolidationNames, contains('error_message'));
     });
   });
 }

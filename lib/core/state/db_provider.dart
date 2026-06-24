@@ -12,6 +12,10 @@ import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/summary_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/memory_catalog_repo.dart';
+import '../db/repositories/memory_entity_repo.dart';
+import '../db/repositories/memory_salience_repo.dart';
+import '../db/repositories/memory_cadence_repo.dart';
+import '../db/repositories/memory_consolidation_repo.dart';
 import '../db/repositories/extension_presets_repository.dart';
 import '../db/repositories/info_blocks_repository.dart';
 import '../models/memory_book.dart';
@@ -90,6 +94,24 @@ final memoryBookRepoProvider = Provider<MemoryBookRepo>((ref) {
 
 final memoryCatalogRepoProvider = Provider<MemoryCatalogRepo>((ref) {
   return MemoryCatalogRepo(ref.watch(appDbProvider));
+});
+
+final memoryEntityRepoProvider = Provider<MemoryEntityRepo>((ref) {
+  return MemoryEntityRepo(ref.watch(appDbProvider));
+});
+
+final memorySalienceRepoProvider = Provider<MemorySalienceRepo>((ref) {
+  return MemorySalienceRepo(ref.watch(appDbProvider));
+});
+
+final memoryCadenceRepoProvider = Provider<MemoryCadenceRepo>((ref) {
+  return MemoryCadenceRepo(ref.watch(appDbProvider));
+});
+
+final memoryConsolidationRepoProvider = Provider<MemoryConsolidationRepo>((
+  ref,
+) {
+  return MemoryConsolidationRepo(ref.watch(appDbProvider));
 });
 
 final memoryBookProvider = FutureProvider.family<MemoryBook?, String>((

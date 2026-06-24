@@ -135,9 +135,28 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                       _MemoryActivityChip(
                         label: _budgetLabel(diagnostics['budget']),
                       ),
+                      if (diagnostics['classifierStatus'] != null &&
+                          diagnostics['classifierStatus'] != 'disabled')
+                        _MemoryActivityChip(
+                          label:
+                              'classifier ${diagnostics['classifierStatus']}',
+                        ),
+                      if (diagnostics['sidecarStatus'] != null &&
+                          diagnostics['sidecarStatus'] != 'disabled')
+                        _MemoryActivityChip(
+                          label: 'sidecar ${diagnostics['sidecarStatus']}',
+                        ),
+                      if (diagnostics['prewarmHit'] == true)
+                        const _MemoryActivityChip(label: 'prewarm hit'),
                     ],
                   ),
                   const SizedBox(height: 8),
+                  if (diagnostics['classifierStatus'] != null &&
+                      diagnostics['classifierStatus'] != 'disabled')
+                    _classifierSection(context, diagnostics),
+                  if (diagnostics['sidecarStatus'] != null &&
+                      diagnostics['sidecarStatus'] != 'disabled')
+                    _sidecarSection(context, diagnostics),
                   _candidateList(context, diagnostics),
                 ],
               ],
@@ -153,6 +172,60 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
     final source = raw['source'] ?? 'none';
     final tokens = raw['effectiveTokens'];
     return tokens is int ? 'budget $tokens ($source)' : 'budget $source';
+  }
+
+  Widget _classifierSection(
+    BuildContext context,
+    Map<String, dynamic> diagnostics,
+  ) {
+    final status = diagnostics['classifierStatus'] as String? ?? '';
+    final needsMemory = diagnostics['classifierNeedsMemory'] as bool? ?? false;
+    final confidence = diagnostics['classifierConfidence'];
+    final confidenceText = confidence is num
+        ? '${(confidence * 100).round()}%'
+        : '';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Classifier: $status'
+            '${confidenceText.isNotEmpty ? " · confidence $confidenceText" : ""}'
+            '${needsMemory ? " · needs memory" : ""}',
+            style: TextStyle(
+              fontSize: 11,
+              color: context.cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sidecarSection(
+    BuildContext context,
+    Map<String, dynamic> diagnostics,
+  ) {
+    final status = diagnostics['sidecarStatus'] as String? ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sidecar: $status'
+            '${diagnostics['prewarmHit'] == true ? " · prewarm hit" : ""}',
+            style: TextStyle(
+              fontSize: 11,
+              color: context.cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _candidateList(

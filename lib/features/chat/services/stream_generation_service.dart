@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +13,7 @@ import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/active_selection_provider.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../state/cached_token_breakdown.dart';
@@ -270,6 +273,15 @@ class StreamGenerationService {
           } else {
             _ref.read(lastMemoryActivityProvider(_charId).notifier).state =
                 null;
+          }
+          // Post-turn memory pipeline (Phase G4): fire-and-forget.
+          // Does NOT block generation or user interaction.
+          if (finalState?.session != null) {
+            unawaited(
+              _ref
+                  .read(memoryPostTurnServiceProvider)
+                  .runPostTurn(finalState!.session!.id),
+            );
           }
         },
         onError: (error) {

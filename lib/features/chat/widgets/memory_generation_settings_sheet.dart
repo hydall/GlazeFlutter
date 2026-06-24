@@ -638,6 +638,16 @@ class _MemoryGenerationSettingsSheetState
               label: Text('memory_mode_deep'.tr()),
               icon: Icon(Icons.manage_search_rounded),
             ),
+            ButtonSegment(
+              value: 'agentic',
+              label: Text('memory_mode_agentic'.tr()),
+              icon: Icon(Icons.smart_toy_outlined),
+            ),
+            ButtonSegment(
+              value: 'studio',
+              label: Text('memory_mode_studio'.tr()),
+              icon: Icon(Icons.movie_filter_outlined),
+            ),
           ],
           selected: {_memoryMode},
           onSelectionChanged: (s) => setState(() => _memoryMode = s.first),
@@ -651,6 +661,10 @@ class _MemoryGenerationSettingsSheetState
               ? 'memory_mode_balanced_desc'.tr()
               : _memoryMode == 'deep'
               ? 'memory_mode_deep_desc'.tr()
+              : _memoryMode == 'agentic'
+              ? 'Experimental. LLM-guided memory search. Adds latency and cost.'
+              : _memoryMode == 'studio'
+              ? 'Experimental. Multi-stage RP pipeline. Highest latency and cost.'
               : 'memory_mode_fast_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),

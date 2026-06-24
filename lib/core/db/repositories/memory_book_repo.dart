@@ -78,6 +78,14 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         queryIncludeAssistant: global.queryIncludeAssistant,
         queryRecentTurns: global.queryRecentTurns,
         queryMaxChars: global.queryMaxChars,
+        cadenceInterval: global.cadenceInterval,
+        consolidationEnabled: global.consolidationEnabled,
+        consolidationThreshold: global.consolidationThreshold,
+        consolidationSource: global.consolidationSource,
+        consolidationModel: global.consolidationModel,
+        consolidationEndpoint: global.consolidationEndpoint,
+        consolidationApiKey: global.consolidationApiKey,
+        consolidationTimeoutMs: global.consolidationTimeoutMs,
       ),
     );
     await put(book);

@@ -47,6 +47,15 @@ class ChatTransportRequest {
   /// Controls when `session_id` is sent: `'openrouter' | 'always' | 'off'`.
   final String sessionIdMode;
 
+  /// Optional tool definitions for native tool-call support (OpenAI format).
+  /// When non-null, the request includes `tools` and `tool_choice` in the body.
+  /// Transports that don't support tools will ignore this field.
+  final List<Map<String, dynamic>>? tools;
+
+  /// Controls tool choice: `'none' | 'auto' | 'required'` or a specific tool.
+  /// Only sent when [tools] is non-null.
+  final String? toolChoice;
+
   const ChatTransportRequest({
     required this.endpoint,
     required this.apiKey,
@@ -70,5 +79,7 @@ class ChatTransportRequest {
     this.cacheControlTtl = 'off',
     this.cacheBreakpointMode = 'depth',
     this.sessionIdMode = 'openrouter',
+    this.tools,
+    this.toolChoice,
   });
 }

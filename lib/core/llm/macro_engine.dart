@@ -19,6 +19,8 @@ class MacroContext {
   final String? lorebooksContent;
   final String? guidanceText;
   final String? macroName;
+  final String? arcContent;
+  final String? entitiesContent;
 
   const MacroContext({
     required this.charName,
@@ -39,6 +41,8 @@ class MacroContext {
     this.lorebooksContent,
     this.guidanceText,
     this.macroName,
+    this.arcContent,
+    this.entitiesContent,
   });
 
   /// Context for preset-only token accounting: external injections (character,
@@ -275,6 +279,16 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   result = result.replaceAllMapped(
     RegExp(r'\{\{memory\}\}', caseSensitive: false),
     (_) => ctx.memoryContent ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{arc\}\}', caseSensitive: false),
+    (_) => ctx.arcContent ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{entities\}\}', caseSensitive: false),
+    (_) => ctx.entitiesContent ?? '',
   );
 
   result = result.replaceAllMapped(

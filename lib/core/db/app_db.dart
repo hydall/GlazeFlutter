@@ -23,6 +23,10 @@ part 'app_db.g.dart';
     ChatSummaries,
     MemoryBookRows,
     MemoryCatalogRows,
+    MemoryEntityRows,
+    MemorySalienceRows,
+    MemoryCadenceRows,
+    MemoryConsolidationRows,
     ExtensionPresets,
     InfoBlocks,
   ],
@@ -33,7 +37,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 34;
+  int get schemaVersion => 35;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -372,6 +376,27 @@ class AppDatabase extends _$AppDatabase {
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('hidden')) {
           await m.addColumn(characters, characters.hidden);
+        }
+      }
+      if (from < 35) {
+        // Memory Graph foundation (Phase G0): entity graph, salience, cadence,
+        // and consolidation tables. Guarded like every prior table migration
+        // to survive partial upgrades from early feature builds.
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('memory_entity_rows')) {
+          await m.createTable(memoryEntityRows);
+        }
+        if (!tableNames.contains('memory_salience_rows')) {
+          await m.createTable(memorySalienceRows);
+        }
+        if (!tableNames.contains('memory_cadence_rows')) {
+          await m.createTable(memoryCadenceRows);
+        }
+        if (!tableNames.contains('memory_consolidation_rows')) {
+          await m.createTable(memoryConsolidationRows);
         }
       }
     },
