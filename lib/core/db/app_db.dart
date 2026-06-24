@@ -38,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 38;
+  int get schemaVersion => 39;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -440,6 +440,15 @@ class AppDatabase extends _$AppDatabase {
             studioConfigRows,
             studioConfigRows.selectedBlockIdsInitialized,
           );
+        }
+      }
+      if (from < 39) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('final_preset_id')) {
+          await m.addColumn(studioConfigRows, studioConfigRows.finalPresetId);
         }
       }
     },

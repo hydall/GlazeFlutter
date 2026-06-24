@@ -15,6 +15,7 @@ abstract class StudioConfig with _$StudioConfig {
     @Default(false) bool enabled,
     @Default([]) List<StudioAgent> agents,
     @Default('') String sourcePresetId,
+    @Default('') String finalPresetId,
     @Default('') String sourcePresetHash,
     @Default('') String buildApiConfigId,
     @Default('') String runApiConfigId,

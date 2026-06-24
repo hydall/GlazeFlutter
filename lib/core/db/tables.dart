@@ -287,6 +287,7 @@ class StudioConfigRows extends Table {
   BoolColumn get enabled => boolean().withDefault(const Constant(false))();
   TextColumn get agentsJson => text().withDefault(const Constant('[]'))();
   TextColumn get sourcePresetId => text().withDefault(const Constant(''))();
+  TextColumn get finalPresetId => text().withDefault(const Constant(''))();
   TextColumn get sourcePresetHash => text().withDefault(const Constant(''))();
   TextColumn get buildApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
