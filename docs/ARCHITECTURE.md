@@ -73,12 +73,14 @@ lib/
 │   ├── llm/                          # LLM pipeline specialists
 │   │   ├── prompt_builder.dart        # Orchestrator: block ordering, lorebook merge, trimming
 │   │   ├── prompt_block_resolver.dart # Maps preset block ID → resolved text
+│   │   ├── prompt_regex_applicator.dart # Pure: applies preset+global regex scripts to final messages
 │   │   ├── prompt_inputs.dart         # Freezed value object: inputs for isolate build
 │   │   ├── prompt_inputs_collector.dart # Reads Riverpod state, assembles PromptInputs (no async work)
 │   │   ├── prompt_payload_assembler.dart # Pure: PromptInputs → PromptPayload (no Riverpod)
 │   │   ├── prompt_payload_builder.dart # Riverpod-aware: assembles PromptPayload (vector/memory async)
 │   │   ├── prompt_isolate.dart        # Spawns isolate; delegates to prompt_worker
 │   │   ├── prompt_worker.dart         # Top-level entry: buildPrompt() inside isolate
+│   │   ├── prompt_worker_codec.dart   # Isolate boundary JSON codec (serialize/deserialize payload+result)
 │   │   ├── history_assembler.dart     # ChatMessage[] → PromptMessage[], macro application
 │   │   ├── context_calculator.dart    # Token budget: trims history from oldest end
 │   │   ├── fallback_prompt_builder.dart # Minimal prompt when no preset configured
@@ -104,6 +106,7 @@ lib/
 │   │   ├── summary_service.dart      # Reads/writes summaries, triggers LLM regeneration
 │   │   ├── tokenizer.dart            # estimateTokens() with LRU cache, base64 stripping
 │   │   ├── macro_engine.dart         # SillyTavern-compatible macro replacement engine
+│   │   ├── memory_formatting.dart    # Shared formatMemoryItems / formatMemoryRange helpers
 │   │   └── vector_math.dart          # cosineSimilarity, findTopK, findTopKMulti, BLOB helpers
 │   ├── llm/converters/               # Protocol-specific message converters (pure)
 │   │   ├── claude_messages.dart      # Anthropic /v1/messages shape
@@ -285,6 +288,8 @@ lib/
 │   │   ├── services/
 │   │   │   ├── sync_service.dart       # High-level orchestrator, lock management
 │   │   │   ├── sync_engine.dart        # Manifest diff, upload/download, conflicts
+│   │   │   ├── sync_binary_asset_syncer.dart # Avatar/gallery push/pull (extracted from SyncEngine)
+│   │   │   ├── sync_image_stripper.dart # Strips [IMG:*] tags from chat sessions before sync
 │   │   │   ├── sync_controller.dart    # UI-facing sync actions
 │   │   │   ├── sync_manifest.dart / sync_serialization.dart / sync_conflict.dart
 │   │   │   ├── sync_queue.dart
@@ -665,6 +670,7 @@ Characters, sessions, presets, API configs, personas, lorebooks, theme presets, 
 
 ### Files
 - `image_gen_service.dart` — orchestrates: dispatches to provider adapters, saves images
+- `image_tag_markup.dart` — pure `[IMG:GEN]`/`[IMG:RESULT]`/`[IMG:ERROR]` tag text transforms (extracted from ImageGenService)
 - `image_gen_provider.dart` — manages settings + generation state
 - `image_gen_models.dart` — Freezed data models for image generation
 - `image_gen_http.dart` — HTTP client for image generation APIs
@@ -915,3 +921,9 @@ Resolved (kept for history; details in git / PR notes):
 - **Session vars on abort/error** — only success path persists isolate vars (INV-C5).
 - **Memory injection token budget** — `memory_budget.dart` + INV-PS4.
 - **JS extensions MVP** — `window.glaze` SDK, headless `JsEngineService`, capability permissions, periodic/afterUser triggers, interactive panels, audioplayers-backed audio, big/medium/small connection profiles, wired `CommandRegistry`, lifecycle-paused periodic scheduler. Current module boundaries are documented in § 9.
+- **`sync_engine.dart` decomposition** — `SyncBinaryAssetSyncer` (avatar/gallery push/pull) + `sync_image_stripper.dart` extracted; `saveLorebookActivations` injected as callback (removed provider-layer import from service).
+- **`prompt_builder.dart` decomposition** — regex application extracted to `prompt_regex_applicator.dart`; deferred-memory finalization extracted to `_finalizeDeferredMemory()`.
+- **`image_gen_service.dart` decomposition** — `[IMG:*]` tag-markup text transforms extracted to `image_tag_markup.dart` (`ImageTagMarkup`).
+- **`memory_injection_service.dart` arch fix** — removed `Ref` dependency; `MemoryGlobalSettings` injected via callback.
+- **`prompt_worker.dart` decomposition** — isolate-boundary JSON codec extracted to `prompt_worker_codec.dart`.
+- **Triplicated memory formatting helpers** — `_formatMemoryItems` / `_formatMemoryRange` deduplicated to `memory_formatting.dart`.
