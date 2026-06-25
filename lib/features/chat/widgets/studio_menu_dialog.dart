@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/studio_request_preset.dart';
@@ -439,26 +440,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         children: [
           _buildSourcePresetInfo(),
           const SizedBox(height: 8),
-          _studioRequestPresetSelector(
-            label: 'Agent Studio preset',
-            value: _selectedAgentStudioPresetId,
-            fallbackId: _contextInfo.agentStudioPresetId,
-            onChanged: (value) async {
-              setState(() => _selectedAgentStudioPresetId = value);
-              await _refreshContextInfo(persistSelection: true);
-            },
-          ),
-          const SizedBox(height: 8),
-          _studioRequestPresetSelector(
-            label: 'Final Studio preset',
-            value: _selectedFinalStudioPresetId,
-            fallbackId: _contextInfo.finalStudioPresetId,
-            onChanged: (value) async {
-              setState(() => _selectedFinalStudioPresetId = value);
-              await _refreshContextInfo(persistSelection: true);
-            },
-          ),
-          const SizedBox(height: 8),
           _apiSelector(
             label: 'Build model',
             value: _selectedBuildApiConfigId,
@@ -484,13 +465,91 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   }
 
   Widget _buildSourcePresetInfo() {
-    return InputDecorator(
-      decoration: const InputDecoration(
-        labelText: 'Build source preset',
-        isDense: true,
-        border: OutlineInputBorder(),
-      ),
-      child: Text(_contextInfo.presetLabel, overflow: TextOverflow.ellipsis),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'Build source preset',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            child: Text(
+              _contextInfo.presetLabel,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filledTonal(
+          tooltip: 'Preset settings',
+          onPressed: _showPresetSettingsDialog,
+          icon: const Icon(Icons.tune, size: 20),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showPresetSettingsDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, dialogSetState) {
+            return AlertDialog(
+              title: const Text('Studio preset settings'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _studioRequestPresetSelector(
+                      label: 'Agent Studio preset',
+                      value: _selectedAgentStudioPresetId,
+                      fallbackId: _contextInfo.agentStudioPresetId,
+                      onChanged: (value) async {
+                        setState(() => _selectedAgentStudioPresetId = value);
+                        dialogSetState(() {});
+                        await _refreshContextInfo(persistSelection: true);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _studioRequestPresetSelector(
+                      label: 'Final Studio preset',
+                      value: _selectedFinalStudioPresetId,
+                      fallbackId: _contextInfo.finalStudioPresetId,
+                      onChanged: (value) async {
+                        setState(() => _selectedFinalStudioPresetId = value);
+                        dialogSetState(() {});
+                        await _refreshContextInfo(persistSelection: true);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        final router = GoRouter.of(context);
+                        Navigator.of(dialogContext).pop();
+                        Navigator.of(context).pop();
+                        router.push('/tools/presets');
+                      },
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Edit app presets'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
