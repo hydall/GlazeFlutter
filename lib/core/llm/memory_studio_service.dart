@@ -987,7 +987,10 @@ class MemoryStudioService {
           messages.addAll(context.staticContext.map((m) => m.toApiMap()));
           break;
         case 'chat_history':
-          messages.addAll(context.history.map((m) => m.toApiMap()));
+          final history = isFinalResponse
+              ? _limitFinalHistory(context.history, config)
+              : context.history;
+          messages.addAll(history.map((m) => m.toApiMap()));
           break;
         case 'dynamic_context':
           messages.addAll(context.dynamicContext.map((m) => m.toApiMap()));
@@ -1014,6 +1017,27 @@ class MemoryStudioService {
     }
 
     return messages;
+  }
+
+  /// Cap how many trailing chat messages reach the FINAL responder.
+  ///
+  /// Intermediate agents always analyze the full transcript; the final writer
+  /// is intentionally limited (default 15) so it relies on the compact agent
+  /// briefs instead of re-reading the whole history. We keep the most recent
+  /// [StudioConfig.maxFinalHistoryMessages] messages, which always preserves
+  /// the current user turn (it is last). 0 (or negative) means no limit.
+  List<PromptMessage> _limitFinalHistory(
+    List<PromptMessage> history,
+    StudioConfig config,
+  ) {
+    final limit = config.maxFinalHistoryMessages;
+    if (limit <= 0 || history.length <= limit) return history;
+    final trimmed = history.sublist(history.length - limit);
+    _log(
+      'final history trimmed from ${history.length} to ${trimmed.length} '
+      '(limit=$limit)',
+    );
+    return trimmed;
   }
 
   String _intermediateRuntimeEnvelope(StudioAgent agent) {

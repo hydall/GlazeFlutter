@@ -301,6 +301,8 @@ class StudioConfigRows extends Table {
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get builderPromptTemplate =>
       text().withDefault(const Constant(''))();
+  IntColumn get maxFinalHistoryMessages =>
+      integer().withDefault(const Constant(15))();
   TextColumn get selectedBlockIdsJson =>
       text().withDefault(const Constant('[]'))();
   BoolColumn get selectedBlockIdsInitialized =>

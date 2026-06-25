@@ -27,6 +27,12 @@ abstract class StudioConfig with _$StudioConfig {
     @Default('') String buildApiConfigId,
     @Default('') String runApiConfigId,
     @Default('') String builderPromptTemplate,
+
+    /// Maximum number of trailing user/assistant chat messages forwarded to the
+    /// FINAL Studio agent. Intermediate agents always see full history; the
+    /// final writer is intentionally limited so it leans on the agent briefs
+    /// instead of re-reading the whole transcript. 0 = no limit.
+    @Default(15) int maxFinalHistoryMessages,
     @Default([]) List<String> selectedBlockIds,
     @Default(false) bool selectedBlockIdsInitialized,
     @Default(0) int createdAt,

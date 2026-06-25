@@ -64,7 +64,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **43**
+Current version: **44**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -93,6 +93,7 @@ Migration history:
 - v41: added Studio preset overrides JSON
 - v42: added Studio `profileId` / `profileName` for reusable session-bound profiles
 - v43: added Studio `builderPromptTemplate` override for editable Studio rebuild prompts
+- v44: added Studio `maxFinalHistoryMessages` INTEGER DEFAULT 15 — caps trailing chat messages sent to the final Studio agent (0 = unlimited); intermediate agents still see full history
 
 ---
 

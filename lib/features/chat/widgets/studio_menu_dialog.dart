@@ -683,9 +683,79 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               ],
             ],
           ),
+          if (_config != null) ...[
+            const SizedBox(height: 8),
+            _finalHistoryLimitField(),
+          ],
         ],
       ),
     );
+  }
+
+  Widget _finalHistoryLimitField() {
+    final value = _config!.maxFinalHistoryMessages;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Final history limit',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: context.cs.onSurface,
+                ),
+              ),
+              Text(
+                'Last U/A messages sent to the final agent. '
+                'Agents always see full history. 0 = unlimited.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 84,
+          child: TextFormField(
+            key: ValueKey('final_history_limit_$value'),
+            initialValue: value.toString(),
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 10,
+              ),
+            ),
+            onFieldSubmitted: _saveFinalHistoryLimit,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveFinalHistoryLimit(String raw) async {
+    if (_config == null) return;
+    final parsed = int.tryParse(raw.trim());
+    if (parsed == null) return;
+    final clamped = parsed.clamp(0, 999);
+    if (clamped == _config!.maxFinalHistoryMessages) return;
+    final updated = _config!.copyWith(
+      maxFinalHistoryMessages: clamped,
+      updatedAt: currentTimestampSeconds(),
+    );
+    await ref.read(studioConfigRepoProvider).upsert(updated);
+    if (mounted) setState(() => _config = updated);
   }
 
   Future<void> _showBuilderPromptDialog() async {
