@@ -11,7 +11,6 @@ ChatTransportRequest _req({
   String sessionIdMode = 'openrouter',
   List<Map<String, dynamic>>? previousMessages,
   String endpoint = 'https://intentionally-ignored.example',
-  bool omitReasoning = false,
 }) {
   return ChatTransportRequest(
     endpoint: endpoint,
@@ -32,7 +31,6 @@ ChatTransportRequest _req({
     cacheBreakpointMode: cacheBreakpointMode,
     sessionIdMode: sessionIdMode,
     previousMessages: previousMessages,
-    omitReasoning: omitReasoning,
   );
 }
 
@@ -71,16 +69,6 @@ void main() {
       final body = OpenAiChatTransport.buildBody(r);
 
       expect(body['session_id'], 'sess-1');
-    });
-
-    test('sends explicit reasoning exclusion when reasoning is omitted', () {
-      final r = OpenRouterChatTransport.buildRouterRequest(
-        _req(model: 'google/gemini-3.1-pro-preview', omitReasoning: true),
-      );
-      final body = OpenAiChatTransport.buildBody(r);
-
-      expect(body['reasoning'], {'exclude': true});
-      expect(body.containsKey('reasoning_effort'), isFalse);
     });
   });
 

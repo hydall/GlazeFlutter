@@ -120,9 +120,6 @@ class OpenAiChatTransport implements ChatTransport {
     if (r.presencePenalty != 0) {
       body['presence_penalty'] = r.presencePenalty;
     }
-    if (r.omitReasoning) {
-      body['reasoning'] = {'exclude': true};
-    }
     if (!r.omitReasoning &&
         r.requestReasoning &&
         !r.omitReasoningEffort &&

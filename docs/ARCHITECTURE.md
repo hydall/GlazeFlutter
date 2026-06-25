@@ -399,6 +399,28 @@ post-gen, or pipeline sync notification. See `docs/INVARIANTS.md` INV-CM2.
 | Summary | Widget-local in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
 | Memory draft | `MemoryBookController` (`_generatingDrafts`, `_cancelTokens`) | No | Per-draft `CancelToken`; mutex via `memory_active_drafts_provider` |
 
+### Reasoning / Thinking
+
+`ApiConfig.requestReasoning` controls whether Glaze asks the provider for
+provider-native reasoning. `ApiConfig.omitReasoning` suppresses app-side
+reasoning request fields such as OpenAI `reasoning_effort`, Anthropic/Gemini
+thinking configs, and Studio final-agent reasoning persistence. It does **not**
+guarantee that a provider/model disables its internal thinking.
+
+Gemini 3.x models can think by default. For example, Gemini 3.1 Pro exposes
+thinking levels (`low` / `medium` / `high`) rather than a documented full off
+switch. Custom OpenAI-compatible proxies such as rout.my may still report or
+bill thought tokens even when Glaze omits reasoning request fields. Do not add
+provider-specific `reasoning: { exclude: true }` or similar body fields unless
+the target provider documents the exact field and we intentionally support that
+contract.
+
+Studio Mode follows the same policy for its final agent: intermediate agents
+force reasoning off/omitted; the final agent inherits the resolved `ApiConfig`
+reasoning settings. Studio also strips prompt-level hidden-reasoning directives
+from final-agent instructions when reasoning is disabled/omitted, but cannot
+disable model-internal thinking if the upstream model always performs it.
+
 ### Prompt Ordering (invariant — do not reorder)
 
 1. Vector lorebook scan (async, in `PromptPayloadBuilder`, before isolate)

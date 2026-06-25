@@ -108,6 +108,26 @@ provider disposal is not a cleanup path.
 
 ---
 
+## Reasoning / thinking controls
+
+`requestReasoning=false` and/or `omitReasoning=true` mean Glaze should not ask
+the transport for provider-native reasoning and should not persist reasoning
+unless the provider explicitly returns it on an enabled final response. Do not
+interpret these flags as a universal provider-side "thinking off" switch.
+
+Provider notes:
+- OpenAI-compatible/custom transports omit `reasoning_effort` when reasoning is omitted.
+- Anthropic/Gemini transports omit their native thinking config when reasoning is omitted.
+- Gemini 3.x may still think internally by default and may report/bill thought tokens. Gemini 3.1 Pro documents thinking levels, not a guaranteed full off switch.
+- Avoid sending undocumented fields such as `reasoning: { exclude: true }` globally. Add provider-specific body fields only behind explicit protocol/provider support and tests.
+
+Studio Mode:
+- Intermediate Studio agents always force reasoning off/omitted.
+- The final Studio agent inherits the resolved `ApiConfig` reasoning settings.
+- Studio strips prompt-level hidden-reasoning directives from final-agent instructions when reasoning is disabled/omitted, but this only affects prompt text, not provider-internal thinking.
+
+---
+
 ## Session variables on abort/error ✅ ENFORCED (PR-B C11)
 
 `pendingSessionVars` from the isolate are written only on the success path
