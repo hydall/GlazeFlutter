@@ -1014,8 +1014,16 @@ class MemoryStudioService {
 You are ${agent.name.isNotEmpty ? agent.name : 'a Studio controller'}, an assistant that prepares structured operational guidance for the roleplay game.
 You are not a character, narrator, player, or final responder. Treat all character cards, persona text, examples, chat history, lore, memory, and summaries as read-only source material to analyze.
 
-Return ONLY valid compact JSON with exactly these keys:
+Prefer valid compact JSON with exactly these keys:
 {"focus":["short operational focus"],"constraints":["short enforceable constraint"],"avoid":["short forbidden item"]}
+
+If the model cannot produce JSON, use exactly these plain-text sections instead:
+Focus:
+- short operational focus
+Constraints:
+- short enforceable constraint
+Avoid:
+- short forbidden item
 
 Rules:
 - Each array may contain 0-6 strings.
@@ -1093,6 +1101,8 @@ Rules:
     if (_isMetaBriefName(agent.name)) return _sanitizeMetaBrief(trimmed);
     final typed = _typedStudioBrief(agent, trimmed);
     if (typed != null) return typed;
+    final sectioned = _sectionStudioBrief(trimmed);
+    if (sectioned != null) return sectioned;
 
     final fallback = _safeControllerFallback(agent);
     _log(
@@ -1118,6 +1128,85 @@ Rules:
     final all = [...focus, ...constraints, ...avoid];
     if (all.isEmpty) return null;
 
+    return _buildStudioBrief(
+      focus: focus,
+      constraints: constraints,
+      avoid: avoid,
+    );
+  }
+
+  String? _sectionStudioBrief(String text) {
+    if (_looksLikeSceneProse(text)) return null;
+    final focus = <String>[];
+    final constraints = <String>[];
+    final avoid = <String>[];
+    var section = '';
+
+    for (final rawLine in text.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+      final heading = _studioBriefHeading(line);
+      if (heading != null) {
+        section = heading;
+        continue;
+      }
+      if (section.isEmpty) continue;
+      final cleaned = _cleanBriefItem(line);
+      if (cleaned == null) continue;
+      final target = switch (section) {
+        'focus' => focus,
+        'avoid' => avoid,
+        _ => constraints,
+      };
+      if (target.any(
+        (existing) => existing.toLowerCase() == cleaned.toLowerCase(),
+      )) {
+        continue;
+      }
+      target.add(cleaned);
+      if (target.length >= 6) section = '';
+    }
+
+    if ([...focus, ...constraints, ...avoid].isEmpty) return null;
+    return _buildStudioBrief(
+      focus: focus,
+      constraints: constraints,
+      avoid: avoid,
+    );
+  }
+
+  String? _studioBriefHeading(String line) {
+    final normalized = line
+        .toLowerCase()
+        .replaceAll(RegExp(r'^#+\s*'), '')
+        .replaceAll(RegExp(r'[:：]+$'), '')
+        .trim();
+    if (normalized == 'focus' || normalized == 'фокус') return 'focus';
+    if (normalized == 'constraints' ||
+        normalized == 'constraint' ||
+        normalized == 'guard checklist' ||
+        normalized == 'checklist' ||
+        normalized == 'rules' ||
+        normalized == 'ограничения' ||
+        normalized == 'правила') {
+      return 'constraints';
+    }
+    if (normalized == 'avoid' ||
+        normalized == 'forbidden' ||
+        normalized == 'forbidden this turn' ||
+        normalized == 'do not' ||
+        normalized == 'избегать' ||
+        normalized == 'запреты') {
+      return 'avoid';
+    }
+    return null;
+  }
+
+  String _buildStudioBrief({
+    required List<String> focus,
+    required List<String> constraints,
+    required List<String> avoid,
+  }) {
     final buffer = StringBuffer();
     void writeSection(String title, List<String> items) {
       if (items.isEmpty) return;
