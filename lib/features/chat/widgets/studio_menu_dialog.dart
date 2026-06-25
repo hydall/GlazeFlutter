@@ -641,19 +641,11 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                           const Spacer(),
                           TextButton.icon(
                             onPressed: () {
-                              final nextOrder = editingBlocks.length;
                               editorSetState(() {
-                                editingBlocks = [
+                                editingBlocks = _reorderStudioBlocks([
+                                  _newCustomStudioBlock(editingBlocks.length),
                                   ...editingBlocks,
-                                  StudioPresetBlock(
-                                    id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
-                                    title: 'Custom block',
-                                    kind: 'custom_text',
-                                    role: 'system',
-                                    content: '',
-                                    order: nextOrder,
-                                  ),
-                                ];
+                                ]);
                               });
                             },
                             icon: const Icon(Icons.add, size: 18),
@@ -894,6 +886,17 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     return [
       for (var i = 0; i < blocks.length; i++) blocks[i].copyWith(order: i),
     ];
+  }
+
+  StudioPresetBlock _newCustomStudioBlock(int existingCount) {
+    final id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+    return StudioPresetBlock(
+      id: 'custom_$id',
+      title: 'Custom block ${existingCount + 1}',
+      kind: 'custom_text',
+      role: 'system',
+      content: '',
+    );
   }
 
   List<StudioPresetBlock> _updateStudioBlock(
