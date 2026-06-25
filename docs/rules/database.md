@@ -64,7 +64,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **44**
+Current version: **45**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -94,6 +94,7 @@ Migration history:
 - v42: added Studio `profileId` / `profileName` for reusable session-bound profiles
 - v43: added Studio `builderPromptTemplate` override for editable Studio rebuild prompts
 - v44: added Studio `maxFinalHistoryMessages` INTEGER DEFAULT 15 — caps trailing chat messages sent to the final Studio agent (0 = unlimited); intermediate agents still see full history
+- v45: added `tracker_rows` table — agentic memory trackers (lightweight key-value state written by the memory agent, e.g. 'mood: happy', 'inventory: chip in pocket'). Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades alongside `memory_book_rows`
 
 ---
 
@@ -167,9 +168,10 @@ Schema: `{ entryId, sourceType, sourceId, vectorsBlob (BLOB), textHash, retrieva
 
 1. Gets session IDs for the character
 2. Deletes `MemoryBookRows` by session IDs
-3. Deletes `ChatSummaries` by session IDs
-4. Deletes `ChatSessions` by character ID
-5. Deletes `Characters` by charId
+3. Deletes `TrackerRows` by session IDs (agentic memory trackers)
+4. Deletes `ChatSummaries` by session IDs
+5. Deletes `ChatSessions` by character ID
+6. Deletes `Characters` by charId
 
 This path is used by direct repo callers (e.g. sync engine). It is idempotent.
 
@@ -181,8 +183,9 @@ This path is used by direct repo callers (e.g. sync engine). It is idempotent.
 
 Deletes in order:
 1. `MemoryBookRows` for all sessions of the character
-2. `ChatSummaries` for all sessions of the character
-3. `ChatSessions` for the character
+2. `TrackerRows` for all sessions of the character (agentic memory trackers)
+3. `ChatSummaries` for all sessions of the character
+4. `ChatSessions` for the character
 
 Returns the list of deleted session IDs (for sync-deletion tracking).
 

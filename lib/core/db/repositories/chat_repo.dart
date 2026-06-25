@@ -135,6 +135,9 @@ class ChatRepo implements SyncChatStore {
       await (_db.delete(_db.memoryBookRows)
             ..where((t) => t.sessionId.isIn(ids)))
           .go();
+      await (_db.delete(_db.trackerRows)
+            ..where((t) => t.sessionId.isIn(ids)))
+          .go();
       await (_db.delete(_db.chatSummaries)
             ..where((t) => t.sessionId.isIn(ids)))
           .go();

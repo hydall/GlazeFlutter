@@ -28,6 +28,7 @@ part 'app_db.g.dart';
     MemoryCadenceRows,
     MemoryConsolidationRows,
     StudioConfigRows,
+    TrackerRows,
     ExtensionPresets,
     InfoBlocks,
   ],
@@ -38,7 +39,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 44;
+  int get schemaVersion => 45;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -525,6 +526,19 @@ class AppDatabase extends _$AppDatabase {
             studioConfigRows,
             studioConfigRows.maxFinalHistoryMessages,
           );
+        }
+      }
+      if (from < 45) {
+        // Agentic memory trackers: lightweight key-value state written by the
+        // memory agent (e.g. 'Lucy: chip in pocket', 'relationship: +1').
+        // Guarded like every prior table migration to survive partial upgrades
+        // from early feature builds.
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('tracker_rows')) {
+          await m.createTable(trackerRows);
         }
       }
     },
