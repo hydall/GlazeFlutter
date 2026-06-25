@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/api_config.dart';
+import '../models/chat_message.dart';
 import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
@@ -185,6 +186,10 @@ class MemoryStudioService {
 
       final sceneKey = _sceneCacheKey(promptPayload);
       final turnIndex = _assistantTurnCount(promptPayload);
+      await _warmBriefCacheFromSession(
+        sessionId: sessionId,
+        currentTurnIndex: turnIndex,
+      );
       final briefs = intermediateAgents.isEmpty
           ? <StudioStageBrief>[]
           : await Future.wait([
@@ -1324,6 +1329,53 @@ class MemoryStudioService {
       return null;
     }
     return cached;
+  }
+
+  Future<void> _warmBriefCacheFromSession({
+    required String sessionId,
+    required int currentTurnIndex,
+  }) async {
+    final session = await _ref.read(chatRepoProvider).getById(sessionId);
+    if (session == null) return;
+    for (final message in session.messages) {
+      if (message.role != 'assistant') continue;
+      final outputs = _storedStudioOutputsForMessage(message);
+      for (final output in outputs) {
+        final policy = _normalizeRefreshPolicy(
+          output['refreshPolicy'] as String? ?? '',
+        );
+        if (!_isCacheablePolicy(policy)) continue;
+        final cacheKey = output['cacheKey'] as String? ?? '';
+        final content = output['content'] as String? ?? '';
+        if (cacheKey.isEmpty || content.trim().isEmpty) continue;
+        _briefCache.putIfAbsent(
+          cacheKey,
+          () => _CachedStudioBrief(
+            brief: content,
+            policy: policy,
+            createdTurnIndex: currentTurnIndex,
+          ),
+        );
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> _storedStudioOutputsForMessage(
+    ChatMessage message,
+  ) {
+    final outputs = <Map<String, dynamic>>[];
+    void addOutputs(Object? raw) {
+      if (raw is! List) return;
+      for (final item in raw.whereType<Map<dynamic, dynamic>>()) {
+        outputs.add(Map<String, dynamic>.from(item));
+      }
+    }
+
+    addOutputs(message.studioOutputs);
+    for (final meta in message.swipesMeta) {
+      addOutputs(meta['studioOutputs']);
+    }
+    return outputs;
   }
 
   String _cacheKeyForAgent({
