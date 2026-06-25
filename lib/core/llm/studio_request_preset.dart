@@ -279,12 +279,55 @@ StudioRequestPreset studioRequestPresetById(
   final override = overrides.where((p) => p.id == base.id).firstOrNull;
   if (override == null) return base;
   final blocks = override.blocks.isNotEmpty
-      ? override.blocks
+      ? _migrateLegacyStudioBlocks(base, override.blocks)
       : _legacyOverrideBlocks(base, override);
   return base.copyWith(
     name: override.name.trim().isNotEmpty ? override.name.trim() : base.name,
     blocks: blocks,
   );
+}
+
+List<StudioPresetBlock> _migrateLegacyStudioBlocks(
+  StudioRequestPreset base,
+  List<StudioPresetBlock> blocks,
+) {
+  final kinds = blocks.map((block) => block.kind).toSet();
+  final hasSplitContext =
+      kinds.contains('user_persona') ||
+      kinds.contains('char_card') ||
+      kinds.contains('scenario') ||
+      kinds.contains('char_personality');
+  if (hasSplitContext) return blocks;
+
+  final byKind = {for (final block in blocks) block.kind: block};
+  final migrated = <StudioPresetBlock>[];
+  for (final baseBlock in base.blocks) {
+    final existing = byKind[baseBlock.kind];
+    if (existing == null) {
+      migrated.add(baseBlock);
+      continue;
+    }
+    migrated.add(
+      baseBlock.copyWith(
+        title: existing.title.trim().isNotEmpty
+            ? existing.title
+            : baseBlock.title,
+        role: existing.role,
+        content: existing.content,
+        enabled: existing.enabled,
+      ),
+    );
+  }
+  migrated.addAll(
+    blocks.where(
+      (block) =>
+          block.kind == 'custom_text' &&
+          !migrated.any((existing) => existing.id == block.id),
+    ),
+  );
+  return [
+    for (var i = 0; i < migrated.length; i++) migrated[i].copyWith(order: i),
+  ];
 }
 
 List<StudioPresetBlock> _legacyOverrideBlocks(
