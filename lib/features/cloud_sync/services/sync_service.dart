@@ -29,6 +29,7 @@ class SyncService {
   final SyncExtensionPresetStore _extensionPresetRepo;
   final SyncExtensionsSettingsStore _extensionsSettingsStore;
   final SyncInfoBlockStore _infoBlockStore;
+  final SyncStudioConfigStore _studioConfigStore;
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
 
   SyncProvider _provider = SyncProvider.dropbox;
@@ -88,6 +89,7 @@ class SyncService {
     required this._extensionPresetRepo,
     required this._extensionsSettingsStore,
     required this._infoBlockStore,
+    required this._studioConfigStore,
     required Future<void> Function(LorebookActivations) saveLorebookActivations,
     // ignore: prefer_initializing_formals
   }) : _saveLorebookActivations = saveLorebookActivations;
@@ -102,38 +104,40 @@ class SyncService {
   }
 
   SyncManifestBuilder get _manifestBuilder => SyncManifestBuilder(
-        characterRepo: _characterRepo,
-        chatRepo: _chatRepo,
-        personaRepo: _personaRepo,
-        presetRepo: _presetRepo,
-        apiRepo: _apiRepo,
-        memoryBookRepo: _memoryBookRepo,
-        lorebookRepo: _lorebookRepo,
-        themePresetRepo: _themePresetRepo,
-        extensionPresetRepo: _extensionPresetRepo,
-        extensionsSettingsStore: _extensionsSettingsStore,
-        infoBlockStore: _infoBlockStore,
-        imageStore: _imageStorage,
-      );
+    characterRepo: _characterRepo,
+    chatRepo: _chatRepo,
+    personaRepo: _personaRepo,
+    presetRepo: _presetRepo,
+    apiRepo: _apiRepo,
+    memoryBookRepo: _memoryBookRepo,
+    lorebookRepo: _lorebookRepo,
+    themePresetRepo: _themePresetRepo,
+    extensionPresetRepo: _extensionPresetRepo,
+    extensionsSettingsStore: _extensionsSettingsStore,
+    infoBlockStore: _infoBlockStore,
+    studioConfigStore: _studioConfigStore,
+    imageStore: _imageStorage,
+  );
 
   SyncEngine get _engine => SyncEngine(
-        _adapter,
-        _manifestBuilder,
-        _characterRepo,
-        _chatRepo,
-        _personaRepo,
-        _presetRepo,
-        _apiRepo,
-        _memoryBookRepo,
-        _lorebookRepo,
-        _embeddingRepo,
-        _imageStorage,
-        _themePresetRepo,
-        _extensionPresetRepo,
-        _extensionsSettingsStore,
-        _infoBlockStore,
-        _saveLorebookActivations,
-      );
+    _adapter,
+    _manifestBuilder,
+    _characterRepo,
+    _chatRepo,
+    _personaRepo,
+    _presetRepo,
+    _apiRepo,
+    _memoryBookRepo,
+    _lorebookRepo,
+    _embeddingRepo,
+    _imageStorage,
+    _themePresetRepo,
+    _extensionPresetRepo,
+    _extensionsSettingsStore,
+    _infoBlockStore,
+    _studioConfigStore,
+    _saveLorebookActivations,
+  );
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -186,9 +190,7 @@ class SyncService {
     });
   }
 
-  Future<void> fullPull({
-    void Function(SyncProgress)? onProgress,
-  }) async {
+  Future<void> fullPull({void Function(SyncProgress)? onProgress}) async {
     await _withSyncForeground(() async {
       _status = SyncStatus.syncing;
       _lastError = null;
@@ -227,9 +229,7 @@ class SyncService {
     }
   }
 
-  Future<void> wipeCloudData({
-    void Function(SyncProgress)? onProgress,
-  }) async {
+  Future<void> wipeCloudData({void Function(SyncProgress)? onProgress}) async {
     if (_status == SyncStatus.syncing) return;
     await _withSyncForeground(() async {
       _status = SyncStatus.syncing;
@@ -237,9 +237,7 @@ class SyncService {
 
       try {
         final engine = _engine;
-        await engine.wipeCloudData(
-          onProgress: onProgress ?? (_) {},
-        );
+        await engine.wipeCloudData(onProgress: onProgress ?? (_) {});
         await _manifestBuilder.clearLocalManifest();
         _conflicts.clear();
         _resolvedAsCloud.clear();
@@ -297,8 +295,9 @@ class SyncService {
         _status = SyncStatus.syncing;
         await _engine.applyPendingPull(
           onProgress: onProgress,
-          resolvedAsCloud:
-              _resolvedAsCloud.isNotEmpty ? List.from(_resolvedAsCloud) : null,
+          resolvedAsCloud: _resolvedAsCloud.isNotEmpty
+              ? List.from(_resolvedAsCloud)
+              : null,
         );
         _resolvedAsCloud.clear();
         _lastSyncTime = DateTime.now().millisecondsSinceEpoch;

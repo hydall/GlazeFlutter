@@ -11,6 +11,7 @@ import 'package:glaze_flutter/core/models/lorebook.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
 import 'package:glaze_flutter/core/models/persona.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
+import 'package:glaze_flutter/core/models/studio_config.dart';
 import 'package:glaze_flutter/shared/theme/theme_preset.dart';
 import 'package:glaze_flutter/features/cloud_sync/cloud_adapter.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_conflict.dart';
@@ -245,6 +246,24 @@ class FakeInfoBlockStore implements SyncInfoBlockStore {
   }
 }
 
+class FakeStudioConfigStore implements SyncStudioConfigStore {
+  final Map<String, StudioConfig> data = {};
+  @override
+  Future<List<StudioConfig>> getAll() async => data.values.toList();
+  @override
+  Future<StudioConfig?> getById(String id) async => data[id];
+  @override
+  Future<void> put(StudioConfig config) async {
+    data[config.profileId.isNotEmpty ? config.profileId : config.sessionId] =
+        config;
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    data.remove(id);
+  }
+}
+
 class FakeImageStore implements SyncImageStore {
   final Map<String, Uint8List> saved = {};
 
@@ -376,6 +395,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     SyncExtensionPresetStore? extensionPresetRepo,
     SyncExtensionsSettingsStore? extensionsSettingsStore,
     SyncInfoBlockStore? infoBlockStore,
+    SyncStudioConfigStore? studioConfigStore,
   }) : _builder = SyncManifestBuilder(
          characterRepo: characterRepo,
          chatRepo: chatRepo,
@@ -389,6 +409,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
          extensionsSettingsStore:
              extensionsSettingsStore ?? FakeExtensionsSettingsStore(),
          infoBlockStore: infoBlockStore ?? FakeInfoBlockStore(),
+         studioConfigStore: studioConfigStore ?? FakeStudioConfigStore(),
        );
 
   @override
@@ -487,6 +508,7 @@ class SyncWorld {
     FakeExtensionPresetStore(),
     FakeExtensionsSettingsStore(),
     FakeInfoBlockStore(),
+    FakeStudioConfigStore(),
     (_) async {},
   );
 }

@@ -51,30 +51,29 @@ class SyncManifestEntry {
     String? charId,
     String? imgId,
     String? ext,
-  }) =>
-      SyncManifestEntry(
-        type: type ?? this.type,
-        id: id ?? this.id,
-        path: path ?? this.path,
-        updatedAt: updatedAt ?? this.updatedAt,
-        hash: hash ?? this.hash,
-        deleted: deleted ?? this.deleted,
-        charId: charId ?? this.charId,
-        imgId: imgId ?? this.imgId,
-        ext: ext ?? this.ext,
-      );
+  }) => SyncManifestEntry(
+    type: type ?? this.type,
+    id: id ?? this.id,
+    path: path ?? this.path,
+    updatedAt: updatedAt ?? this.updatedAt,
+    hash: hash ?? this.hash,
+    deleted: deleted ?? this.deleted,
+    charId: charId ?? this.charId,
+    imgId: imgId ?? this.imgId,
+    ext: ext ?? this.ext,
+  );
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'id': id,
-        'path': path,
-        'updatedAt': updatedAt,
-        'hash': hash,
-        'deleted': deleted,
-        if (charId != null) 'charId': charId,
-        if (imgId != null) 'imgId': imgId,
-        if (ext != null) 'ext': ext,
-      };
+    'type': type,
+    'id': id,
+    'path': path,
+    'updatedAt': updatedAt,
+    'hash': hash,
+    'deleted': deleted,
+    if (charId != null) 'charId': charId,
+    if (imgId != null) 'imgId': imgId,
+    if (ext != null) 'ext': ext,
+  };
 
   factory SyncManifestEntry.fromJson(Map<String, dynamic> m) =>
       SyncManifestEntry(
@@ -100,6 +99,7 @@ class SyncManifest {
   final int? lastSync;
   final int createdAt;
   final Map<String, SyncManifestEntry> entries;
+
   /// Whether the last cloud push included API/embedding keys in api_presets.
   final bool apiKeysIncluded;
 
@@ -119,38 +119,39 @@ class SyncManifest {
     int? createdAt,
     Map<String, SyncManifestEntry>? entries,
     bool? apiKeysIncluded,
-  }) =>
-      SyncManifest(
-        version: version ?? this.version,
-        deviceId: deviceId ?? this.deviceId,
-        lastSync: lastSync ?? this.lastSync,
-        createdAt: createdAt ?? this.createdAt,
-        entries: entries ?? this.entries,
-        apiKeysIncluded: apiKeysIncluded ?? this.apiKeysIncluded,
-      );
+  }) => SyncManifest(
+    version: version ?? this.version,
+    deviceId: deviceId ?? this.deviceId,
+    lastSync: lastSync ?? this.lastSync,
+    createdAt: createdAt ?? this.createdAt,
+    entries: entries ?? this.entries,
+    apiKeysIncluded: apiKeysIncluded ?? this.apiKeysIncluded,
+  );
 
   Map<String, dynamic> toJson() => {
-        'version': version,
-        'deviceId': deviceId,
-        'lastSync': lastSync,
-        'createdAt': createdAt,
-        'apiKeysIncluded': apiKeysIncluded,
-        'entries': entries.map((k, v) => MapEntry(k, v.toJson())),
-      };
+    'version': version,
+    'deviceId': deviceId,
+    'lastSync': lastSync,
+    'createdAt': createdAt,
+    'apiKeysIncluded': apiKeysIncluded,
+    'entries': entries.map((k, v) => MapEntry(k, v.toJson())),
+  };
 
   factory SyncManifest.fromJson(Map<String, dynamic> m) => SyncManifest(
-        version: m['version'] as int? ?? 2,
-        deviceId: m['deviceId'] as String? ?? '',
-        lastSync: m['lastSync'] as int?,
-        createdAt: m['createdAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
-        apiKeysIncluded: m['apiKeysIncluded'] as bool? ?? false,
-        entries: _parseEntries(m['entries'] as Map<String, dynamic>?),
-      );
+    version: m['version'] as int? ?? 2,
+    deviceId: m['deviceId'] as String? ?? '',
+    lastSync: m['lastSync'] as int?,
+    createdAt: m['createdAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+    apiKeysIncluded: m['apiKeysIncluded'] as bool? ?? false,
+    entries: _parseEntries(m['entries'] as Map<String, dynamic>?),
+  );
 
   static Map<String, SyncManifestEntry> _parseEntries(Map<String, dynamic>? m) {
     if (m == null) return {};
-    return m.map((k, v) =>
-        MapEntry(k, SyncManifestEntry.fromJson(v as Map<String, dynamic>)));
+    return m.map(
+      (k, v) =>
+          MapEntry(k, SyncManifestEntry.fromJson(v as Map<String, dynamic>)),
+    );
   }
 }
 
@@ -176,6 +177,8 @@ String cloudPath(String type, String id) {
       return '$cloudBase/extensions_settings.json';
     case 'info_block':
       return '$cloudBase/info_blocks/$id.json';
+    case 'studio_config':
+      return '$cloudBase/studio_configs/$id.json';
     case 'lorebooks':
       return '$cloudBase/lorebooks.json';
     case 'api_presets':

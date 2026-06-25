@@ -1,4 +1,8 @@
+import 'dart:math' as math;
+
 import '../models/memory_book.dart';
+import '../models/memory_graph.dart';
+import 'memory_salience_scorer.dart';
 import 'tokenizer.dart';
 import 'glaze_matcher.dart';
 
@@ -17,6 +21,12 @@ class MemoryCandidateScore {
   final List<String> vectorMatchedChunks;
   final bool excludedBySourceWindow;
   final String? exclusionReason;
+  final bool isCore;
+  final double salienceScore;
+  final double emotionalScore;
+  final double entityScore;
+  final List<String> emotionalTags;
+  final List<String> narrativeFlags;
 
   const MemoryCandidateScore({
     required this.entry,
@@ -32,6 +42,12 @@ class MemoryCandidateScore {
     this.vectorMatchedChunks = const [],
     this.excludedBySourceWindow = false,
     this.exclusionReason,
+    this.isCore = false,
+    this.salienceScore = 0,
+    this.emotionalScore = 0,
+    this.entityScore = 0,
+    this.emotionalTags = const [],
+    this.narrativeFlags = const [],
   });
 }
 
@@ -88,6 +104,9 @@ class MemorySelectionInput {
   /// When true, entry-level token budget is deferred to
   /// [MemoryExcerptSelector] chunk packing (chunk_first mode).
   final bool chunkBudgeting;
+  final Map<String, MemorySalience> salienceByEntryId;
+  final List<String> queryEmotions;
+  final Map<String, int> entityOverlapByEntryId;
   final int now;
 
   const MemorySelectionInput({
@@ -112,6 +131,9 @@ class MemorySelectionInput {
     this.keywordWeight = 6.0,
     this.vectorWeight = 5.0,
     this.chunkBudgeting = false,
+    this.salienceByEntryId = const {},
+    this.queryEmotions = const [],
+    this.entityOverlapByEntryId = const {},
     int? nowSeconds,
   }) : now = nowSeconds ?? 0;
 
@@ -202,15 +224,42 @@ class MemorySelector {
           ? 0.0
           : input.keywordWeight * _keywordBoost(matched, entry.keys.length);
       final catalog = input.catalogScores[entry.id] ?? 0;
+      final salience = input.salienceByEntryId[entry.id];
       final recency = input.recencyBoost
-          ? _recencyBoost(entry, input.recencyHalfLifeDays, currentMessageIndex)
+          ? _recencyBoost(
+              entry,
+              input.recencyHalfLifeDays,
+              currentMessageIndex,
+              salience,
+            )
           : 0.0;
       final importance = input.importanceBoost
           ? (entry.importance.clamp(0, 1)) * input.importanceWeight
           : 0.0;
       final baseline = entry.content.trim().length > 20 ? 0.5 : 0.0;
-      final score =
-          keyword + vector + catalog + recency + importance + baseline;
+
+      // Emotional recall (Phase G2): Jaccard overlap between query emotions
+      // and entry salience emotional tags, weighted at 0.3.
+      final emotionalComponent = _emotionalOverlap(
+        input.queryEmotions,
+        salience?.emotionalTags ?? const [],
+      );
+
+      // Entity fusion (Phase G3): query-mentioned entities that appear in
+      // this entry. Weighted at 0.15 per entity, capped at 0.5.
+      final entityOverlap = input.entityOverlapByEntryId[entry.id] ?? 0;
+      final entityComponent = entityOverlap > 0
+          ? math.min(0.5, entityOverlap * 0.15)
+          : 0.0;
+
+      final score = keyword +
+          vector +
+          catalog +
+          recency +
+          importance +
+          emotionalComponent +
+          entityComponent +
+          baseline;
       scored.add(
         MemoryCandidateScore(
           entry: entry,
@@ -223,6 +272,12 @@ class MemorySelector {
           matchedKeys: matched,
           catalogMatchedTerms: input.catalogMatchedTerms[entry.id] ?? const [],
           vectorMatchedChunks: input.vectorMatchedChunks[entry.id] ?? const [],
+          isCore: MemorySalienceScorer.isCore(salience),
+          salienceScore: salience?.score ?? 0,
+          emotionalScore: emotionalComponent,
+          entityScore: entityComponent,
+          emotionalTags: salience?.emotionalTags ?? const [],
+          narrativeFlags: salience?.narrativeFlags ?? const [],
         ),
       );
     }
@@ -281,6 +336,12 @@ class MemorySelector {
           matchedKeys: c.matchedKeys,
           catalogMatchedTerms: c.catalogMatchedTerms,
           vectorMatchedChunks: c.vectorMatchedChunks,
+          isCore: c.isCore,
+          salienceScore: c.salienceScore,
+          emotionalScore: c.emotionalScore,
+          entityScore: c.entityScore,
+          emotionalTags: c.emotionalTags,
+          narrativeFlags: c.narrativeFlags,
         );
         picked[picked.length - 1] = reranked;
         // Also stamp the reranked score into allScores so the diagnostic
@@ -326,16 +387,36 @@ class MemorySelector {
   /// on its source message range relative to the newest sourced memory entry.
   /// Entries without source positions get no boost because their narrative
   /// position is unknown.
+  ///
+  /// Core memory protection (Phase G1, decision C):
+  /// - [temporallyBlind] → 1.0 (permanent facts always win).
+  /// - Core entries (death/promise/high salience) → 5x slower decay, floor 0.5.
+  /// - Normal entries → standard half-life decay.
   /// Returns a value in [0, 1] that callers can scale with recencyWeight.
   static double _recencyBoost(
     MemoryEntry entry,
     double halfLifeMessages,
     int currentMessageIndex,
+    MemorySalience? salience,
   ) {
-    if (entry.temporallyBlind || halfLifeMessages <= 0) return 0;
+    if (halfLifeMessages <= 0) return 0;
+
+    // temporallyBlind entries bypass decay entirely.
+    if (entry.temporallyBlind) return 1.0;
+
     final end = entry.messageRange?.end;
     if (end == null || end <= 0 || currentMessageIndex <= 0) return 0;
+
     final distance = (currentMessageIndex - end).clamp(0, currentMessageIndex);
+
+    // Core memory protection: 5x slower decay, floor 0.5.
+    if (MemorySalienceScorer.isCore(salience)) {
+      final effectiveHalfLife = halfLifeMessages * 5.0;
+      final halvings = distance / effectiveHalfLife;
+      final decayed = 1.0 / (1.0 + halvings);
+      return math.max(0.5, decayed * 0.2);
+    }
+
     final halvings = distance / halfLifeMessages;
     return 1.0 / (1.0 + halvings);
   }
@@ -353,6 +434,21 @@ class MemorySelector {
     if (matched.isEmpty) return 0;
     final t = totalKeys <= 0 ? matched.length : totalKeys;
     return (matched.length / t).clamp(0.0, 1.0);
+  }
+
+  /// Jaccard overlap between query emotions and entry emotional tags (Phase G2).
+  /// Returns a value in [0, 1] that callers scale by the emotional weight (0.3).
+  static double _emotionalOverlap(
+    List<String> queryEmotions,
+    List<String> entryEmotions,
+  ) {
+    if (queryEmotions.isEmpty || entryEmotions.isEmpty) return 0;
+    final querySet = queryEmotions.toSet();
+    final entrySet = entryEmotions.toSet();
+    final intersection = querySet.intersection(entrySet).length;
+    final union = querySet.union(entrySet).length;
+    if (union == 0) return 0;
+    return intersection / union;
   }
 
   static List<String> _matchedKeys(

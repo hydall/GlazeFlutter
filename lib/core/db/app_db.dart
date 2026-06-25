@@ -23,6 +23,11 @@ part 'app_db.g.dart';
     ChatSummaries,
     MemoryBookRows,
     MemoryCatalogRows,
+    MemoryEntityRows,
+    MemorySalienceRows,
+    MemoryCadenceRows,
+    MemoryConsolidationRows,
+    StudioConfigRows,
     ExtensionPresets,
     InfoBlocks,
   ],
@@ -33,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 34;
+  int get schemaVersion => 43;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -372,6 +377,142 @@ class AppDatabase extends _$AppDatabase {
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('hidden')) {
           await m.addColumn(characters, characters.hidden);
+        }
+      }
+      if (from < 35) {
+        // Memory Graph foundation (Phase G0): entity graph, salience, cadence,
+        // and consolidation tables. Guarded like every prior table migration
+        // to survive partial upgrades from early feature builds.
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('memory_entity_rows')) {
+          await m.createTable(memoryEntityRows);
+        }
+        if (!tableNames.contains('memory_salience_rows')) {
+          await m.createTable(memorySalienceRows);
+        }
+        if (!tableNames.contains('memory_cadence_rows')) {
+          await m.createTable(memoryCadenceRows);
+        }
+        if (!tableNames.contains('memory_consolidation_rows')) {
+          await m.createTable(memoryConsolidationRows);
+        }
+      }
+      if (from < 36) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('studio_config_rows')) {
+          await m.createTable(studioConfigRows);
+        }
+      }
+      if (from < 37) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('build_api_config_id')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.buildApiConfigId,
+          );
+        }
+        if (!colNames.contains('run_api_config_id')) {
+          await m.addColumn(studioConfigRows, studioConfigRows.runApiConfigId);
+        }
+      }
+      if (from < 38) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('selected_block_ids_json')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.selectedBlockIdsJson,
+          );
+        }
+        if (!colNames.contains('selected_block_ids_initialized')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.selectedBlockIdsInitialized,
+          );
+        }
+      }
+      if (from < 39) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('final_preset_id')) {
+          await m.addColumn(studioConfigRows, studioConfigRows.finalPresetId);
+        }
+      }
+      if (from < 40) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('agent_studio_preset_id')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.agentStudioPresetId,
+          );
+        }
+        if (!colNames.contains('final_studio_preset_id')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.finalStudioPresetId,
+          );
+        }
+      }
+      if (from < 41) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('studio_preset_overrides_json')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.studioPresetOverridesJson,
+          );
+        }
+      }
+      if (from < 42) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('profile_id')) {
+          await m.addColumn(studioConfigRows, studioConfigRows.profileId);
+        }
+        if (!colNames.contains('profile_name')) {
+          await m.addColumn(studioConfigRows, studioConfigRows.profileName);
+        }
+        await customStatement(
+          "UPDATE studio_config_rows SET profile_id = session_id "
+          "WHERE profile_id IS NULL OR profile_id = ''",
+        );
+        await customStatement(
+          "UPDATE studio_config_rows SET profile_name = "
+          "CASE WHEN source_preset_id IS NULL OR source_preset_id = '' "
+          "THEN 'Studio Profile' ELSE 'Studio: ' || source_preset_id END "
+          "WHERE profile_name IS NULL OR profile_name = ''",
+        );
+      }
+      if (from < 43) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('builder_prompt_template')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.builderPromptTemplate,
+          );
         }
       }
     },

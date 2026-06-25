@@ -75,6 +75,7 @@ class GenerationPipeline {
     int? previousTokens,
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? regenTargetId,
+    bool studioFinalOnly = false,
   }) async {
     if (!ref.mounted) return null;
     abortHandler.clearStreaming();
@@ -106,6 +107,7 @@ class GenerationPipeline {
         previousSwipesMeta: previousSwipesMeta,
         guidanceText: guidanceText,
         regenTargetId: regenTargetId,
+        studioFinalOnly: studioFinalOnly,
       );
 
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {

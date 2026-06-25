@@ -370,6 +370,8 @@ export class Bridge {
 
     if (msg.reasoning) section.dataset.reasoning = msg.reasoning;
     else if (msg.reasoning === null || msg.reasoning === '') delete section.dataset.reasoning;
+    if (msg.studioOutputs && msg.studioOutputs.length) section.dataset.studioOutputs = JSON.stringify(msg.studioOutputs);
+    else if (msg.studioOutputs !== undefined) delete section.dataset.studioOutputs;
 
     if (msg.text != null) section.dataset.rawText = msg.text;
 
@@ -382,7 +384,9 @@ export class Bridge {
       msg.reasoning ?? null,
       isUser,
       !!msg.isTyping,
-      animate
+      animate,
+      msg.studioOutputs !== undefined ? msg.studioOutputs : null,
+      !!msg.studioOutputsExpanded
     );
     this._imgGenTimer.ensureRunning();
 

@@ -60,11 +60,13 @@ const Map<String, HandlerSpec> bridgeHandlers = {
   // Message actions
   'onMessageContext': HandlerSpec(HandlerKind.jsonObject),
   'onSwipe': HandlerSpec(HandlerKind.jsonObject),
-  'onRegenerate': HandlerSpec(HandlerKind.stringArg),
+  'onRegenerate': HandlerSpec(HandlerKind.idStringPair),
   'onChangeGreeting': HandlerSpec(HandlerKind.idIntPair),
   'onSelectionAction': HandlerSpec(HandlerKind.jsonObject),
   // Edit
   'onEditSave': HandlerSpec(HandlerKind.idStringPair),
+  'onStudioOutputEdit': HandlerSpec(HandlerKind.idStringPair),
+  'onStudioOutputRegen': HandlerSpec(HandlerKind.idStringPair),
   'onEditCancel': HandlerSpec(HandlerKind.stringArg),
   'onEditFocusChange': HandlerSpec(HandlerKind.idBoolPair),
   // Guided swipe / memory / lorebook
@@ -89,21 +91,11 @@ const Map<String, HandlerSpec> bridgeHandlers = {
   'onStop': HandlerSpec(HandlerKind.noArgs),
   // Ext blocks
   'onExtBlocksRunAll': HandlerSpec(HandlerKind.stringArg),
-  'onExtBlockStop': HandlerSpec(
-    HandlerKind.imageAction,
-  ),
-  'onExtBlockRegen': HandlerSpec(
-    HandlerKind.imageAction,
-  ),
-  'onExtBlockRegenImage': HandlerSpec(
-    HandlerKind.imageAction,
-  ),
-  'onExtBlockEdit': HandlerSpec(
-    HandlerKind.imageAction,
-  ),
-  'onExtBlockDelete': HandlerSpec(
-    HandlerKind.imageAction,
-  ),
+  'onExtBlockStop': HandlerSpec(HandlerKind.imageAction),
+  'onExtBlockRegen': HandlerSpec(HandlerKind.imageAction),
+  'onExtBlockRegenImage': HandlerSpec(HandlerKind.imageAction),
+  'onExtBlockEdit': HandlerSpec(HandlerKind.imageAction),
+  'onExtBlockDelete': HandlerSpec(HandlerKind.imageAction),
   // Interactive panels
   'onPanelResize': HandlerSpec(HandlerKind.jsonObject),
   'onPanelEvent': HandlerSpec(HandlerKind.jsonObject),

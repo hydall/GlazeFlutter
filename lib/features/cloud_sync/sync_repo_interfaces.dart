@@ -7,6 +7,7 @@ import '../../core/models/lorebook.dart';
 import '../../core/models/memory_book.dart';
 import '../../core/models/persona.dart';
 import '../../core/models/preset.dart';
+import '../../core/models/studio_config.dart';
 import '../extensions/models/extension_preset.dart';
 import '../extensions/models/extensions_settings.dart';
 import '../extensions/models/info_block.dart';
@@ -74,7 +75,11 @@ abstract class SyncEmbeddingStore {
 abstract class SyncImageStore {
   String? absolutePath(String? relativePath);
   Future<String> saveBytes(
-      Uint8List bytes, String subfolder, String filename, String ext);
+    Uint8List bytes,
+    String subfolder,
+    String filename,
+    String ext,
+  );
 }
 
 abstract class SyncExtensionPresetStore {
@@ -94,6 +99,13 @@ abstract class SyncInfoBlockStore {
   Future<List<InfoBlock>> getBySessionId(String sessionId);
   Future<void> deleteBySessionId(String sessionId);
   Future<void> insert(InfoBlock block);
+}
+
+abstract class SyncStudioConfigStore {
+  Future<List<StudioConfig>> getAll();
+  Future<StudioConfig?> getById(String id);
+  Future<void> put(StudioConfig config);
+  Future<void> delete(String id);
 }
 
 abstract class SyncManifestProvider {

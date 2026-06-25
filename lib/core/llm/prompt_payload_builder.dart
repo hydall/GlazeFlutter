@@ -16,6 +16,8 @@ import '../state/db_provider.dart';
 import '../state/global_regex_provider.dart';
 import '../state/lorebook_provider.dart';
 import '../state/memory_settings_provider.dart';
+import '../db/repositories/memory_consolidation_repo.dart';
+import '../db/repositories/memory_entity_repo.dart';
 import 'embedding_types.dart';
 import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';
@@ -218,6 +220,41 @@ class PromptPayloadBuilder {
       }
     }
 
+    // Load {{arc}} and {{entities}} macro content from derived state repos.
+    // These are placement-only macros (decision F) — they don't compete for
+    // retrieval budget. Loaded only when memoryMode != 'fast'.
+    String? arcContent;
+    String? entitiesContent;
+    if (memorySettings.memoryMode != 'fast' && sessionId != null) {
+      try {
+        final arcs = await _ref
+            .read(memoryConsolidationRepoProvider)
+            .getBySessionId(sessionId, tier: 2);
+        if (arcs.isNotEmpty) {
+          final currentMessageIndex = history.length;
+          final currentArc = arcs.where((a) =>
+              a.messageRangeStart <= currentMessageIndex &&
+              a.messageRangeEnd >= currentMessageIndex).firstOrNull;
+          if (currentArc != null && currentArc.summary.isNotEmpty) {
+            arcContent = currentArc.summary;
+          }
+        }
+      } catch (_) {}
+      try {
+        final entities = await _ref
+            .read(memoryEntityRepoProvider)
+            .getBySessionId(sessionId);
+        if (entities.isNotEmpty) {
+          final active = entities.where((e) => e.status == 'active').take(20);
+          entitiesContent = active
+              .map((e) =>
+                  '- ${e.name} (${e.entityType})'
+                  '${e.facts.isNotEmpty ? ": ${e.facts.join("; ")}" : ""}')
+              .join('\n');
+        }
+      } catch (_) {}
+    }
+
     return PromptPayload(
       character: character,
       persona: persona,
@@ -251,6 +288,8 @@ class PromptPayloadBuilder {
       memoryExcerptChunksPerEntry: memorySettings.memoryExcerptChunksPerEntry,
       chunkFirstTopEntries: memorySettings.chunkFirstTopEntries,
       chunkFirstTopChunks: memorySettings.chunkFirstTopChunks,
+      arcContent: arcContent,
+      entitiesContent: entitiesContent,
     );
   }
 
@@ -291,6 +330,39 @@ class PromptPayloadBuilder {
       );
     }
 
+    final memSettings = _ref.read(memoryGlobalSettingsProvider);
+    String? arcContent;
+    String? entitiesContent;
+    if (memSettings.memoryMode != 'fast' && session != null) {
+      try {
+        final arcs = await _ref
+            .read(memoryConsolidationRepoProvider)
+            .getBySessionId(session.id, tier: 2);
+        if (arcs.isNotEmpty) {
+          final currentMessageIndex = history.length;
+          final currentArc = arcs.where((a) =>
+              a.messageRangeStart <= currentMessageIndex &&
+              a.messageRangeEnd >= currentMessageIndex).firstOrNull;
+          if (currentArc != null && currentArc.summary.isNotEmpty) {
+            arcContent = currentArc.summary;
+          }
+        }
+      } catch (_) {}
+      try {
+        final entities = await _ref
+            .read(memoryEntityRepoProvider)
+            .getBySessionId(session.id);
+        if (entities.isNotEmpty) {
+          final active = entities.where((e) => e.status == 'active').take(20);
+          entitiesContent = active
+              .map((e) =>
+                  '- ${e.name} (${e.entityType})'
+                  '${e.facts.isNotEmpty ? ": ${e.facts.join("; ")}" : ""}')
+              .join('\n');
+        }
+      } catch (_) {}
+    }
+
     return PromptPayload(
       character: character,
       persona: persona,
@@ -317,24 +389,14 @@ class PromptPayloadBuilder {
       globalRegexes: _ref.read(globalRegexProvider).value ?? [],
       triggeredMemories: triggeredMemories,
       runtimePromptBlocks: runtimePromptBlocks,
-      memoryExcerptingEnabled: _ref
-          .read(memoryGlobalSettingsProvider)
-          .memoryExcerptingEnabled,
-      memoryPackingMode: _ref
-          .read(memoryGlobalSettingsProvider)
-          .memoryPackingMode,
-      memoryExcerptTokensPerChunk: _ref
-          .read(memoryGlobalSettingsProvider)
-          .memoryExcerptTokensPerChunk,
-      memoryExcerptChunksPerEntry: _ref
-          .read(memoryGlobalSettingsProvider)
-          .memoryExcerptChunksPerEntry,
-      chunkFirstTopEntries: _ref
-          .read(memoryGlobalSettingsProvider)
-          .chunkFirstTopEntries,
-      chunkFirstTopChunks: _ref
-          .read(memoryGlobalSettingsProvider)
-          .chunkFirstTopChunks,
+      memoryExcerptingEnabled: memSettings.memoryExcerptingEnabled,
+      memoryPackingMode: memSettings.memoryPackingMode,
+      memoryExcerptTokensPerChunk: memSettings.memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: memSettings.memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: memSettings.chunkFirstTopEntries,
+      chunkFirstTopChunks: memSettings.chunkFirstTopChunks,
+      arcContent: arcContent,
+      entitiesContent: entitiesContent,
     );
   }
 

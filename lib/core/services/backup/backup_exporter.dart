@@ -9,12 +9,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../db/app_db.dart';
 import '../file_export_service.dart';
-import '../image_storage_service.dart';class BackupExporter {
+import '../image_storage_service.dart';
+
+class BackupExporter {
   // Schema version history:
   //   2 — initial v2 ZIP format (characters, chats, presets, api_configs,
   //         personas, lorebooks, embeddings, chat_summaries, memory_book_rows)
   //   3 — added extension_presets and info_blocks tables
-  static const int _schemaVersion = 3;
+  //   4 — added studio_config_rows (Studio agent profiles/settings)
+  static const int _schemaVersion = 4;
 
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
@@ -64,9 +67,7 @@ import '../image_storage_service.dart';class BackupExporter {
       'exportedAt': DateTime.now().toIso8601String(),
     };
     final manifestBytes = utf8.encode(jsonEncode(manifest));
-    encoder.addArchiveFile(
-      ArchiveFile.bytes('manifest.json', manifestBytes),
-    );
+    encoder.addArchiveFile(ArchiveFile.bytes('manifest.json', manifestBytes));
 
     // 2. tables/<name>.jsonl — streamed per row.
     for (final tableName in _knownTableNames()) {
@@ -85,22 +86,22 @@ import '../image_storage_service.dart';class BackupExporter {
       if (value != null) prefsMap[key] = value;
     }
     final prefsBytes = utf8.encode(jsonEncode(prefsMap));
-    encoder.addArchiveFile(
-      ArchiveFile.bytes('preferences.json', prefsBytes),
-    );
+    encoder.addArchiveFile(ArchiveFile.bytes('preferences.json', prefsBytes));
 
     // 4. avatars/characters/<id>.png and avatars/personas/<id>.png —
     // copy directly from disk into the zip via streams. We do not
     // encode them as base64, which is the main memory win over v1.
     final avatarIds = <String>{};
-    final charactersRows =
-        await _db.customSelect('SELECT char_id FROM characters').get();
+    final charactersRows = await _db
+        .customSelect('SELECT char_id FROM characters')
+        .get();
     for (final row in charactersRows) {
       final id = row.data['char_id'] as String?;
       if (id != null && id.isNotEmpty) avatarIds.add(id);
     }
-    final personasRows =
-        await _db.customSelect('SELECT persona_id FROM personas').get();
+    final personasRows = await _db
+        .customSelect('SELECT persona_id FROM personas')
+        .get();
     final personaIds = <String>{};
     for (final row in personasRows) {
       final id = row.data['persona_id'] as String?;
@@ -113,9 +114,7 @@ import '../image_storage_service.dart';class BackupExporter {
         if (entity is! File) continue;
         final id = p.basenameWithoutExtension(entity.path);
         final ext = p.extension(entity.path).replaceFirst('.', '');
-        final inArchive = ext.isEmpty
-            ? 'avatars/$id'
-            : 'avatars/$id.$ext';
+        final inArchive = ext.isEmpty ? 'avatars/$id' : 'avatars/$id.$ext';
         // If the id is a known character or persona, group it under the
         // matching subfolder so the importer can route it correctly.
         String? subfolder;
@@ -182,6 +181,7 @@ import '../image_storage_service.dart';class BackupExporter {
       'memory_book_rows',
       'extension_presets',
       'info_blocks',
+      'studio_config_rows',
     ];
   }
 }

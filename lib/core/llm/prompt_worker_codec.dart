@@ -51,6 +51,8 @@ Map<String, dynamic> serializePayload(PromptPayload p) => {
       'memoryExcerptChunksPerEntry': p.memoryExcerptChunksPerEntry,
       'chunkFirstTopEntries': p.chunkFirstTopEntries,
       'chunkFirstTopChunks': p.chunkFirstTopChunks,
+      'arcContent': p.arcContent,
+      'entitiesContent': p.entitiesContent,
     };
 
 PromptResult deserializeResult(Map<String, dynamic> json) {
@@ -148,6 +150,8 @@ PromptPayload deserializePayload(Map<String, dynamic> json) {
         defaultMemoryExcerptChunksPerEntry,
     chunkFirstTopEntries: json['chunkFirstTopEntries'] as int? ?? 3,
     chunkFirstTopChunks: json['chunkFirstTopChunks'] as int? ?? 1,
+    arcContent: json['arcContent'] as String?,
+    entitiesContent: json['entitiesContent'] as String?,
   );
 }
 

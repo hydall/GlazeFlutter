@@ -697,7 +697,7 @@ void main() {
   group('updateMessageContent fast path (renderer modules)', () {
     test('updateMessageContent has fast path for text-only updates', () {
       final marker =
-          'updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate)';
+          'updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate,';
       final idx = rendererJs.indexOf(marker);
       expect(idx, isNot(-1), reason: 'updateMessageContent must exist');
 

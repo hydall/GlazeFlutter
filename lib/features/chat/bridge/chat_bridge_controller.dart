@@ -62,10 +62,8 @@ class ChatBridgeController {
   late final LayoutBridgeCommands layout = LayoutBridgeCommands(this);
   late final MemoryBridgeCommands memory = MemoryBridgeCommands(this);
 
-  ChatBridgeController(
-    this._controller, {
-    JsBridgeService? jsBridgeService,
-  }) : _jsBridgeService = jsBridgeService ?? JsBridgeService() {
+  ChatBridgeController(this._controller, {JsBridgeService? jsBridgeService})
+    : _jsBridgeService = jsBridgeService ?? JsBridgeService() {
     setupHandlers();
   }
 
@@ -83,20 +81,24 @@ class ChatBridgeController {
   Persona? get regexPersona => _regexPersona;
 
   ChatMessageMapperContext get mapperContext => ChatMessageMapperContext(
-        currentCharName: currentCharName,
-        currentCharColor: currentCharColor,
-        currentPersonaName: currentPersonaName,
-        charAvatarDataUrl: _charAvatarUrl,
-        personaAvatarDataUrl: _personaAvatarUrl,
-        isGenerating: isGenerating,
-        coveredMemoryIds: _coveredMemoryIds,
-        pendingMemoryIds: _pendingMemoryIds,
-        draftMemoryIds: _draftMemoryIds,
-        greetingTotal: currentGreetingTotal,
-        blockStatusByMessageId: Map.unmodifiable(_blockStatusByMessageId),
-      );
+    currentCharName: currentCharName,
+    currentCharColor: currentCharColor,
+    currentPersonaName: currentPersonaName,
+    charAvatarDataUrl: _charAvatarUrl,
+    personaAvatarDataUrl: _personaAvatarUrl,
+    isGenerating: isGenerating,
+    coveredMemoryIds: _coveredMemoryIds,
+    pendingMemoryIds: _pendingMemoryIds,
+    draftMemoryIds: _draftMemoryIds,
+    greetingTotal: currentGreetingTotal,
+    blockStatusByMessageId: Map.unmodifiable(_blockStatusByMessageId),
+  );
 
-  void setRegexContext(List<PresetRegex> regexes, Character? char, Persona? persona) {
+  void setRegexContext(
+    List<PresetRegex> regexes,
+    Character? char,
+    Persona? persona,
+  ) {
     _displayRegexes = regexes;
     _regexCharacter = char;
     _regexPersona = persona;
@@ -192,7 +194,10 @@ class ChatBridgeController {
   }
 
   String escape(String s) {
-    return s.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n');
+    return s
+        .replaceAll('\\', '\\\\')
+        .replaceAll('"', '\\"')
+        .replaceAll('\n', '\\n');
   }
 
   String escapeJsonStr(String s) {
@@ -210,12 +215,15 @@ class ChatBridgeController {
   void Function(String url)? onLinkClick;
   void Function(String url)? onImageClick;
   void Function(String src)? onImgDownload;
-  void Function(String id, bool isUser, bool isSystem, String content)? onMessageContext;
+  void Function(String id, bool isUser, bool isSystem, String content)?
+  onMessageContext;
   void Function(String id, String direction)? onSwipe;
   void Function(String id, int direction)? onChangeGreeting;
-  void Function(String id)? onRegenerate;
+  void Function(String id, String mode)? onRegenerate;
   void Function(String action, String text)? onSelectionAction;
   void Function(String id, String text)? onEditSave;
+  void Function(String outputId, String messageId)? onStudioOutputEdit;
+  void Function(String outputId, String messageId)? onStudioOutputRegen;
   void Function(String id)? onEditCancel;
   void Function(String id, bool focused)? onEditFocusChange;
   void Function(String id, String guidanceText)? onGuidedSwipe;
@@ -239,12 +247,18 @@ class ChatBridgeController {
   /// Called when an interactive panel reports its content height changed.
   /// `panelId` identifies the panel, `messageId` the assistant message it
   /// belongs to, `heightPx` the new height in CSS pixels.
-  void Function(String panelId, String messageId, double heightPx)? onPanelResize;
+  void Function(String panelId, String messageId, double heightPx)?
+  onPanelResize;
 
   /// Called when an interactive panel emits a custom event (action button,
   /// form submit, etc.). The `payload` shape is panel-defined.
-  void Function(String panelId, String messageId, String event, Map<String, dynamic> payload)?
-      onPanelEvent;
+  void Function(
+    String panelId,
+    String messageId,
+    String event,
+    Map<String, dynamic> payload,
+  )?
+  onPanelEvent;
 
   /// Register JS handlers for every callback declared on this host. The
   /// declarations live in [bridgeHandlers] (data-driven) so the actual
@@ -265,8 +279,8 @@ class ChatBridgeController {
         final request = raw is Map<String, dynamic>
             ? raw
             : raw is Map
-                ? Map<String, dynamic>.from(raw)
-                : const <String, dynamic>{};
+            ? Map<String, dynamic>.from(raw)
+            : const <String, dynamic>{};
         return _jsBridgeService.dispatch(request);
       },
     );
@@ -299,10 +313,14 @@ class ChatBridgeController {
 
   void _dispatchNoArgs(String name) {
     switch (name) {
-      case 'onWebViewReady': onReady?.call();
-      case 'onLoadMore': onLoadMore?.call();
-      case 'onStop': onStop?.call();
-      case 'onImgCancel': onImgCancel?.call();
+      case 'onWebViewReady':
+        onReady?.call();
+      case 'onLoadMore':
+        onLoadMore?.call();
+      case 'onStop':
+        onStop?.call();
+      case 'onImgCancel':
+        onImgCancel?.call();
     }
   }
 
@@ -310,8 +328,10 @@ class ChatBridgeController {
     if (args.isEmpty) return;
     final v = args[0] == true;
     switch (name) {
-      case 'onHeaderScroll': onHeaderScroll?.call(v);
-      case 'onScrollToBottomVisibility': onScrollToBottomVisibility?.call(v);
+      case 'onHeaderScroll':
+        onHeaderScroll?.call(v);
+      case 'onScrollToBottomVisibility':
+        onScrollToBottomVisibility?.call(v);
     }
   }
 
@@ -319,15 +339,22 @@ class ChatBridgeController {
     if (args.isEmpty) return;
     final s = args[0] as String;
     switch (name) {
-      case 'onLinkClick': onLinkClick?.call(s);
-      case 'onImageClick': onImageClick?.call(s);
-      case 'onImgDownload': onImgDownload?.call(s);
-      case 'onRegenerate': onRegenerate?.call(s);
-      case 'onEditCancel': onEditCancel?.call(s);
-      case 'onMemoryClick': onMemoryClick?.call(s);
-      case 'onToggleHidden': onToggleHidden?.call(s);
-      case 'onInjectClick': onInjectClick?.call(s);
-      case 'onExtBlocksRunAll': onExtBlocksRunAll?.call(s);
+      case 'onLinkClick':
+        onLinkClick?.call(s);
+      case 'onImageClick':
+        onImageClick?.call(s);
+      case 'onImgDownload':
+        onImgDownload?.call(s);
+      case 'onEditCancel':
+        onEditCancel?.call(s);
+      case 'onMemoryClick':
+        onMemoryClick?.call(s);
+      case 'onToggleHidden':
+        onToggleHidden?.call(s);
+      case 'onInjectClick':
+        onInjectClick?.call(s);
+      case 'onExtBlocksRunAll':
+        onExtBlocksRunAll?.call(s);
     }
   }
 
@@ -382,7 +409,14 @@ class ChatBridgeController {
     final id = args[0] as String? ?? '';
     final s = args[1] as String? ?? '';
     switch (name) {
-      case 'onEditSave': onEditSave?.call(id, s);
+      case 'onEditSave':
+        onEditSave?.call(id, s);
+      case 'onStudioOutputEdit':
+        onStudioOutputEdit?.call(id, s);
+      case 'onStudioOutputRegen':
+        onStudioOutputRegen?.call(id, s);
+      case 'onRegenerate':
+        onRegenerate?.call(id, s);
     }
   }
 
@@ -394,7 +428,8 @@ class ChatBridgeController {
         : int.tryParse('${args[1]}') ?? 0;
     if (id.isEmpty || dir == 0) return;
     switch (name) {
-      case 'onChangeGreeting': onChangeGreeting?.call(id, dir);
+      case 'onChangeGreeting':
+        onChangeGreeting?.call(id, dir);
     }
   }
 
@@ -403,7 +438,8 @@ class ChatBridgeController {
     final id = args[0] as String? ?? '';
     final v = args[1] == true;
     switch (name) {
-      case 'onEditFocusChange': onEditFocusChange?.call(id, v);
+      case 'onEditFocusChange':
+        onEditFocusChange?.call(id, v);
     }
   }
 
@@ -412,7 +448,8 @@ class ChatBridgeController {
     final id = args[0] as String? ?? '';
     final s = args[1] as String? ?? '';
     switch (name) {
-      case 'onGuidedSwipe': onGuidedSwipe?.call(id, s);
+      case 'onGuidedSwipe':
+        onGuidedSwipe?.call(id, s);
     }
   }
 
@@ -424,14 +461,22 @@ class ChatBridgeController {
       debugPrint(spec.debugPrint!.replaceAll('\$args', args.toString()));
     }
     switch (name) {
-      case 'onImgRetry': onImgRetry?.call(instr, msgId);
-      case 'onImgFind': onImgFind?.call(instr, msgId);
-      case 'onImgRegen': onImgRegen?.call(instr, msgId);
-      case 'onExtBlockStop': onExtBlockStop?.call(instr, msgId);
-      case 'onExtBlockRegen': onExtBlockRegen?.call(instr, msgId);
-      case 'onExtBlockRegenImage': onExtBlockRegenImage?.call(instr, msgId);
-      case 'onExtBlockEdit': onExtBlockEdit?.call(instr, msgId);
-      case 'onExtBlockDelete': onExtBlockDelete?.call(instr, msgId);
+      case 'onImgRetry':
+        onImgRetry?.call(instr, msgId);
+      case 'onImgFind':
+        onImgFind?.call(instr, msgId);
+      case 'onImgRegen':
+        onImgRegen?.call(instr, msgId);
+      case 'onExtBlockStop':
+        onExtBlockStop?.call(instr, msgId);
+      case 'onExtBlockRegen':
+        onExtBlockRegen?.call(instr, msgId);
+      case 'onExtBlockRegenImage':
+        onExtBlockRegenImage?.call(instr, msgId);
+      case 'onExtBlockEdit':
+        onExtBlockEdit?.call(instr, msgId);
+      case 'onExtBlockDelete':
+        onExtBlockDelete?.call(instr, msgId);
     }
   }
 
@@ -440,7 +485,8 @@ class ChatBridgeController {
     try {
       final list = jsonDecode(args[0] as String) as List;
       switch (name) {
-        case 'onSelectionChange': onSelectionChange?.call(list.cast<String>());
+        case 'onSelectionChange':
+          onSelectionChange?.call(list.cast<String>());
       }
     } catch (_) {}
   }
@@ -459,10 +505,19 @@ class ChatBridgeController {
   Future<void> appendMessage(ChatMessage m) => messages.appendMessage(m);
   Future<void> appendMessages(List<ChatMessage> m, {int startIndex = 0}) =>
       messages.appendMessages(m, startIndex: startIndex);
-  Future<void> prependMessages(List<ChatMessage> m, {int visibleStartIndex = 0}) =>
-      messages.prependMessages(m, visibleStartIndex: visibleStartIndex);
-  Future<void> updateMessage(ChatMessage m, {bool isStreamingUpdate = false, bool isLast = false}) =>
-      messages.updateMessage(m, isStreamingUpdate: isStreamingUpdate, isLast: isLast);
+  Future<void> prependMessages(
+    List<ChatMessage> m, {
+    int visibleStartIndex = 0,
+  }) => messages.prependMessages(m, visibleStartIndex: visibleStartIndex);
+  Future<void> updateMessage(
+    ChatMessage m, {
+    bool isStreamingUpdate = false,
+    bool isLast = false,
+  }) => messages.updateMessage(
+    m,
+    isStreamingUpdate: isStreamingUpdate,
+    isLast: isLast,
+  );
   Future<void> updateMessageContent(String id, String text, bool isUser) =>
       messages.updateMessageContent(id, text, isUser);
   Future<void> removeMessage(String id) => messages.removeMessage(id);
@@ -483,13 +538,12 @@ class ChatBridgeController {
     String? fontDataUrl,
     required double fontSize,
     required double letterSpacing,
-  }) =>
-      theme.setChatFont(
-        fontName: fontName,
-        fontDataUrl: fontDataUrl,
-        fontSize: fontSize,
-        letterSpacing: letterSpacing,
-      );
+  }) => theme.setChatFont(
+    fontName: fontName,
+    fontDataUrl: fontDataUrl,
+    fontSize: fontSize,
+    letterSpacing: letterSpacing,
+  );
   Future<void> applyTheme(Map<String, String> t) => theme.applyTheme(t);
   Future<void> setPerformanceMode(bool enabled) =>
       theme.setPerformanceMode(enabled);
@@ -503,16 +557,15 @@ class ChatBridgeController {
     String? charAvatarPath,
     String? personaAvatarPath,
     int? greetingTotal,
-  }) =>
-      identity.setIdentity(
-        charName: charName,
-        charColor: charColor,
-        personaName: personaName,
-        layout: layout,
-        charAvatarPath: charAvatarPath,
-        personaAvatarPath: personaAvatarPath,
-        greetingTotal: greetingTotal,
-      );
+  }) => identity.setIdentity(
+    charName: charName,
+    charColor: charColor,
+    personaName: personaName,
+    layout: layout,
+    charAvatarPath: charAvatarPath,
+    personaAvatarPath: personaAvatarPath,
+    greetingTotal: greetingTotal,
+  );
   Future<void> applyLayout(String l) => identity.applyLayout(l);
 
   // Layout
@@ -528,14 +581,13 @@ class ChatBridgeController {
     required bool hideGenerationTime,
     required bool hideTokenCount,
     required bool disableSwipeRegeneration,
-  }) =>
-      layout.setMessageSettings(
-        batterySaver: batterySaver,
-        hideMessageId: hideMessageId,
-        hideGenerationTime: hideGenerationTime,
-        hideTokenCount: hideTokenCount,
-        disableSwipeRegeneration: disableSwipeRegeneration,
-      );
+  }) => layout.setMessageSettings(
+    batterySaver: batterySaver,
+    hideMessageId: hideMessageId,
+    hideGenerationTime: hideGenerationTime,
+    hideTokenCount: hideTokenCount,
+    disableSwipeRegeneration: disableSwipeRegeneration,
+  );
   Future<void> setSelectionMode(bool enabled) =>
       layout.setSelectionMode(enabled);
   Future<void> toggleMessageSelection(String id) =>
@@ -545,11 +597,10 @@ class ChatBridgeController {
   void updateMemoryBookData({
     required List<Map<String, dynamic>> entries,
     required List<Map<String, dynamic>> pendingDrafts,
-  }) =>
-      memory.updateMemoryBookData(
-        entries: entries,
-        pendingDrafts: pendingDrafts,
-      );
+  }) => memory.updateMemoryBookData(
+    entries: entries,
+    pendingDrafts: pendingDrafts,
+  );
 
   // Ext Blocks
 
@@ -725,18 +776,20 @@ class ChatBridgeController {
 
     // callAsyncJavaScript returns the JS Promise result.
     // bridge.runSandboxedScript returns a Promise<string>.
-    final result = await _controller.callAsyncJavaScript(
-      functionBody: '''
+    final result = await _controller
+        .callAsyncJavaScript(
+          functionBody: '''
         return window.bridge.runSandboxedScript(script, contextJson);
       ''',
-      arguments: {
-        'script': script,
-        'contextJson': contextJson,
-      },
-    ).timeout(
-      const Duration(seconds: 60),
-      onTimeout: () => throw TimeoutException('JS runner timed out', const Duration(seconds: 60)),
-    );
+          arguments: {'script': script, 'contextJson': contextJson},
+        )
+        .timeout(
+          const Duration(seconds: 60),
+          onTimeout: () => throw TimeoutException(
+            'JS runner timed out',
+            const Duration(seconds: 60),
+          ),
+        );
 
     if (result == null) return '';
     final value = result.value;

@@ -19,6 +19,8 @@ class MacroContext {
   final String? lorebooksContent;
   final String? guidanceText;
   final String? macroName;
+  final String? arcContent;
+  final String? entitiesContent;
 
   const MacroContext({
     required this.charName,
@@ -39,6 +41,8 @@ class MacroContext {
     this.lorebooksContent,
     this.guidanceText,
     this.macroName,
+    this.arcContent,
+    this.entitiesContent,
   });
 
   /// Context for preset-only token accounting: external injections (character,
@@ -77,6 +81,8 @@ class MacroContext {
     Object? memoryContent = _sentinel,
     Object? lorebooksContent = _sentinel,
     Object? guidanceText = _sentinel,
+    Object? arcContent = _sentinel,
+    Object? entitiesContent = _sentinel,
   }) {
     return MacroContext(
       charName: charName,
@@ -92,11 +98,25 @@ class MacroContext {
       globalVars: globalVars ?? this.globalVars,
       charId: charId,
       sessionId: sessionId,
-      summaryContent: identical(summaryContent, _sentinel) ? this.summaryContent : summaryContent as String?,
-      memoryContent: identical(memoryContent, _sentinel) ? this.memoryContent : memoryContent as String?,
-      lorebooksContent: identical(lorebooksContent, _sentinel) ? this.lorebooksContent : lorebooksContent as String?,
-      guidanceText: identical(guidanceText, _sentinel) ? this.guidanceText : guidanceText as String?,
+      summaryContent: identical(summaryContent, _sentinel)
+          ? this.summaryContent
+          : summaryContent as String?,
+      memoryContent: identical(memoryContent, _sentinel)
+          ? this.memoryContent
+          : memoryContent as String?,
+      lorebooksContent: identical(lorebooksContent, _sentinel)
+          ? this.lorebooksContent
+          : lorebooksContent as String?,
+      guidanceText: identical(guidanceText, _sentinel)
+          ? this.guidanceText
+          : guidanceText as String?,
       macroName: macroName,
+      arcContent: identical(arcContent, _sentinel)
+          ? this.arcContent
+          : arcContent as String?,
+      entitiesContent: identical(entitiesContent, _sentinel)
+          ? this.entitiesContent
+          : entitiesContent as String?,
     );
   }
 
@@ -121,6 +141,8 @@ class MacroContext {
     'lorebooksContent': lorebooksContent,
     'guidanceText': guidanceText,
     'macroName': macroName,
+    'arcContent': arcContent,
+    'entitiesContent': entitiesContent,
   };
 
   factory MacroContext.fromJson(Map<String, dynamic> json) => MacroContext(
@@ -142,6 +164,8 @@ class MacroContext {
     lorebooksContent: json['lorebooksContent'] as String?,
     guidanceText: json['guidanceText'] as String?,
     macroName: json['macroName'] as String?,
+    arcContent: json['arcContent'] as String?,
+    entitiesContent: json['entitiesContent'] as String?,
   );
 }
 
@@ -172,10 +196,7 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
     (_) => '',
   );
 
-  result = result.replaceAllMapped(
-    RegExp(r'\{\{\/\/[^}]*\}\}'),
-    (_) => '',
-  );
+  result = result.replaceAllMapped(RegExp(r'\{\{\/\/[^}]*\}\}'), (_) => '');
 
   final resolvedCharName = ctx.macroName ?? ctx.charName;
 
@@ -259,12 +280,18 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
 
   result = result.replaceAllMapped(
     RegExp(r'\{\{reasoningPrefix\}\}', caseSensitive: false),
-    (_) => ctx.reasoningStart ?? '<think' '>',
+    (_) =>
+        ctx.reasoningStart ??
+        '<think'
+            '>',
   );
 
   result = result.replaceAllMapped(
     RegExp(r'\{\{reasoningSuffix\}\}', caseSensitive: false),
-    (_) => ctx.reasoningEnd ?? '</think' '>',
+    (_) =>
+        ctx.reasoningEnd ??
+        '</think'
+            '>',
   );
 
   result = result.replaceAllMapped(
@@ -278,6 +305,16 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   );
 
   result = result.replaceAllMapped(
+    RegExp(r'\{\{arc\}\}', caseSensitive: false),
+    (_) => ctx.arcContent ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{entit(?:y|ies)\}\}', caseSensitive: false),
+    (_) => ctx.entitiesContent ?? '',
+  );
+
+  result = result.replaceAllMapped(
     RegExp(r'\{\{lorebooks\}\}', caseSensitive: false),
     (_) => ctx.lorebooksContent ?? '',
   );
@@ -287,8 +324,18 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
     (_) => ctx.guidanceText ?? '',
   );
 
-  result = _replaceSetVar(result, 'setvar', sessionVars, () => varsChanged = true);
-  result = _replaceSetVar(result, 'setglobalvar', globalVars, () => varsChanged = true);
+  result = _replaceSetVar(
+    result,
+    'setvar',
+    sessionVars,
+    () => varsChanged = true,
+  );
+  result = _replaceSetVar(
+    result,
+    'setglobalvar',
+    globalVars,
+    () => varsChanged = true,
+  );
 
   result = result.replaceAllMapped(
     RegExp(r'\{\{getvar::([\s\S]*?)\}\}', caseSensitive: false),
@@ -307,7 +354,10 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   );
 
   result = result.replaceAllMapped(
-    RegExp(r'\{\{(lumiaDef|lumiaOOC|lumiaOOCErotic|lumiaOOCEroticBleed|lumiaPersonality|loomRetrofits|loomStyle|loomSummary|loomUtils|sim_tracker|suggest)\}\}', caseSensitive: false),
+    RegExp(
+      r'\{\{(lumiaDef|lumiaOOC|lumiaOOCErotic|lumiaOOCEroticBleed|lumiaPersonality|loomRetrofits|loomStyle|loomSummary|loomUtils|sim_tracker|suggest)\}\}',
+      caseSensitive: false,
+    ),
     (m) {
       final name = m.group(1)!;
       final val = globalVars[name];
@@ -330,7 +380,8 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
       final parts = m.group(1)!.split('::');
       if (parts.isEmpty) return '';
       final version = int.tryParse(sessionVars['__pick_version'] ?? '0') ?? 0;
-      final seed = '${ctx.charId}_${ctx.sessionId}_pick_${pickCount++}_v$version';
+      final seed =
+          '${ctx.charId}_${ctx.sessionId}_pick_${pickCount++}_v$version';
       final hash = _simpleHash(seed);
       return parts[hash % parts.length];
     },
@@ -357,7 +408,15 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   result = result.replaceAllMapped(
     RegExp(r'\{\{weekday\}\}', caseSensitive: false),
     (_) {
-      final days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      final days = [
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+        'Sunday',
+      ];
       return days[DateTime.now().weekday - 1];
     },
   );
@@ -385,8 +444,8 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
     (m) {
       final offsetHours = double.tryParse(m.group(1)!) ?? 0;
       final shifted = DateTime.now().toUtc().add(
-            Duration(milliseconds: (offsetHours * 3600 * 1000).round()),
-          );
+        Duration(milliseconds: (offsetHours * 3600 * 1000).round()),
+      );
       return '${_pad2(shifted.hour)}:${_pad2(shifted.minute)}:${_pad2(shifted.second)}';
     },
   );
@@ -411,15 +470,41 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
 String _pad2(int n) => n.toString().padLeft(2, '0');
 
 const _monthNames = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 const _monthNamesShort = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 const _weekdayNames = [
-  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
 ];
 const _weekdayNamesShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -520,7 +605,9 @@ List<String> extractSetvarPayloads(String text, String keyword) {
       if (pos + 1 < text.length && text[pos] == '{' && text[pos + 1] == '{') {
         depth++;
         pos += 2;
-      } else if (pos + 1 < text.length && text[pos] == '}' && text[pos + 1] == '}') {
+      } else if (pos + 1 < text.length &&
+          text[pos] == '}' &&
+          text[pos + 1] == '}') {
         depth--;
         if (depth == 0) break;
         pos += 2;
@@ -536,7 +623,12 @@ List<String> extractSetvarPayloads(String text, String keyword) {
   return values;
 }
 
-String _replaceSetVar(String text, String keyword, Map<String, String> vars, void Function() markChanged) {
+String _replaceSetVar(
+  String text,
+  String keyword,
+  Map<String, String> vars,
+  void Function() markChanged,
+) {
   final tag = '{{$keyword::';
   final buf = StringBuffer();
   int i = 0;
@@ -561,7 +653,9 @@ String _replaceSetVar(String text, String keyword, Map<String, String> vars, voi
       if (pos + 1 < text.length && text[pos] == '{' && text[pos + 1] == '{') {
         depth++;
         pos += 2;
-      } else if (pos + 1 < text.length && text[pos] == '}' && text[pos + 1] == '}') {
+      } else if (pos + 1 < text.length &&
+          text[pos] == '}' &&
+          text[pos + 1] == '}') {
         depth--;
         if (depth == 0) break;
         pos += 2;

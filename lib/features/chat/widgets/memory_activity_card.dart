@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../state/memory_activity_provider.dart';
+import 'memory_graph_panel.dart';
 
 class MemoryActivityCard extends StatefulWidget {
   final MemoryActivityState activity;
   final bool expanded;
   final VoidCallback onToggle;
+  final String? sessionId;
 
   const MemoryActivityCard({
     super.key,
     required this.activity,
     required this.expanded,
     required this.onToggle,
+    this.sessionId,
   });
 
   @override
@@ -126,18 +130,57 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                   ),
                 if (widget.expanded) ...[
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                  Row(
                     children: [
-                      _MemoryActivityChip(label: 'skipped $skippedCount'),
-                      _MemoryActivityChip(label: 'latency ${latencyMs}ms'),
-                      _MemoryActivityChip(
-                        label: _budgetLabel(diagnostics['budget']),
+                      Expanded(
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _MemoryActivityChip(label: 'skipped $skippedCount'),
+                            _MemoryActivityChip(label: 'latency ${latencyMs}ms'),
+                            _MemoryActivityChip(
+                              label: _budgetLabel(diagnostics['budget']),
+                            ),
+                            if (diagnostics['classifierStatus'] != null &&
+                                diagnostics['classifierStatus'] != 'disabled')
+                              _MemoryActivityChip(
+                                label:
+                                    'classifier ${diagnostics['classifierStatus']}',
+                              ),
+                            if (diagnostics['sidecarStatus'] != null &&
+                                diagnostics['sidecarStatus'] != 'disabled')
+                              _MemoryActivityChip(
+                                label: 'sidecar ${diagnostics['sidecarStatus']}',
+                              ),
+                            if (diagnostics['prewarmHit'] == true)
+                              const _MemoryActivityChip(label: 'prewarm hit'),
+                          ],
+                        ),
                       ),
+                      if (widget.sessionId != null &&
+                          widget.sessionId!.isNotEmpty)
+                        IconButton(
+                          onPressed: () => showDialog(
+                            context: context,
+                            builder: (_) => MemoryGraphPanel(
+                              sessionId: widget.sessionId!,
+                            ),
+                          ),
+                          icon: const Icon(Icons.account_tree_outlined,
+                              size: 18),
+                          tooltip: 'Memory Graph',
+                          visualDensity: VisualDensity.compact,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 8),
+                  if (diagnostics['classifierStatus'] != null &&
+                      diagnostics['classifierStatus'] != 'disabled')
+                    _classifierSection(context, diagnostics),
+                  if (diagnostics['sidecarStatus'] != null &&
+                      diagnostics['sidecarStatus'] != 'disabled')
+                    _sidecarSection(context, diagnostics),
                   _candidateList(context, diagnostics),
                 ],
               ],
@@ -153,6 +196,60 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
     final source = raw['source'] ?? 'none';
     final tokens = raw['effectiveTokens'];
     return tokens is int ? 'budget $tokens ($source)' : 'budget $source';
+  }
+
+  Widget _classifierSection(
+    BuildContext context,
+    Map<String, dynamic> diagnostics,
+  ) {
+    final status = diagnostics['classifierStatus'] as String? ?? '';
+    final needsMemory = diagnostics['classifierNeedsMemory'] as bool? ?? false;
+    final confidence = diagnostics['classifierConfidence'];
+    final confidenceText = confidence is num
+        ? '${(confidence * 100).round()}%'
+        : '';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Classifier: $status'
+            '${confidenceText.isNotEmpty ? " · confidence $confidenceText" : ""}'
+            '${needsMemory ? " · needs memory" : ""}',
+            style: TextStyle(
+              fontSize: 11,
+              color: context.cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sidecarSection(
+    BuildContext context,
+    Map<String, dynamic> diagnostics,
+  ) {
+    final status = diagnostics['sidecarStatus'] as String? ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sidecar: $status'
+            '${diagnostics['prewarmHit'] == true ? " · prewarm hit" : ""}',
+            style: TextStyle(
+              fontSize: 11,
+              color: context.cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _candidateList(

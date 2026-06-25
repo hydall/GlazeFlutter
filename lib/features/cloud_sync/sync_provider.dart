@@ -2,7 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/state/db_provider.dart';
-import '../../../core/state/lorebook_provider.dart' show saveLorebookActivations;
+import '../../../core/state/lorebook_provider.dart'
+    show saveLorebookActivations;
 import '../../../shared/theme/theme_preset_storage.dart';
 import 'adapters/ext_blocks_sync_stores.dart';
 import 'services/sync_conflict.dart';
@@ -32,9 +33,8 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
       ref.watch(extensionPresetsRepoProvider),
     ),
     extensionsSettingsStore: ExtensionsSettingsSyncStore(),
-    infoBlockStore: InfoBlockSyncStore(
-      ref.watch(infoBlocksRepoProvider),
-    ),
+    infoBlockStore: InfoBlockSyncStore(ref.watch(infoBlocksRepoProvider)),
+    studioConfigStore: ref.watch(studioConfigRepoProvider),
     saveLorebookActivations: saveLorebookActivations,
   );
   await service.init();

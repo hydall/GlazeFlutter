@@ -8,6 +8,32 @@ import '../models/chat_message.dart';
 class RetrievalQueryBuilder {
   const RetrievalQueryBuilder._();
 
+  static const _emotionalPatterns = <String, List<String>>{
+    'grief': ['grief', 'grieved', 'mourning', 'mourn', 'sorrow', 'lament'],
+    'betrayal': ['betray', 'betrayed', 'betrayal', 'backstab'],
+    'tension': ['tension', 'tense', 'suspicion', 'suspicious', 'distrust'],
+    'dread': ['dread', 'dreaded', 'horror', 'terror', 'afraid', 'fear'],
+    'joy': ['joy', 'joyful', 'happiness', 'happy', 'elated', 'triumph'],
+    'resolve': ['resolve', 'resolved', 'determination', 'determined'],
+    'humor': ['humor', 'humorous', 'laugh', 'laughed', 'amused', 'witty'],
+    'intimacy': ['intimacy', 'intimate', 'tender', 'caress', 'embrace'],
+  };
+
+  /// Extract emotional context tags from a text string (Phase G2).
+  ///
+  /// Uses the same regex vocabulary as [MemorySalienceScorer] so that
+  /// emotional recall in fusion can match entry salience tags.
+  static List<String> extractEmotionalContext(String text) {
+    final lower = text.toLowerCase();
+    final tags = <String>[];
+    for (final entry in _emotionalPatterns.entries) {
+      if (entry.value.any((p) => lower.contains(p))) {
+        tags.add(entry.key);
+      }
+    }
+    return tags;
+  }
+
   /// Build the retrieval query from the most recent turns.
   ///
   /// Rules:

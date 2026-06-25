@@ -104,6 +104,8 @@ class PromptPayload {
   final int memoryExcerptChunksPerEntry;
   final int chunkFirstTopEntries;
   final int chunkFirstTopChunks;
+  final String? arcContent;
+  final String? entitiesContent;
 
   const PromptPayload({
     required this.character,
@@ -140,6 +142,8 @@ class PromptPayload {
     this.memoryExcerptChunksPerEntry = defaultMemoryExcerptChunksPerEntry,
     this.chunkFirstTopEntries = 3,
     this.chunkFirstTopChunks = 1,
+    this.arcContent,
+    this.entitiesContent,
   });
 }
 
@@ -274,6 +278,8 @@ PromptResult buildPrompt(PromptPayload payload) {
     guidanceText: payload.guidanceText,
     macroName: char.macroName,
     memoryContent: payload.memoryMacroContent,
+    arcContent: payload.arcContent,
+    entitiesContent: payload.entitiesContent,
   );
 
   var currentSessionVars = Map<String, String>.from(payload.sessionVars);
@@ -857,6 +863,7 @@ PromptResult _assembleMessages({
           PromptMessage(
             role: block.role,
             blockId: block.id,
+            blockName: block.name,
             content: content,
             isSummary: block.isSummary,
           ),
@@ -1099,7 +1106,8 @@ _DeferredMemoryResult _finalizeDeferredMemory({
       macroTokens['memory'] = estimateTokens(memoryMacroContent);
     } else if (payload.memoryInjectionTarget == 'hard_block') {
       memoryContent = rebuilt.content;
-      final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+      final hasMemoryBlock =
+          messages.any((m) => m.blockId == 'memory') ||
           appendedEntries.any((b) => b.id == 'memory');
       if (!hasMemoryBlock) {
         _injectMemoryBlock(messages, attributionBlocks, rebuilt.content);
@@ -1107,7 +1115,8 @@ _DeferredMemoryResult _finalizeDeferredMemory({
     } else {
       // injectionTarget == 'macro' but the preset has no {{memory}}
       // placeholder, so the packed memory has nowhere to go and is dropped.
-      final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+      final hasMemoryBlock =
+          messages.any((m) => m.blockId == 'memory') ||
           appendedEntries.any((b) => b.id == 'memory');
       if (!hasMemoryBlock) {
         memoryMacroMissing = true;
@@ -1129,7 +1138,8 @@ _DeferredMemoryResult _finalizeDeferredMemory({
       _shouldInjectFactualContinuityGuard(payload)) {
     const guard =
         'Factual continuity note: The latest user message may refer to older context, but no reliable Memory Book entry was selected. Do not invent specific past events; ask for clarification or answer only from visible chat context.';
-    final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+    final hasMemoryBlock =
+        messages.any((m) => m.blockId == 'memory') ||
         appendedEntries.any((b) => b.id == 'memory');
     if (!hasMemoryBlock) {
       _injectMemoryBlock(messages, attributionBlocks, guard);

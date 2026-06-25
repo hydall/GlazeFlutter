@@ -115,6 +115,14 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(true) bool queryIncludeAssistant,
     @Default(6) int queryRecentTurns,
     @Default(1500) int queryMaxChars,
+    @Default(3) int cadenceInterval,
+    @Default(false) bool consolidationEnabled,
+    @Default(5) int consolidationThreshold,
+    @Default('current') String consolidationSource,
+    @Default('') String consolidationModel,
+    @Default('') String consolidationEndpoint,
+    @Default('') String consolidationApiKey,
+    @Default(4000) int consolidationTimeoutMs,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>

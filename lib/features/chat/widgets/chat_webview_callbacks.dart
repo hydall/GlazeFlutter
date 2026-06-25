@@ -63,8 +63,8 @@ class ChatWebViewCallbacks {
     scrollActions.onScrollToBottomVisibility?.call(visible);
   }
 
-  void onRegenerate(String id) {
-    messageActions.onRegenerate?.call(id);
+  void onRegenerate(String id, String mode) {
+    messageActions.onRegenerate?.call(id, mode);
   }
 
   void onSelectionAction(String action, String text) {
@@ -77,6 +77,14 @@ class ChatWebViewCallbacks {
 
   void onEditSave(String id, String text) {
     editActions.onEditSave?.call(id, text);
+  }
+
+  void onStudioOutputEdit(String outputId, String messageId) {
+    editActions.onStudioOutputEdit?.call(outputId, messageId);
+  }
+
+  void onStudioOutputRegen(String outputId, String messageId) {
+    editActions.onStudioOutputRegen?.call(outputId, messageId);
   }
 
   void onEditCancel(String id) {

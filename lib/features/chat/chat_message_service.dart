@@ -32,14 +32,20 @@ class ChatMessageService {
         final startIdx = text.indexOf(tagStart);
         final endIdx = text.indexOf(tagEnd, startIdx + tagStart.length);
         if (endIdx != -1) {
-          newReasoning = text.substring(startIdx + tagStart.length, endIdx).trim();
-          text = (text.substring(0, startIdx) + text.substring(endIdx + tagEnd.length)).trim();
+          newReasoning = text
+              .substring(startIdx + tagStart.length, endIdx)
+              .trim();
+          text =
+              (text.substring(0, startIdx) +
+                      text.substring(endIdx + tagEnd.length))
+                  .trim();
           if (newReasoning.isEmpty) newReasoning = null;
         } else {
           newReasoning = text.substring(startIdx + tagStart.length).trim();
           text = '';
         }
-        isAllReasoning = text.isEmpty && (newReasoning != null && newReasoning.isNotEmpty);
+        isAllReasoning =
+            text.isEmpty && (newReasoning != null && newReasoning.isNotEmpty);
       } else {
         newReasoning = null;
         isAllReasoning = false;
@@ -49,12 +55,16 @@ class ChatMessageService {
     if (msg.content == text && msg.reasoning == newReasoning) return session;
     final newMessages = List<ChatMessage>.from(session.messages);
     final swipeIdx = msg.swipeId;
-    final updatedSwipes = msg.swipes.isNotEmpty && swipeIdx >= 0 && swipeIdx < msg.swipes.length
+    final updatedSwipes =
+        msg.swipes.isNotEmpty && swipeIdx >= 0 && swipeIdx < msg.swipes.length
         ? (List<String>.from(msg.swipes)..[swipeIdx] = text)
         : msg.swipes;
     final updatedSwipesMeta = List<Map<String, dynamic>>.from(msg.swipesMeta);
     if (swipeIdx >= 0 && swipeIdx < updatedSwipesMeta.length) {
-      updatedSwipesMeta[swipeIdx] = {...updatedSwipesMeta[swipeIdx], 'reasoning': newReasoning};
+      updatedSwipesMeta[swipeIdx] = {
+        ...updatedSwipesMeta[swipeIdx],
+        'reasoning': newReasoning,
+      };
     }
     newMessages[index] = msg.copyWith(
       content: text,
@@ -63,6 +73,52 @@ class ChatMessageService {
       swipes: updatedSwipes,
       swipesMeta: updatedSwipesMeta,
       tokens: estimateTokens(text),
+    );
+    return _persist(session, newMessages);
+  }
+
+  ChatSession editStudioOutput(
+    ChatSession session,
+    int index,
+    String outputId,
+    String newContent,
+  ) {
+    return updateStudioOutput(session, index, outputId, {
+      'content': newContent,
+    });
+  }
+
+  ChatSession updateStudioOutput(
+    ChatSession session,
+    int index,
+    String outputId,
+    Map<String, dynamic> patch,
+  ) {
+    if (index < 0 || index >= session.messages.length) return session;
+    final msg = session.messages[index];
+    final outputIndex = msg.studioOutputs.indexWhere(
+      (o) => o['id'] == outputId,
+    );
+    if (outputIndex < 0) return session;
+
+    final updatedOutputs = msg.studioOutputs
+        .map((o) => Map<String, dynamic>.from(o))
+        .toList(growable: true);
+    updatedOutputs[outputIndex] = {...updatedOutputs[outputIndex], ...patch};
+
+    final updatedSwipesMeta = List<Map<String, dynamic>>.from(msg.swipesMeta);
+    final swipeIdx = msg.swipeId;
+    if (swipeIdx >= 0 && swipeIdx < updatedSwipesMeta.length) {
+      updatedSwipesMeta[swipeIdx] = {
+        ...updatedSwipesMeta[swipeIdx],
+        'studioOutputs': updatedOutputs,
+      };
+    }
+
+    final newMessages = List<ChatMessage>.from(session.messages);
+    newMessages[index] = msg.copyWith(
+      studioOutputs: updatedOutputs,
+      swipesMeta: updatedSwipesMeta,
     );
     return _persist(session, newMessages);
   }
@@ -80,14 +136,17 @@ class ChatMessageService {
 
   ChatSession deleteMessage(ChatSession session, int index) {
     if (index < 0 || index >= session.messages.length) return session;
-    final newMessages = List<ChatMessage>.from(session.messages)..removeAt(index);
+    final newMessages = List<ChatMessage>.from(session.messages)
+      ..removeAt(index);
     return _persist(session, newMessages);
   }
 
   ChatSession toggleMessageHidden(ChatSession session, int index) {
     if (index < 0 || index >= session.messages.length) return session;
     final newMessages = List<ChatMessage>.from(session.messages);
-    newMessages[index] = newMessages[index].copyWith(isHidden: !newMessages[index].isHidden);
+    newMessages[index] = newMessages[index].copyWith(
+      isHidden: !newMessages[index].isHidden,
+    );
     return _persist(session, newMessages);
   }
 
@@ -119,11 +178,17 @@ class ChatMessageService {
   }
 
   ChatSession setSwipe(ChatSession session, int messageIndex, int swipeId) {
-    if (messageIndex < 0 || messageIndex >= session.messages.length) return session;
+    if (messageIndex < 0 || messageIndex >= session.messages.length) {
+      return session;
+    }
     final msg = session.messages[messageIndex];
-    if (msg.swipes.isEmpty || swipeId < 0 || swipeId >= msg.swipes.length) return session;
+    if (msg.swipes.isEmpty || swipeId < 0 || swipeId >= msg.swipes.length) {
+      return session;
+    }
 
-    final meta = swipeId < msg.swipesMeta.length ? msg.swipesMeta[swipeId] : null;
+    final meta = swipeId < msg.swipesMeta.length
+        ? msg.swipesMeta[swipeId]
+        : null;
     final updated = msg.copyWith(
       swipeId: swipeId,
       content: msg.swipes[swipeId],
@@ -132,6 +197,7 @@ class ChatMessageService {
       tokens: meta?['tokens'] as int?,
       triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
       triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
+      studioOutputs: _studioOutputsFromMeta(meta),
     );
     final newMessages = List<ChatMessage>.from(session.messages);
     newMessages[messageIndex] = updated;
@@ -154,6 +220,17 @@ class ChatMessageService {
         .toList();
   }
 
+  static List<Map<String, dynamic>> _studioOutputsFromMeta(
+    Map<String, dynamic>? meta,
+  ) {
+    final raw = meta?['studioOutputs'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map<dynamic, dynamic>>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+  }
+
   /// Mirrors Glaze/src/composables/chat/useSwipeNavigation.js → `changeSwipe`.
   /// `dir`: +1 forward, -1 back. `fromSwipe`: animation hint (slide vs fade).
   /// Returns a [ChangeSwipeResult] describing whether the session was updated,
@@ -170,21 +247,29 @@ class ChatMessageService {
       return const ChangeSwipeResult.noop();
     }
     final msg = session.messages[messageIndex];
-    final animDir = fromSwipe ? (dir > 0 ? 'slide-next' : 'slide-prev') : 'fade';
+    final animDir = fromSwipe
+        ? (dir > 0 ? 'slide-next' : 'slide-prev')
+        : 'fade';
 
     // Error-swipe path: drop the error variant and slide to the neighbor.
     if (msg.isError && msg.swipes.length > 1) {
       final errorSwipeId = msg.swipeId;
-      final remainingSwipes = List<String>.from(msg.swipes)..removeAt(errorSwipeId);
+      final remainingSwipes = List<String>.from(msg.swipes)
+        ..removeAt(errorSwipeId);
       final remainingMeta = msg.swipesMeta.length > errorSwipeId
-          ? (List<Map<String, dynamic>>.from(msg.swipesMeta)..removeAt(errorSwipeId))
+          ? (List<Map<String, dynamic>>.from(msg.swipesMeta)
+              ..removeAt(errorSwipeId))
           : List<Map<String, dynamic>>.from(msg.swipesMeta);
 
       var newIndex = dir < 0 ? errorSwipeId - 1 : errorSwipeId;
-      if (newIndex >= remainingSwipes.length) newIndex = remainingSwipes.length - 1;
+      if (newIndex >= remainingSwipes.length) {
+        newIndex = remainingSwipes.length - 1;
+      }
       if (newIndex < 0) newIndex = 0;
 
-      final meta = newIndex < remainingMeta.length ? remainingMeta[newIndex] : null;
+      final meta = newIndex < remainingMeta.length
+          ? remainingMeta[newIndex]
+          : null;
       final updated = msg.copyWith(
         swipes: remainingSwipes,
         swipesMeta: remainingMeta,
@@ -197,8 +282,10 @@ class ChatMessageService {
         tokens: meta?['tokens'] as int?,
         triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
         triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
+        studioOutputs: _studioOutputsFromMeta(meta),
       );
-      final newMessages = List<ChatMessage>.from(session.messages)..[messageIndex] = updated;
+      final newMessages = List<ChatMessage>.from(session.messages)
+        ..[messageIndex] = updated;
       return ChangeSwipeResult.updated(_persist(session, newMessages));
     }
 
@@ -214,7 +301,9 @@ class ChatMessageService {
       return const ChangeSwipeResult.noop();
     }
 
-    final meta = newIndex < msg.swipesMeta.length ? msg.swipesMeta[newIndex] : null;
+    final meta = newIndex < msg.swipesMeta.length
+        ? msg.swipesMeta[newIndex]
+        : null;
     final updated = msg.copyWith(
       swipeId: newIndex,
       content: msg.swipes[newIndex],
@@ -225,8 +314,10 @@ class ChatMessageService {
       tokens: meta?['tokens'] as int?,
       triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
       triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
+      studioOutputs: _studioOutputsFromMeta(meta),
     );
-    final newMessages = List<ChatMessage>.from(session.messages)..[messageIndex] = updated;
+    final newMessages = List<ChatMessage>.from(session.messages)
+      ..[messageIndex] = updated;
     return ChangeSwipeResult.updated(_persist(session, newMessages));
   }
 
@@ -236,7 +327,9 @@ class ChatMessageService {
     int newGreetingIndex,
     List<String> resolvedGreetings,
   ) {
-    if (messageIndex < 0 || messageIndex >= session.messages.length) return session;
+    if (messageIndex < 0 || messageIndex >= session.messages.length) {
+      return session;
+    }
     if (resolvedGreetings.length <= 1) return session;
     var idx = newGreetingIndex;
     if (idx < 0) idx = resolvedGreetings.length - 1;
@@ -251,6 +344,7 @@ class ChatMessageService {
       swipeId: 0,
       swipesMeta: const [],
       reasoning: null,
+      studioOutputs: const [],
       isError: false,
       tokens: estimateTokens(newText),
       genTime: null,

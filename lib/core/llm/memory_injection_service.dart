@@ -9,10 +9,14 @@ import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/memory_catalog_repo.dart';
+import '../db/repositories/memory_salience_repo.dart';
+import '../db/repositories/memory_entity_repo.dart';
 import '../models/chat_message.dart';
 import '../models/memory_book.dart';
+import '../models/memory_graph.dart';
 import '../state/db_provider.dart';
 import '../state/memory_settings_provider.dart';
+import '../state/memory_agent_providers.dart';
 import 'embedding_service.dart';
 import 'embedding_types.dart';
 import 'memory_catalog_builder.dart';
@@ -20,8 +24,15 @@ import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
 import 'memory_embedding_service.dart';
 import 'memory_excerpt_selector.dart';
+import 'memory_entity_extractor.dart';
 import 'memory_formatting.dart';
+import 'memory_graph_builder.dart';
+import 'memory_needs_classifier_service.dart';
+import 'memory_salience_scorer.dart';
 import 'memory_selector.dart';
+import 'memory_sidecar_prewarm_cache.dart';
+import 'memory_sidecar_reranker_service.dart';
+import 'memory_agentic_service.dart';
 import 'retrieval_query_builder.dart';
 import 'vector_math.dart';
 
@@ -69,16 +80,33 @@ class MemoryInjectionService {
   final MemoryBookRepo _repo;
   final EmbeddingRepo _embeddingRepo;
   final MemoryCatalogRepo _catalogRepo;
+  final MemorySalienceRepo? _salienceRepo;
+  final MemoryEntityRepo? _entityRepo;
   final EmbeddingService _embeddingService;
   final MemoryGlobalSettings Function() _readGlobalSettings;
+  final MemoryNeedsClassifierService? _classifierService;
+  final MemorySidecarRerankerService? _sidecarService;
+  final MemorySidecarPrewarmCache? _prewarmCache;
+  final MemoryAgenticService? _agenticService;
 
   MemoryInjectionService(
     this._repo,
     this._embeddingRepo,
     this._catalogRepo,
     this._embeddingService,
-    this._readGlobalSettings,
-  );
+    this._readGlobalSettings, {
+    MemorySalienceRepo? salienceRepo,
+    MemoryEntityRepo? entityRepo,
+    MemoryNeedsClassifierService? classifierService,
+    MemorySidecarRerankerService? sidecarService,
+    MemorySidecarPrewarmCache? prewarmCache,
+    MemoryAgenticService? agenticService,
+  })  : _salienceRepo = salienceRepo,
+        _entityRepo = entityRepo,
+        _classifierService = classifierService,
+        _sidecarService = sidecarService,
+        _prewarmCache = prewarmCache,
+        _agenticService = agenticService;
 
   /// Build injection candidates + diagnostics. Returns the raw selection
   /// (with source-window exclusion applied) plus all scored candidates
@@ -125,6 +153,13 @@ class MemoryInjectionService {
         source: 'none',
       ),
       MemoryBookSettings? settings,
+      String? classifierStatus,
+      int? classifierLatencyMs,
+      bool? classifierNeedsMemory,
+      double? classifierConfidence,
+      String? sidecarStatus,
+      int? sidecarLatencyMs,
+      bool prewarmHit = false,
     }) {
       sw.stop();
       final resolvedSettings = settings ?? const MemoryBookSettings();
@@ -141,6 +176,13 @@ class MemoryInjectionService {
                 memoryMode: resolvedSettings.memoryMode,
                 factualContinuityGuardEnabled:
                     resolvedSettings.factualContinuityGuardEnabled,
+                classifierStatus: classifierStatus,
+                classifierLatencyMs: classifierLatencyMs,
+                classifierNeedsMemory: classifierNeedsMemory,
+                classifierConfidence: classifierConfidence,
+                sidecarStatus: sidecarStatus,
+                sidecarLatencyMs: sidecarLatencyMs,
+                prewarmHit: prewarmHit,
               ),
       );
     }
@@ -165,6 +207,42 @@ class MemoryInjectionService {
         .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
         .toList();
     if (activeEntries.isEmpty) return finish(const MemorySelection());
+
+    final salienceByEntryId = <String, MemorySalience>{};
+    if (_salienceRepo != null && book.settings.memoryMode != 'fast') {
+      final salienceRows = await _salienceRepo!.getBySessionId(sessionId);
+      for (final s in salienceRows) {
+        salienceByEntryId[s.memoryEntryId] = s;
+      }
+    }
+
+    // Entity fusion (Phase G3): match entity names/aliases in query text
+    var entityOverlapByEntryId = const <String, int>{};
+    if (_entityRepo != null && book.settings.memoryMode != 'fast') {
+      final scanText = _selectorScanText(book.settings, history, currentText);
+      final entities = await _entityRepo!.getBySessionId(sessionId);
+      if (entities.isNotEmpty) {
+        final lowerQuery = scanText.toLowerCase();
+        for (final entity in entities) {
+          final names = [entity.name, ...entity.aliases];
+          if (names.any((n) => n.isNotEmpty && lowerQuery.contains(n.toLowerCase()))) {
+            entityOverlapByEntryId = Map.fromEntries([
+              ...entityOverlapByEntryId.entries,
+            ]);
+            entityOverlapByEntryId[entity.memoryEntryId] =
+                (entityOverlapByEntryId[entity.memoryEntryId] ?? 0) + 1;
+          }
+        }
+      }
+    }
+
+    // Emotional recall (Phase G2): extract emotional context from query
+    var queryEmotions = const <String>[];
+    if (book.settings.memoryMode != 'fast') {
+      queryEmotions = RetrievalQueryBuilder.extractEmotionalContext(
+        _selectorScanText(book.settings, history, currentText),
+      );
+    }
 
     var vectorMatches = const _MemoryVectorMatchResult();
     final keywordMatchedTerms = _keywordMatches(
@@ -222,9 +300,133 @@ class MemoryInjectionService {
         sourceWindowExclusion: book.settings.sourceWindowExclusion,
         currentMessageIndex: history.length,
         chunkBudgeting: book.settings.memoryPackingMode == 'chunk_first',
+        salienceByEntryId: salienceByEntryId,
+        queryEmotions: queryEmotions,
+        entityOverlapByEntryId: entityOverlapByEntryId,
       ),
     );
-    return finish(selection, budget: budget, settings: book.settings);
+
+    var finalSelection = selection;
+    MemoryClassifierResult? classifierResult = const MemoryClassifierResult(status: 'disabled');
+    MemorySidecarResult? sidecarResult;
+    var prewarmHit = false;
+    MemoryAgenticResult? agenticResult;
+
+    // Balanced mode: classifier for missing-context detection
+    if (book.settings.memoryMode == 'balanced' &&
+        _classifierService != null &&
+        book.settings.classifierEnabled &&
+        !selection.allScores.every((s) => s.excludedBySourceWindow || s.score == 0)) {
+      final candidateTitles = selection.allScores
+          .where((s) => !s.excludedBySourceWindow && s.score > 0)
+          .map((s) => s.entry.title)
+          .toList();
+      classifierResult = await _classifierService!.classify(
+        MemoryClassifierRequest(
+          settings: book.settings,
+          currentText: currentText,
+          candidateTitles: candidateTitles,
+          missingContextReasons: const [],
+        ),
+        cancelToken: cancelToken,
+      );
+      if (shouldAbort?.call() == true) {
+        return finish(finalSelection, budget: budget, settings: book.settings);
+      }
+      // If classifier says memory needed but no reliable candidate found,
+      // and queryExpansion is provided, we could broaden retrieval here.
+      // For now, the classifier output is recorded in diagnostics.
+    }
+
+    // Deep mode: sidecar reranker with prewarm
+    if (book.settings.memoryMode == 'deep' &&
+        _sidecarService != null &&
+        book.settings.sidecarEnabled) {
+      // Try prewarm cache first
+      if (_prewarmCache != null) {
+        final prewarmKey = MemorySidecarPrewarmKey(
+          sessionId: sessionId,
+          branchId: sessionId,
+          anchorMessageId: history.isNotEmpty ? history.last.id : sessionId,
+          anchorSwipeId: history.isNotEmpty ? history.last.swipeId : 0,
+          settingsRevision: '',
+          memoryRevision: book.updatedAt.toString(),
+          historyRevision: '${history.length}',
+        );
+        final prewarmEntry = _prewarmCache.takeIfFresh(prewarmKey);
+        if (prewarmEntry != null) {
+          prewarmHit = true;
+          sidecarResult = prewarmEntry.result;
+          finalSelection = prewarmEntry.result.selection;
+        }
+      }
+
+      // If no prewarm hit, run sidecar on-demand
+      if (!prewarmHit) {
+        sidecarResult = await _sidecarService!.rerank(
+          MemorySidecarRequest(
+            settings: book.settings,
+            candidates: selection.allScores
+                .where((s) => !s.excludedBySourceWindow)
+                .toList(),
+            fallbackSelection: selection,
+            visibleMessageIds: visibleMessageIds,
+            maxInjectionTokens: budget.effectiveTokens,
+            maxInjectedEntries: book.settings.maxInjectedEntries,
+          ),
+          cancelToken: cancelToken,
+        );
+        if (shouldAbort?.call() == true) {
+          return finish(finalSelection, budget: budget, settings: book.settings);
+        }
+        finalSelection = sidecarResult.selection;
+
+        // Store for next-turn prewarm
+        if (_prewarmCache != null && sidecarResult.status == 'ok') {
+          _prewarmCache!.put(MemorySidecarPrewarmEntry(
+            key: MemorySidecarPrewarmKey(
+              sessionId: sessionId,
+              branchId: sessionId,
+              anchorMessageId: history.isNotEmpty ? history.last.id : sessionId,
+              anchorSwipeId: history.isNotEmpty ? history.last.swipeId : 0,
+              settingsRevision: '',
+              memoryRevision: book.updatedAt.toString(),
+              historyRevision: '${history.length}',
+            ),
+            result: sidecarResult,
+            createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
+      }
+    }
+
+    // Agentic mode: searchMemory tool (Phase 10)
+    if (book.settings.memoryMode == 'agentic' &&
+        _agenticService != null) {
+      agenticResult = await _agenticService!.runAgentic(
+        settings: book.settings,
+        entries: activeEntries,
+        currentText: currentText,
+        visibleMessageIds: visibleMessageIds,
+        fallbackSelection: finalSelection,
+        cancelToken: cancelToken,
+      );
+      if (shouldAbort?.call() == true) {
+        return finish(finalSelection, budget: budget, settings: book.settings);
+      }
+      finalSelection = agenticResult.selection;
+    }
+
+    return finish(
+      finalSelection,
+      budget: budget,
+      settings: book.settings,
+      classifierStatus: classifierResult?.status,
+      classifierNeedsMemory: classifierResult?.output?.needsMemory,
+      classifierConfidence: classifierResult?.output?.confidence,
+      sidecarStatus: sidecarResult?.status,
+      prewarmHit: prewarmHit,
+    );
   }
 
   /// Backwards-compatible facade for callers that still expect an
@@ -654,6 +856,12 @@ final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
     ref.watch(memoryCatalogRepoProvider),
     EmbeddingService(),
     () => ref.read(memoryGlobalSettingsProvider),
+    salienceRepo: ref.watch(memorySalienceRepoProvider),
+    entityRepo: ref.watch(memoryEntityRepoProvider),
+    classifierService: ref.watch(memoryClassifierServiceProvider),
+    sidecarService: ref.watch(memorySidecarRerankerServiceProvider),
+    prewarmCache: ref.watch(memorySidecarPrewarmCacheProvider),
+    agenticService: ref.watch(memoryAgenticServiceProvider),
   );
 });
 

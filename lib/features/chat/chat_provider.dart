@@ -11,6 +11,7 @@ import '../../core/services/generation_notification_service.dart';
 import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
+import '../../core/state/memory_agent_providers.dart';
 import '../chat_history/chat_history_provider.dart';
 import '../memory/state/memory_active_drafts_provider.dart';
 import 'abort_handler.dart';
@@ -111,6 +112,8 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   void abortImageGeneration() => _abortHandler.abortImageGeneration();
   void abortGeneration() => _abortHandler.abortGeneration();
+  void finishCurrentStudioAgent() =>
+      ref.read(memoryStudioServiceProvider).finishCurrentAgent();
   void cancelImageGeneration() => _abortHandler.cancelImageGeneration();
   Future<void> retryImageGeneration() async =>
       _imageRecoverySvc.retryImageGeneration();
@@ -186,6 +189,15 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     tagStart: tagStart,
     tagEnd: tagEnd,
   );
+
+  Future<void> editStudioOutput(
+    int index,
+    String outputId,
+    String newContent,
+  ) => _messageOpsCtrl.editStudioOutput(index, outputId, newContent);
+
+  Future<void> regenerateStudioOutput(int index, String outputId) =>
+      _messageOpsCtrl.regenerateStudioOutput(index, outputId);
 
   Future<void> moveMessage(int fromIndex, int toIndex) =>
       _messageOpsCtrl.moveMessage(fromIndex, toIndex);
@@ -309,7 +321,10 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     }
   }
 
-  Future<void> regenerateLastAssistant({String? guidanceText}) async {
+  Future<void> regenerateLastAssistant({
+    String? guidanceText,
+    bool studioFinalOnly = false,
+  }) async {
     if (!ref.mounted) return;
     if (state.value?.isGenerating == true) {
       abortGeneration();
@@ -352,6 +367,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     final clearedMsg = prevAssistant.copyWith(
       content: '',
       reasoning: null,
+      studioOutputs: const [],
       isTyping: true,
       genTime: null,
       tokens: null,
@@ -386,6 +402,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       current,
       saveSession: current.session!,
       guidanceText: guidanceText,
+      studioFinalOnly: studioFinalOnly,
       regenTargetId: regenTargetId,
       previousSwipes: prevAssistant.swipes.isNotEmpty
           ? prevAssistant.swipes
@@ -394,9 +411,26 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       previousReasoning: prevAssistant.reasoning,
       previousGenTime: prevAssistant.genTime,
       previousTokens: prevAssistant.tokens,
-      previousSwipesMeta: prevAssistant.swipesMeta.isNotEmpty
-          ? prevAssistant.swipesMeta
-          : null,
+      previousSwipesMeta: _previousSwipesMetaForRegen(prevAssistant),
+    );
+  }
+
+  List<Map<String, dynamic>>? _previousSwipesMetaForRegen(ChatMessage message) {
+    if (message.swipesMeta.isNotEmpty) return message.swipesMeta;
+    if (message.studioOutputs.isEmpty) return null;
+    final swipes = message.swipes.isNotEmpty
+        ? message.swipes
+        : [message.content];
+    return List<Map<String, dynamic>>.generate(
+      swipes.length,
+      (i) => i == message.swipeId
+          ? <String, dynamic>{
+              'genTime': message.genTime,
+              'reasoning': message.reasoning,
+              'tokens': message.tokens,
+              'studioOutputs': message.studioOutputs,
+            }
+          : <String, dynamic>{},
     );
   }
 
@@ -491,6 +525,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     int? previousTokens,
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? regenTargetId,
+    bool studioFinalOnly = false,
   }) {
     final genId = _abortHandler.nextGenId();
     final pipeline = GenerationPipeline(
@@ -514,6 +549,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       previousTokens: previousTokens,
       previousSwipesMeta: previousSwipesMeta,
       regenTargetId: regenTargetId,
+      studioFinalOnly: studioFinalOnly,
     );
   }
 }

@@ -59,7 +59,9 @@ class ChatState {
       generationStartTime: generationStartTime ?? this.generationStartTime,
       visibleStartIndex: visibleStartIndex ?? this.visibleStartIndex,
       isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
-      regenTargetId: regenTargetId == _unset ? this.regenTargetId : regenTargetId as String?,
+      regenTargetId: regenTargetId == _unset
+          ? this.regenTargetId
+          : regenTargetId as String?,
     );
   }
 }
@@ -67,6 +69,13 @@ class ChatState {
 class StreamingState {
   final String text;
   final String? reasoning;
+  final List<Map<String, dynamic>> studioOutputs;
+  final bool studioOutputsExpanded;
 
-  const StreamingState({this.text = '', this.reasoning});
+  const StreamingState({
+    this.text = '',
+    this.reasoning,
+    this.studioOutputs = const [],
+    this.studioOutputsExpanded = false,
+  });
 }

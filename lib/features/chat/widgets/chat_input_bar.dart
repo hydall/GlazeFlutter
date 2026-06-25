@@ -34,6 +34,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
   final bool isGenerating;
   final bool isGeneratingImage;
   final VoidCallback? onStop;
+  final VoidCallback? onFinishAgent;
   final VoidCallback? onMagicDrawer;
   final void Function(String text, String? guidanceText, String imageDataUrl)?
   onSendWithImage;
@@ -81,6 +82,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
     required this.isGenerating,
     this.isGeneratingImage = false,
     this.onStop,
+    this.onFinishAgent,
     this.onMagicDrawer,
     this.onSendWithImage,
     this.onFullScreen,
@@ -604,6 +606,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       color: widget.isQuickRepliesOpen ? Colors.amber : null,
                       batterySaver: widget.batterySaver,
                     ),
+                    if (isGenerating && widget.onFinishAgent != null) ...[
+                      const SizedBox(width: 8),
+                      _CircleBtn(
+                        icon: Icons.skip_next_rounded,
+                        onTap: widget.onFinishAgent,
+                        color: Colors.lightBlueAccent,
+                        batterySaver: widget.batterySaver,
+                      ),
+                    ],
                   ],
                 ),
                 _SendBtn(

@@ -41,7 +41,7 @@ lib/
 │   ├── constants/
 │   │   └── image_gen_patterns.dart     # IMG-tag regex constants
 │   ├── db/
-│   │   ├── app_db.dart                 # AppDatabase singleton (14 tables, schema v34)
+│   │   ├── app_db.dart                 # AppDatabase singleton (18 tables, schema v42)
 │   │   ├── tables.dart                 # Drift table class definitions
 │   │   └── repositories/              # One repo per table (CRUD only)
 │   │       ├── api_config_repo.dart
@@ -399,6 +399,43 @@ post-gen, or pipeline sync notification. See `docs/INVARIANTS.md` INV-CM2.
 | Summary | Widget-local in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
 | Memory draft | `MemoryBookController` (`_generatingDrafts`, `_cancelTokens`) | No | Per-draft `CancelToken`; mutex via `memory_active_drafts_provider` |
 
+### Reasoning / Thinking
+
+`ApiConfig.requestReasoning` controls whether Glaze asks the provider for
+provider-native reasoning. `ApiConfig.omitReasoning` suppresses app-side
+reasoning request fields such as OpenAI `reasoning_effort`, Anthropic/Gemini
+thinking configs, and Studio final-agent reasoning persistence. It does **not**
+guarantee that a provider/model disables its internal thinking.
+
+Gemini 3.x models can think by default. For example, Gemini 3.1 Pro exposes
+thinking levels (`low` / `medium` / `high`) rather than a documented full off
+switch. Custom OpenAI-compatible proxies such as rout.my may still report or
+bill thought tokens even when Glaze omits reasoning request fields. Do not add
+provider-specific `reasoning: { exclude: true }` or similar body fields unless
+the target provider documents the exact field and we intentionally support that
+contract.
+
+Studio Mode follows the same policy for its final agent: intermediate agents
+force reasoning off/omitted; the final agent inherits the resolved `ApiConfig`
+reasoning settings. Studio also strips prompt-level hidden-reasoning directives
+from final-agent instructions when reasoning is disabled/omitted, but cannot
+disable model-internal thinking if the upstream model always performs it.
+
+### Studio Mode Pipeline
+
+Studio settings are stored as reusable Studio profiles in `studio_config_rows`.
+Sessions bind to a profile by `profileId`; starting a new session can reuse an
+existing profile without rebuilding agents. Rebuilding only changes the selected
+profile's agent prompts/settings.
+
+At generation time, all enabled intermediate agents run in parallel. Their
+outputs are ephemeral briefs shown under the assistant message and passed to the
+final agent as `previous_agents`. A failed intermediate agent is captured as a
+Studio output with `status: error` and does not abort the whole Studio pipeline;
+the final agent still runs with the successful briefs plus an error marker for
+the failed agent. The final enabled agent runs after all intermediate agents
+settle and produces the visible assistant response.
+
 ### Prompt Ordering (invariant — do not reorder)
 
 1. Vector lorebook scan (async, in `PromptPayloadBuilder`, before isolate)
@@ -597,7 +634,7 @@ expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` ar
 
 **File:** `lib/core/db/app_db.dart` + `lib/core/db/repositories/`
 
-### Tables (14 total, schema v34)
+### Tables (18 total, schema v42)
 
 | Table | Repo | Notes |
 |-------|------|-------|
@@ -615,6 +652,7 @@ expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` ar
 | `MemoryCatalogRows` | `memory_catalog_repo.dart` | v29; rebuildable per-session Memory Catalog state |
 | `ExtensionPresets` | `extension_presets_repository.dart` | v20 |
 | `InfoBlocks` | `info_blocks_repository.dart` | v20; v22 adds `status` TEXT (default `'done'`) + `order` INTEGER (default 0); v27 adds `swipe_id` |
+| `StudioConfigRows` | `studio_config_repo.dart` | v36; reusable Studio profiles, v42 adds `profileId`/`profileName` for session-to-profile binding |
 
 ### Write Rule
 **Never** do `getChat → mutate → saveChat`. Use `patchChatData` to serialize reads.
@@ -645,7 +683,7 @@ All service implementations live under `lib/features/cloud_sync/services/`.
 - `widgets/sync_sheet.dart` — Sync UI sheet
 
 ### What Is Synced
-Characters, sessions, presets, API configs, personas, lorebooks, theme presets, active preset, selected app settings. **Not synced:** generation state, UI state, embedding vectors, extension/info-block rows, debug traces.
+Characters, sessions, presets, API configs, personas, lorebooks, theme presets, Studio profiles, active preset, selected app settings, extension presets/settings, and info-block rows. **Not synced:** generation state, UI state, embedding vectors, debug traces.
 
 ---
 

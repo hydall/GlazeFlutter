@@ -157,6 +157,161 @@ class MemoryCatalogRows extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('MemoryEntityRow')
+@TableIndex(
+  name: 'idx_memory_entity_session_name',
+  columns: {#chatSessionId, #name},
+)
+@TableIndex(
+  name: 'idx_memory_entity_session_type',
+  columns: {#chatSessionId, #entityType},
+)
+@TableIndex(name: 'idx_memory_entity_entry', columns: {#memoryEntryId})
+class MemoryEntityRows extends Table {
+  @override
+  String get tableName => 'memory_entity_rows';
+
+  TextColumn get id => text()();
+  TextColumn get chatSessionId => text()();
+  TextColumn get memoryEntryId => text()();
+  TextColumn get name => text()();
+  TextColumn get entityType =>
+      text().withDefault(const Constant('character'))();
+  TextColumn get aliasesJson => text().withDefault(const Constant('[]'))();
+  TextColumn get description => text().withDefault(const Constant(''))();
+  RealColumn get salienceAvg => real().withDefault(const Constant(0.0))();
+  RealColumn get saliencePeak => real().withDefault(const Constant(0.0))();
+  TextColumn get status => text().withDefault(const Constant('active'))();
+  TextColumn get factsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get emotionalValenceJson =>
+      text().withDefault(const Constant('{}'))();
+  IntColumn get mentionCount => integer().withDefault(const Constant(0))();
+  IntColumn get lastSeenMessageIndex =>
+      integer().withDefault(const Constant(0))();
+  TextColumn get sourceHash => text().withDefault(const Constant(''))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('MemorySalienceRow')
+@TableIndex(name: 'idx_memory_salience_session', columns: {#chatSessionId})
+@TableIndex(name: 'idx_memory_salience_entry', columns: {#memoryEntryId})
+class MemorySalienceRows extends Table {
+  @override
+  String get tableName => 'memory_salience_rows';
+
+  TextColumn get id => text()();
+  TextColumn get chatSessionId => text()();
+  TextColumn get memoryEntryId => text()();
+  RealColumn get score => real().withDefault(const Constant(0.0))();
+  TextColumn get emotionalTagsJson =>
+      text().withDefault(const Constant('[]'))();
+  TextColumn get narrativeFlagsJson =>
+      text().withDefault(const Constant('[]'))();
+  BoolColumn get hasDialogue => boolean().withDefault(const Constant(false))();
+  BoolColumn get hasAction => boolean().withDefault(const Constant(false))();
+  IntColumn get wordCount => integer().withDefault(const Constant(0))();
+  TextColumn get scoreSource =>
+      text().withDefault(const Constant('heuristic'))();
+  IntColumn get scoredAt => integer().withDefault(const Constant(0))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('MemoryCadenceRow')
+class MemoryCadenceRows extends Table {
+  @override
+  String get tableName => 'memory_cadence_rows';
+
+  TextColumn get chatSessionId => text()();
+  IntColumn get assistantMessagesSinceLastRun =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get lastRunMessageIndex =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get lastRunAt => integer().withDefault(const Constant(0))();
+  TextColumn get lastRunKind => text().withDefault(const Constant('graph'))();
+
+  @override
+  Set<Column> get primaryKey => {chatSessionId};
+}
+
+@DataClassName('MemoryConsolidationRow')
+@TableIndex(
+  name: 'idx_memory_consolidation_session_tier',
+  columns: {#chatSessionId, #tier},
+)
+@TableIndex(
+  name: 'idx_memory_consolidation_session_status',
+  columns: {#chatSessionId, #status},
+)
+class MemoryConsolidationRows extends Table {
+  @override
+  String get tableName => 'memory_consolidation_rows';
+
+  TextColumn get id => text()();
+  TextColumn get chatSessionId => text()();
+  IntColumn get tier => integer().withDefault(const Constant(1))();
+  TextColumn get title => text().withDefault(const Constant(''))();
+  TextColumn get summary => text().withDefault(const Constant(''))();
+  TextColumn get sourceEntryIdsJson =>
+      text().withDefault(const Constant('[]'))();
+  TextColumn get entityIdsJson => text().withDefault(const Constant('[]'))();
+  IntColumn get messageRangeStart => integer().withDefault(const Constant(0))();
+  IntColumn get messageRangeEnd => integer().withDefault(const Constant(0))();
+  RealColumn get salienceAvg => real().withDefault(const Constant(0.0))();
+  TextColumn get emotionalTagsJson =>
+      text().withDefault(const Constant('[]'))();
+  IntColumn get tokenCount => integer().withDefault(const Constant(0))();
+  TextColumn get sourceModel => text().withDefault(const Constant(''))();
+  TextColumn get status => text().withDefault(const Constant('pending'))();
+  TextColumn get errorMessage => text().withDefault(const Constant(''))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('StudioConfigRow')
+@TableIndex(name: 'idx_studio_config_session', columns: {#sessionId})
+class StudioConfigRows extends Table {
+  @override
+  String get tableName => 'studio_config_rows';
+
+  TextColumn get sessionId => text()();
+  TextColumn get profileId => text().withDefault(const Constant(''))();
+  TextColumn get profileName => text().withDefault(const Constant(''))();
+  BoolColumn get enabled => boolean().withDefault(const Constant(false))();
+  TextColumn get agentsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get sourcePresetId => text().withDefault(const Constant(''))();
+  TextColumn get finalPresetId => text().withDefault(const Constant(''))();
+  TextColumn get agentStudioPresetId =>
+      text().withDefault(const Constant(''))();
+  TextColumn get finalStudioPresetId =>
+      text().withDefault(const Constant(''))();
+  TextColumn get studioPresetOverridesJson =>
+      text().withDefault(const Constant('[]'))();
+  TextColumn get sourcePresetHash => text().withDefault(const Constant(''))();
+  TextColumn get buildApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get builderPromptTemplate =>
+      text().withDefault(const Constant(''))();
+  TextColumn get selectedBlockIdsJson =>
+      text().withDefault(const Constant('[]'))();
+  BoolColumn get selectedBlockIdsInitialized =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sessionId};
+}
+
 @DataClassName('PresetRow')
 class Presets extends Table {
   @override

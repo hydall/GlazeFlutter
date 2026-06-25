@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/llm/memory_selector.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/memory_graph.dart';
 
 MemoryEntry _entry({
   required String id,
@@ -276,7 +277,7 @@ void main() {
       expect(recent.recencyScore, greaterThan(old.recencyScore));
     });
 
-    test('temporallyBlind entries are not recency-boosted', () {
+    test('temporallyBlind entries get maximum recency (decision C)', () {
       final entries = [
         _entry(
           id: 'blind_recent',
@@ -301,17 +302,16 @@ void main() {
           diversityAware: false,
         ),
       );
-      // The non-blind sourced entry has recency boost.
-      // The blind entry has 0 boost. Without the keyword/vector/importance
-      // contributions, the blind entry's total score is only the baseline.
+      // Decision C: temporallyBlind entries always get recency = 1.0 (wins).
+      // The non-blind sourced entry gets normal decay.
       final blind = result.allScores.firstWhere(
         (s) => s.entry.id == 'blind_recent',
       );
       final nonBlind = result.allScores.firstWhere(
         (s) => s.entry.id == 'recent',
       );
-      expect(blind.recencyScore, 0.0);
-      expect(nonBlind.recencyScore, greaterThan(0.0));
+      expect(blind.recencyScore, 1.0);
+      expect(nonBlind.recencyScore, lessThan(1.0));
     });
   });
 
@@ -438,6 +438,80 @@ void main() {
       expect(result.excludedBySourceWindow, 0);
       expect(result.selectionMode, 'legacy');
       expect(result.allScores.every((s) => s.diversityPenalty == 0), isTrue);
+    });
+  });
+
+  group('MemorySelector: core memory protection (Phase G1)', () {
+    test('core entries get 5x slower decay with floor 0.5', () {
+      final entries = [
+        _entry(
+          id: 'core_old',
+          content: 'He made a promise to protect her',
+          messageRange: const MessageRange(start: 10, end: 20),
+        ),
+        _entry(
+          id: 'normal_old',
+          content: 'some regular event happened here',
+          messageRange: const MessageRange(start: 10, end: 20),
+        ),
+      ];
+      final coreSalience = MemorySalience(
+        id: 's_core',
+        chatSessionId: 'session',
+        memoryEntryId: 'core_old',
+        score: 0.8,
+        narrativeFlags: const ['promise'],
+        emotionalTags: const [],
+      );
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          currentMessageIndex: 200,
+          maxInjectedEntries: 2,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          importanceBoost: false,
+          diversityAware: false,
+          recencyHalfLifeDays: 50,
+          salienceByEntryId: {'core_old': coreSalience},
+        ),
+      );
+      final coreScore = result.allScores.firstWhere(
+        (s) => s.entry.id == 'core_old',
+      );
+      final normalScore = result.allScores.firstWhere(
+        (s) => s.entry.id == 'normal_old',
+      );
+      // Core entry: floor 0.5, 5x slower decay
+      expect(coreScore.recencyScore, greaterThanOrEqualTo(0.5));
+      expect(coreScore.isCore, isTrue);
+      // Normal entry: standard decay, should be lower
+      expect(normalScore.recencyScore, lessThan(coreScore.recencyScore));
+    });
+
+    test('temporallyBlind overrides core protection (decision C)', () {
+      final entries = [
+        _entry(
+          id: 'blind',
+          content: 'permanent world fact',
+          messageRange: const MessageRange(start: 10, end: 20),
+          temporallyBlind: true,
+        ),
+      ];
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          currentMessageIndex: 500,
+          maxInjectedEntries: 1,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          importanceBoost: false,
+          diversityAware: false,
+          recencyHalfLifeDays: 50,
+        ),
+      );
+      final blindScore = result.allScores.single;
+      expect(blindScore.recencyScore, 1.0);
     });
   });
 }

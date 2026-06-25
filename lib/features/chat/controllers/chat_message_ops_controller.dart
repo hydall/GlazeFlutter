@@ -1,7 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
+import '../../../core/llm/prompt_isolate.dart';
+import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/utils/time_helpers.dart';
 import '../chat_message_service.dart';
 import '../chat_session_service.dart';
@@ -54,7 +57,98 @@ class ChatMessageOpsController {
     _setState(AsyncData(current.copyWith(session: updated)));
   }
 
-  Future<ChatSession> _applyRunOnEditRegexes(ChatSession session, int index) async {
+  Future<void> editStudioOutput(
+    int index,
+    String outputId,
+    String newContent,
+  ) async {
+    if (!_ref.mounted) return;
+    final current = _getState().value;
+    if (current == null || current.session == null) return;
+    final updated = _messageSvc.editStudioOutput(
+      current.session!,
+      index,
+      outputId,
+      newContent,
+    );
+    if (!_ref.mounted) return;
+    _setState(AsyncData(current.copyWith(session: updated)));
+  }
+
+  Future<void> regenerateStudioOutput(int index, String outputId) async {
+    if (!_ref.mounted) return;
+    final current = _getState().value;
+    final session = current?.session;
+    if (current == null || session == null) return;
+    if (index < 0 || index >= session.messages.length) return;
+    final msg = session.messages[index];
+    Map<String, dynamic>? output;
+    for (final item in msg.studioOutputs) {
+      if (item['id'] == outputId) {
+        output = item;
+        break;
+      }
+    }
+    if (output == null) return;
+
+    var updated = _messageSvc.updateStudioOutput(session, index, outputId, {
+      'content': 'Regenerating...',
+      'status': 'running',
+    });
+    _setState(AsyncData(current.copyWith(session: updated)));
+
+    try {
+      final promptSession = updated.copyWith(
+        messages: updated.messages.take(index).toList(growable: false),
+        updatedAt: currentTimestampSeconds(),
+      );
+      final builder = _ref.read(promptPayloadBuilderProvider);
+      final payload = await builder.buildFromSession(
+        charId: _charId,
+        session: promptSession,
+      );
+      if (!_ref.mounted) return;
+      final promptResult = await buildPromptInIsolate(payload);
+      if (!_ref.mounted) return;
+      final brief = await _ref
+          .read(memoryStudioServiceProvider)
+          .regenerateIntermediateAgent(
+            sessionId: session.id,
+            agentId: outputId,
+            promptResult: promptResult,
+            promptPayload: payload,
+            apiConfig: payload.apiConfig,
+          );
+      if (!_ref.mounted) return;
+      final latest = _getState().value?.session;
+      if (latest == null) return;
+      updated = _messageSvc.updateStudioOutput(latest, index, outputId, {
+        'content': brief.brief,
+        'status': brief.status,
+        'error': null,
+      });
+      _setState(
+        AsyncData((_getState().value ?? current).copyWith(session: updated)),
+      );
+    } catch (e) {
+      if (!_ref.mounted) return;
+      final latest = _getState().value?.session;
+      if (latest == null) return;
+      updated = _messageSvc.updateStudioOutput(latest, index, outputId, {
+        'content': '$e',
+        'status': 'error',
+        'error': '$e',
+      });
+      _setState(
+        AsyncData((_getState().value ?? current).copyWith(session: updated)),
+      );
+    }
+  }
+
+  Future<ChatSession> _applyRunOnEditRegexes(
+    ChatSession session,
+    int index,
+  ) async {
     if (index < 0 || index >= session.messages.length) return session;
     final scripts = await _ref.read(activeRegexesProvider.future);
     final editScripts = scripts.where((r) => r.runOnEdit).toList();
@@ -72,11 +166,7 @@ class ChatMessageOpsController {
       _ref.read(personaConnectionsProvider),
     );
     final depth = session.messages.length - 1 - index;
-    final ctx = RegexApplyContext(
-      char: char,
-      persona: persona,
-      depth: depth,
-    );
+    final ctx = RegexApplyContext(char: char, persona: persona, depth: depth);
     final content = applyRegexes(
       msg.content,
       placement,
@@ -101,7 +191,11 @@ class ChatMessageOpsController {
     if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
-    final updated = _messageSvc.moveMessage(current.session!, fromIndex, toIndex);
+    final updated = _messageSvc.moveMessage(
+      current.session!,
+      fromIndex,
+      toIndex,
+    );
     _invalidateHistory();
     _setState(AsyncData(current.copyWith(session: updated)));
   }
@@ -146,7 +240,9 @@ class ChatMessageOpsController {
     if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
-    final cleared = await ChatSessionService(_ref).clearChat(_charId, current.session!);
+    final cleared = await ChatSessionService(
+      _ref,
+    ).clearChat(_charId, current.session!);
     if (!_ref.mounted) return;
     _invalidateHistory();
     _setState(AsyncData(ChatState(session: cleared)));

@@ -64,7 +64,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **34**
+Current version: **43**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -84,6 +84,15 @@ Migration history:
 - v32: added `characters.tokenCount` INTEGER DEFAULT 0 (cached estimated token count; computed on import/save, backfilled in background for existing rows)
 - v33: added `characters.variantGroupId` TEXT + `characters.variantName` TEXT + `characters.variantOrder` INTEGER (character variations: rows sharing `variant_group_id` collapse to one list card; backfill sets each existing character's group to its own `char_id`)
 - v34: added `characters.hidden` BOOL DEFAULT 0 (hideable characters: excludes a character/group from the My Characters list)
+- v35: added Memory Graph tables (`memory_entity_rows`, `memory_salience_rows`, `memory_cadence_rows`, `memory_consolidation_rows`)
+- v36: added `studio_config_rows`
+- v37: added Studio `buildApiConfigId` / `runApiConfigId`
+- v38: added Studio selected block ids fields
+- v39: added Studio `finalPresetId`
+- v40: added Studio request preset ids
+- v41: added Studio preset overrides JSON
+- v42: added Studio `profileId` / `profileName` for reusable session-bound profiles
+- v43: added Studio `builderPromptTemplate` override for editable Studio rebuild prompts
 
 ---
 

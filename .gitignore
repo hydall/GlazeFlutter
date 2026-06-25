@@ -164,6 +164,7 @@ package-lock.json
 /refactor_plan.md
 /refactor_plan_v2.md
 /archival_memory_extension_plan.md
+/agentic_memory_implementation_plan.md
 
 # ===========================
 # Cursor local hooks (per-machine, contain absolute paths)

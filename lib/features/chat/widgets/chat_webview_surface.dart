@@ -111,7 +111,11 @@ class ChatWebViewSurface extends ConsumerWidget {
     if (chatBgMode == 'avatar') {
       final path = chatBgAvatarPath;
       if (path != null && path.isNotEmpty) {
-        image = Image.file(File(path), fit: BoxFit.cover, gaplessPlayback: true);
+        image = Image.file(
+          File(path),
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+        );
       }
     } else if (chatBgMode != 'color' && bgImageBytes != null) {
       // Decoded bytes (same as GlazeBackground) because the data is a base64
@@ -210,6 +214,8 @@ class ChatWebViewSurface extends ConsumerWidget {
                 bridge.onSelectionAction = callbacks.onSelectionAction;
                 bridge.onSelectionChange = callbacks.onSelectionChange;
                 bridge.onEditSave = callbacks.onEditSave;
+                bridge.onStudioOutputEdit = callbacks.onStudioOutputEdit;
+                bridge.onStudioOutputRegen = callbacks.onStudioOutputRegen;
                 bridge.onEditCancel = callbacks.onEditCancel;
                 bridge.onEditFocusChange = callbacks.onEditFocusChange;
                 bridge.onImageClick = callbacks.onImageClick;
@@ -265,9 +271,7 @@ class ChatWebViewSurface extends ConsumerWidget {
         // it composites for a frame on re-attach) behind the chat's own
         // background, so switching shows an empty chat rather than a stale flash.
         if (sessionSwitching)
-          Positioned.fill(
-            child: IgnorePointer(child: _background(context)),
-          ),
+          Positioned.fill(child: IgnorePointer(child: _background(context))),
         if (sessionSwitching)
           const Center(child: CircularProgressIndicator(strokeWidth: 3)),
         if (bottomInset > 0)

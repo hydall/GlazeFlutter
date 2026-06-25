@@ -102,25 +102,25 @@ class OpenAiChatTransport implements ChatTransport {
       'stream': r.stream,
     };
 
-      if (r.maxTokens > 0) {
-        body['max_tokens'] = r.maxTokens;
-      }
-      if (!r.omitTemperature && r.temperature > 0) {
-        body['temperature'] = r.temperature;
+    if (r.maxTokens > 0) {
+      body['max_tokens'] = r.maxTokens;
     }
-      if (!r.omitTopP && r.topP > 0 && r.topP < 1) {
-        body['top_p'] = r.topP;
-      }
-      if (r.topK > 0) {
-        body['top_k'] = r.topK;
-      }
-      if (r.frequencyPenalty != 0) {
-        body['frequency_penalty'] = r.frequencyPenalty;
-      }
-      if (r.presencePenalty != 0) {
-        body['presence_penalty'] = r.presencePenalty;
-      }
-      if (!r.omitReasoning &&
+    if (!r.omitTemperature && r.temperature > 0) {
+      body['temperature'] = r.temperature;
+    }
+    if (!r.omitTopP && r.topP > 0 && r.topP < 1) {
+      body['top_p'] = r.topP;
+    }
+    if (r.topK > 0) {
+      body['top_k'] = r.topK;
+    }
+    if (r.frequencyPenalty != 0) {
+      body['frequency_penalty'] = r.frequencyPenalty;
+    }
+    if (r.presencePenalty != 0) {
+      body['presence_penalty'] = r.presencePenalty;
+    }
+    if (!r.omitReasoning &&
         r.requestReasoning &&
         !r.omitReasoningEffort &&
         r.reasoningEffort != null &&
@@ -142,6 +142,11 @@ class OpenAiChatTransport implements ChatTransport {
                 r.endpoint.contains('openrouter.ai')));
     if (shouldSendSessionId) {
       body['session_id'] = r.sessionId;
+    }
+
+    if (r.tools != null && r.tools!.isNotEmpty) {
+      body['tools'] = r.tools;
+      body['tool_choice'] = r.toolChoice ?? 'auto';
     }
 
     return body;

@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
+import '../../../core/llm/memory_studio_service.dart';
+import '../../../core/llm/memory_studio_mode.dart';
 import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/transport/chat_transport_request.dart';
 import '../../../core/llm/transport/transport_factory.dart';
@@ -11,6 +16,7 @@ import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/active_selection_provider.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../state/cached_token_breakdown.dart';
@@ -45,6 +51,7 @@ class StreamGenerationService {
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? guidanceText,
     String? regenTargetId,
+    bool studioFinalOnly = false,
     required ChatState currentState,
   }) async {
     final vsi = currentState.visibleStartIndex;
@@ -124,28 +131,211 @@ class StreamGenerationService {
       final hasInlineTags =
           reasoningTagStart.isNotEmpty && reasoningTagEnd.isNotEmpty;
 
-      final accumulator = StreamAccumulator(
-        tagStart: reasoningTagStart,
-        tagEnd: reasoningTagEnd,
-        hasInlineTags: hasInlineTags,
-      );
-
       final apiMessages = promptResult.messages
           .where((m) => m.content.trim().isNotEmpty)
           .map((m) => m.toApiMap())
           .toList();
       final previousApiMessages = _lastRequestsBySession[session.id];
       _rememberRequest(session.id, apiMessages);
+      _log(
+        'base prompt ready char=$_charId session=${session.id} '
+        'messages=${apiMessages.length} model=${apiConfig.model} '
+        'protocol=${apiConfig.protocol}',
+      );
 
-      final startGenTime = DateTime.now();
-      final transport = pickChatTransport(apiConfig.protocol);
-      ChatState? finalState;
       final coverage = promptResult.memoryCoverage.isNotEmpty
           ? promptResult.memoryCoverage
           : payload.memoryCoverage;
       final memoryDiagnostics = coverage['diagnostics'];
       final triggeredLorebooks = promptResult.triggeredLorebooks;
       final triggeredMemories = promptResult.triggeredMemories;
+
+      final studioConfig = await _ref
+          .read(memoryStudioServiceProvider)
+          .getEnabledConfig(session.id);
+      if (_isAborted()) {
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
+      }
+      if (studioConfig != null) {
+        _log(
+          'studio intercept char=$_charId session=${session.id} '
+          'agents=${studioConfig.agents.length}',
+        );
+        final promptResult = await buildPromptInIsolate(payload);
+        if (_isAborted()) {
+          return ChatState(
+            session: saveSession ?? session,
+            isGenerating: false,
+            visibleStartIndex: vsi,
+          );
+        }
+        final startGenTime = DateTime.now();
+        bool studioFrameScheduled = false;
+        var latestStudioText = '';
+        String? latestStudioReasoning;
+        var latestStudioOutputs = const <Map<String, dynamic>>[];
+        void scheduleStudioStreamingUpdate() {
+          if (studioFrameScheduled) return;
+          studioFrameScheduled = true;
+          SchedulerBinding.instance.scheduleFrameCallback((_) {
+            studioFrameScheduled = false;
+            if (_isAborted()) return;
+            _ref
+                .read(streamingStateProvider(_charId).notifier)
+                .state = StreamingState(
+              text: latestStudioText,
+              reasoning: latestStudioReasoning,
+              studioOutputs: latestStudioOutputs,
+            );
+          });
+        }
+
+        final studioOutputsSub = _ref.listen<List<Map<String, dynamic>>>(
+          studioStreamingOutputsProvider(session.id),
+          (_, next) {
+            if (_isAborted()) return;
+            latestStudioOutputs = next;
+            scheduleStudioStreamingUpdate();
+          },
+        );
+        final previousBriefs = studioFinalOnly
+            ? _studioBriefsFromSwipeMeta(previousSwipesMeta, previousSwipeId)
+            : const <StudioStageBrief>[];
+        final studioService = _ref.read(memoryStudioServiceProvider);
+        final studioResult = studioFinalOnly && previousBriefs.isNotEmpty
+            ? await studioService.runFinalAgentOnly(
+                config: studioConfig,
+                promptResult: promptResult,
+                promptPayload: payload,
+                apiConfig: apiConfig,
+                sessionId: session.id,
+                priorBriefs: previousBriefs,
+                cancelToken: cancelToken,
+                onFinalResponseUpdate: (text, reasoning) {
+                  if (_isAborted()) return;
+                  latestStudioText = text;
+                  latestStudioReasoning = reasoning;
+                  scheduleStudioStreamingUpdate();
+                },
+              )
+            : await studioService.runPipeline(
+                config: studioConfig,
+                promptResult: promptResult,
+                promptPayload: payload,
+                apiConfig: apiConfig,
+                sessionId: session.id,
+                cancelToken: cancelToken,
+                onFinalResponseUpdate: (text, reasoning) {
+                  if (_isAborted()) return;
+                  latestStudioText = text;
+                  latestStudioReasoning = reasoning;
+                  scheduleStudioStreamingUpdate();
+                },
+              );
+        studioOutputsSub.close();
+        if (_isAborted() || studioResult.status == 'aborted') {
+          return ChatState(
+            session: saveSession ?? session,
+            isGenerating: false,
+            visibleStartIndex: vsi,
+          );
+        }
+        if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
+          final message =
+              studioResult.error ?? 'Studio failed: ${studioResult.status}';
+          _log(
+            'studio failed char=$_charId session=${session.id} '
+            'status=${studioResult.status} error=$message',
+          );
+          if (regenTargetId != null && saveSession != null) {
+            return _writer.writeRegenError(
+              errorText: message,
+              saveSession: saveSession,
+              regenTargetId: regenTargetId,
+              visibleStartIndex: vsi,
+            );
+          }
+          return _writer.writeError(
+            errorText: message,
+            currentSession: session,
+            visibleStartIndex: vsi,
+          );
+        }
+
+        final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
+        _log(
+          'studio write assistant char=$_charId session=${session.id} '
+          'elapsedMs=$elapsed chars=${studioResult.response.length} '
+          'briefs=${studioResult.stageBriefs.length}',
+        );
+        final finalState = _writer.writeAssistant(
+          text: studioResult.response,
+          reasoning: studioResult.reasoning.isNotEmpty
+              ? studioResult.reasoning
+              : null,
+          currentSession: saveSession ?? session,
+          isAborted: _isAborted,
+          pendingSessionVars: pendingSessionVars,
+          genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
+          tokens: estimateTokens(studioResult.response),
+          rawResponse: studioResult.rawResponseJson ?? studioResult.response,
+          previousSwipes: previousSwipes,
+          previousSwipeId: previousSwipeId,
+          previousReasoning: previousReasoning,
+          previousGenTime: previousGenTime,
+          previousTokens: previousTokens,
+          previousSwipesMeta: previousSwipesMeta,
+          guidanceText: guidanceText,
+          memoryCoverage: coverage,
+          isAllReasoning: false,
+          triggeredLorebooks: triggeredLorebooks,
+          triggeredMemories: triggeredMemories,
+          studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
+          regenTargetId: regenTargetId,
+          visibleStartIndex: vsi,
+        );
+        if (memoryDiagnostics is Map<String, dynamic> &&
+            finalState.session != null) {
+          final messageId = _lastAssistantId(
+            finalState.session!,
+            regenTargetId,
+          );
+          _ref
+              .read(lastMemoryActivityProvider(_charId).notifier)
+              .state = MemoryActivityState(
+            sessionId: finalState.session!.id,
+            messageId: messageId,
+            diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
+            updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+          );
+        } else {
+          _ref.read(lastMemoryActivityProvider(_charId).notifier).state = null;
+        }
+        if (finalState.session != null) {
+          unawaited(
+            _ref
+                .read(memoryPostTurnServiceProvider)
+                .runPostTurn(finalState.session!.id),
+          );
+        }
+        return finalState;
+      }
+
+      _log('studio not active char=$_charId session=${session.id}');
+
+      final accumulator = StreamAccumulator(
+        tagStart: reasoningTagStart,
+        tagEnd: reasoningTagEnd,
+        hasInlineTags: hasInlineTags,
+      );
+
+      final startGenTime = DateTime.now();
+      final transport = pickChatTransport(apiConfig.protocol);
+      ChatState? finalState;
 
       bool frameScheduled = false;
 
@@ -271,6 +461,15 @@ class StreamGenerationService {
             _ref.read(lastMemoryActivityProvider(_charId).notifier).state =
                 null;
           }
+          // Post-turn memory pipeline (Phase G4): fire-and-forget.
+          // Does NOT block generation or user interaction.
+          if (finalState?.session != null) {
+            unawaited(
+              _ref
+                  .read(memoryPostTurnServiceProvider)
+                  .runPostTurn(finalState!.session!.id),
+            );
+          }
         },
         onError: (error) {
           final isCancelled =
@@ -352,5 +551,57 @@ class StreamGenerationService {
       if (message.role == 'assistant') return message.id;
     }
     return null;
+  }
+
+  static List<Map<String, dynamic>> _studioOutputsToJson(
+    List<StudioStageBrief> briefs,
+  ) {
+    return briefs
+        .map(
+          (b) => {
+            'id': b.agentId,
+            'name': b.agentName,
+            'content': b.brief,
+            'status': b.status,
+            'refreshPolicy': b.refreshPolicy,
+            if (b.cacheHit) 'cacheHit': true,
+            if (b.cacheKey != null) 'cacheKey': b.cacheKey,
+            if (b.error != null) 'error': b.error,
+          },
+        )
+        .toList(growable: false);
+  }
+
+  static List<StudioStageBrief> _studioBriefsFromSwipeMeta(
+    List<Map<String, dynamic>>? swipesMeta,
+    int swipeId,
+  ) {
+    if (swipesMeta == null || swipeId < 0 || swipeId >= swipesMeta.length) {
+      return const [];
+    }
+    final raw = swipesMeta[swipeId]['studioOutputs'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map<dynamic, dynamic>>()
+        .map((item) {
+          final json = Map<String, dynamic>.from(item);
+          return StudioStageBrief(
+            agentId: json['id'] as String? ?? '',
+            agentName: json['name'] as String? ?? 'Studio Agent',
+            brief: json['content'] as String? ?? '',
+            disposition: MemoryStudioOutputDisposition.ephemeral,
+            status: json['status'] as String? ?? 'ok',
+            error: json['error'] as String?,
+            refreshPolicy: json['refreshPolicy'] as String? ?? 'turn',
+            cacheKey: json['cacheKey'] as String?,
+            cacheHit: json['cacheHit'] == true,
+          );
+        })
+        .where((b) => b.agentId.isNotEmpty && b.brief.trim().isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static void _log(String message) {
+    debugPrint('[StudioGen] $message');
   }
 }
