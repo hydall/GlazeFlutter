@@ -39,6 +39,7 @@ final studioRuntimeStateProvider = StateProvider<StudioRuntimeState>(
 );
 
 const _mandatoryBlockIds = {'char_card', 'char_personality', 'user_persona'};
+const _studioAgentStartDelay = Duration(seconds: 2);
 
 class StudioRuntimeState {
   final String? sessionId;
@@ -194,7 +195,7 @@ class MemoryStudioService {
           ? <StudioStageBrief>[]
           : await Future.wait([
               for (var i = 0; i < intermediateAgents.length; i++)
-                _runIntermediateAgentWithCache(
+                _runStaggeredIntermediateAgent(
                   index: i,
                   agent: intermediateAgents[i],
                   promptResult: promptResult,
@@ -268,6 +269,41 @@ class MemoryStudioService {
       _ref.read(studioRuntimeStateProvider.notifier).state =
           const StudioRuntimeState.idle();
     }
+  }
+
+  Future<StudioStageBrief> _runStaggeredIntermediateAgent({
+    required int index,
+    required StudioAgent agent,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required StudioConfig config,
+    required String sessionId,
+    required CancelToken cancelToken,
+    required String sceneKey,
+    required int turnIndex,
+  }) async {
+    if (index > 0) {
+      await Future<void>.delayed(_studioAgentStartDelay * index);
+      if (cancelToken.isCancelled) {
+        throw DioException.requestCancelled(
+          requestOptions: RequestOptions(),
+          reason: 'Studio pipeline cancelled before agent start',
+        );
+      }
+    }
+    return _runIntermediateAgentWithCache(
+      index: index,
+      agent: agent,
+      promptResult: promptResult,
+      promptPayload: promptPayload,
+      apiConfig: apiConfig,
+      config: config,
+      sessionId: sessionId,
+      cancelToken: cancelToken,
+      sceneKey: sceneKey,
+      turnIndex: turnIndex,
+    );
   }
 
   Future<StudioPipelineResult> runFinalAgentOnly({
