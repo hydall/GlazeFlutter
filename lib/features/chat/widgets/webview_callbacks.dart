@@ -8,7 +8,7 @@ typedef MessageContextCallback =
     );
 typedef SwipeCallback = void Function(String id, String direction);
 typedef GreetingCallback = void Function(String id, int direction);
-typedef RegenerateCallback = void Function(String id);
+typedef RegenerateCallback = void Function(String id, String mode);
 typedef ToggleHiddenCallback = void Function(String id);
 typedef InjectClickCallback = void Function(String id);
 typedef MemoryClickCallback = void Function(String id);

@@ -26,6 +26,7 @@ abstract class StudioConfig with _$StudioConfig {
     @Default('') String sourcePresetHash,
     @Default('') String buildApiConfigId,
     @Default('') String runApiConfigId,
+    @Default('') String builderPromptTemplate,
     @Default([]) List<String> selectedBlockIds,
     @Default(false) bool selectedBlockIdsInitialized,
     @Default(0) int createdAt,

@@ -38,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 42;
+  int get schemaVersion => 43;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -502,6 +502,18 @@ class AppDatabase extends _$AppDatabase {
           "THEN 'Studio Profile' ELSE 'Studio: ' || source_preset_id END "
           "WHERE profile_name IS NULL OR profile_name = ''",
         );
+      }
+      if (from < 43) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('builder_prompt_template')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.builderPromptTemplate,
+          );
+        }
       }
     },
   );

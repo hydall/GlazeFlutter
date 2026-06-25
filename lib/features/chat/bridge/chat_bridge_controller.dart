@@ -219,7 +219,7 @@ class ChatBridgeController {
   onMessageContext;
   void Function(String id, String direction)? onSwipe;
   void Function(String id, int direction)? onChangeGreeting;
-  void Function(String id)? onRegenerate;
+  void Function(String id, String mode)? onRegenerate;
   void Function(String action, String text)? onSelectionAction;
   void Function(String id, String text)? onEditSave;
   void Function(String outputId, String messageId)? onStudioOutputEdit;
@@ -345,8 +345,6 @@ class ChatBridgeController {
         onImageClick?.call(s);
       case 'onImgDownload':
         onImgDownload?.call(s);
-      case 'onRegenerate':
-        onRegenerate?.call(s);
       case 'onEditCancel':
         onEditCancel?.call(s);
       case 'onMemoryClick':
@@ -417,6 +415,8 @@ class ChatBridgeController {
         onStudioOutputEdit?.call(id, s);
       case 'onStudioOutputRegen':
         onStudioOutputRegen?.call(id, s);
+      case 'onRegenerate':
+        onRegenerate?.call(id, s);
     }
   }
 

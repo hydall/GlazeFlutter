@@ -521,6 +521,7 @@ if (messageData.isEditing) classes.push('editing');
     const hasSwipes = isChar && m.swipeTotal && m.swipeTotal > 1;
     const hasGreetings = isChar && m.messageIndex === 0 && m.greetingTotal && m.greetingTotal > 1;
     const showRegen = ((!isChar && m.isLast) || m.isError) && !m.isGenerating && !m.isEditing;
+    const showStudioFinalRegen = showRegen && isChar && m.isLast && m.studioOutputs && m.studioOutputs.length;
 
     if (hasSwipes) {
       center.appendChild(this._createSwitcher(m.id, m.swipeIndex || 0, m.swipeTotal, 'swipe'));
@@ -551,12 +552,13 @@ if (messageData.isEditing) classes.push('editing');
     if (showRegen) {
       const regen = document.createElement('div');
       regen.className = 'msg-regenerate';
-      if (hasSwipes || hasGreetings) regen.classList.add('icon-only');
+      if (hasSwipes || hasGreetings || showStudioFinalRegen) regen.classList.add('icon-only');
       regen.dataset.action = 'regenerate';
       regen.dataset.messageId = m.id;
       regen.dataset.mode = 'magic';
+      regen.title = showStudioFinalRegen ? 'Regenerate full Studio pipeline' : 'Regenerate';
       regen.innerHTML = ICON.regen;
-      if (!hasSwipes && !hasGreetings) {
+      if (!hasSwipes && !hasGreetings && !showStudioFinalRegen) {
         const span = document.createElement('span');
         span.textContent = '↻';
         // text label; Flutter side may localize
@@ -564,6 +566,21 @@ if (messageData.isEditing) classes.push('editing');
         regen.appendChild(span);
       }
       center.appendChild(regen);
+
+      if (showStudioFinalRegen) {
+        const finalRegen = document.createElement('div');
+        finalRegen.className = 'msg-regenerate icon-only studio-final-only';
+        finalRegen.dataset.action = 'regenerate';
+        finalRegen.dataset.messageId = m.id;
+        finalRegen.dataset.mode = 'studio-final';
+        finalRegen.title = 'Regenerate final Studio agent only';
+        finalRegen.innerHTML = ICON.regen;
+        const badge = document.createElement('span');
+        badge.className = 'studio-final-only-badge';
+        badge.textContent = 'F';
+        finalRegen.appendChild(badge);
+        center.appendChild(finalRegen);
+      }
     }
 
     footer.appendChild(center);

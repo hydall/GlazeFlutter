@@ -299,6 +299,8 @@ class StudioConfigRows extends Table {
   TextColumn get sourcePresetHash => text().withDefault(const Constant(''))();
   TextColumn get buildApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get builderPromptTemplate =>
+      text().withDefault(const Constant(''))();
   TextColumn get selectedBlockIdsJson =>
       text().withDefault(const Constant('[]'))();
   BoolColumn get selectedBlockIdsInitialized =>

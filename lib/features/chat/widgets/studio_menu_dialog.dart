@@ -48,6 +48,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   String? _selectedBuildApiConfigId;
   String? _selectedRunApiConfigId;
   List<StudioPresetOverride> _studioPresetOverrides = const [];
+  String _builderPromptTemplate = '';
   bool _loading = true;
   bool _building = false;
   final Map<String, List<String>> _modelsByApiConfigId = {};
@@ -78,6 +79,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _selectedBuildApiConfigId = contextInfo.buildApiConfig?.id;
           _selectedRunApiConfigId = contextInfo.runApiConfig?.id;
           _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
+          _builderPromptTemplate = config?.builderPromptTemplate ?? '';
           _loading = false;
         });
       }
@@ -115,6 +117,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         preset: preset,
         sessionId: widget.sessionId,
         apiConfig: buildApiConfig,
+        builderPromptTemplate: _builderPromptTemplate,
       );
 
       if (agents.isEmpty) {
@@ -143,6 +146,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         ),
         buildApiConfigId: buildApiConfig.id,
         runApiConfigId: contextInfo.runApiConfig?.id ?? '',
+        builderPromptTemplate: _builderPromptTemplate,
         createdAt: now,
         updatedAt: now,
       );
@@ -270,6 +274,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       final updated = _config!.copyWith(
         buildApiConfigId: contextInfo.buildApiConfig?.id ?? '',
         runApiConfigId: contextInfo.runApiConfig?.id ?? '',
+        builderPromptTemplate: _builderPromptTemplate,
         agentStudioPresetId: contextInfo.agentStudioPresetId,
         finalStudioPresetId: contextInfo.finalStudioPresetId,
         studioPresetOverrides: _studioPresetOverrides,
@@ -500,9 +505,125 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               await _refreshContextInfo(persistSelection: true);
             },
           ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _showBuilderPromptDialog,
+              icon: const Icon(Icons.article_outlined, size: 18),
+              label: const Text('Builder prompt'),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _showBuilderPromptDialog() async {
+    final controller = TextEditingController(
+      text: _builderPromptTemplate.trim().isNotEmpty
+          ? _builderPromptTemplate
+          : StudioDecompositionService.defaultBuilderPromptTemplate,
+    );
+    var useDefault = _builderPromptTemplate.trim().isEmpty;
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (dialogContext, dialogSetState) {
+              return AlertDialog(
+                title: const Text('Studio builder prompt'),
+                content: SizedBox(
+                  width: 760,
+                  height: 620,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'This template is sent to the build model when you rebuild Studio. Keep {{blocksSummary}} where the source preset blocks should be inserted.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.cs.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SwitchListTile(
+                        value: useDefault,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Use default prompt'),
+                        subtitle: const Text(
+                          'Turn off to save a custom builder prompt in this Studio profile.',
+                        ),
+                        onChanged: (value) {
+                          dialogSetState(() {
+                            useDefault = value;
+                            if (value) {
+                              controller.text = StudioDecompositionService
+                                  .defaultBuilderPromptTemplate;
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: controller,
+                          enabled: !useDefault,
+                          expands: true,
+                          maxLines: null,
+                          minLines: null,
+                          textAlignVertical: TextAlignVertical.top,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                            labelText: 'Prompt template',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () async {
+                      final next = useDefault ? '' : controller.text;
+                      setState(() => _builderPromptTemplate = next);
+                      if (_config != null) {
+                        final updated = _config!.copyWith(
+                          builderPromptTemplate: next,
+                          updatedAt: currentTimestampSeconds(),
+                        );
+                        await ref
+                            .read(studioConfigRepoProvider)
+                            .upsert(updated);
+                        if (mounted) setState(() => _config = updated);
+                      }
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop();
+                      }
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Widget _profileSelector() {
@@ -1292,8 +1413,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         ),
         subtitle: Text(
           agent.sourceBlockNames.isNotEmpty
-              ? 'From: ${agent.sourceBlockNames} • Model: ${_agentApiConfigLabel(agent)}'
-              : 'Order: ${agent.order} • Model: ${_agentApiConfigLabel(agent)}',
+              ? 'From: ${agent.sourceBlockNames} • Policy: ${isLast ? 'turn' : _normalizedRefreshPolicy(agent.refreshPolicy)} • Model: ${_agentApiConfigLabel(agent)}'
+              : 'Order: ${agent.order} • Policy: ${isLast ? 'turn' : _normalizedRefreshPolicy(agent.refreshPolicy)} • Model: ${_agentApiConfigLabel(agent)}',
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
         children: [_buildAgentDetails(agent)],
@@ -1302,6 +1423,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   }
 
   Widget _buildAgentDetails(StudioAgent agent) {
+    final isFinal = _config?.agents.lastOrNull?.id == agent.id;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -1326,6 +1448,37 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             style: const TextStyle(fontSize: 12),
             onChanged: (value) =>
                 _updateAgent(agent.copyWith(promptShard: value)),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Refresh policy:',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 4),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'static', label: Text('Static')),
+              ButtonSegment(value: 'scene', label: Text('Scene')),
+              ButtonSegment(value: 'turn', label: Text('Turn')),
+            ],
+            selected: {
+              isFinal ? 'turn' : _normalizedRefreshPolicy(agent.refreshPolicy),
+            },
+            onSelectionChanged: isFinal
+                ? null
+                : (s) => _updateAgent(agent.copyWith(refreshPolicy: s.first)),
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          ),
+          _modelHint(
+            isFinal
+                ? 'Final responder always runs every turn.'
+                : agent.invalidationSignals.isNotEmpty
+                ? 'Invalidates on: ${agent.invalidationSignals.join(', ')}'
+                : 'Static and scene agents may reuse cached briefs.',
           ),
           const SizedBox(height: 16),
           Text(
@@ -1437,6 +1590,13 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
     ref.read(studioConfigRepoProvider).upsert(newConfig);
     setState(() => _config = newConfig);
+  }
+
+  String _normalizedRefreshPolicy(String policy) {
+    return switch (policy.trim().toLowerCase()) {
+      'static' || 'scene' || 'turn' => policy.trim().toLowerCase(),
+      _ => 'turn',
+    };
   }
 }
 

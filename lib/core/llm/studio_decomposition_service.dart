@@ -39,6 +39,7 @@ class StudioDecompositionService {
     required Preset preset,
     required String sessionId,
     ApiConfig? apiConfig,
+    String builderPromptTemplate = '',
     CancelToken? cancelToken,
   }) async {
     final enabledBlocks = preset.blocks.where((b) => b.enabled).toList();
@@ -70,49 +71,10 @@ class StudioDecompositionService {
         })
         .join('\n\n---\n\n');
 
-    final prompt =
-        '''You are a prompt engineering expert. Decompose the following RP preset blocks into a multi-agent pipeline.
-
-Each agent will receive ONLY its assigned instructions plus compact memory context — never the full preset. The final agent produces the actual RP response.
-
-Enabled preset blocks:
-$blocksSummary
-
-Create 3-6 agents. Respond with ONLY a JSON array (no markdown, no explanation):
-[
-  {
-    "name": "Agent Name",
-    "role": "system",
-    "promptShard": "The instructions this agent should follow, extracted/compressed from the relevant preset blocks",
-    "order": 0,
-    "refreshPolicy": "turn",
-    "invalidationSignals": ["scene_changed"],
-    "sourceBlockNames": "block names this agent derives from"
-  }
-]
-
-Rules:
-- Agent with order 0 = memory/continuity curator (gets memory context)
-- Last agent (highest order) = main responder (produces the RP response)
-- Middle agents = directors, scenario writers, style enforcers
-- Each agent's promptShard should be self-contained (2-5 sentences)
-- Distribute preset blocks across agents — don't put everything on one agent
-- System blocks (char_card, scenario, etc.) go to the main responder
-- Jailbreak/content permission blocks go to the main responder
-- CoT/quality control blocks (anti-loop, anti-echo, sensory) go to a director agent
-- From CoT blocks, extract only enforceable quality/context policy. Never preserve hidden chain-of-thought instructions, <think> tags, or "plan internally then output after </think>" text.
-- Genre/tone blocks go to a director or scenario agent
-- Formatting blocks (HTML, comics, images) go to the main responder
-- Variable blocks (setvar) go to the main responder
-- Intermediate agents are fed into the final agent as context. They must produce compact operational briefs, not draft prose.
-- Intermediate agents may include brief do/don't examples derived from the preset, but must never continue the current scene, write in-scene dialogue/actions, or produce the final RP response.
-- Preserve named meta-agents, invisible directors, ghosts, companions, OOC interfaces, and operational checklists as explicit agent instructions. Do not collapse them to a one-line mention.
-- If a block defines a named entity such as Lumia/Ghost in the Machine, one agent promptShard must retain its name, nature, silent-operation rules, OOC interface, and non-exposure rules.
-- For every intermediate agent, assign refreshPolicy conservatively:
-  - "static" = reusable until preset/profile/card/settings change; use for banlists, fixed formatting policy, stable style rules.
-  - "scene" = reusable while location, active cast, scene goal, conflict, relationship state, and tone remain stable; use for scene-level directors.
-  - "turn" = must rerun every user turn; use for continuity, recent history, anti-loop, user-message-sensitive checks, and the final responder.
-- If uncertain, choose "turn". Include short invalidationSignals such as "preset_changed", "scene_changed", "active_cast_changed", "tone_changed", "last_3_replies_changed".''';
+    final prompt = buildDecompositionPrompt(
+      blocksSummary: blocksSummary,
+      builderPromptTemplate: builderPromptTemplate,
+    );
 
     final String? raw;
     try {
@@ -179,6 +141,67 @@ Rules:
     _log('build complete session=$sessionId agents=${result.length}');
     return result;
   }
+
+  String buildDecompositionPrompt({
+    required String blocksSummary,
+    String builderPromptTemplate = '',
+  }) {
+    final template = builderPromptTemplate.trim().isNotEmpty
+        ? builderPromptTemplate.trim()
+        : defaultBuilderPromptTemplate;
+    if (template.contains('{{blocksSummary}}')) {
+      return template.replaceAll('{{blocksSummary}}', blocksSummary);
+    }
+    return '$template\n\nEnabled preset blocks:\n$blocksSummary';
+  }
+
+  static const defaultBuilderPromptTemplate =
+      '''You are a prompt engineering expert. Decompose the following RP preset blocks into a multi-agent pipeline.
+
+Each agent will receive ONLY its assigned instructions plus compact memory context — never the full preset. The final agent produces the actual RP response.
+
+Enabled preset blocks:
+{{blocksSummary}}
+
+Create 3-6 agents. Respond with ONLY a JSON array (no markdown, no explanation):
+[
+  {
+    "name": "Agent Name",
+    "role": "system",
+    "promptShard": "The instructions this agent should follow, extracted/compressed from the relevant preset blocks",
+    "order": 0,
+    "refreshPolicy": "turn",
+    "invalidationSignals": ["scene_changed"],
+    "sourceBlockNames": "block names this agent derives from"
+  }
+]
+
+Rules:
+- Agent with order 0 = memory/continuity curator (gets memory context)
+- Last agent (highest order) = main responder (produces the RP response)
+- Middle agents = directors, scenario writers, style enforcers
+- Each agent's promptShard should be self-contained (2-5 sentences)
+- Distribute preset blocks across agents — don't put everything on one agent
+- System blocks (char_card, scenario, etc.) go to the main responder
+- Jailbreak/content permission blocks go to the main responder
+- CoT/quality control blocks (anti-loop, anti-echo, sensory) go to a director agent
+- Prefer splitting fixed quality policy from recent-history checks:
+  - fixed banlists, forbidden words, formatting rules, and stable prose standards should be their own static agent when substantial.
+  - anti-loop, anti-echo, last-3-replies, recent-history, and user-message-sensitive checks should be turn agents.
+- From CoT blocks, extract only enforceable quality/context policy. Never preserve hidden chain-of-thought instructions, <think> tags, or "plan internally then output after </think>" text.
+- Genre/tone blocks go to a director or scenario agent
+- Formatting blocks (HTML, comics, images) go to the main responder
+- Variable blocks (setvar) go to the main responder
+- Intermediate agents are fed into the final agent as context. They must produce compact operational briefs, not draft prose.
+- Intermediate agents may include brief do/don't examples derived from the preset, but must never continue the current scene, write in-scene dialogue/actions, or produce the final RP response.
+- Preserve named meta-agents, invisible directors, ghosts, companions, OOC interfaces, and operational checklists as explicit agent instructions. Do not collapse them to a one-line mention.
+- If a block defines a named entity such as Lumia/Ghost in the Machine, one agent promptShard must retain its name, nature, silent-operation rules, OOC interface, and non-exposure rules.
+- For every intermediate agent, assign refreshPolicy conservatively:
+  - "static" = reusable until preset/profile/card/settings change; use for banlists, fixed formatting policy, stable style rules.
+  - "scene" = reusable while location, active cast, scene goal, conflict, relationship state, and tone remain stable; use for scene-level directors.
+  - "turn" = must rerun every user turn; use for continuity, recent history, anti-loop, user-message-sensitive checks, and the final responder.
+- Do not mark an agent "turn" just because one source block also contains stable rules; split stable rules into static when possible.
+- If uncertain, choose "turn". Include short invalidationSignals such as "preset_changed", "scene_changed", "active_cast_changed", "tone_changed", "last_3_replies_changed".''';
 
   List<dynamic>? _decodeAgentList(String raw) {
     final candidates = <String>{raw.trim(), ..._jsonPayloadCandidates(raw)};

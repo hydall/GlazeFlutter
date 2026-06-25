@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/memory_studio_service.dart';
+import '../../../core/llm/memory_studio_mode.dart';
 import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/transport/chat_transport_request.dart';
 import '../../../core/llm/transport/transport_factory.dart';
@@ -50,6 +51,7 @@ class StreamGenerationService {
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? guidanceText,
     String? regenTargetId,
+    bool studioFinalOnly = false,
     required ChatState currentState,
   }) async {
     final vsi = currentState.visibleStartIndex;
@@ -200,22 +202,40 @@ class StreamGenerationService {
             scheduleStudioStreamingUpdate();
           },
         );
-        final studioResult = await _ref
-            .read(memoryStudioServiceProvider)
-            .runPipeline(
-              config: studioConfig,
-              promptResult: promptResult,
-              promptPayload: payload,
-              apiConfig: apiConfig,
-              sessionId: session.id,
-              cancelToken: cancelToken,
-              onFinalResponseUpdate: (text, reasoning) {
-                if (_isAborted()) return;
-                latestStudioText = text;
-                latestStudioReasoning = reasoning;
-                scheduleStudioStreamingUpdate();
-              },
-            );
+        final previousBriefs = studioFinalOnly
+            ? _studioBriefsFromSwipeMeta(previousSwipesMeta, previousSwipeId)
+            : const <StudioStageBrief>[];
+        final studioService = _ref.read(memoryStudioServiceProvider);
+        final studioResult = studioFinalOnly && previousBriefs.isNotEmpty
+            ? await studioService.runFinalAgentOnly(
+                config: studioConfig,
+                promptResult: promptResult,
+                promptPayload: payload,
+                apiConfig: apiConfig,
+                sessionId: session.id,
+                priorBriefs: previousBriefs,
+                cancelToken: cancelToken,
+                onFinalResponseUpdate: (text, reasoning) {
+                  if (_isAborted()) return;
+                  latestStudioText = text;
+                  latestStudioReasoning = reasoning;
+                  scheduleStudioStreamingUpdate();
+                },
+              )
+            : await studioService.runPipeline(
+                config: studioConfig,
+                promptResult: promptResult,
+                promptPayload: payload,
+                apiConfig: apiConfig,
+                sessionId: session.id,
+                cancelToken: cancelToken,
+                onFinalResponseUpdate: (text, reasoning) {
+                  if (_isAborted()) return;
+                  latestStudioText = text;
+                  latestStudioReasoning = reasoning;
+                  scheduleStudioStreamingUpdate();
+                },
+              );
         studioOutputsSub.close();
         if (_isAborted() || studioResult.status == 'aborted') {
           return ChatState(
@@ -549,6 +569,35 @@ class StreamGenerationService {
             if (b.error != null) 'error': b.error,
           },
         )
+        .toList(growable: false);
+  }
+
+  static List<StudioStageBrief> _studioBriefsFromSwipeMeta(
+    List<Map<String, dynamic>>? swipesMeta,
+    int swipeId,
+  ) {
+    if (swipesMeta == null || swipeId < 0 || swipeId >= swipesMeta.length) {
+      return const [];
+    }
+    final raw = swipesMeta[swipeId]['studioOutputs'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map<dynamic, dynamic>>()
+        .map((item) {
+          final json = Map<String, dynamic>.from(item);
+          return StudioStageBrief(
+            agentId: json['id'] as String? ?? '',
+            agentName: json['name'] as String? ?? 'Studio Agent',
+            brief: json['content'] as String? ?? '',
+            disposition: MemoryStudioOutputDisposition.ephemeral,
+            status: json['status'] as String? ?? 'ok',
+            error: json['error'] as String?,
+            refreshPolicy: json['refreshPolicy'] as String? ?? 'turn',
+            cacheKey: json['cacheKey'] as String?,
+            cacheHit: json['cacheHit'] == true,
+          );
+        })
+        .where((b) => b.agentId.isNotEmpty && b.brief.trim().isNotEmpty)
         .toList(growable: false);
   }
 

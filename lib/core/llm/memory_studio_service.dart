@@ -265,6 +265,77 @@ class MemoryStudioService {
     }
   }
 
+  Future<StudioPipelineResult> runFinalAgentOnly({
+    required StudioConfig config,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required String sessionId,
+    required List<StudioStageBrief> priorBriefs,
+    CancelToken? cancelToken,
+    void Function(String text, String? reasoning)? onFinalResponseUpdate,
+  }) async {
+    final token = cancelToken ?? CancelToken();
+    if (token.isCancelled) {
+      return const StudioPipelineResult(status: 'aborted', response: '');
+    }
+
+    try {
+      final agents = config.agents.where((a) => a.enabled).toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
+      if (agents.isEmpty) {
+        return const StudioPipelineResult(status: 'disabled', response: '');
+      }
+
+      final finalAgent = agents.last;
+      _ref.read(studioStreamingOutputsProvider(sessionId).notifier).state = [
+        for (final brief in priorBriefs) _stageBriefToStreamingJson(brief),
+      ];
+      _ref.read(studioRuntimeStateProvider.notifier).state = StudioRuntimeState(
+        sessionId: sessionId,
+        agentId: finalAgent.id,
+        agentName: finalAgent.name,
+        index: agents.length - 1,
+        total: agents.length,
+        canFinishAgent: true,
+      );
+
+      final result = await _runAgent(
+        agent: finalAgent,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        apiConfig: apiConfig,
+        config: config,
+        priorBriefs: priorBriefs,
+        sessionId: sessionId,
+        cancelToken: token,
+        isFinalResponse: true,
+        onFinalResponseUpdate: onFinalResponseUpdate,
+      );
+      if (token.isCancelled) {
+        return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+      return StudioPipelineResult(
+        status: 'ok',
+        response: result.text,
+        reasoning: result.reasoning,
+        rawResponseJson: result.rawResponseJson,
+        stageBriefs: priorBriefs,
+      );
+    } on TimeoutException catch (e) {
+      return StudioPipelineResult(
+        status: 'timeout',
+        response: '',
+        error: e.message?.isNotEmpty == true ? e.message : 'Studio timed out',
+      );
+    } catch (e) {
+      if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
+        return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+      return StudioPipelineResult(status: 'error', response: '', error: '$e');
+    }
+  }
+
   Future<StudioStageBrief> regenerateIntermediateAgent({
     required String sessionId,
     required String agentId,
@@ -1175,6 +1246,20 @@ class MemoryStudioService {
       next.add(itemJson());
     }
     notifier.state = next;
+  }
+
+  Map<String, dynamic> _stageBriefToStreamingJson(StudioStageBrief brief) {
+    final json = <String, dynamic>{
+      'id': brief.agentId,
+      'name': brief.agentName,
+      'content': brief.brief,
+      'status': brief.status,
+      'refreshPolicy': brief.refreshPolicy,
+    };
+    if (brief.error != null) json['error'] = brief.error;
+    if (brief.cacheHit) json['cacheHit'] = true;
+    if (brief.cacheKey != null) json['cacheKey'] = brief.cacheKey;
+    return json;
   }
 
   String _normalizeRefreshPolicy(String policy) {

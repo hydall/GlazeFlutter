@@ -1117,10 +1117,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                             .read(chatProvider(widget.charId).notifier)
                             .setGreeting(idx, dir);
                       },
-                      onRegenerate: (id) {
+                      onRegenerate: (id, mode) {
                         ref
                             .read(chatProvider(widget.charId).notifier)
-                            .regenerateLastAssistant();
+                            .regenerateLastAssistant(
+                              studioFinalOnly: mode == 'studio-final',
+                            );
                         ref
                             .read(memorySidecarPrewarmCacheProvider)
                             .invalidateSession(widget.state.session?.id ?? '');
