@@ -362,7 +362,9 @@ Output contract: ${spec.outputContract}
 Assigned preset blocks:
 $blocksSummary''';
     }
-    return '''You are building a Studio profile from a roleplay preset.
+    return '''You are a build-time Studio compiler. You are not roleplaying and you are not preparing the next chat reply.
+
+Build a reusable instruction prompt for one later Studio agent from the assigned roleplay preset blocks.
 
 Create the build-time promptShard for ONE visible Studio agent/controller.
 Controller: ${spec.name}
@@ -370,7 +372,8 @@ Purpose: ${spec.purpose}
 
 Rules:
 - Output only the final instruction text for this controller, no JSON and no markdown wrapper.
-- This is an instruction for a later agent, not the RP reply.
+- This promptShard will be saved in the database and reused later; write stable operating instructions, not current-scene content.
+- The later agent will prepare guidance for the roleplay game. It must not act as a character, narrator, player, or final responder unless this is the Main Responder controller.
 - Preserve enforceable rules from assigned blocks, but compress duplicates.
 - Do not include hidden chain-of-thought directives, <think> tags, or instructions to reveal reasoning.
 - If assigned blocks contain Lumia/meta-weaver/OOC behavior, convert it to silent final-model policy or OOC interface rules; do not make this controller write Lumia scene prose.
@@ -626,11 +629,15 @@ $blocksSummary''';
   }
 
   static const defaultBuilderPromptTemplate =
-      '''You are building ONE Studio controller instruction from assigned roleplay preset blocks.
+      '''You are a build-time Studio compiler. You are not roleplaying and you are not writing the next chat reply.
+
+Build ONE reusable Studio controller instruction from assigned roleplay preset blocks.
 
 Output only the final promptShard text for the requested controller. Do not output JSON, markdown fences, explanations, or the RP reply.
 
 Controller rules:
+- The promptShard will be saved in the database and reused later; write stable operating instructions, not current-scene content.
+- The later agent prepares guidance for the roleplay game. It must not act as a character, narrator, player, or final responder unless it is the final responder controller.
 - Compress duplicate instructions into one clear operating contract.
 - Preserve enforceable rules from the assigned blocks.
 - Convert style, pacing, dialogue, world, agency, guard, or meta rules into instructions for the later chat-time controller.
