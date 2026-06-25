@@ -122,6 +122,66 @@ class ChatRepo implements SyncChatStore {
     )..where((t) => t.sessionId.equals(sessionId))).go();
   }
 
+  /// Atomically updates a single message's content and appends a new swipe.
+  ///
+  /// Used by the POST-cleaner (Stage 4) to replace the assistant text while
+  /// preserving the original as a swipe. Wraps the read-modify-write in a
+  /// transaction so concurrent writes cannot interleave (database.md Rule 3).
+  ///
+  /// [messageId] — the message to update.
+  /// [newContent] — the cleaned text that becomes the active content.
+  /// [previousContent] — the original text, appended as the last swipe.
+  /// Returns `true` if the message was found and updated.
+  Future<bool> appendSwipeToMessage({
+    required String sessionId,
+    required String messageId,
+    required String newContent,
+    required String previousContent,
+  }) async {
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.chatSessions)
+            ..where((t) => t.sessionId.equals(sessionId)))
+          .getSingleOrNull();
+      if (row == null) return false;
+
+      final messages = (jsonDecode(row.messagesJson) as List<dynamic>)
+          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      var found = false;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].id == messageId) {
+          final msg = messages[i];
+          final swipes = List<String>.from(msg.swipes);
+          // Preserve original as previous swipe, add cleaned as new swipe.
+          if (swipes.isNotEmpty) {
+            swipes[swipes.length - 1] = previousContent;
+          }
+          swipes.add(newContent);
+          messages[i] = msg.copyWith(
+            content: newContent,
+            swipes: swipes,
+            swipeId: swipes.length - 1,
+          );
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) return false;
+
+      await (_db.update(_db.chatSessions)
+            ..where((t) => t.sessionId.equals(sessionId)))
+          .write(
+        ChatSessionsCompanion(
+          messagesJson:
+              Value(jsonEncode(messages.map((e) => e.toJson()).toList())),
+        ),
+      );
+      return true;
+    });
+  }
+
   /// Deletes all sessions belonging to [characterId], along with all per-session
   /// dependent data (memory books, summaries). Returns the deleted session IDs
   /// for sync-deletion tracking.

@@ -14,6 +14,7 @@ import '../llm/memory_cadence_service.dart';
 import '../llm/memory_post_turn_service.dart';
 import '../llm/memory_consolidation_service.dart';
 import '../llm/memory_agentic_service.dart';
+import '../llm/memory_agentic_write_service.dart';
 import '../llm/memory_studio_service.dart';
 import '../llm/studio_decomposition_service.dart';
 import '../llm/post_cleaner_service.dart';
@@ -83,6 +84,12 @@ final memoryConsolidationServiceProvider =
 /// Agentic memory service (Phase 10). Read-only searchMemory tool.
 final memoryAgenticServiceProvider = Provider<MemoryAgenticService>((ref) {
   return MemoryAgenticService(ref);
+});
+
+/// Agentic write-loop service (Stage 1). Trackers + memory drafts.
+final memoryAgenticWriteServiceProvider =
+    Provider<MemoryAgenticWriteService>((ref) {
+  return MemoryAgenticWriteService(ref);
 });
 
 /// Studio Mode pipeline service (Phase 11). Multi-stage RP pipeline.

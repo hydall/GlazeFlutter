@@ -6,6 +6,7 @@ import 'package:glaze_flutter/core/db/repositories/tracker_repo.dart';
 import 'package:glaze_flutter/core/llm/memory_agentic_policy.dart';
 import 'package:glaze_flutter/core/llm/memory_agentic_service.dart';
 import 'package:glaze_flutter/core/llm/memory_agentic_tools.dart';
+import 'package:glaze_flutter/core/llm/memory_agentic_write_service.dart';
 
 AppDatabase _testDb() => AppDatabase.forTesting(NativeDatabase.memory());
 

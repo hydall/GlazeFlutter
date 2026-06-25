@@ -511,7 +511,7 @@ class GenerationPipeline {
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
-      final agenticService = ref.read(memoryAgenticServiceProvider);
+      final agenticService = ref.read(memoryAgenticWriteServiceProvider);
       await agenticService.runWriteLoop(
         sessionId: sessionId,
         settings: book.settings,

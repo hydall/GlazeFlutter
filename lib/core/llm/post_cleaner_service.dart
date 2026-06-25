@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -7,31 +6,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/memory_book.dart';
 import '../state/db_provider.dart';
-import '../utils/time_helpers.dart';
 import '../../features/chat/chat_session_service.dart';
 import '../../features/chat_history/chat_history_provider.dart';
-import '../../features/settings/api_list_provider.dart';
-import 'transport/chat_transport_request.dart';
-import 'transport/llm_protocol.dart';
-import 'transport/transport_factory.dart';
+import 'sidecar_llm_client.dart';
 
 /// POST-cleaner service (Stage 4).
 ///
 /// After generation completes, this service rewrites the final assistant
 /// message to remove clichés, repetitive phrasings, and common AI-isms.
 /// The rewrite is silent — the text in chat is replaced without a diff or
-/// swipe UI. The original text is preserved as the previous swipe so the
-/// user can still access it. "What changed" is visible in the request
-/// preview (via studioOutputs / memoryCoverage diagnostics).
+/// swipe UI. The original text is preserved as a swipe so the user can
+/// still access it.
 ///
-/// Uses the sidecar JSON approach (same as agentic write-loop): one
-/// non-streaming LLM call. Falls back to the original text on any error.
+/// Uses [SidecarLlmClient] for the sidecar LLM call and
+/// [ChatRepo.appendSwipeToMessage] for the atomic DB update.
+/// Falls back to the original text on any error.
 class PostCleanerService {
   final Ref _ref;
+  final SidecarLlmClient _llm;
 
-  PostCleanerService(this._ref);
+  PostCleanerService(this._ref) : _llm = SidecarLlmClient(_ref);
 
-  /// Run the POST-cleaner on the last assistant message in [session].
+  /// Run the POST-cleaner on the last assistant message.
   ///
   /// Returns the cleaned text, or the original if cleaning was disabled,
   /// failed, or the LLM returned an empty/refusal response.
@@ -55,7 +51,14 @@ class PostCleanerService {
     }
 
     try {
+      final config =
+          await _llm.resolveConfig(settings, errorLabel: 'post-cleaner');
+      if (token.isCancelled) {
+        return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
+      }
+
       final cleaned = await _askLlmForCleanedText(
+        config: config,
         settings: settings,
         assistantText: assistantText,
         cancelToken: token,
@@ -70,7 +73,6 @@ class PostCleanerService {
       }
 
       // Safety: if the cleaned text is drastically shorter or longer, skip.
-      // The cleaner should refine, not rewrite from scratch.
       final ratio = cleaned.length / assistantText.length;
       if (ratio < 0.3 || ratio > 3.0) {
         debugPrint(
@@ -103,39 +105,11 @@ class PostCleanerService {
   }
 
   Future<String?> _askLlmForCleanedText({
+    required SidecarApiConfig config,
     required MemoryBookSettings settings,
     required String assistantText,
     required CancelToken cancelToken,
   }) async {
-    final isCustom = settings.sidecarSource == 'custom';
-    String endpoint;
-    String apiKey;
-    String model;
-    String protocol;
-
-    if (isCustom) {
-      endpoint = settings.sidecarEndpoint;
-      apiKey = settings.sidecarApiKey;
-      model = settings.sidecarModel;
-      protocol = LlmProtocol.openai;
-    } else {
-      await _ref.read(apiListProvider.future);
-      final chatConfig = _ref.read(activeApiConfigProvider);
-      if (chatConfig == null) {
-        throw Exception('No chat API config available for post-cleaner');
-      }
-      endpoint = chatConfig.endpoint ?? '';
-      apiKey = chatConfig.apiKey ?? '';
-      model = settings.sidecarModel.isNotEmpty
-          ? settings.sidecarModel
-          : (chatConfig.model ?? '');
-      protocol = chatConfig.protocol;
-    }
-
-    if (endpoint.isEmpty || model.isEmpty) {
-      throw Exception('Post-cleaner API not configured');
-    }
-
     final prompt = '''You are a prose editor for a roleplay story. Your job is to clean up the following assistant response by removing clichés, repetitive phrasings, and common AI-isms.
 
 Rules:
@@ -150,42 +124,22 @@ Rules:
 Assistant response to clean:
 $assistantText''';
 
-    final completer = Completer<String>();
-    final transport = pickChatTransport(protocol);
-
-    transport.stream(
-      request: ChatTransportRequest(
-        endpoint: endpoint,
-        apiKey: apiKey,
-        model: model,
-        messages: [
-          {'role': 'user', 'content': prompt},
-        ],
-        maxTokens: (assistantText.length ~/ 3).clamp(500, 8000),
-        temperature: 0.3,
-        topP: 1.0,
-        stream: false,
-      ),
+    final raw = await _llm.callOnce(
+      config: config,
+      prompt: prompt,
+      maxTokens: (assistantText.length ~/ 3).clamp(500, 8000),
+      temperature: 0.3,
+      timeoutMs: settings.sidecarTimeoutMs,
       cancelToken: cancelToken,
-      onComplete: (text, _, {rawResponseJson}) {
-        if (!completer.isCompleted) completer.complete(text);
-      },
-      onError: (error) {
-        if (!completer.isCompleted) completer.completeError(error);
-      },
-    );
-
-    final raw = await completer.future.timeout(
-      Duration(milliseconds: settings.sidecarTimeoutMs),
     );
 
     final cleaned = raw.trim();
-    if (cleaned.isEmpty) return null;
-    return cleaned;
+    return cleaned.isEmpty ? null : cleaned;
   }
 
   /// Applies the cleaned text to the session: updates the last assistant
-  /// message content in DB and invalidates the chat history provider.
+  /// message content in DB (atomically via [ChatRepo.appendSwipeToMessage])
+  /// and invalidates the chat history provider.
   Future<void> applyCleanedText({
     required String sessionId,
     required String messageId,
@@ -193,41 +147,19 @@ $assistantText''';
     required String originalText,
   }) async {
     final chatRepo = _ref.read(chatRepoProvider);
-    final session = await chatRepo.getById(sessionId);
-    if (session == null) return;
-
-    final messages = List<dynamic>.from(session.messages);
-    var updated = false;
-    for (var i = messages.length - 1; i >= 0; i--) {
-      final msg = messages[i];
-      if (msg is Map<String, dynamic> && msg['id'] == messageId) {
-        // Preserve original as a swipe if swipes exist.
-        final swipes = msg['swipes'] as List<dynamic>?;
-        if (swipes != null && swipes.length > 1) {
-          // Keep the original as the previous swipe, set cleaned as current.
-          swipes[swipes.length - 1] = originalText;
-          swipes.add(cleanedText);
-          msg['swipes'] = swipes;
-          msg['swipeId'] = swipes.length - 1;
-        } else {
-          // No swipes: add original + cleaned.
-          msg['swipes'] = [originalText, cleanedText];
-          msg['swipeId'] = 1;
-        }
-        msg['content'] = cleanedText;
-        updated = true;
-        break;
-      }
-    }
-
+    final updated = await chatRepo.appendSwipeToMessage(
+      sessionId: sessionId,
+      messageId: messageId,
+      newContent: cleanedText,
+      previousContent: originalText,
+    );
     if (!updated) return;
 
-    final updatedSession = session.copyWith(
-      messages: messages.cast(),
-      updatedAt: currentTimestampSeconds(),
-    );
-    await chatRepo.put(updatedSession);
-    ChatSessionService.updateCache(updatedSession);
+    // Refresh cache + reactive streams.
+    final session = await chatRepo.getById(sessionId);
+    if (session != null) {
+      ChatSessionService.updateCache(session);
+    }
     _ref.invalidate(chatHistoryProvider);
   }
 }

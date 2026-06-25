@@ -1,0 +1,323 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../models/memory_book.dart';
+import '../models/tracker.dart';
+import '../state/db_provider.dart';
+import '../utils/id_generator.dart';
+import '../utils/time_helpers.dart';
+import 'memory_agentic_policy.dart';
+import 'memory_agentic_tools.dart';
+import 'sidecar_llm_client.dart';
+
+/// Agentic write-loop service (Stage 1).
+///
+/// After a turn is finalized, this service runs a sidecar LLM call that
+/// decides what to persist: trackers (lightweight key-value state) and/or
+/// memory drafts (pending human-approval entries). All writes go through
+/// the policy gate (default-deny).
+///
+/// Extracted from `MemoryAgenticService` to keep each service under 250 lines
+/// and focused on one responsibility (CODE_STYLE: one class = one job).
+class MemoryAgenticWriteService {
+  final Ref _ref;
+  final SidecarLlmClient _llm;
+
+  MemoryAgenticWriteService(this._ref)
+      : _llm = SidecarLlmClient(_ref);
+
+  /// Run the agentic write-loop after a turn is finalized.
+  ///
+  /// Returns [MemoryWriteLoopResult] with counts of writes/denials/errors.
+  /// Never throws — errors are captured in the result.
+  Future<MemoryWriteLoopResult> runWriteLoop({
+    required String sessionId,
+    required MemoryBookSettings settings,
+    required String recentHistoryText,
+    required List<Tracker> currentTrackers,
+    CancelToken? cancelToken,
+  }) async {
+    if (!settings.agenticWriteEnabled) {
+      return const MemoryWriteLoopResult(status: 'disabled');
+    }
+
+    final token = cancelToken ?? CancelToken();
+    if (token.isCancelled) {
+      return const MemoryWriteLoopResult(status: 'aborted');
+    }
+
+    try {
+      final config = await _llm.resolveConfig(settings, errorLabel: 'agentic write-loop');
+      if (token.isCancelled) {
+        return const MemoryWriteLoopResult(status: 'aborted');
+      }
+
+      final response = await _askLlmForWrites(
+        config: config,
+        settings: settings,
+        recentHistoryText: recentHistoryText,
+        currentTrackers: currentTrackers,
+        cancelToken: token,
+      );
+
+      if (token.isCancelled) {
+        return const MemoryWriteLoopResult(status: 'aborted');
+      }
+      if (response == null) {
+        return const MemoryWriteLoopResult(status: 'ok');
+      }
+
+      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
+        enabled: true,
+        readOnly: false,
+        writeToolsEnabled: true,
+        requireExplicitDiffApproval: false,
+      ));
+
+      final trackerResult = await _executeTrackerWrites(
+        policy: policy,
+        sessionId: sessionId,
+        requests: response.trackerRequests,
+        provenance: 'memory_agent',
+      );
+
+      if (token.isCancelled) {
+        return MemoryWriteLoopResult(
+          status: 'aborted',
+          trackerResult: trackerResult,
+        );
+      }
+
+      final memoryResult = await _executeMemoryWrites(
+        policy: policy,
+        sessionId: sessionId,
+        requests: response.memoryRequests,
+      );
+
+      return MemoryWriteLoopResult(
+        status: 'ok',
+        trackerResult: trackerResult,
+        memoryResult: memoryResult,
+      );
+    } on TimeoutException {
+      return const MemoryWriteLoopResult(status: 'timeout');
+    } catch (e) {
+      if (token.isCancelled ||
+          (e is DioException && CancelToken.isCancel(e))) {
+        return const MemoryWriteLoopResult(status: 'aborted');
+      }
+      return MemoryWriteLoopResult(status: 'error', error: '$e');
+    }
+  }
+
+  Future<_WriteLoopResponse?> _askLlmForWrites({
+    required SidecarApiConfig config,
+    required MemoryBookSettings settings,
+    required String recentHistoryText,
+    required List<Tracker> currentTrackers,
+    required CancelToken cancelToken,
+  }) async {
+    final trackersBlock = currentTrackers.isEmpty
+        ? '(no active trackers)'
+        : currentTrackers.map((t) => '- ${t.name}: ${t.value}').join('\n');
+
+    final prompt = '''You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.
+
+Recent conversation:
+$recentHistoryText
+
+Current trackers:
+$trackersBlock
+
+Decide what to write. You have two tools:
+
+1. updateTracker — lightweight key-value state that persists across turns (mood, location, relationship status, inventory, ongoing promises).
+2. writeMemory — a pending memory draft for significant events, revelations, promises. These require user approval before becoming active.
+
+Respond with ONLY a JSON object (no markdown, no explanation):
+{
+  "trackers": [
+    {"name": "mood", "value": "happy", "scope": "chat"},
+    {"name": "location", "value": "tavern"}
+  ],
+  "memories": [
+    {"title": "Lucy reveals the chip", "content": "...", "keys": ["Lucy", "chip"]}
+  ]
+}
+
+Rules:
+- Only write trackers that CHANGED or are NEW. Don't repeat unchanged trackers.
+- Only create memory drafts for SIGNIFICANT events (not every turn).
+- If nothing is worth persisting, return: {"trackers": [], "memories": []}
+- Keep tracker values short (1-5 words).
+- Memory content should be 1-3 sentences describing what happened and why it matters.''';
+
+    final raw = await _llm.callOnce(
+      config: config,
+      prompt: prompt,
+      maxTokens: 1000,
+      temperature: 0.2,
+      timeoutMs: settings.sidecarTimeoutMs,
+      cancelToken: cancelToken,
+    );
+
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) return null;
+
+    final trackerRequests = <TrackerWriteRequest>[];
+    final trackerRaw = decoded['trackers'];
+    if (trackerRaw is List) {
+      for (final item in trackerRaw) {
+        if (item is Map<String, dynamic>) {
+          final req = TrackerWriteRequest.fromJson(item);
+          if (req.name.isNotEmpty && req.value.isNotEmpty) {
+            trackerRequests.add(req);
+          }
+        }
+      }
+    }
+
+    final memoryRequests = <MemoryWriteRequest>[];
+    final memoryRaw = decoded['memories'];
+    if (memoryRaw is List) {
+      for (final item in memoryRaw) {
+        if (item is Map<String, dynamic>) {
+          final req = MemoryWriteRequest.fromJson(item);
+          if (req.title.isNotEmpty && req.content.isNotEmpty) {
+            memoryRequests.add(req);
+          }
+        }
+      }
+    }
+
+    return _WriteLoopResponse(
+      trackerRequests: trackerRequests,
+      memoryRequests: memoryRequests,
+    );
+  }
+
+  Future<TrackerWriteResult> _executeTrackerWrites({
+    required MemoryAgenticPolicy policy,
+    required String sessionId,
+    required List<TrackerWriteRequest> requests,
+    required String provenance,
+  }) async {
+    if (requests.isEmpty) return const TrackerWriteResult();
+
+    final repo = _ref.read(trackerRepoProvider);
+    var written = 0;
+    var denied = 0;
+    final errors = <String>[];
+
+    for (final req in requests) {
+      final decision = policy.canUse(MemoryAgenticTool.writeTracker);
+      if (!decision.allowed) {
+        denied++;
+        errors.add('Denied ${req.name}: ${decision.reason}');
+        continue;
+      }
+      try {
+        await repo.upsertValue(
+          sessionId,
+          req.name,
+          req.value,
+          scope: req.scope,
+          provenance: provenance,
+        );
+        written++;
+      } catch (e) {
+        errors.add('Error ${req.name}: $e');
+      }
+    }
+
+    return TrackerWriteResult(
+      written: written,
+      denied: denied,
+      errors: errors,
+      requests: requests,
+    );
+  }
+
+  Future<MemoryWriteResult> _executeMemoryWrites({
+    required MemoryAgenticPolicy policy,
+    required String sessionId,
+    required List<MemoryWriteRequest> requests,
+  }) async {
+    if (requests.isEmpty) return const MemoryWriteResult();
+
+    final repo = _ref.read(memoryBookRepoProvider);
+    var written = 0;
+    var denied = 0;
+    final errors = <String>[];
+
+    final drafts = <MemoryDraft>[];
+    for (final req in requests) {
+      final decision = policy.canUse(MemoryAgenticTool.writeMemory);
+      if (!decision.allowed) {
+        denied++;
+        errors.add('Denied "${req.title}": ${decision.reason}');
+        continue;
+      }
+      drafts.add(MemoryDraft(
+        id: generateId(),
+        title: req.title,
+        content: req.content,
+        keys: req.keys,
+        status: 'pending_generation',
+        source: 'agentic',
+        createdAt: currentTimestampSeconds(),
+      ));
+      written++;
+    }
+
+    if (drafts.isNotEmpty) {
+      try {
+        await repo.appendDrafts(sessionId, drafts);
+      } catch (e) {
+        debugPrint('[MemoryAgenticWriteService] appendDrafts failed: $e');
+        errors.add('Batch write error: $e');
+        written = 0;
+      }
+    }
+
+    return MemoryWriteResult(
+      written: written,
+      denied: denied,
+      errors: errors,
+      requests: requests,
+    );
+  }
+}
+
+class _WriteLoopResponse {
+  final List<TrackerWriteRequest> trackerRequests;
+  final List<MemoryWriteRequest> memoryRequests;
+
+  const _WriteLoopResponse({
+    this.trackerRequests = const [],
+    this.memoryRequests = const [],
+  });
+}
+
+class MemoryWriteLoopResult {
+  final String status;
+  final TrackerWriteResult? trackerResult;
+  final MemoryWriteResult? memoryResult;
+  final String? error;
+
+  const MemoryWriteLoopResult({
+    this.status = 'ok',
+    this.trackerResult,
+    this.memoryResult,
+    this.error,
+  });
+
+  int get totalWritten =>
+      (trackerResult?.written ?? 0) + (memoryResult?.written ?? 0);
+
+  bool get anyWrites => totalWritten > 0;
+}
