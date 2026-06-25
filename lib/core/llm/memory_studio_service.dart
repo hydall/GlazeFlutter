@@ -40,6 +40,7 @@ final studioRuntimeStateProvider = StateProvider<StudioRuntimeState>(
 
 const _mandatoryBlockIds = {'char_card', 'char_personality', 'user_persona'};
 const _studioAgentStartDelay = Duration(seconds: 2);
+const _studioMetaPolicyAgentName = 'Meta-Weaver / Lumia Policy';
 
 class StudioRuntimeState {
   final String? sessionId;
@@ -430,6 +431,25 @@ class MemoryStudioService {
       brief: 'Running...',
       status: 'running',
     );
+    if (_isMetaPolicyAgent(agent)) {
+      final brief = _metaPolicyBrief(agent);
+      _updateStreamingBrief(
+        sessionId: sessionId,
+        agent: agent,
+        brief: brief,
+        status: 'ok',
+      );
+      _log(
+        'brief deterministic session=$sessionId agent="${agent.name}" '
+        'index=$index chars=${brief.length}',
+      );
+      return StudioStageBrief(
+        agentId: agent.id,
+        agentName: agent.name,
+        brief: brief,
+        disposition: MemoryStudioOutputDisposition.ephemeral,
+      );
+    }
     try {
       final result = await _runAgent(
         agent: agent,
@@ -914,6 +934,14 @@ class MemoryStudioService {
               context: context,
             ).trim(),
           );
+          if (isFinalResponse) {
+            final styleContract = _finalHardStyleContract(config);
+            if (styleContract.isNotEmpty) {
+              control
+                ..writeln()
+                ..writeln(styleContract);
+            }
+          }
           messages.add({
             'role': _normalizeRole(
               block.role.isNotEmpty ? block.role : agent.role,
@@ -926,6 +954,7 @@ class MemoryStudioService {
           messages.addAll(
             priorBriefs
                 .where((b) => b.brief.trim().isNotEmpty)
+                .map(_sanitizePriorBriefForFinal)
                 .map(
                   (b) => {
                     'role': _normalizeRole(block.role),
@@ -965,6 +994,90 @@ class MemoryStudioService {
     }
 
     return messages;
+  }
+
+  bool _isMetaPolicyAgent(StudioAgent agent) {
+    final text = '${agent.id}\n${agent.name}\n${agent.sourceBlockNames}'
+        .toLowerCase();
+    return text.contains('meta-weaver') ||
+        text.contains('lumia') ||
+        text.contains('ghost in the machine');
+  }
+
+  String _metaPolicyBrief(StudioAgent agent) {
+    final source = agent.sourceBlockNames.trim();
+    final buffer = StringBuffer()
+      ..writeln('Meta policy:')
+      ..writeln('- Silent during normal in-character roleplay.')
+      ..writeln('- Never write scene prose, dialogue, actions, or narration.')
+      ..writeln('- Do not draft or continue the assistant reply.')
+      ..writeln(
+        '- Apply only as hidden policy for continuity, tone, and OOC routing.',
+      )
+      ..writeln(
+        '- If the user explicitly addresses OOC/Lumia/meta, answer as an OOC interface; otherwise stay invisible.',
+      );
+    if (source.isNotEmpty) {
+      buffer.writeln('- Source policy block: $source.');
+    }
+    return buffer.toString().trim();
+  }
+
+  StudioStageBrief _sanitizePriorBriefForFinal(StudioStageBrief brief) {
+    if (!_isMetaBriefName(brief.agentName)) return brief;
+    return StudioStageBrief(
+      agentId: brief.agentId,
+      agentName: brief.agentName,
+      brief: _sanitizeMetaBrief(brief.brief),
+      disposition: brief.disposition,
+      status: brief.status,
+      error: brief.error,
+      refreshPolicy: brief.refreshPolicy,
+      cacheKey: brief.cacheKey,
+      cacheHit: brief.cacheHit,
+    );
+  }
+
+  bool _isMetaBriefName(String name) {
+    final lower = name.toLowerCase();
+    return lower.contains('meta-weaver') || lower.contains('lumia');
+  }
+
+  String _sanitizeMetaBrief(String brief) {
+    final lower = brief.toLowerCase();
+    if (lower.contains('meta policy:') &&
+        lower.contains('never write scene prose')) {
+      return brief;
+    }
+    return _metaPolicyBrief(
+      const StudioAgent(id: 'meta_sanitized', name: _studioMetaPolicyAgentName),
+    );
+  }
+
+  String _finalHardStyleContract(StudioConfig config) {
+    final sources = config.agents
+        .map(
+          (agent) =>
+              '${agent.name}\n${agent.sourceBlockNames}\n${agent.promptShard}',
+        )
+        .join('\n\n');
+    final rules = <String>[];
+    if (RegExp(
+      r'—|длинн.{0,24}тире|long.{0,24}dash|em dash',
+      caseSensitive: false,
+    ).hasMatch(sources)) {
+      rules.add('- Do not use em dashes / long dashes: avoid "—".');
+    }
+    if (RegExp(
+      r'кавыч|quote|quotation|direct speech|прям.{0,24}реч',
+      caseSensitive: false,
+    ).hasMatch(sources)) {
+      rules.add(
+        '- Wrap direct spoken dialogue in quotation marks; do not use bare dialogue lines.',
+      );
+    }
+    if (rules.isEmpty) return '';
+    return 'Hard final formatting constraints from Studio controllers:\n${rules.join('\n')}';
   }
 
   List<Map<String, dynamic>> _stripPromptLevelReasoning(

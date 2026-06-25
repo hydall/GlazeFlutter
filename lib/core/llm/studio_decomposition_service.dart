@@ -328,7 +328,11 @@ class StudioDecompositionService {
         cancelToken: cancelToken,
       );
       final text = raw?.trim() ?? '';
-      if (text.isNotEmpty) return _stripMarkdownFence(text);
+      final cleaned = _stripMarkdownFence(text);
+      if (cleaned.isNotEmpty && !_isBuilderRefusal(cleaned)) return cleaned;
+      if (cleaned.isNotEmpty) {
+        _log('controller build refusal name="${spec.name}"; using fallback');
+      }
     } on TimeoutException {
       _log('controller build timeout name="${spec.name}"; using fallback');
     } on DioException catch (e) {
@@ -405,6 +409,16 @@ $blocksSummary''';
       caseSensitive: false,
     ).firstMatch(text.trim());
     return (fenced?.group(1) ?? text).trim();
+  }
+
+  bool _isBuilderRefusal(String text) {
+    final lower = text.toLowerCase();
+    return lower.startsWith("i can't build") ||
+        lower.startsWith('i cannot build') ||
+        lower.startsWith("i won't build") ||
+        lower.startsWith('i will not build') ||
+        lower.contains("i can't build this controller") ||
+        lower.contains('i cannot build this controller');
   }
 
   int _blockLimitFor(PresetBlock block) {
