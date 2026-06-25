@@ -521,7 +521,7 @@ if (messageData.isEditing) classes.push('editing');
     const hasSwipes = isChar && m.swipeTotal && m.swipeTotal > 1;
     const hasGreetings = isChar && m.messageIndex === 0 && m.greetingTotal && m.greetingTotal > 1;
     const showRegen = ((!isChar && m.isLast) || m.isError) && !m.isGenerating && !m.isEditing;
-    const showStudioFinalRegen = showRegen && isChar && m.isLast && m.studioOutputs && m.studioOutputs.length;
+    const showStudioFinalRegen = isChar && m.isLast && !m.isGenerating && !m.isEditing && m.studioOutputs && m.studioOutputs.length;
 
     if (hasSwipes) {
       center.appendChild(this._createSwitcher(m.id, m.swipeIndex || 0, m.swipeTotal, 'swipe'));
@@ -549,7 +549,7 @@ if (messageData.isEditing) classes.push('editing');
       center.appendChild(stop);
     }
 
-    if (showRegen) {
+    if (showRegen || showStudioFinalRegen) {
       const regen = document.createElement('div');
       regen.className = 'msg-regenerate';
       if (hasSwipes || hasGreetings || showStudioFinalRegen) regen.classList.add('icon-only');
@@ -569,16 +569,16 @@ if (messageData.isEditing) classes.push('editing');
 
       if (showStudioFinalRegen) {
         const finalRegen = document.createElement('div');
-        finalRegen.className = 'msg-regenerate icon-only studio-final-only';
+        finalRegen.className = 'msg-regenerate studio-final-only';
         finalRegen.dataset.action = 'regenerate';
         finalRegen.dataset.messageId = m.id;
         finalRegen.dataset.mode = 'studio-final';
-        finalRegen.title = 'Regenerate final Studio agent only';
+        finalRegen.title = 'Regenerate final Studio agent only (reuses agent briefs)';
         finalRegen.innerHTML = ICON.regen;
-        const badge = document.createElement('span');
-        badge.className = 'studio-final-only-badge';
-        badge.textContent = 'F';
-        finalRegen.appendChild(badge);
+        const label = document.createElement('span');
+        label.className = 'studio-final-only-label';
+        label.textContent = 'Final';
+        finalRegen.appendChild(label);
         center.appendChild(finalRegen);
       }
     }
