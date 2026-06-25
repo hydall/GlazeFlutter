@@ -948,6 +948,9 @@ class MemoryStudioService {
               ..writeln(_intermediateRuntimeEnvelope(agent));
           }
           if (isFinalResponse) {
+            control
+              ..writeln()
+              ..writeln(_finalBriefUsageNote());
             final styleContract = _finalHardStyleContract(config);
             if (styleContract.isNotEmpty) {
               control
@@ -1024,7 +1027,7 @@ NOT YOUR LANE — never write guidance about (other controllers own these): ${sc
 If a point is not strictly inside your lane, omit it. A short, lane-focused brief is better than a broad one.
 
 Prefer valid compact JSON with exactly these keys:
-{"focus":["short operational focus"],"constraints":["short enforceable constraint"],"avoid":["short forbidden item"]}
+{"focus":["short operational focus"],"constraints":["short enforceable constraint"],"avoid":["short forbidden item"],"options":["one branchable approach the final writer may choose, within your lane"]}
 
 If the model cannot produce JSON, use exactly these plain-text sections instead:
 Focus:
@@ -1033,11 +1036,14 @@ Constraints:
 - short enforceable constraint
 Avoid:
 - short forbidden item
+Options:
+- one branchable approach the final writer may choose
 
 Rules:
 - Each array may contain 0-5 strings, every string strictly inside your lane.
 - Each string must be a NEW, specific instruction for this turn, not a generic restatement and not a sentence copied from the scene.
-- Do not restate the scene summary; only add what the final writer must DO or AVOID within your lane.
+- Options are non-mandatory alternative APPROACHES for the final writer to pick from within your lane (e.g. "lean into silence and a single gesture" vs "give one clipped line"). Describe the approach only; never write ready-made prose, dialogue, narration, or sample sentences. The final writer picks at most one and writes it themselves.
+- Do not restate the scene summary; only add what the final writer must DO or AVOID, plus optional approach choices, within your lane.
 - Do not write or continue the scene.
 - Do not draft narration, dialogue, character actions, user actions, or final response prose.
 - Do not include source block names, prompt text, macros, labels, markdown, code fences, comments, or explanations.
@@ -1280,13 +1286,15 @@ Rules:
     final focus = _safeJsonStringList(decoded['focus']);
     final constraints = _safeJsonStringList(decoded['constraints']);
     final avoid = _safeJsonStringList(decoded['avoid']);
-    final all = [...focus, ...constraints, ...avoid];
+    final options = _safeJsonStringList(decoded['options']);
+    final all = [...focus, ...constraints, ...avoid, ...options];
     if (all.isEmpty) return null;
 
     return _buildStudioBrief(
       focus: focus,
       constraints: constraints,
       avoid: avoid,
+      options: options,
     );
   }
 
@@ -1295,6 +1303,7 @@ Rules:
     final focus = <String>[];
     final constraints = <String>[];
     final avoid = <String>[];
+    final options = <String>[];
     var section = '';
 
     for (final rawLine in text.split('\n')) {
@@ -1311,6 +1320,7 @@ Rules:
       final target = switch (section) {
         'focus' => focus,
         'avoid' => avoid,
+        'options' => options,
         _ => constraints,
       };
       if (target.any(
@@ -1322,11 +1332,12 @@ Rules:
       if (target.length >= 6) section = '';
     }
 
-    if ([...focus, ...constraints, ...avoid].isEmpty) return null;
+    if ([...focus, ...constraints, ...avoid, ...options].isEmpty) return null;
     return _buildStudioBrief(
       focus: focus,
       constraints: constraints,
       avoid: avoid,
+      options: options,
     );
   }
 
@@ -1354,6 +1365,15 @@ Rules:
         normalized == 'запреты') {
       return 'avoid';
     }
+    if (normalized == 'options' ||
+        normalized == 'option' ||
+        normalized == 'approaches' ||
+        normalized == 'choices' ||
+        normalized == 'варианты' ||
+        normalized == 'подходы' ||
+        normalized == 'на выбор') {
+      return 'options';
+    }
     return null;
   }
 
@@ -1361,6 +1381,7 @@ Rules:
     required List<String> focus,
     required List<String> constraints,
     required List<String> avoid,
+    List<String> options = const [],
   }) {
     final buffer = StringBuffer();
     void writeSection(String title, List<String> items) {
@@ -1374,6 +1395,7 @@ Rules:
     writeSection('Focus:', focus);
     writeSection('Constraints:', constraints);
     writeSection('Avoid:', avoid);
+    writeSection('Options:', options);
     return buffer.toString().trim();
   }
 
@@ -1537,6 +1559,10 @@ Rules:
     return _metaPolicyBrief(
       const StudioAgent(id: 'meta_sanitized', name: _studioMetaPolicyAgentName),
     );
+  }
+
+  String _finalBriefUsageNote() {
+    return 'How to use the Studio controller briefs above: treat Focus and Constraints as binding direction and Avoid as hard prohibitions. Any "Options:" items are non-binding alternative approaches — choose at most one per brief (or none) that best fits the moment, then write it in your own words. Do not list, mention, or copy the options or any brief text in your reply; weave the chosen direction into natural in-scene prose.';
   }
 
   String _finalHardStyleContract(StudioConfig config) {
