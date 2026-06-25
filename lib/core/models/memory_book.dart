@@ -123,6 +123,11 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default('') String consolidationEndpoint,
     @Default('') String consolidationApiKey,
     @Default(4000) int consolidationTimeoutMs,
+    /// Enables the agentic write-loop: after a turn is finalized, the memory
+    /// agent may write trackers and memory drafts via sidecar JSON. Off by
+    /// default — the agent runs read-only (searchMemory only) unless this is
+    /// explicitly enabled. See docs/PLAN_AGENTIC_STUDIO.md Stage 1.
+    @Default(false) bool agenticWriteEnabled,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>
