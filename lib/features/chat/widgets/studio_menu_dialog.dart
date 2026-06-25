@@ -549,6 +549,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildContextInfoCard(),
+              const SizedBox(height: 12),
+              // Agentic memory works independently of Studio decomposition,
+              // so expose its toggles here before Studio is built. The preset
+              // routing mode lives in StudioConfig, so it's omitted until a
+              // config exists (shown in the agent list card instead).
+              _buildStandaloneAgenticCard(),
               const SizedBox(height: 24),
               Icon(
                 Icons.movie_filter_outlined,
@@ -700,7 +706,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             const SizedBox(height: 8),
             _finalHistoryLimitField(),
             const SizedBox(height: 8),
-            _buildAgenticAdvancedSection(),
+            _buildAgenticAdvancedSection(includeRoutingMode: true),
           ],
         ],
       ),
@@ -773,7 +779,25 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     if (mounted) setState(() => _config = updated);
   }
 
-  Widget _buildAgenticAdvancedSection() {
+  /// Standalone card shown in the empty state (before Studio is built), so
+  /// agentic memory can be toggled without building Studio first. Mirrors the
+  /// styling of [_buildContextInfoCard] for visual consistency.
+  Widget _buildStandaloneAgenticCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: context.cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      child: _buildAgenticAdvancedSection(includeRoutingMode: false),
+    );
+  }
+
+  Widget _buildAgenticAdvancedSection({required bool includeRoutingMode}) {
     return ExpansionTile(
       tilePadding: EdgeInsets.zero,
       title: Row(
@@ -827,33 +851,34 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             if (mounted) setState(() => _postCleanerEnabled = v);
           },
         ),
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Preset routing mode'),
-          subtitle: const Text(
-            'Verbatim = blocks go to agents as-is (no LLM). '
-            'Compiled = LLM digests blocks into instructions.',
+        if (includeRoutingMode)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Preset routing mode'),
+            subtitle: const Text(
+              'Verbatim = blocks go to agents as-is (no LLM). '
+              'Compiled = LLM digests blocks into instructions.',
+            ),
+            trailing: DropdownButton<String>(
+              value: _routingMode,
+              items: const [
+                DropdownMenuItem(
+                  value: 'verbatim',
+                  child: Text('Verbatim'),
+                ),
+                DropdownMenuItem(
+                  value: 'compiled',
+                  child: Text('Compiled'),
+                ),
+              ],
+              onChanged: (v) async {
+                if (v == null || v == _routingMode) return;
+                await _saveRoutingMode(v);
+                if (mounted) setState(() => _routingMode = v);
+              },
+            ),
           ),
-          trailing: DropdownButton<String>(
-            value: _routingMode,
-            items: const [
-              DropdownMenuItem(
-                value: 'verbatim',
-                child: Text('Verbatim'),
-              ),
-              DropdownMenuItem(
-                value: 'compiled',
-                child: Text('Compiled'),
-              ),
-            ],
-            onChanged: (v) async {
-              if (v == null || v == _routingMode) return;
-              await _saveRoutingMode(v);
-              if (mounted) setState(() => _routingMode = v);
-            },
-          ),
-        ),
       ],
     );
   }
@@ -862,8 +887,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     MemoryBookSettings Function(MemoryBookSettings) mutator,
   ) async {
     final repo = ref.read(memoryBookRepoProvider);
-    final book = await repo.getBySessionId(widget.sessionId);
-    if (book == null) return;
+    // Use ensureForSession (not getBySessionId): on the empty Studio screen the
+    // MemoryBook row may not exist yet. updateSettings is a bare UPDATE and
+    // silently no-ops on a missing row, so the toggle would not persist.
+    final book = await repo.ensureForSession(widget.sessionId);
     final updated = mutator(book.settings);
     await repo.updateSettings(widget.sessionId, updated);
   }
