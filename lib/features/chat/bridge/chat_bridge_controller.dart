@@ -223,6 +223,7 @@ class ChatBridgeController {
   void Function(String action, String text)? onSelectionAction;
   void Function(String id, String text)? onEditSave;
   void Function(String outputId, String messageId)? onStudioOutputEdit;
+  void Function(String outputId, String messageId)? onStudioOutputRegen;
   void Function(String id)? onEditCancel;
   void Function(String id, bool focused)? onEditFocusChange;
   void Function(String id, String guidanceText)? onGuidedSwipe;
@@ -414,6 +415,8 @@ class ChatBridgeController {
         onEditSave?.call(id, s);
       case 'onStudioOutputEdit':
         onStudioOutputEdit?.call(id, s);
+      case 'onStudioOutputRegen':
+        onStudioOutputRegen?.call(id, s);
     }
   }
 

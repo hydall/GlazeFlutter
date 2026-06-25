@@ -537,7 +537,18 @@ class StreamGenerationService {
     List<StudioStageBrief> briefs,
   ) {
     return briefs
-        .map((b) => {'id': b.agentId, 'name': b.agentName, 'content': b.brief})
+        .map(
+          (b) => {
+            'id': b.agentId,
+            'name': b.agentName,
+            'content': b.brief,
+            'status': b.status,
+            'refreshPolicy': b.refreshPolicy,
+            if (b.cacheHit) 'cacheHit': true,
+            if (b.cacheKey != null) 'cacheKey': b.cacheKey,
+            if (b.error != null) 'error': b.error,
+          },
+        )
         .toList(growable: false);
   }
 

@@ -66,6 +66,7 @@ const Map<String, HandlerSpec> bridgeHandlers = {
   // Edit
   'onEditSave': HandlerSpec(HandlerKind.idStringPair),
   'onStudioOutputEdit': HandlerSpec(HandlerKind.idStringPair),
+  'onStudioOutputRegen': HandlerSpec(HandlerKind.idStringPair),
   'onEditCancel': HandlerSpec(HandlerKind.stringArg),
   'onEditFocusChange': HandlerSpec(HandlerKind.idBoolPair),
   // Guided swipe / memory / lorebook

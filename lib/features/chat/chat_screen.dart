@@ -1224,6 +1224,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                             .read(chatProvider(widget.charId).notifier)
                             .editStudioOutput(idx, outputId, newContent);
                       },
+                      onStudioOutputRegen: (outputId, messageId) async {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == messageId,
+                        );
+                        if (idx < 0) return;
+                        await ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .regenerateStudioOutput(idx, outputId);
+                      },
                       onEditCancel: (id) {
                         ref
                                 .read(

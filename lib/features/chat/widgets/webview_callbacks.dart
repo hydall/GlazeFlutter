@@ -16,6 +16,8 @@ typedef GuidedSwipeCallback = void Function(String id, String guidanceText);
 typedef EditSaveCallback = void Function(String id, String text);
 typedef StudioOutputEditCallback =
     void Function(String outputId, String messageId);
+typedef StudioOutputRegenCallback =
+    void Function(String outputId, String messageId);
 typedef EditCancelCallback = void Function(String id);
 typedef EditFocusCallback = void Function(String id, bool focused);
 typedef ImgActionCallback = void Function(String instruction, String messageId);
@@ -53,12 +55,14 @@ class MessageActionsCallbacks {
 class EditActionsCallbacks {
   final EditSaveCallback? onEditSave;
   final StudioOutputEditCallback? onStudioOutputEdit;
+  final StudioOutputRegenCallback? onStudioOutputRegen;
   final EditCancelCallback? onEditCancel;
   final EditFocusCallback? onEditFocusChange;
 
   const EditActionsCallbacks({
     this.onEditSave,
     this.onStudioOutputEdit,
+    this.onStudioOutputRegen,
     this.onEditCancel,
     this.onEditFocusChange,
   });

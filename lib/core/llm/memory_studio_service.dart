@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,8 @@ import '../models/api_config.dart';
 import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
+import '../utils/cast_helpers.dart';
+import '../utils/error_format.dart';
 import '../../features/settings/api_list_provider.dart';
 import 'history_assembler.dart';
 import 'macro_engine.dart';
@@ -92,6 +95,7 @@ class StudioRequestPreview {
 class MemoryStudioService {
   final Ref _ref;
   Completer<void>? _finishCurrentAgent;
+  final Map<String, _CachedStudioBrief> _briefCache = {};
 
   MemoryStudioService(this._ref);
 
@@ -161,81 +165,85 @@ class MemoryStudioService {
       _ref.read(studioStreamingOutputsProvider(sessionId).notifier).state =
           const [];
 
-      final briefs = <StudioStageBrief>[];
-      for (var i = 0; i < agents.length; i++) {
-        if (token.isCancelled) {
-          _log('pipeline aborted before agent index=$i session=$sessionId');
-          return const StudioPipelineResult(status: 'aborted', response: '');
-        }
-        final agent = agents[i];
-        final isFinal = i == agents.length - 1;
-        _ref
-            .read(studioRuntimeStateProvider.notifier)
-            .state = StudioRuntimeState(
-          sessionId: sessionId,
-          agentId: agent.id,
-          agentName: agent.name,
-          index: i,
-          total: agents.length,
-          canFinishAgent: true,
-        );
-        final agentResult = await _runAgent(
-          agent: agent,
-          promptResult: promptResult,
-          promptPayload: promptPayload,
-          apiConfig: apiConfig,
-          config: config,
-          priorBriefs: briefs,
-          sessionId: sessionId,
-          cancelToken: token,
-          isFinalResponse: isFinal,
-          onFinalResponseUpdate: onFinalResponseUpdate,
-          onIntermediateUpdate: (text) {
-            _updateStreamingBrief(
-              sessionId: sessionId,
-              agent: agent,
-              brief: text,
-            );
-          },
-        );
-        if (token.isCancelled) {
-          _log(
-            'pipeline aborted after agent="${agent.name}" session=$sessionId',
-          );
-          return const StudioPipelineResult(status: 'aborted', response: '');
-        }
-
-        if (isFinal) {
-          _log(
-            'pipeline complete session=$sessionId finalAgent="${agent.name}" '
-            'chars=${agentResult.text.length} reasoning=${agentResult.reasoning.length} '
-            'briefs=${briefs.length}',
-          );
-          return StudioPipelineResult(
-            status: 'ok',
-            response: agentResult.text,
-            reasoning: agentResult.reasoning,
-            rawResponseJson: agentResult.rawResponseJson,
-            stageBriefs: briefs,
-          );
-        }
-
-        briefs.add(
-          StudioStageBrief(
-            agentId: agent.id,
-            agentName: agent.name,
-            brief: agentResult.text,
-            disposition: MemoryStudioOutputDisposition.ephemeral,
-          ),
-        );
-        _log(
-          'brief stored session=$sessionId agent="${agent.name}" '
-          'chars=${agentResult.text.length} briefs=${briefs.length}',
-        );
+      if (token.isCancelled) {
+        _log('pipeline aborted before agents session=$sessionId');
+        return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
-      _log('pipeline disabled: loop ended session=$sessionId');
-      return const StudioPipelineResult(status: 'disabled', response: '');
+      final finalAgent = agents.last;
+      final intermediateAgents = agents.sublist(0, agents.length - 1);
+      _ref.read(studioRuntimeStateProvider.notifier).state = StudioRuntimeState(
+        sessionId: sessionId,
+        agentId: null,
+        agentName: intermediateAgents.isEmpty
+            ? finalAgent.name
+            : 'Studio agents',
+        index: 0,
+        total: agents.length,
+        canFinishAgent: false,
+      );
+
+      final sceneKey = _sceneCacheKey(promptPayload);
+      final turnIndex = _assistantTurnCount(promptPayload);
+      final briefs = intermediateAgents.isEmpty
+          ? <StudioStageBrief>[]
+          : await Future.wait([
+              for (var i = 0; i < intermediateAgents.length; i++)
+                _runIntermediateAgentWithCache(
+                  index: i,
+                  agent: intermediateAgents[i],
+                  promptResult: promptResult,
+                  promptPayload: promptPayload,
+                  apiConfig: apiConfig,
+                  config: config,
+                  sessionId: sessionId,
+                  cancelToken: token,
+                  sceneKey: sceneKey,
+                  turnIndex: turnIndex,
+                ),
+            ]);
+      if (token.isCancelled) {
+        _log('pipeline aborted after intermediate agents session=$sessionId');
+        return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+
+      _ref.read(studioRuntimeStateProvider.notifier).state = StudioRuntimeState(
+        sessionId: sessionId,
+        agentId: finalAgent.id,
+        agentName: finalAgent.name,
+        index: agents.length - 1,
+        total: agents.length,
+        canFinishAgent: true,
+      );
+      final agentResult = await _runAgent(
+        agent: finalAgent,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        apiConfig: apiConfig,
+        config: config,
+        priorBriefs: briefs,
+        sessionId: sessionId,
+        cancelToken: token,
+        isFinalResponse: true,
+        onFinalResponseUpdate: onFinalResponseUpdate,
+      );
+      if (token.isCancelled) {
+        _log('pipeline aborted after final agent session=$sessionId');
+        return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+
+      _log(
+        'pipeline complete session=$sessionId finalAgent="${finalAgent.name}" '
+        'chars=${agentResult.text.length} reasoning=${agentResult.reasoning.length} '
+        'briefs=${briefs.length}',
+      );
+      return StudioPipelineResult(
+        status: 'ok',
+        response: agentResult.text,
+        reasoning: agentResult.reasoning,
+        rawResponseJson: agentResult.rawResponseJson,
+        stageBriefs: briefs,
+      );
     } on TimeoutException catch (e) {
       _log('pipeline timeout session=$sessionId error=${e.message}');
       return StudioPipelineResult(
@@ -257,6 +265,202 @@ class MemoryStudioService {
     }
   }
 
+  Future<StudioStageBrief> regenerateIntermediateAgent({
+    required String sessionId,
+    required String agentId,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    CancelToken? cancelToken,
+  }) async {
+    final config = await getEnabledConfig(sessionId);
+    if (config == null) {
+      throw Exception('Studio is not enabled for this session');
+    }
+    final agents = config.agents.where((a) => a.enabled).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+    if (agents.length < 2) {
+      throw Exception('Studio has no intermediate agents to regenerate');
+    }
+    final agentIndex = agents.indexWhere((a) => a.id == agentId);
+    if (agentIndex < 0 || agentIndex == agents.length - 1) {
+      throw Exception('Studio output is not an intermediate agent');
+    }
+    final token = cancelToken ?? CancelToken();
+    final brief = await _runIntermediateAgentSafely(
+      index: agentIndex,
+      agent: agents[agentIndex],
+      promptResult: promptResult,
+      promptPayload: promptPayload,
+      apiConfig: apiConfig,
+      config: config,
+      sessionId: sessionId,
+      cancelToken: token,
+      captureErrors: false,
+    );
+    return brief;
+  }
+
+  Future<StudioStageBrief> _runIntermediateAgentSafely({
+    required int index,
+    required StudioAgent agent,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required StudioConfig config,
+    required String sessionId,
+    required CancelToken cancelToken,
+    bool captureErrors = true,
+  }) async {
+    _updateStreamingBrief(
+      sessionId: sessionId,
+      agent: agent,
+      brief: 'Running...',
+      status: 'running',
+    );
+    try {
+      final result = await _runAgent(
+        agent: agent,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        apiConfig: apiConfig,
+        config: config,
+        priorBriefs: const [],
+        sessionId: sessionId,
+        cancelToken: cancelToken,
+        isFinalResponse: false,
+        allowManualFinish: false,
+        onIntermediateUpdate: (text) {
+          _updateStreamingBrief(
+            sessionId: sessionId,
+            agent: agent,
+            brief: text,
+            status: 'running',
+          );
+        },
+      );
+      _updateStreamingBrief(
+        sessionId: sessionId,
+        agent: agent,
+        brief: result.text,
+        status: 'ok',
+      );
+      _log(
+        'brief stored session=$sessionId agent="${agent.name}" '
+        'index=$index chars=${result.text.length}',
+      );
+      return StudioStageBrief(
+        agentId: agent.id,
+        agentName: agent.name,
+        brief: result.text,
+        disposition: MemoryStudioOutputDisposition.ephemeral,
+      );
+    } catch (e) {
+      if (!captureErrors ||
+          cancelToken.isCancelled ||
+          (e is DioException && CancelToken.isCancel(e))) {
+        rethrow;
+      }
+      final error = formatError(e);
+      _updateStreamingBrief(
+        sessionId: sessionId,
+        agent: agent,
+        brief: error,
+        status: 'error',
+        error: error,
+      );
+      _log('brief error session=$sessionId agent="${agent.name}" error=$error');
+      return StudioStageBrief(
+        agentId: agent.id,
+        agentName: agent.name,
+        brief: 'Studio agent failed: $error',
+        disposition: MemoryStudioOutputDisposition.ephemeral,
+        status: 'error',
+        error: error,
+      );
+    }
+  }
+
+  Future<StudioStageBrief> _runIntermediateAgentWithCache({
+    required int index,
+    required StudioAgent agent,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required StudioConfig config,
+    required String sessionId,
+    required CancelToken cancelToken,
+    required String sceneKey,
+    required int turnIndex,
+  }) async {
+    final policy = _effectiveRefreshPolicy(agent);
+    final cacheKey = _cacheKeyForAgent(
+      config: config,
+      agent: agent,
+      policy: policy,
+      sceneKey: sceneKey,
+    );
+    final cached = _usableCachedBrief(
+      cacheKey: cacheKey,
+      policy: policy,
+      sceneChanged: _lastUserMessageSuggestsSceneChange(promptPayload),
+      turnIndex: turnIndex,
+    );
+    if (cached != null) {
+      final brief = StudioStageBrief(
+        agentId: agent.id,
+        agentName: agent.name,
+        brief: cached.brief,
+        disposition: MemoryStudioOutputDisposition.ephemeral,
+        status: 'cached',
+        refreshPolicy: policy,
+        cacheKey: cacheKey,
+        cacheHit: true,
+      );
+      _updateStreamingBrief(
+        sessionId: sessionId,
+        agent: agent,
+        brief: cached.brief,
+        status: 'cached',
+        refreshPolicy: policy,
+        cacheHit: true,
+      );
+      _log(
+        'brief cache hit session=$sessionId agent="${agent.name}" '
+        'policy=$policy index=$index',
+      );
+      return brief;
+    }
+
+    final brief = await _runIntermediateAgentSafely(
+      index: index,
+      agent: agent,
+      promptResult: promptResult,
+      promptPayload: promptPayload,
+      apiConfig: apiConfig,
+      config: config,
+      sessionId: sessionId,
+      cancelToken: cancelToken,
+    );
+    if (!cancelToken.isCancelled &&
+        brief.status == 'ok' &&
+        _isCacheablePolicy(policy)) {
+      _briefCache[cacheKey] = _CachedStudioBrief(
+        brief: brief.brief,
+        policy: policy,
+        createdTurnIndex: turnIndex,
+      );
+      _log(
+        'brief cache store session=$sessionId agent="${agent.name}" '
+        'policy=$policy index=$index',
+      );
+    }
+    return brief.copyWithCacheMetadata(
+      refreshPolicy: policy,
+      cacheKey: _isCacheablePolicy(policy) ? cacheKey : null,
+    );
+  }
+
   Future<_StudioAgentRunResult> _runAgent({
     required StudioAgent agent,
     required PromptResult promptResult,
@@ -267,6 +471,7 @@ class MemoryStudioService {
     required String sessionId,
     required CancelToken cancelToken,
     required bool isFinalResponse,
+    bool allowManualFinish = true,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
@@ -277,7 +482,7 @@ class MemoryStudioService {
 
     final completer = Completer<_StudioAgentRunResult>();
     final finishCompleter = Completer<void>();
-    _finishCurrentAgent = finishCompleter;
+    if (allowManualFinish) _finishCurrentAgent = finishCompleter;
     final messages = _buildAgentMessages(
       agent: agent,
       promptResult: promptResult,
@@ -389,15 +594,17 @@ class MemoryStudioService {
         }
       }),
     );
-    unawaited(
-      finishCompleter.future.then((_) {
-        finishRequested = true;
-        completeWithAccumulated('manual_finish');
-        if (!(agentCancelToken?.isCancelled ?? true)) {
-          agentCancelToken?.cancel('Studio agent manually finished');
-        }
-      }),
-    );
+    if (allowManualFinish) {
+      unawaited(
+        finishCompleter.future.then((_) {
+          finishRequested = true;
+          completeWithAccumulated('manual_finish');
+          if (!(agentCancelToken?.isCancelled ?? true)) {
+            agentCancelToken?.cancel('Studio agent manually finished');
+          }
+        }),
+      );
+    }
     resetAgentTimer();
 
     unawaited(
@@ -497,7 +704,8 @@ class MemoryStudioService {
 
     return completer.future.whenComplete(() {
       idleTimer?.cancel();
-      if (identical(_finishCurrentAgent, finishCompleter)) {
+      if (allowManualFinish &&
+          identical(_finishCurrentAgent, finishCompleter)) {
         _finishCurrentAgent = null;
       }
     });
@@ -929,27 +1137,164 @@ class MemoryStudioService {
     required String sessionId,
     required StudioAgent agent,
     required String brief,
+    String status = 'ok',
+    String? error,
+    String? refreshPolicy,
+    bool cacheHit = false,
   }) {
     final trimmed = brief.trimLeft();
     if (trimmed.isEmpty) return;
     final notifier = _ref.read(
       studioStreamingOutputsProvider(sessionId).notifier,
     );
+    Map<String, dynamic> itemJson() {
+      final json = <String, dynamic>{
+        'id': agent.id,
+        'name': agent.name,
+        'content': trimmed,
+        'status': status,
+        'refreshPolicy': refreshPolicy ?? _effectiveRefreshPolicy(agent),
+      };
+      if (error != null) json['error'] = error;
+      if (cacheHit) json['cacheHit'] = true;
+      return json;
+    }
+
     final current = notifier.state;
     final next = <Map<String, dynamic>>[];
     var replaced = false;
     for (final item in current) {
       if (item['id'] == agent.id) {
-        next.add({'id': agent.id, 'name': agent.name, 'content': trimmed});
+        next.add(itemJson());
         replaced = true;
       } else {
         next.add(Map<String, dynamic>.from(item));
       }
     }
     if (!replaced) {
-      next.add({'id': agent.id, 'name': agent.name, 'content': trimmed});
+      next.add(itemJson());
     }
     notifier.state = next;
+  }
+
+  String _normalizeRefreshPolicy(String policy) {
+    return switch (policy.trim().toLowerCase()) {
+      'static' || 'scene' || 'turn' => policy.trim().toLowerCase(),
+      _ => 'turn',
+    };
+  }
+
+  String _effectiveRefreshPolicy(StudioAgent agent) {
+    final policy = _normalizeRefreshPolicy(agent.refreshPolicy);
+    if (policy != 'turn' || agent.invalidationSignals.isNotEmpty) {
+      return policy;
+    }
+
+    final text = [
+      agent.name,
+      agent.sourceBlockNames,
+      agent.promptShard,
+    ].join('\n').toLowerCase();
+    if (RegExp(
+      r'ban|banned|forbidden|clich|клиш|запрет|forbidden words',
+      caseSensitive: false,
+    ).hasMatch(text)) {
+      return 'static';
+    }
+    if (RegExp(
+      r'lumia|ghost in the machine',
+      caseSensitive: false,
+    ).hasMatch(text)) {
+      return 'scene';
+    }
+    if (RegExp(
+      r'last\s+3|recent chat|last beat|last user|continuity|memory|current scene|anti-loop|anti-echo',
+      caseSensitive: false,
+    ).hasMatch(text)) {
+      return 'turn';
+    }
+    if (RegExp(
+      r'tone|genre|style|romantic|fluff|comfort|lumia|ghost|director',
+      caseSensitive: false,
+    ).hasMatch(text)) {
+      return 'scene';
+    }
+    return policy;
+  }
+
+  bool _isCacheablePolicy(String policy) =>
+      policy == 'static' || policy == 'scene';
+
+  _CachedStudioBrief? _usableCachedBrief({
+    required String cacheKey,
+    required String policy,
+    required bool sceneChanged,
+    required int turnIndex,
+  }) {
+    if (!_isCacheablePolicy(policy)) return null;
+    if (policy == 'scene' && sceneChanged) return null;
+    final cached = _briefCache[cacheKey];
+    if (cached == null) return null;
+    if (policy == 'scene' && turnIndex - cached.createdTurnIndex >= 4) {
+      return null;
+    }
+    return cached;
+  }
+
+  String _cacheKeyForAgent({
+    required StudioConfig config,
+    required StudioAgent agent,
+    required String policy,
+    required String sceneKey,
+  }) {
+    final base = <String, dynamic>{
+      'v': 1,
+      'profileId': config.profileId,
+      'sourcePresetHash': config.sourcePresetHash,
+      'configUpdatedAt': config.updatedAt,
+      'agentId': agent.id,
+      'promptShard': agent.promptShard,
+      'sourceBlockNames': agent.sourceBlockNames,
+      'refreshPolicy': policy,
+      'invalidationSignals': agent.invalidationSignals,
+      'agentPreset': config.agentStudioPresetId,
+      'finalPreset': config.finalStudioPresetId,
+      if (policy == 'scene') 'sceneKey': sceneKey,
+    };
+    return computeHash(jsonEncode(base));
+  }
+
+  String _sceneCacheKey(PromptPayload payload) {
+    final summary = payload.summaryContent?.trim() ?? '';
+    final authorsNote = payload.authorsNote?.content.trim() ?? '';
+    final recentAssistants = payload.history
+        .where((m) => m.role == 'assistant')
+        .length;
+    return computeHash(
+      jsonEncode({
+        'characterId': payload.character.id,
+        'personaId': payload.persona?.id ?? '',
+        'summary': summary,
+        'authorsNote': authorsNote,
+        'assistantBucket': recentAssistants ~/ 4,
+      }),
+    );
+  }
+
+  int _assistantTurnCount(PromptPayload payload) {
+    return payload.history.where((m) => m.role == 'assistant').length;
+  }
+
+  bool _lastUserMessageSuggestsSceneChange(PromptPayload payload) {
+    for (final message in payload.history.reversed) {
+      if (message.role != 'user') continue;
+      final text = message.content.toLowerCase();
+      return RegExp(
+        r'\b(new scene|next scene|time skip|timeskip|later|meanwhile|the next day|next morning|новая сцена|следующая сцена|позже|тем временем|на следующий день|утром|вечером|ночью|перенес[её]мся)\b',
+        caseSensitive: false,
+      ).hasMatch(text);
+    }
+    return false;
   }
 
   Map<String, dynamic> _buildRequestPreviewBody(
@@ -1121,11 +1466,51 @@ class StudioStageBrief {
   final String agentName;
   final String brief;
   final MemoryStudioOutputDisposition disposition;
+  final String status;
+  final String? error;
+  final String refreshPolicy;
+  final String? cacheKey;
+  final bool cacheHit;
 
   const StudioStageBrief({
     required this.agentId,
     required this.agentName,
     required this.brief,
     required this.disposition,
+    this.status = 'ok',
+    this.error,
+    this.refreshPolicy = 'turn',
+    this.cacheKey,
+    this.cacheHit = false,
+  });
+
+  StudioStageBrief copyWithCacheMetadata({
+    required String refreshPolicy,
+    String? cacheKey,
+    bool cacheHit = false,
+  }) {
+    return StudioStageBrief(
+      agentId: agentId,
+      agentName: agentName,
+      brief: brief,
+      disposition: disposition,
+      status: status,
+      error: error,
+      refreshPolicy: refreshPolicy,
+      cacheKey: cacheKey,
+      cacheHit: cacheHit,
+    );
+  }
+}
+
+class _CachedStudioBrief {
+  final String brief;
+  final String policy;
+  final int createdTurnIndex;
+
+  const _CachedStudioBrief({
+    required this.brief,
+    required this.policy,
+    required this.createdTurnIndex,
   });
 }

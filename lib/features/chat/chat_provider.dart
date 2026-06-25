@@ -196,6 +196,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     String newContent,
   ) => _messageOpsCtrl.editStudioOutput(index, outputId, newContent);
 
+  Future<void> regenerateStudioOutput(int index, String outputId) =>
+      _messageOpsCtrl.regenerateStudioOutput(index, outputId);
+
   Future<void> moveMessage(int fromIndex, int toIndex) =>
       _messageOpsCtrl.moveMessage(fromIndex, toIndex);
 

@@ -125,6 +125,13 @@ Studio Mode:
 - Intermediate Studio agents always force reasoning off/omitted.
 - The final Studio agent inherits the resolved `ApiConfig` reasoning settings.
 - Studio strips prompt-level hidden-reasoning directives from final-agent instructions when reasoning is disabled/omitted, but this only affects prompt text, not provider-internal thinking.
+- Intermediate Studio agents run in parallel. Individual intermediate failures
+  are stored as `status: error` Studio outputs and do not abort the final agent;
+  the final agent receives successful briefs plus error markers. Only final-agent
+  failure turns the chat generation into a generation error.
+- Studio profiles are reusable prompt/agent presets stored in DB and can be
+  bound to multiple chat sessions. Do not treat Studio config as purely
+  session-local state.
 
 ---
 

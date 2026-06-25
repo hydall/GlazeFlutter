@@ -40,7 +40,9 @@ class StudioMenuDialog extends ConsumerStatefulWidget {
 
 class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   StudioConfig? _config;
+  List<StudioConfig> _profiles = const [];
   _StudioContextInfo _contextInfo = const _StudioContextInfo();
+  String? _selectedProfileId;
   String? _selectedAgentStudioPresetId;
   String? _selectedFinalStudioPresetId;
   String? _selectedBuildApiConfigId;
@@ -63,10 +65,13 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       final config = await ref
           .read(studioConfigRepoProvider)
           .getBySessionId(widget.sessionId);
+      final profiles = await ref.read(studioConfigRepoProvider).getProfiles();
       final contextInfo = await _loadContextInfo(config: config);
       if (mounted) {
         setState(() {
           _config = config;
+          _profiles = profiles;
+          _selectedProfileId = config?.profileId;
           _contextInfo = contextInfo;
           _selectedAgentStudioPresetId = contextInfo.agentStudioPresetId;
           _selectedFinalStudioPresetId = contextInfo.finalStudioPresetId;
@@ -117,8 +122,15 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       }
 
       final now = currentTimestampSeconds();
+      final profileId = _config?.profileId.isNotEmpty == true
+          ? _config!.profileId
+          : 'studio_${widget.sessionId}_$now';
       final newConfig = StudioConfig(
         sessionId: widget.sessionId,
+        profileId: profileId,
+        profileName: preset.name.isNotEmpty
+            ? 'Studio: ${preset.name}'
+            : 'Studio Profile',
         enabled: true,
         agents: agents,
         sourcePresetId: preset.id,
@@ -136,10 +148,13 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       );
 
       await ref.read(studioConfigRepoProvider).upsert(newConfig);
+      final profiles = await ref.read(studioConfigRepoProvider).getProfiles();
 
       if (mounted) {
         setState(() {
           _config = newConfig;
+          _profiles = profiles;
+          _selectedProfileId = profileId;
           _contextInfo = contextInfo;
           _building = false;
         });
@@ -219,6 +234,26 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       buildModelLabel: _apiLabel(buildApiConfig),
       runModelLabel: _apiLabel(runApiConfig),
     );
+  }
+
+  Future<void> _applyProfile(String? profileId) async {
+    if (profileId == null || profileId.isEmpty) return;
+    final repo = ref.read(studioConfigRepoProvider);
+    await repo.bindSessionToProfile(
+      sessionId: widget.sessionId,
+      profileId: profileId,
+    );
+    final config = await repo.getBySessionId(widget.sessionId);
+    final profiles = await repo.getProfiles();
+    final contextInfo = await _loadContextInfo(config: config);
+    if (!mounted) return;
+    setState(() {
+      _config = config;
+      _profiles = profiles;
+      _selectedProfileId = profileId;
+      _contextInfo = contextInfo;
+      _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
+    });
   }
 
   String _apiLabel(ApiConfig? config) {
@@ -441,6 +476,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSourcePresetInfo(),
+          if (_profiles.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _profileSelector(),
+          ],
           const SizedBox(height: 8),
           _apiSelector(
             label: 'Build model',
@@ -463,6 +502,37 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _profileSelector() {
+    final value = _profiles.any((p) => p.profileId == _selectedProfileId)
+        ? _selectedProfileId
+        : null;
+    return DropdownButtonFormField<String>(
+      initialValue: value,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Studio profile',
+        isDense: true,
+        border: OutlineInputBorder(),
+      ),
+      items: _profiles
+          .map(
+            (profile) => DropdownMenuItem(
+              value: profile.profileId,
+              child: Text(
+                profile.profileName.isNotEmpty
+                    ? profile.profileName
+                    : profile.sourcePresetId.isNotEmpty
+                    ? 'Studio: ${profile.sourcePresetId}'
+                    : profile.profileId,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: _applyProfile,
     );
   }
 

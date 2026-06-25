@@ -215,6 +215,7 @@ class ChatWebViewSurface extends ConsumerWidget {
                 bridge.onSelectionChange = callbacks.onSelectionChange;
                 bridge.onEditSave = callbacks.onEditSave;
                 bridge.onStudioOutputEdit = callbacks.onStudioOutputEdit;
+                bridge.onStudioOutputRegen = callbacks.onStudioOutputRegen;
                 bridge.onEditCancel = callbacks.onEditCancel;
                 bridge.onEditFocusChange = callbacks.onEditFocusChange;
                 bridge.onImageClick = callbacks.onImageClick;

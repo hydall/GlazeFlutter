@@ -38,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 41;
+  int get schemaVersion => 42;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -480,6 +480,28 @@ class AppDatabase extends _$AppDatabase {
             studioConfigRows.studioPresetOverridesJson,
           );
         }
+      }
+      if (from < 42) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('profile_id')) {
+          await m.addColumn(studioConfigRows, studioConfigRows.profileId);
+        }
+        if (!colNames.contains('profile_name')) {
+          await m.addColumn(studioConfigRows, studioConfigRows.profileName);
+        }
+        await customStatement(
+          "UPDATE studio_config_rows SET profile_id = session_id "
+          "WHERE profile_id IS NULL OR profile_id = ''",
+        );
+        await customStatement(
+          "UPDATE studio_config_rows SET profile_name = "
+          "CASE WHEN source_preset_id IS NULL OR source_preset_id = '' "
+          "THEN 'Studio Profile' ELSE 'Studio: ' || source_preset_id END "
+          "WHERE profile_name IS NULL OR profile_name = ''",
+        );
       }
     },
   );

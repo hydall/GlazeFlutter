@@ -83,6 +83,17 @@ class ChatMessageService {
     String outputId,
     String newContent,
   ) {
+    return updateStudioOutput(session, index, outputId, {
+      'content': newContent,
+    });
+  }
+
+  ChatSession updateStudioOutput(
+    ChatSession session,
+    int index,
+    String outputId,
+    Map<String, dynamic> patch,
+  ) {
     if (index < 0 || index >= session.messages.length) return session;
     final msg = session.messages[index];
     final outputIndex = msg.studioOutputs.indexWhere(
@@ -93,10 +104,7 @@ class ChatMessageService {
     final updatedOutputs = msg.studioOutputs
         .map((o) => Map<String, dynamic>.from(o))
         .toList(growable: true);
-    updatedOutputs[outputIndex] = {
-      ...updatedOutputs[outputIndex],
-      'content': newContent,
-    };
+    updatedOutputs[outputIndex] = {...updatedOutputs[outputIndex], ...patch};
 
     final updatedSwipesMeta = List<Map<String, dynamic>>.from(msg.swipesMeta);
     final swipeIdx = msg.swipeId;

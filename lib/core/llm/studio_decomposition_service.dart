@@ -85,6 +85,8 @@ Create 3-6 agents. Respond with ONLY a JSON array (no markdown, no explanation):
     "role": "system",
     "promptShard": "The instructions this agent should follow, extracted/compressed from the relevant preset blocks",
     "order": 0,
+    "refreshPolicy": "turn",
+    "invalidationSignals": ["scene_changed"],
     "sourceBlockNames": "block names this agent derives from"
   }
 ]
@@ -105,7 +107,12 @@ Rules:
 - Intermediate agents are fed into the final agent as context. They must produce compact operational briefs, not draft prose.
 - Intermediate agents may include brief do/don't examples derived from the preset, but must never continue the current scene, write in-scene dialogue/actions, or produce the final RP response.
 - Preserve named meta-agents, invisible directors, ghosts, companions, OOC interfaces, and operational checklists as explicit agent instructions. Do not collapse them to a one-line mention.
-- If a block defines a named entity such as Lumia/Ghost in the Machine, one agent promptShard must retain its name, nature, silent-operation rules, OOC interface, and non-exposure rules.''';
+- If a block defines a named entity such as Lumia/Ghost in the Machine, one agent promptShard must retain its name, nature, silent-operation rules, OOC interface, and non-exposure rules.
+- For every intermediate agent, assign refreshPolicy conservatively:
+  - "static" = reusable until preset/profile/card/settings change; use for banlists, fixed formatting policy, stable style rules.
+  - "scene" = reusable while location, active cast, scene goal, conflict, relationship state, and tone remain stable; use for scene-level directors.
+  - "turn" = must rerun every user turn; use for continuity, recent history, anti-loop, user-message-sensitive checks, and the final responder.
+- If uncertain, choose "turn". Include short invalidationSignals such as "preset_changed", "scene_changed", "active_cast_changed", "tone_changed", "last_3_replies_changed".''';
 
     final String? raw;
     try {
@@ -152,6 +159,10 @@ Rules:
           temperature: i == decoded.length - 1 ? 0.8 : 0.3,
           maxTokens: 8000,
           timeoutMs: i == decoded.length - 1 ? 90000 : 60000,
+          refreshPolicy: i == decoded.length - 1
+              ? 'turn'
+              : _refreshPolicyField(item['refreshPolicy']),
+          invalidationSignals: _stringListField(item['invalidationSignals']),
         ),
       );
     }
@@ -228,6 +239,30 @@ Rules:
     return fallback;
   }
 
+  String _refreshPolicyField(dynamic value) {
+    final text = _stringField(value).toLowerCase();
+    return switch (text) {
+      'static' || 'scene' || 'turn' => text,
+      _ => 'turn',
+    };
+  }
+
+  List<String> _stringListField(dynamic value) {
+    if (value is Iterable) {
+      return value
+          .map((v) => v.toString().trim())
+          .where((v) => v.isNotEmpty)
+          .toList(growable: false);
+    }
+    final text = _stringField(value);
+    if (text.isEmpty) return const [];
+    return text
+        .split(',')
+        .map((v) => v.trim())
+        .where((v) => v.isNotEmpty)
+        .toList(growable: false);
+  }
+
   List<StudioAgent> _fallbackAgents(
     List<PresetBlock> enabledBlocks,
     List<({String name, String role, String content})> preservedMetaBlocks,
@@ -258,6 +293,8 @@ Rules:
         maxTokens: 8000,
         timeoutMs: 60000,
         sourceBlockNames: otherBlocks,
+        refreshPolicy: 'turn',
+        invalidationSignals: const ['last_user_message_changed'],
       ),
       StudioAgent(
         id: 'agent_${sessionId}_fallback_director_$now',
@@ -272,6 +309,8 @@ Rules:
         maxTokens: 8000,
         timeoutMs: 60000,
         sourceBlockNames: enabledBlocks.map((b) => b.name).join(', '),
+        refreshPolicy: 'scene',
+        invalidationSignals: const ['scene_changed', 'tone_changed'],
       ),
       StudioAgent(
         id: 'agent_${sessionId}_fallback_responder_$now',
@@ -286,6 +325,7 @@ Rules:
         maxTokens: 8000,
         timeoutMs: 90000,
         sourceBlockNames: systemBlocks,
+        refreshPolicy: 'turn',
       ),
     ];
 

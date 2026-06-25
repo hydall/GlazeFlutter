@@ -16,6 +16,7 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/preset.dart';
+import '../../../core/models/studio_config.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../sync_repo_interfaces.dart';
 import '../../../features/extensions/models/extension_preset.dart';
@@ -46,6 +47,7 @@ class SyncEngine {
   final SyncExtensionPresetStore _extensionPresetRepo;
   final SyncExtensionsSettingsStore _extensionsSettingsStore;
   final SyncInfoBlockStore _infoBlockStore;
+  final SyncStudioConfigStore _studioConfigStore;
   final SyncQueue _queue = SyncQueue();
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
   late final SyncBinaryAssetSyncer _binarySyncer;
@@ -67,6 +69,7 @@ class SyncEngine {
     this._extensionPresetRepo,
     this._extensionsSettingsStore,
     this._infoBlockStore,
+    this._studioConfigStore,
     this._saveLorebookActivations,
   ) {
     _binarySyncer = SyncBinaryAssetSyncer(
@@ -90,6 +93,7 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/persona_avatars');
     await _adapter.ensureFolder('$cloudBase/extension_presets');
     await _adapter.ensureFolder('$cloudBase/info_blocks');
+    await _adapter.ensureFolder('$cloudBase/studio_configs');
 
     onProgress(const SyncProgress(message: 'Building sync manifest...'));
     final localManifest = await _manifestBuilder.buildLocalManifest();
@@ -730,6 +734,9 @@ class SyncEngine {
           final blocks = await _infoBlockStore.getBySessionId(id);
           if (blocks.isEmpty) return null;
           return SyncSerialization.infoBlocksPayload(blocks);
+        case 'studio_config':
+          final config = await _studioConfigStore.getById(id);
+          return config?.toJson();
         default:
           return null;
       }
@@ -787,6 +794,9 @@ class SyncEngine {
           break;
         case 'info_block':
           await _applyCloudInfoBlocks(id, data);
+          break;
+        case 'studio_config':
+          await _studioConfigStore.put(StudioConfig.fromJson(data));
           break;
       }
     } catch (_) {}
@@ -1046,9 +1056,11 @@ class SyncEngine {
           // id == sessionId for info_block entries
           await _infoBlockStore.deleteBySessionId(id);
           break;
+        case 'studio_config':
+          await _studioConfigStore.delete(id);
+          break;
         // extensions_settings has no meaningful "delete" — it's always present.
       }
     } catch (_) {}
   }
 }
-

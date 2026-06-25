@@ -166,8 +166,10 @@ export class InteractionDispatch {
       'ext-block-edit': (e, el) => bridge._sendToFlutter('onExtBlockEdit', [el.dataset.blockId, el.dataset.messageId]),
       'ext-block-delete': (e, el) => bridge._sendToFlutter('onExtBlockDelete', [el.dataset.blockId, el.dataset.messageId]),
       'studio-output-edit': (e, el) => bridge._sendToFlutter('onStudioOutputEdit', [el.dataset.outputId, el.dataset.messageId]),
+      'studio-output-regen': (e, el) => bridge._sendToFlutter('onStudioOutputRegen', [el.dataset.outputId, el.dataset.messageId]),
       'toggle-studio-output': (e, el) => {
         if (e.target.closest('.msg-studio-output-edit')) return;
+        if (e.target.closest('.msg-studio-output-regen')) return;
         e.preventDefault();
         e.stopPropagation();
         const item = el.closest('.msg-studio-output');

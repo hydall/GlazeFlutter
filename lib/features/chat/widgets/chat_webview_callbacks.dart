@@ -83,6 +83,10 @@ class ChatWebViewCallbacks {
     editActions.onStudioOutputEdit?.call(outputId, messageId);
   }
 
+  void onStudioOutputRegen(String outputId, String messageId) {
+    editActions.onStudioOutputRegen?.call(outputId, messageId);
+  }
+
   void onEditCancel(String id) {
     editActions.onEditCancel?.call(id);
   }

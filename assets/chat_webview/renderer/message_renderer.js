@@ -310,6 +310,7 @@ if (messageData.isEditing) classes.push('editing');
     for (const output of outputs || []) {
       const item = document.createElement('div');
       item.className = expanded ? 'msg-studio-output' : 'msg-studio-output collapsed';
+      if (output.status === 'error') item.classList.add('error');
       item.dataset.outputId = output.id || '';
 
       const header = document.createElement('div');
@@ -319,7 +320,9 @@ if (messageData.isEditing) classes.push('editing');
 
       const name = document.createElement('span');
       name.className = 'msg-studio-output-name';
-      name.textContent = output.name || 'Studio Agent';
+      name.textContent = output.status === 'error'
+        ? `${output.name || 'Studio Agent'} — error`
+        : output.name || 'Studio Agent';
       header.appendChild(name);
 
       const actions = document.createElement('span');
@@ -333,6 +336,17 @@ if (messageData.isEditing) classes.push('editing');
       edit.title = 'Edit Studio output';
       edit.innerHTML = ICON.edit;
       actions.appendChild(edit);
+      if (output.status === 'error') {
+        const regen = document.createElement('button');
+        regen.type = 'button';
+        regen.className = 'msg-studio-output-regen';
+        regen.dataset.action = 'studio-output-regen';
+        regen.dataset.outputId = output.id || '';
+        regen.dataset.messageId = messageId;
+        regen.title = 'Regenerate Studio output';
+        regen.innerHTML = ICON.regen;
+        actions.appendChild(regen);
+      }
       const caret = document.createElement('span');
       caret.className = 'msg-studio-output-caret';
       caret.innerHTML = ICON.chevron;

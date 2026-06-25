@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'studio_config.freezed.dart';
 part 'studio_config.g.dart';
 
-/// Per-session Studio configuration. Bound to a chat session — copied on branch.
+/// Reusable Studio configuration profile.
 ///
 /// Created when the user clicks "Build Studio" in the MagicDrawer Studio menu.
 /// The LLM decomposes the active preset into agent tasks, each with its own
@@ -11,7 +11,11 @@ part 'studio_config.g.dart';
 @freezed
 abstract class StudioConfig with _$StudioConfig {
   const factory StudioConfig({
+    /// Storage id. Older rows used the chat session id; profile rows use a
+    /// stable Studio profile id and can be reused by many sessions.
     required String sessionId,
+    @Default('') String profileId,
+    @Default('') String profileName,
     @Default(false) bool enabled,
     @Default([]) List<StudioAgent> agents,
     @Default('') String sourcePresetId,
@@ -87,6 +91,12 @@ abstract class StudioAgent with _$StudioAgent {
     @Default(0.3) double temperature,
     @Default(8000) int maxTokens,
     @Default('') String sourceBlockNames,
+
+    /// Controls whether an intermediate agent should be refreshed every turn
+    /// or can reuse a previous brief. Supported values: static, scene, turn.
+    /// Final agents always run every turn.
+    @Default('turn') String refreshPolicy,
+    @Default([]) List<String> invalidationSignals,
   }) = _StudioAgent;
 
   factory StudioAgent.fromJson(Map<String, dynamic> json) =>

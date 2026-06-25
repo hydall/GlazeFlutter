@@ -22,6 +22,7 @@ import 'package:glaze_flutter/features/extensions/models/block_run_status.dart';
 import 'package:glaze_flutter/features/extensions/models/extension_preset.dart';
 import 'package:glaze_flutter/features/extensions/models/extensions_settings.dart';
 import 'package:glaze_flutter/features/extensions/models/info_block.dart';
+import 'package:glaze_flutter/core/models/studio_config.dart';
 import 'package:glaze_flutter/shared/theme/theme_preset.dart';
 
 // ─── In-memory fakes (reuse pattern from sync_lifecycle_test) ───────
@@ -223,6 +224,27 @@ class FakeInfoBlockStore implements SyncInfoBlockStore {
   }
 }
 
+class FakeStudioConfigStore implements SyncStudioConfigStore {
+  final Map<String, StudioConfig> data = {};
+
+  @override
+  Future<List<StudioConfig>> getAll() async => data.values.toList();
+
+  @override
+  Future<StudioConfig?> getById(String id) async => data[id];
+
+  @override
+  Future<void> put(StudioConfig config) async {
+    data[config.profileId.isNotEmpty ? config.profileId : config.sessionId] =
+        config;
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    data.remove(id);
+  }
+}
+
 // ─── Cloud adapter (in-memory) ───────────────────────────────────────
 
 class FakeCloudAdapter implements CloudAdapter {
@@ -297,6 +319,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     required SyncExtensionPresetStore extensionPresetRepo,
     required SyncExtensionsSettingsStore extensionsSettingsStore,
     required SyncInfoBlockStore infoBlockStore,
+    required SyncStudioConfigStore studioConfigStore,
   }) : _builder = SyncManifestBuilder(
          characterRepo: characterRepo,
          chatRepo: chatRepo,
@@ -309,6 +332,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
          extensionPresetRepo: extensionPresetRepo,
          extensionsSettingsStore: extensionsSettingsStore,
          infoBlockStore: infoBlockStore,
+         studioConfigStore: studioConfigStore,
        );
 
   @override
@@ -366,6 +390,7 @@ class SyncWorld {
   final FakeExtensionsSettingsStore extensionsSettings =
       FakeExtensionsSettingsStore();
   final FakeInfoBlockStore infoBlocks = FakeInfoBlockStore();
+  final FakeStudioConfigStore studioConfigs = FakeStudioConfigStore();
   late final InMemoryManifestProvider manifestProvider;
 
   SyncWorld() {
@@ -381,6 +406,7 @@ class SyncWorld {
       extensionPresetRepo: extensionPresets,
       extensionsSettingsStore: extensionsSettings,
       infoBlockStore: infoBlocks,
+      studioConfigStore: studioConfigs,
     );
   }
 
@@ -400,6 +426,7 @@ class SyncWorld {
     extensionPresets,
     extensionsSettings,
     infoBlocks,
+    studioConfigs,
     (_) async {},
   );
 }

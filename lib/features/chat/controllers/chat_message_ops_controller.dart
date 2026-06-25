@@ -1,7 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
+import '../../../core/llm/prompt_isolate.dart';
+import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/utils/time_helpers.dart';
 import '../chat_message_service.dart';
 import '../chat_session_service.dart';
@@ -70,6 +73,76 @@ class ChatMessageOpsController {
     );
     if (!_ref.mounted) return;
     _setState(AsyncData(current.copyWith(session: updated)));
+  }
+
+  Future<void> regenerateStudioOutput(int index, String outputId) async {
+    if (!_ref.mounted) return;
+    final current = _getState().value;
+    final session = current?.session;
+    if (current == null || session == null) return;
+    if (index < 0 || index >= session.messages.length) return;
+    final msg = session.messages[index];
+    Map<String, dynamic>? output;
+    for (final item in msg.studioOutputs) {
+      if (item['id'] == outputId) {
+        output = item;
+        break;
+      }
+    }
+    if (output == null) return;
+
+    var updated = _messageSvc.updateStudioOutput(session, index, outputId, {
+      'content': 'Regenerating...',
+      'status': 'running',
+    });
+    _setState(AsyncData(current.copyWith(session: updated)));
+
+    try {
+      final promptSession = updated.copyWith(
+        messages: updated.messages.take(index).toList(growable: false),
+        updatedAt: currentTimestampSeconds(),
+      );
+      final builder = _ref.read(promptPayloadBuilderProvider);
+      final payload = await builder.buildFromSession(
+        charId: _charId,
+        session: promptSession,
+      );
+      if (!_ref.mounted) return;
+      final promptResult = await buildPromptInIsolate(payload);
+      if (!_ref.mounted) return;
+      final brief = await _ref
+          .read(memoryStudioServiceProvider)
+          .regenerateIntermediateAgent(
+            sessionId: session.id,
+            agentId: outputId,
+            promptResult: promptResult,
+            promptPayload: payload,
+            apiConfig: payload.apiConfig,
+          );
+      if (!_ref.mounted) return;
+      final latest = _getState().value?.session;
+      if (latest == null) return;
+      updated = _messageSvc.updateStudioOutput(latest, index, outputId, {
+        'content': brief.brief,
+        'status': brief.status,
+        'error': null,
+      });
+      _setState(
+        AsyncData((_getState().value ?? current).copyWith(session: updated)),
+      );
+    } catch (e) {
+      if (!_ref.mounted) return;
+      final latest = _getState().value?.session;
+      if (latest == null) return;
+      updated = _messageSvc.updateStudioOutput(latest, index, outputId, {
+        'content': '$e',
+        'status': 'error',
+        'error': '$e',
+      });
+      _setState(
+        AsyncData((_getState().value ?? current).copyWith(session: updated)),
+      );
+    }
   }
 
   Future<ChatSession> _applyRunOnEditRegexes(

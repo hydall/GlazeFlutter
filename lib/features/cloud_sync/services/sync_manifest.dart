@@ -20,6 +20,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncExtensionPresetStore _extensionPresetRepo;
   final SyncExtensionsSettingsStore _extensionsSettingsStore;
   final SyncInfoBlockStore _infoBlockStore;
+  final SyncStudioConfigStore _studioConfigStore;
   final SyncImageStore? _imageStore;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
@@ -38,6 +39,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required this._extensionPresetRepo,
     required this._extensionsSettingsStore,
     required this._infoBlockStore,
+    required this._studioConfigStore,
     this._imageStore,
   });
 
@@ -201,6 +203,33 @@ class SyncManifestBuilder implements SyncManifestProvider {
         type: 'info_block',
         id: sessionId,
         path: cloudPath('info_block', sessionId),
+        updatedAt: updatedAt,
+        hash: hash,
+      );
+    }
+
+    final studioConfigs = await _studioConfigStore.getAll();
+    for (final config in studioConfigs) {
+      final id = config.profileId.isNotEmpty
+          ? config.profileId
+          : config.sessionId;
+      final json = config.toJson();
+      final hash = SyncSerialization.computeSyncHash(json);
+      final key = entryKey('studio_config', id);
+      final prevEntry = previous.entries[key];
+      final cloudEntry = cloudManifest?.entries[key];
+      var updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+      if (config.updatedAt > updatedAt) updatedAt = config.updatedAt;
+
+      entries[key] = SyncManifestEntry(
+        type: 'studio_config',
+        id: id,
+        path: cloudPath('studio_config', id),
         updatedAt: updatedAt,
         hash: hash,
       );
