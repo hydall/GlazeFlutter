@@ -11,6 +11,7 @@ import '../models/studio_config.dart';
 import '../state/db_provider.dart';
 import '../../features/settings/api_list_provider.dart';
 import 'history_assembler.dart';
+import 'macro_engine.dart';
 import 'memory_studio_mode.dart';
 import 'prompt_builder.dart';
 import 'studio_request_preset.dart';
@@ -567,12 +568,25 @@ class MemoryStudioService {
       switch (block.kind) {
         case 'agent_instruction':
           final control = StringBuffer();
-          if (agent.promptShard.trim().isNotEmpty) {
+          final promptShard = _expandStudioBlockContent(
+            agent.promptShard,
+            promptPayload: promptPayload,
+            promptResult: promptResult,
+            context: context,
+          ).trim();
+          if (promptShard.isNotEmpty) {
             control
-              ..writeln(agent.promptShard.trim())
+              ..writeln(promptShard)
               ..writeln();
           }
-          control.writeln(block.content.trim());
+          control.writeln(
+            _expandStudioBlockContent(
+              block.content,
+              promptPayload: promptPayload,
+              promptResult: promptResult,
+              context: context,
+            ).trim(),
+          );
           messages.add({
             'role': _normalizeRole(
               block.role.isNotEmpty ? block.role : agent.role,
@@ -608,7 +622,12 @@ class MemoryStudioService {
             messages.addAll(promptMessages.map((m) => m.toApiMap()));
             break;
           }
-          final content = block.content.trim();
+          final content = _expandStudioBlockContent(
+            block.content,
+            promptPayload: promptPayload,
+            promptResult: promptResult,
+            context: context,
+          ).trim();
           if (content.isNotEmpty) {
             messages.add({
               'role': _normalizeRole(block.role),
@@ -619,6 +638,51 @@ class MemoryStudioService {
     }
 
     return messages;
+  }
+
+  String _expandStudioBlockContent(
+    String content, {
+    required PromptPayload promptPayload,
+    required PromptResult promptResult,
+    required _StudioContextBuckets context,
+  }) {
+    if (!content.contains('{')) return content;
+    final macroCtx = MacroContext(
+      charName: promptPayload.character.name,
+      charDescription: promptPayload.character.description,
+      charScenario: promptPayload.character.scenario,
+      charPersonality: promptPayload.character.personality,
+      charMesExample: promptPayload.character.mesExample,
+      userName: promptPayload.persona?.name ?? 'User',
+      personaPrompt: promptPayload.persona?.prompt,
+      reasoningStart: promptPayload.preset?.reasoningStart,
+      reasoningEnd: promptPayload.preset?.reasoningEnd,
+      sessionVars: promptResult.sessionVars,
+      globalVars: promptResult.globalVars,
+      charId: promptPayload.character.id,
+      sessionId: promptPayload.sessionId ?? '',
+      summaryContent:
+          promptPayload.summaryContent ?? context.joinKind('summary'),
+      memoryContent:
+          promptPayload.memoryMacroContent ??
+          promptPayload.memoryContent ??
+          context
+              .joinKind('memory')
+              .ifBlank(context.taggedDynamicContent('summary')),
+      lorebooksContent:
+          [
+                context.joinKind('worldInfoBefore'),
+                context.joinKind('worldInfoAfter'),
+              ]
+              .where((value) => value.trim().isNotEmpty)
+              .join('\n\n')
+              .ifBlank(context.taggedDynamicContent('lorebooks')),
+      guidanceText: promptPayload.guidanceText,
+      macroName: promptPayload.character.macroName,
+      arcContent: promptPayload.arcContent,
+      entitiesContent: promptPayload.entitiesContent,
+    );
+    return replaceMacros(content, macroCtx).text;
   }
 
   _StudioContextBuckets _studioContextBuckets(
@@ -879,6 +943,31 @@ class _StudioContextBuckets {
 
   List<PromptMessage> messagesForKind(String kind) =>
       byKind[kind] ?? const <PromptMessage>[];
+
+  String joinKind(String kind) =>
+      messagesForKind(kind).map((message) => message.content).join('\n\n');
+
+  String taggedDynamicContent(String tag) {
+    final buffer = StringBuffer();
+    final pattern = RegExp(
+      '<$tag>\\s*([\\s\\S]*?)\\s*</$tag>',
+      caseSensitive: false,
+    );
+    for (final message in dynamicContext) {
+      for (final match in pattern.allMatches(message.content)) {
+        final content = match.group(1)?.trim();
+        if (content != null && content.isNotEmpty) {
+          if (buffer.isNotEmpty) buffer.writeln('\n');
+          buffer.write(content);
+        }
+      }
+    }
+    return buffer.toString();
+  }
+}
+
+extension _BlankStringFallback on String {
+  String ifBlank(String fallback) => trim().isEmpty ? fallback : this;
 }
 
 class _ResolvedAgentConfig {
