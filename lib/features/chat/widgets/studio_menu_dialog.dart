@@ -51,6 +51,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   String _builderPromptTemplate = '';
   bool _loading = true;
   bool _building = false;
+  final Set<String> _regeneratingAgentIds = {};
   final Map<String, List<String>> _modelsByApiConfigId = {};
   final Set<String> _fetchingModelConfigIds = {};
   String? _error;
@@ -173,6 +174,63 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     }
   }
 
+  Future<void> _regenerateAgentInstruction(StudioAgent agent) async {
+    if (_config == null || _regeneratingAgentIds.contains(agent.id)) return;
+    setState(() {
+      _regeneratingAgentIds.add(agent.id);
+      _error = null;
+    });
+
+    try {
+      final contextInfo = await _loadContextInfo(config: _config);
+      final preset = contextInfo.preset;
+      final buildApiConfig = contextInfo.buildApiConfig;
+      if (preset == null) {
+        throw Exception(
+          'No preset available. Create or select a preset first.',
+        );
+      }
+      if (buildApiConfig == null) {
+        throw Exception('No model selected for Studio build.');
+      }
+
+      final decompositionService = ref.read(studioDecompositionServiceProvider);
+      final updatedAgent = await decompositionService
+          .regenerateAgentInstruction(
+            preset: preset,
+            agent: agent,
+            apiConfig: buildApiConfig,
+            builderPromptTemplate: _builderPromptTemplate,
+          );
+
+      if (!mounted || _config == null) return;
+      final agents = _config!.agents.map((a) {
+        return a.id == agent.id ? updatedAgent.copyWith(order: a.order) : a;
+      }).toList();
+      final updatedConfig = _config!.copyWith(
+        agents: agents,
+        sourcePresetHash: StudioDecompositionService.computePresetHash(
+          preset.blocks.where((b) => b.enabled).toList(),
+        ),
+        buildApiConfigId: buildApiConfig.id,
+        builderPromptTemplate: _builderPromptTemplate,
+        updatedAt: currentTimestampSeconds(),
+      );
+      await ref.read(studioConfigRepoProvider).upsert(updatedConfig);
+      if (!mounted) return;
+      setState(() {
+        _config = updatedConfig;
+        _contextInfo = contextInfo;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _regeneratingAgentIds.remove(agent.id));
+      }
+    }
+  }
+
   Future<_StudioContextInfo> _loadContextInfo({StudioConfig? config}) async {
     final chatState = ref.read(chatProvider(widget.charId)).value;
     final session = chatState?.session;
@@ -291,10 +349,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 650,
-          maxHeight: size.height - 48,
-        ),
+        constraints: BoxConstraints(maxWidth: 650, maxHeight: size.height - 48),
         child: SizedBox(
           width: size.width < 650 ? size.width - 32 : 650,
           height: size.height < 648 ? size.height - 48 : 600,
@@ -1480,21 +1535,42 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 
   Widget _buildAgentDetails(StudioAgent agent) {
     final isFinal = _config?.agents.lastOrNull?.id == agent.id;
+    final regenerating = _regeneratingAgentIds.contains(agent.id);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Prompt shard:',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: context.cs.onSurfaceVariant,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Prompt shard:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: context.cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: regenerating
+                    ? null
+                    : () => _regenerateAgentInstruction(agent),
+                icon: regenerating
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_fix_high, size: 16),
+                label: Text(regenerating ? 'Regenerating...' : 'Regenerate'),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           TextFormField(
+            key: ValueKey('${agent.id}_${agent.promptShard.hashCode}'),
             initialValue: agent.promptShard,
             maxLines: 6,
             decoration: const InputDecoration(
