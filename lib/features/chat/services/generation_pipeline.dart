@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
 import '../../../core/llm/memory_draft_planner.dart';
+import '../../../core/llm/memory_agentic_service.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/services/generation_notification_service.dart';
 import '../../../core/state/db_provider.dart';
@@ -200,6 +204,23 @@ class GenerationPipeline {
       }
 
       await _autoCreateMemoryDrafts(result.session);
+
+      // Stage 2: Agentic write-loop — only on accepted (non-regen) turns.
+      // Suppressed on swipe/regen/studioFinalOnly to avoid duplicate or
+      // contradictory writes (the user may swipe again). The regen branch
+      // above (regenOutcome != null) returns early before reaching here, so
+      // this code only runs on the normal send-message path.
+      if (regenTargetId == null &&
+          !studioFinalOnly &&
+          result.session != null) {
+        unawaited(
+          _runAgenticWriteLoop(
+            sessionId: result.session!.id,
+            messages: result.session!.messages,
+            genId: genId,
+          ),
+        );
+      }
 
       return GenerationOutcome(
         state: getState().value ?? result,
@@ -448,4 +469,69 @@ class GenerationPipeline {
       debugPrint('[GenerationPipeline] auto-create memory drafts failed: $e');
     }
   }
+
+  /// Stage 2: Agentic write-loop trigger.
+  ///
+  /// Fire-and-forget — does not block generation or user interaction.
+  /// Only called on the normal (non-regen) path, after the assistant message
+  /// is persisted to DB. Reads MemoryBook settings to check
+  /// `agenticWriteEnabled`, fetches current trackers, extracts recent history
+  /// text, and delegates to [MemoryAgenticService.runWriteLoop].
+  ///
+  /// Staleness guard: checks `abortHandler.isCurrentGen(genId)` before
+  /// executing writes (after the LLM call returns). The write-loop itself
+  /// creates its own CancelToken and checks it after each await.
+  Future<void> _runAgenticWriteLoop({
+    required String sessionId,
+    required List<ChatMessage> messages,
+    required int genId,
+  }) async {
+    if (!ref.mounted) return;
+
+    try {
+      final bookRepo = ref.read(memoryBookRepoProvider);
+      final book = await bookRepo.getBySessionId(sessionId);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (book == null || !book.settings.agenticWriteEnabled) return;
+
+      final trackerRepo = ref.read(trackerRepoProvider);
+      final trackers = await trackerRepo.getBySessionId(sessionId);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
+      final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
+
+      final agenticService = ref.read(memoryAgenticServiceProvider);
+      await agenticService.runWriteLoop(
+        sessionId: sessionId,
+        settings: book.settings,
+        recentHistoryText: recentHistory,
+        currentTrackers: trackers,
+      );
+    } catch (e) {
+      debugPrint('[GenerationPipeline] agentic write-loop failed: $e');
+    }
+  }
+}
+
+/// Extracts recent conversation as plain text for the agentic write-loop
+/// prompt. Format: "Role: content" per line, last [maxMessages] messages.
+/// Skips error, typing, and empty-content messages.
+@visibleForTesting
+String extractRecentHistoryText(
+  List<ChatMessage> messages, {
+  int maxMessages = 10,
+}) {
+  final start = messages.length > maxMessages
+      ? messages.length - maxMessages
+      : 0;
+  final recent = messages.sublist(start);
+  final lines = <String>[];
+  for (final msg in recent) {
+    if (msg.isError || msg.isTyping) continue;
+    final role = msg.role == 'assistant' ? 'Assistant' : 'User';
+    final content = msg.content.trim();
+    if (content.isEmpty) continue;
+    lines.add('$role: $content');
+  }
+  return lines.join('\n\n');
 }
