@@ -98,9 +98,12 @@ Rules:
 - System blocks (char_card, scenario, etc.) go to the main responder
 - Jailbreak/content permission blocks go to the main responder
 - CoT/quality control blocks (anti-loop, anti-echo, sensory) go to a director agent
+- From CoT blocks, extract only enforceable quality/context policy. Never preserve hidden chain-of-thought instructions, <think> tags, or "plan internally then output after </think>" text.
 - Genre/tone blocks go to a director or scenario agent
 - Formatting blocks (HTML, comics, images) go to the main responder
 - Variable blocks (setvar) go to the main responder
+- Intermediate agents are fed into the final agent as context. They must produce compact operational briefs, not draft prose.
+- Intermediate agents may include brief do/don't examples derived from the preset, but must never continue the current scene, write in-scene dialogue/actions, or produce the final RP response.
 - Preserve named meta-agents, invisible directors, ghosts, companions, OOC interfaces, and operational checklists as explicit agent instructions. Do not collapse them to a one-line mention.
 - If a block defines a named entity such as Lumia/Ghost in the Machine, one agent promptShard must retain its name, nature, silent-operation rules, OOC interface, and non-exposure rules.''';
 
@@ -159,11 +162,8 @@ Rules:
     }
 
     agents.sort((a, b) => a.order.compareTo(b.order));
-    final result = _applyPreservedMetaBlocks(
-      agents,
-      preservedMetaBlocks,
-      sessionId,
-      now,
+    final result = _normalizeStudioAgents(
+      _applyPreservedMetaBlocks(agents, preservedMetaBlocks, sessionId, now),
     );
     _log('build complete session=$sessionId agents=${result.length}');
     return result;
@@ -289,11 +289,8 @@ Rules:
       ),
     ];
 
-    return _applyPreservedMetaBlocks(
-      agents,
-      preservedMetaBlocks,
-      sessionId,
-      now,
+    return _normalizeStudioAgents(
+      _applyPreservedMetaBlocks(agents, preservedMetaBlocks, sessionId, now),
     );
   }
 
@@ -382,6 +379,75 @@ Rules:
       for (var i = 0; i < updated.length; i++) updated[i].copyWith(order: i),
     ];
   }
+
+  List<StudioAgent> _normalizeStudioAgents(List<StudioAgent> agents) {
+    if (agents.isEmpty) return agents;
+    final ordered = agents.toList()..sort((a, b) => a.order.compareTo(b.order));
+    return [
+      for (var i = 0; i < ordered.length; i++)
+        _normalizeStudioAgent(ordered[i], isFinal: i == ordered.length - 1),
+    ];
+  }
+
+  StudioAgent _normalizeStudioAgent(
+    StudioAgent agent, {
+    required bool isFinal,
+  }) {
+    var prompt = _stripPromptLevelReasoning(agent.promptShard);
+    prompt = isFinal
+        ? _appendSentence(prompt, _finalResponderGuard)
+        : _appendSentence(prompt, _intermediateBriefGuard);
+
+    return agent.copyWith(
+      promptShard: prompt,
+      sourceBlockNames: _stripReasoningSourceNames(agent.sourceBlockNames),
+    );
+  }
+
+  String _stripPromptLevelReasoning(String text) {
+    var result = text;
+    final patterns = <RegExp>[
+      RegExp(
+        r'\s*Plan internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\s*Think internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\s*Use\s+<think>[\s\S]*?</think>\s*(?:for|to)[^.]*\. ?',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\s*## Language Rule\s*- The hidden <think>[\s\S]*?(?:usually Russian\.|$)',
+        caseSensitive: false,
+      ),
+    ];
+    for (final pattern in patterns) {
+      result = result.replaceAll(pattern, ' ');
+    }
+    return result.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  }
+
+  String _stripReasoningSourceNames(String text) {
+    return text
+        .replaceAll(RegExp(r',?\s*Block \d+ \(CoT Gemini think template\)'), '')
+        .replaceAll(RegExp(r'\s{2,}'), ' ')
+        .trim();
+  }
+
+  String _appendSentence(String text, String sentence) {
+    if (text.toLowerCase().contains(sentence.toLowerCase())) return text;
+    if (text.trim().isEmpty) return sentence;
+    return '${text.trim()} $sentence';
+  }
+
+  static const _intermediateBriefGuard =
+      "When giving style guidance, you may include brief do/don't examples derived from the user's preset, but never draft or continue the current scene, never write in-scene dialogue/actions as if it were the final reply, and never output hidden reasoning.";
+
+  static const _finalResponderGuard =
+      'Do not output or request hidden reasoning blocks; generate only the final visible reply.';
 
   String _identityMarker(String name, String content) {
     final text = '$name\n$content'.toLowerCase();

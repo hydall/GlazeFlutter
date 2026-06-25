@@ -679,6 +679,8 @@ class MemoryStudioService {
     for (final pattern in patterns) {
       result = result.replaceAll(pattern, ' ');
     }
+    result = result.replaceAll('<think>', 'hidden reasoning');
+    result = result.replaceAll('</think>', 'hidden reasoning');
     result = result.replaceAll(RegExp(r'\s{2,}'), ' ');
     return result.trim();
   }
