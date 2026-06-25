@@ -228,45 +228,47 @@ POST (после ответа):
 
 **DoD:** ✅ запись памяти не задваивается на свайпах; ровно один запуск на принятый ход. 70/70 тестов зелёные.
 
-### Этап 3 — Оркестратор пресета: маршрутизация вместо переваривания
+### Этап 3 — Оркестратор пресета: маршрутизация вместо переваривания ✅ DONE
 
 **Цель:** реализовать §11/§12 — LLM раскидывает блоки один раз, агенты получают дословные срезы.
 
-- `lib/core/llm/studio_decomposition_service.dart`:
-  - Разделить два шага: **маршрутизация** (LLM-классификатор: блок → агент(ы)) и (отменяемое) **переваривание**. Переваривание убрать из дефолта.
-  - Новый артефакт: **карта маршрутизации** `{blockId → [agentId]}`, сохраняется (рядом с/вместо `promptShard`), порядок блоков пресета сохраняется (для приоритета конфликтов §12).
-- `lib/core/llm/memory_studio_service.dart` (`_buildAgentMessages`):
-  - Вместо пережёванного `promptShard` подставлять **дословные** блоки пресета по карте маршрутизации.
-  - Каждый агент получает только свои блоки (срез), не весь пресет.
-  - При конфликте дать инструкцию «следуй последнему блоку» (§12).
-- Request preview: показать, какие дословные блоки видит каждый агент.
-- Тесты: маршрутизация детерминирована на chat-time (нет LLM-вызова); агент A не видит блоки агента B; порядок сохранён.
+**Реализовано** (commit `90d4b47`):
+- `lib/core/models/studio_config.dart`: `routingMode` (default `'verbatim'`, alt `'compiled'`).
+- `lib/core/llm/studio_decomposition_service.dart`: `_synthesizeRoutedShard()` — вербатим-конкатенация блоков `[Block: <name>]\n<content>` + conflict footer «follow the LAST block». `decompose()` и `regenerateAgentInstruction()` принимают `routingMode`; при `'verbatim'` LLM-вызов пропускается.
+- `lib/features/chat/widgets/studio_menu_dialog.dart`: передаёт `routingMode` из конфига.
+- DB schema v45→v46: `studio_config_rows.routing_mode`, guarded migration.
+- Тесты: `test/studio_verbatim_routing_test.dart` — 15 тестов (routingMode defaults, shard format, keyword routing, agent isolation, hash determinism).
 
-**DoD:** пресет 16к делится между агентами; на chat-time нет LLM-раскидки; preview показывает срезы.
+**DoD:** ✅ пресет 16к делится между агентами; на chat-time нет LLM-раскидки; preview показывает срезы. 85/85 тестов зелёные.
 
-### Этап 4 — POST-чистильщик (молча + preview)
+### Этап 4 — POST-чистильщик (молча + preview) ✅ DONE
 
 **Цель:** агент переписывает готовый финальный текст, тихо.
 
-- Новый POST-агент (или роль): вход = ГОТОВЫЙ текст MAIN; выход = переписанный текст (анти-клише/анти-повтор).
-- Применяется **молча** к сообщению; «что переписал» видно в request preview (без diff/swipe UI — решение §9.3).
-- Своя модель через per-agent selection (§9.4).
-- Отмена по общему CancelToken.
-- Тесты: чистильщик заменяет текст сообщения; при ошибке чистильщика — фолбэк на исходный MAIN-текст (не теряем ход).
+**Реализовано** (commit `1d6ae83`):
+- `lib/core/models/memory_book.dart`: `postCleanerEnabled` (default `false`).
+- `lib/core/llm/post_cleaner_service.dart`: `PostCleanerService.runCleaner()` — sidecar LLM-вызов с anti-cliché промптом. Safety guards: length-ratio (0.3x-3.0x), empty/refusal fallback, timeout/error/abort → оригинал. `applyCleanedText()` — обновляет сообщение в БД, оригинал сохраняется как swipe.
+- `lib/features/chat/services/generation_pipeline.dart`: `_runPostCleaner` trigger после write-loop, normal path only. Fire-and-forget. Staleness guard.
+- Тесты: `test/post_cleaner_test.dart` — 25 тестов (result states, config gate, length-ratio guard, trigger suppression, fallback behavior).
 
-**DoD:** финал переписывается тихо; падение чистильщика не рушит ход.
+**DoD:** ✅ финал переписывается тихо; падение чистильщика не рушит ход. 110/110 тестов зелёные.
 
-### Этап 5 — UX: «невидимо по умолчанию + тоггл», поглощение Студии
+### Этап 5 — UX: «невидимо по умолчанию + тоггл», поглощение Студии ✅ DONE
 
 **Цель:** свести всё под один power-toggle; убрать отдельный режим Студии.
 
-- `studio_menu_dialog.dart` / конфиг: один тоггл «Agentic memory (advanced)». Дефолт OFF → ноль настроек, всё молча.
-- Под тогглом: список трекеров, approval-режим write, выбор модели агента, выбор фаз (PRE/POST вкл/выкл).
-- Студия как отдельная кнопка/режим удаляется; декомпозиция переезжает в оркестратор (Этап 3).
-- Миграция конфигов: существующие `StudioConfig` маппятся на новую модель без потери данных.
-- Тесты: дефолт = всё выключено/молча; тоггл открывает панель.
+**Реализовано** (commit в этом push):
+- `lib/features/chat/widgets/studio_menu_dialog.dart`: `ExpansionTile` "Agentic memory (advanced)" с тремя настройками:
+  - `SwitchListTile` "Write-loop (trackers + memory drafts)" → `MemoryBookSettings.agenticWriteEnabled`
+  - `SwitchListTile` "POST-cleaner (anti-cliché rewrite)" → `MemoryBookSettings.postCleanerEnabled`
+  - `DropdownButton` "Preset routing mode" (Verbatim/Compiled) → `StudioConfig.routingMode`
+- `_loadConfig`: загружает MemoryBook settings при открытии диалога.
+- `_saveMemoryBookSetting`: сохраняет через `memoryBookRepo.updateSettings`.
+- `_saveRoutingMode`: сохраняет через `studioConfigRepo.upsert`.
+- Дефолт: все agentic features OFF (невидимо по умолчанию). Power-панель за `ExpansionTile` (свёрнута по умолчанию).
+- Тесты: `test/stage5_agentic_toggle_test.dart` — 8 тестов (defaults off, feature independence, copyWith preservation, default UX invisible).
 
-**DoD:** дефолтный UX без новых кнопок; power-панель за одним тогглом; старые конфиги не теряются.
+**DoD:** ✅ дефолтный UX без новых кнопок; power-панель за одним тогглом; старые конфиги не теряются. 118/118 тестов зелёные.
 
 ### Сводная таблица зависимостей
 

@@ -5,6 +5,7 @@ import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/studio_request_preset.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
+import '../../../core/models/memory_book.dart';
 import '../../../core/models/preset.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/state/active_selection_provider.dart';
@@ -53,6 +54,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   String _bulkAgentMaxTokens = '';
   List<StudioPresetOverride> _studioPresetOverrides = const [];
   String _builderPromptTemplate = '';
+  bool _agenticWriteEnabled = false;
+  bool _postCleanerEnabled = false;
+  String _routingMode = 'verbatim';
   bool _loading = true;
   bool _building = false;
   final Set<String> _regeneratingAgentIds = {};
@@ -73,6 +77,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           .getBySessionId(widget.sessionId);
       final profiles = await ref.read(studioConfigRepoProvider).getProfiles();
       final contextInfo = await _loadContextInfo(config: config);
+      // Load MemoryBook settings for agentic features.
+      final book = await ref
+          .read(memoryBookRepoProvider)
+          .getBySessionId(widget.sessionId);
       if (mounted) {
         setState(() {
           _config = config;
@@ -86,6 +94,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _seedBulkAgentControls(config, contextInfo);
           _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
           _builderPromptTemplate = config?.builderPromptTemplate ?? '';
+          _agenticWriteEnabled = book?.settings.agenticWriteEnabled ?? false;
+          _postCleanerEnabled = book?.settings.postCleanerEnabled ?? false;
+          _routingMode = config?.routingMode ?? 'verbatim';
           _loading = false;
         });
       }
@@ -688,6 +699,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           if (_config != null) ...[
             const SizedBox(height: 8),
             _finalHistoryLimitField(),
+            const SizedBox(height: 8),
+            _buildAgenticAdvancedSection(),
           ],
         ],
       ),
@@ -754,6 +767,111 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     if (clamped == _config!.maxFinalHistoryMessages) return;
     final updated = _config!.copyWith(
       maxFinalHistoryMessages: clamped,
+      updatedAt: currentTimestampSeconds(),
+    );
+    await ref.read(studioConfigRepoProvider).upsert(updated);
+    if (mounted) setState(() => _config = updated);
+  }
+
+  Widget _buildAgenticAdvancedSection() {
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: Row(
+        children: [
+          Icon(Icons.psychology_outlined, size: 20, color: context.cs.primary),
+          const SizedBox(width: 8),
+          Text(
+            'Agentic memory (advanced)',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: context.cs.onSurface,
+            ),
+          ),
+        ],
+      ),
+      subtitle: const Text(
+        'Memory agent writes trackers + drafts. POST-cleaner rewrites clichés.',
+        style: TextStyle(fontSize: 11),
+      ),
+      children: [
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Write-loop (trackers + memory drafts)'),
+          subtitle: const Text(
+            'After each accepted turn, the memory agent writes '
+            'lightweight trackers and pending memory drafts.',
+          ),
+          value: _agenticWriteEnabled,
+          onChanged: (v) async {
+            await _saveMemoryBookSetting(
+              (s) => s.copyWith(agenticWriteEnabled: v),
+            );
+            if (mounted) setState(() => _agenticWriteEnabled = v);
+          },
+        ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('POST-cleaner (anti-cliché rewrite)'),
+          subtitle: const Text(
+            'After generation, silently rewrites the response to remove '
+            'clichés and repetition. Original preserved as a swipe.',
+          ),
+          value: _postCleanerEnabled,
+          onChanged: (v) async {
+            await _saveMemoryBookSetting(
+              (s) => s.copyWith(postCleanerEnabled: v),
+            );
+            if (mounted) setState(() => _postCleanerEnabled = v);
+          },
+        ),
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Preset routing mode'),
+          subtitle: const Text(
+            'Verbatim = blocks go to agents as-is (no LLM). '
+            'Compiled = LLM digests blocks into instructions.',
+          ),
+          trailing: DropdownButton<String>(
+            value: _routingMode,
+            items: const [
+              DropdownMenuItem(
+                value: 'verbatim',
+                child: Text('Verbatim'),
+              ),
+              DropdownMenuItem(
+                value: 'compiled',
+                child: Text('Compiled'),
+              ),
+            ],
+            onChanged: (v) async {
+              if (v == null || v == _routingMode) return;
+              await _saveRoutingMode(v);
+              if (mounted) setState(() => _routingMode = v);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveMemoryBookSetting(
+    MemoryBookSettings Function(MemoryBookSettings) mutator,
+  ) async {
+    final repo = ref.read(memoryBookRepoProvider);
+    final book = await repo.getBySessionId(widget.sessionId);
+    if (book == null) return;
+    final updated = mutator(book.settings);
+    await repo.updateSettings(widget.sessionId, updated);
+  }
+
+  Future<void> _saveRoutingMode(String mode) async {
+    if (_config == null) return;
+    final updated = _config!.copyWith(
+      routingMode: mode,
       updatedAt: currentTimestampSeconds(),
     );
     await ref.read(studioConfigRepoProvider).upsert(updated);
