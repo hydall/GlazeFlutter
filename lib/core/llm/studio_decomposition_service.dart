@@ -10,6 +10,7 @@ import '../models/api_config.dart';
 import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../utils/time_helpers.dart';
+import 'studio_block_router.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
@@ -206,8 +207,27 @@ class StudioDecompositionService {
     String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
-    final enabledBlocks = preset.blocks.where((b) => b.enabled).toList();
+    final allEnabled = preset.blocks.where((b) => b.enabled).toList();
+    if (allEnabled.isEmpty) return const [];
+
+    // CoT / reasoning / thinking blocks are NOT routed to any agent: the
+    // multi-agent pipeline IS the externalized chain-of-thought, so a per-turn
+    // <think> directive inside an agent is redundant and conflicts with the
+    // "produce a brief, not prose / no hidden reasoning" contract. Drop them
+    // before routing. See docs/PLAN_AGENTIC_STUDIO.md §11 and the final/
+    // intermediate reasoning guards below.
+    final reasoningBlocks = allEnabled.where(isReasoningBlock).toList();
+    final enabledBlocks = allEnabled
+        .where((b) => !isReasoningBlock(b))
+        .toList();
+    if (reasoningBlocks.isNotEmpty) {
+      _log(
+        'dropped ${reasoningBlocks.length} reasoning/CoT block(s) from routing: '
+        '${reasoningBlocks.map((b) => b.name.isNotEmpty ? b.name : b.id).join(', ')}',
+      );
+    }
     if (enabledBlocks.isEmpty) return const [];
+
     final totalChars = enabledBlocks.fold<int>(
       0,
       (sum, b) => sum + b.content.length,
@@ -218,8 +238,21 @@ class StudioDecompositionService {
       'model=${apiConfig?.model ?? '<active>'}',
     );
 
+    // §11: LLM router classifies block -> agent ONCE at build-time. Falls back
+    // to deterministic keyword bucketing if the LLM is unavailable/refuses, so
+    // Studio always builds. Skipped only when there is no build model.
+    final routingMapResult = await _routeBlocks(
+      blocks: enabledBlocks,
+      apiConfig: apiConfig,
+      cancelToken: cancelToken,
+    );
+    _log(
+      'routing: ${routingMapResult.fromLlm ? 'LLM' : 'keyword-fallback'} '
+      '(${routingMapResult.blockToBucket.length}/${enabledBlocks.length} mapped)',
+    );
+
     final now = currentTimestampSeconds();
-    final assignments = _assignBlocks(enabledBlocks);
+    final assignments = _assignBlocks(enabledBlocks, routingMapResult);
     final agents = <StudioAgent>[];
     for (final spec in _controllerSpecs) {
       final blocks = assignments[spec.id] ?? const <PresetBlock>[];
@@ -253,9 +286,13 @@ class StudioDecompositionService {
     String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
-    final enabledBlocks = preset.blocks.where((b) => b.enabled).toList();
+    final enabledBlocks = preset.blocks
+        .where((b) => b.enabled && !isReasoningBlock(b))
+        .toList();
     final spec = _specForAgent(agent);
-    final assignments = _assignBlocks(enabledBlocks);
+    // Single-agent regen reuses deterministic bucketing (no LLM router call);
+    // the build-time LLM map only matters for a full decompose().
+    final assignments = _assignBlocks(enabledBlocks, BlockRoutingMap.empty);
     final blocks = assignments[spec.id] ?? const <PresetBlock>[];
     final promptShard = await _synthesizePromptShard(
       spec: spec,
@@ -497,13 +534,78 @@ $blocksSummary''';
     );
   }
 
-  Map<String, List<PresetBlock>> _assignBlocks(List<PresetBlock> blocks) {
+  /// Assigns blocks to controller buckets. Prefers the LLM [routing] map when
+  /// it provides a valid bucket for a block; otherwise falls back per-block to
+  /// the deterministic keyword bucketing. This keeps Studio building even if
+  /// the classifier was unavailable or only partially mapped the blocks.
+  Map<String, List<PresetBlock>> _assignBlocks(
+    List<PresetBlock> blocks,
+    BlockRoutingMap routing,
+  ) {
+    final validIds = _controllerSpecs.map((s) => s.id).toSet();
     final map = {for (final spec in _controllerSpecs) spec.id: <PresetBlock>[]};
     for (final block in blocks) {
-      final bucket = _bucketForBlock(block);
+      final routed = routing.bucketFor(block.id);
+      final bucket = (routed != null && validIds.contains(routed))
+          ? routed
+          : _bucketForBlock(block);
       map[bucket]!.add(block);
     }
     return map;
+  }
+
+  /// Runs the LLM block router over [blocks]. Maps the private controller specs
+  /// to public [RouterBucket]s and delegates to [StudioBlockRouter]. Returns an
+  /// empty (non-LLM) map on any failure so callers fall back to keywords.
+  Future<BlockRoutingMap> _routeBlocks({
+    required List<PresetBlock> blocks,
+    ApiConfig? apiConfig,
+    CancelToken? cancelToken,
+  }) async {
+    final buckets = [
+      for (final spec in _controllerSpecs)
+        RouterBucket(id: spec.id, name: spec.name, purpose: spec.purpose),
+    ];
+    final router = StudioBlockRouter(_callLlm);
+    return router.route(
+      blocks: blocks,
+      buckets: buckets,
+      apiConfig: apiConfig,
+      cancelToken: cancelToken,
+    );
+  }
+
+  /// True if a block is a chain-of-thought / reasoning / thinking template.
+  /// Such blocks describe HOW to reason internally; the multi-agent pipeline
+  /// already externalizes reasoning, so they are dropped before routing rather
+  /// than assigned to an agent. Public for testing.
+  @visibleForTesting
+  static bool isReasoningBlock(PresetBlock block) {
+    final name = block.name.toLowerCase();
+    final id = block.id.toLowerCase();
+    final content = block.content.toLowerCase();
+
+    // Strong name/id signals (cheap, high-precision).
+    const nameNeedles = [
+      'cot',
+      'chain of thought',
+      'chain-of-thought',
+      'reasoning',
+      'think template',
+      'thinking',
+      '<think>',
+    ];
+    for (final needle in nameNeedles) {
+      if (name.contains(needle) || id.contains(needle)) return true;
+    }
+
+    // Content signal: a block whose primary purpose is to drive hidden
+    // <think> reasoning. Require the literal tag to avoid false positives on
+    // blocks that merely mention "think".
+    if (content.contains('<think>') && content.contains('</think>')) {
+      return true;
+    }
+    return false;
   }
 
   String _bucketForBlock(PresetBlock block) {
