@@ -76,7 +76,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 35);
+      expect(version, 46);
     });
 
     test(
@@ -99,6 +99,9 @@ void main() {
         final upgraded = AppDatabase.forTesting(
           NativeDatabase.createInBackground(file),
         );
+        // Ensure the db handle is released even if an expectation below
+        // fails — otherwise Windows cannot delete the temp file in tearDown.
+        addTearDown(() async => upgraded.close());
         await upgraded.customSelect('SELECT 1').get();
 
         final cols = await upgraded
@@ -110,10 +113,9 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 35);
+        expect(version.first.read<int>('user_version'), 46);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
-        await upgraded.close();
       },
     );
 
