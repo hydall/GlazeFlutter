@@ -31,10 +31,16 @@ class PostCleanerService {
   ///
   /// Returns the cleaned text, or the original if cleaning was disabled,
   /// failed, or the LLM returned an empty/refusal response.
+  /// [broadcastBlocks] are verbatim cross-cutting preset rules (output language
+  /// + prose-quality guards) captured at Studio build time. When present they
+  /// drive the cleaner using the user's OWN rules instead of the hardcoded
+  /// English-only cliché list, and pin the output language so the rewrite does
+  /// not silently translate or break language-specific formatting.
   Future<PostCleanerResult> runCleaner({
     required String sessionId,
     required MemoryBookSettings settings,
     required String assistantText,
+    List<String> broadcastBlocks = const [],
     CancelToken? cancelToken,
   }) async {
     if (!settings.postCleanerEnabled) {
@@ -61,6 +67,7 @@ class PostCleanerService {
         config: config,
         settings: settings,
         assistantText: assistantText,
+        broadcastBlocks: broadcastBlocks,
         cancelToken: token,
       );
 
@@ -108,21 +115,13 @@ class PostCleanerService {
     required SidecarApiConfig config,
     required MemoryBookSettings settings,
     required String assistantText,
+    List<String> broadcastBlocks = const [],
     required CancelToken cancelToken,
   }) async {
-    final prompt = '''You are a prose editor for a roleplay story. Your job is to clean up the following assistant response by removing clichés, repetitive phrasings, and common AI-isms.
-
-Rules:
-- Keep the same meaning, events, and character voices.
-- Remove or rephrase: "a shiver ran down", "a dance of", "symphony of", "tapestry of", "couldn't help but", "a mix of", "sent shivers", "palpable tension", and similar overused phrases.
-- Remove redundant descriptions and filler.
-- Do NOT add new content, events, or dialogue.
-- Do NOT change the POV, tense, or language.
-- Keep the same approximate length.
-- Return ONLY the cleaned text, no explanation, no markdown.
-
-Assistant response to clean:
-$assistantText''';
+    final prompt = buildCleanerPrompt(
+      assistantText: assistantText,
+      broadcastBlocks: broadcastBlocks,
+    );
 
     final raw = await _llm.callOnce(
       config: config,
@@ -135,6 +134,64 @@ $assistantText''';
 
     final cleaned = raw.trim();
     return cleaned.isEmpty ? null : cleaned;
+  }
+
+  /// Builds the POST-cleaner prompt. When [broadcastBlocks] are supplied the
+  /// user's own language + prose-quality rules (captured verbatim at Studio
+  /// build time) are injected and take precedence over the built-in defaults,
+  /// so the rewrite respects the preset's language and anti-cliché/anti-slop
+  /// rules instead of a hardcoded English-only list. Public for testing.
+  @visibleForTesting
+  static String buildCleanerPrompt({
+    required String assistantText,
+    List<String> broadcastBlocks = const [],
+  }) {
+    final rules = broadcastBlocks
+        .map((b) => b.trim())
+        .where((b) => b.isNotEmpty)
+        .toList();
+
+    final buffer = StringBuffer()
+      ..writeln(
+        'You are a prose editor for a roleplay story. Your job is to clean up '
+        'the following assistant response by removing clichés, repetitive '
+        'phrasings, and common AI-isms.',
+      )
+      ..writeln();
+
+    if (rules.isNotEmpty) {
+      buffer
+        ..writeln(
+          'AUTHORITATIVE RULES (from the active preset — follow these exactly; '
+          'they OVERRIDE the generic guidance below, especially for output '
+          'language and formatting):',
+        )
+        ..writeln()
+        ..writeln(rules.join('\n\n---\n\n'))
+        ..writeln();
+    }
+
+    buffer
+      ..writeln('Rules:')
+      ..writeln('- Keep the same meaning, events, and character voices.')
+      ..writeln(
+        '- Remove or rephrase overused phrases and AI-isms (e.g. "a shiver ran '
+        'down", "a dance of", "symphony of", "tapestry of", "couldn\'t help '
+        'but", "a mix of", "sent shivers", "palpable tension").',
+      )
+      ..writeln('- Remove redundant descriptions and filler.')
+      ..writeln('- Do NOT add new content, events, or dialogue.')
+      ..writeln(
+        '- Do NOT change the POV, tense, or the output language. Preserve the '
+        'language and formatting required by the authoritative rules above.',
+      )
+      ..writeln('- Keep the same approximate length.')
+      ..writeln('- Return ONLY the cleaned text, no explanation, no markdown.')
+      ..writeln()
+      ..writeln('Assistant response to clean:')
+      ..write(assistantText);
+
+    return buffer.toString();
   }
 
   /// Applies the cleaned text to the session: updates the last assistant

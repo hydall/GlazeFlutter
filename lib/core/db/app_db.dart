@@ -39,7 +39,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 46;
+  int get schemaVersion => 47;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -552,6 +552,22 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(
             studioConfigRows,
             studioConfigRows.routingMode,
+          );
+        }
+      }
+      if (from < 47) {
+        // Broadcast blocks: verbatim content of cross-cutting rules (output
+        // language + prose-quality guards) captured at Studio build time so the
+        // POST-cleaner can apply the user's own rules instead of a hardcoded
+        // English-only cliché list. Guarded to survive partial upgrades.
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('broadcast_blocks_json')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.broadcastBlocksJson,
           );
         }
       }

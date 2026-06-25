@@ -21,7 +21,7 @@ const _buckets = [
 void main() {
   group('StudioBlockRouter.parse', () {
     final router = StudioBlockRouter((p, {apiConfig, cancelToken}) async => null);
-    final validBuckets = {'continuity', 'agency', 'final'};
+    final validBuckets = {'continuity', 'agency', 'final', kRouterDropBucketId};
     final validBlocks = {'b1', 'b2', 'b3'};
 
     test('parses clean JSON assignments', () {
@@ -72,6 +72,44 @@ void main() {
           '{"block":"b1","bucket":"agency"}]}';
       final map = router.parseForTest(json, validBuckets, validBlocks);
       expect(map, {'b1': 'agency'});
+    });
+
+    test('accepts the special drop bucket for reasoning blocks', () {
+      const json =
+          '{"assignments":[{"block":"b1","bucket":"drop"},'
+          '{"block":"b2","bucket":"final"}]}';
+      final map = router.parseForTest(json, validBuckets, validBlocks);
+      expect(map, {'b1': kRouterDropBucketId, 'b2': 'final'});
+    });
+  });
+
+  group('StudioBlockRouter.route drop bucket', () {
+    test('route() accepts drop without falling back to keywords', () async {
+      final router = StudioBlockRouter(
+        (p, {apiConfig, cancelToken}) async =>
+            '{"assignments":[{"block":"b1","bucket":"drop"}]}',
+      );
+      final result = await router.route(
+        blocks: [_block(id: 'b1', name: 'CoT Gemini')],
+        buckets: _buckets,
+      );
+      expect(result.fromLlm, isTrue);
+      expect(result.isDropped('b1'), isTrue);
+      expect(result.bucketFor('b1'), kRouterDropBucketId);
+    });
+
+    test('prompt documents the drop bucket and its narrow use', () {
+      final router = StudioBlockRouter(
+        (p, {apiConfig, cancelToken}) async => null,
+      );
+      final prompt = router.buildPromptForTest(
+        blocks: [_block(id: 'b1', name: 'CoT')],
+        buckets: _buckets,
+      );
+      expect(prompt, contains(kRouterDropBucketId));
+      expect(prompt.toLowerCase(), contains('chain-of-thought'));
+      // Must warn against dropping mere mentions (language/meta blocks).
+      expect(prompt.toLowerCase(), contains('language'));
     });
   });
 
@@ -208,6 +246,118 @@ void main() {
           _block(id: 'cot_gemini', name: ''),
         ),
         isTrue,
+      );
+    });
+
+    test('does NOT flag a LANGUAGE block that merely mentions </think>', () {
+      // Regression: this block was previously dropped, losing the output
+      // language. It references <think> only to scope a language rule.
+      const content =
+          '{{setvar::output_language::Russian}}\n'
+          '<language>\nRUSSIAN ONLY - ABSOLUTE COMPLIANCE REQUIRED\n'
+          'CRITICAL EXCEPTION:\n'
+          '- The <think> block must be written in English as technical '
+          'planning.\n'
+          '- Everything AFTER </think> must be written in Russian.\n'
+          'RUSSIAN OUTPUT RULES:\n- Dialogue uses double quotes.\n'
+          '- Do not use em-dashes as narration separators.\n</language>';
+      expect(
+        StudioDecompositionService.isReasoningBlock(
+          _block(
+            id: 'lang_ru',
+            name: '🇷🇺 LANGUAGE: Russian (Русский)',
+            content: content,
+          ),
+        ),
+        isFalse,
+        reason: 'a language rule is not a reasoning template',
+      );
+    });
+
+    test('does NOT flag a meta/lore block that describes a <think> block', () {
+      const content =
+          '<lumia_ghost>\n# Lumia: Ghost in the Machine\n'
+          'You are accompanied by Lumia, an invisible meta-weaver.\n'
+          'Lumia silently guides storycraft, continuity, pacing, emotion.\n'
+          '## Language Rule\n'
+          '- The hidden <think> block remains English if the preset requires '
+          'it.\n'
+          '- All visible narrative and Lumia OOC replies after </think> must '
+          'follow the active language preset, usually Russian.\n</lumia_ghost>';
+      expect(
+        StudioDecompositionService.isReasoningBlock(
+          _block(
+            id: 'lumia',
+            name: 'Lumia: Ghost in the Machine',
+            content: content,
+          ),
+        ),
+        isFalse,
+        reason: 'a meta/lore block is not a reasoning template',
+      );
+    });
+
+    test('DOES flag a real CoT scaffold dominated by <think> content', () {
+      // Mimics the real "CoT Gemini" block: most content lives inside <think>.
+      final inside = 'INTERNAL PLANNING STEP. ' * 60; // long body
+      final content =
+          'After </think>, output ONLY the final reply.\n'
+          '<think>\n$inside\n</think>';
+      expect(
+        StudioDecompositionService.isReasoningBlock(
+          _block(id: 'cot_block', name: 'Hidden Planner', content: content),
+        ),
+        isTrue,
+      );
+    });
+  });
+
+  group('isBroadcastBlock', () {
+    test('flags language blocks', () {
+      expect(
+        StudioDecompositionService.isBroadcastBlock(
+          _block(id: 'x', name: '🇷🇺 LANGUAGE: Russian (Русский)'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('flags prose-quality guard blocks', () {
+      for (final n in [
+        '🔁 Anti-Loop System ~ Анти-луп',
+        '✨ Anti-Cliché Filter ~ Анти-клише',
+        '🤐 Anti-Echo ~ Анти-эхо',
+        '❌Ban Rus',
+      ]) {
+        expect(
+          StudioDecompositionService.isBroadcastBlock(_block(id: 'x', name: n)),
+          isTrue,
+          reason: '"$n" should broadcast to final + cleaner',
+        );
+      }
+    });
+
+    test('does NOT flag normal narrative/persona blocks', () {
+      for (final n in [
+        '🎭 Character Personality',
+        '📍 Scenario',
+        '✍🏻Writer style ~ Стиль автора',
+        '💕 Romantic ~ Романтика',
+      ]) {
+        expect(
+          StudioDecompositionService.isBroadcastBlock(_block(id: 'x', name: n)),
+          isFalse,
+          reason: '"$n" is agent-local, not broadcast',
+        );
+      }
+    });
+
+    test('does NOT flag reasoning blocks', () {
+      expect(
+        StudioDecompositionService.isBroadcastBlock(
+          _block(id: 'cot', name: 'CoT Gemini'),
+        ),
+        isFalse,
       );
     });
   });

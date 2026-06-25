@@ -276,6 +276,24 @@ class StudioDecompositionService {
     return result;
   }
 
+  /// Collects "broadcast" blocks: cross-cutting rules that must reach more than
+  /// one stage. Output language and prose-quality guards (anti-loop / anti-echo
+  /// / anti-cliché / anti-slop / banlists) are not properties of a single agent
+  /// — they govern the final visible reply AND the POST-cleaner rewrite. They
+  /// are still routed to their primary agent (e.g. the guard agent) via
+  /// [_assignBlocks]; this method additionally surfaces their verbatim content
+  /// so the caller can (a) duplicate them into the Main Responder and (b)
+  /// persist them for the POST-cleaner. See docs/PLAN_AGENTIC_STUDIO.md §11.
+  ///
+  /// Returns blocks in preset order (priority = position, §12). Reasoning/CoT
+  /// blocks are excluded.
+  List<PresetBlock> collectBroadcastBlocks(Preset preset) {
+    return preset.blocks
+        .where((b) => b.enabled && !isReasoningBlock(b))
+        .where(isBroadcastBlock)
+        .toList();
+  }
+
   /// Regenerate the build-time prompt shard for one visible Studio agent.
   /// This rebuilds Studio setup, not chat-time agent output.
   Future<StudioAgent> regenerateAgentInstruction({
@@ -538,6 +556,16 @@ $blocksSummary''';
   /// it provides a valid bucket for a block; otherwise falls back per-block to
   /// the deterministic keyword bucketing. This keeps Studio building even if
   /// the classifier was unavailable or only partially mapped the blocks.
+  ///
+  /// A block the LLM marked [kRouterDropBucketId] (a genuine reasoning/CoT
+  /// template) is excluded entirely. As a safety net the deterministic
+  /// [isReasoningBlock] check (run earlier in [decompose]) already removed
+  /// obvious CoT blocks; this honors the LLM's per-block drop decision too.
+  ///
+  /// "Broadcast" blocks (output language + prose-quality guards) are placed in
+  /// their primary bucket AND duplicated into the final responder bucket, since
+  /// those rules must also govern the final visible reply. They are not
+  /// duplicated if they were already routed to `final`.
   Map<String, List<PresetBlock>> _assignBlocks(
     List<PresetBlock> blocks,
     BlockRoutingMap routing,
@@ -545,13 +573,58 @@ $blocksSummary''';
     final validIds = _controllerSpecs.map((s) => s.id).toSet();
     final map = {for (final spec in _controllerSpecs) spec.id: <PresetBlock>[]};
     for (final block in blocks) {
+      // Honor an explicit LLM drop decision (reasoning/CoT template).
+      if (routing.isDropped(block.id)) continue;
+
       final routed = routing.bucketFor(block.id);
       final bucket = (routed != null && validIds.contains(routed))
           ? routed
           : _bucketForBlock(block);
       map[bucket]!.add(block);
+
+      // Broadcast: also ensure cross-cutting rules reach the final responder.
+      if (bucket != 'final' && isBroadcastBlock(block)) {
+        map['final']!.add(block);
+      }
     }
     return map;
+  }
+
+  /// True if a block carries a cross-cutting rule that must be broadcast to the
+  /// final responder and the POST-cleaner in addition to its primary agent:
+  /// output language/format rules and prose-quality guards (anti-loop /
+  /// anti-echo / anti-cliché / anti-slop / banlists). Public for testing.
+  @visibleForTesting
+  static bool isBroadcastBlock(PresetBlock block) {
+    if (isReasoningBlock(block)) return false;
+    final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();
+    const needles = [
+      // Output language / format rules.
+      'language',
+      'русск',
+      'russian',
+      'output_language',
+      // Prose-quality guards.
+      'anti-loop',
+      'anti loop',
+      'anti-echo',
+      'anti echo',
+      'anti-cliche',
+      'anti-clich',
+      'анти-клише',
+      'анти-луп',
+      'анти-эхо',
+      'anti-slop',
+      'slop',
+      'ban rus',
+      'banlist',
+      'forbidden words',
+    ];
+    return _containsAnyStatic(text, needles);
+  }
+
+  static bool _containsAnyStatic(String text, List<String> needles) {
+    return needles.any(text.contains);
   }
 
   /// Runs the LLM block router over [blocks]. Maps the private controller specs
@@ -579,11 +652,18 @@ $blocksSummary''';
   /// Such blocks describe HOW to reason internally; the multi-agent pipeline
   /// already externalizes reasoning, so they are dropped before routing rather
   /// than assigned to an agent. Public for testing.
+  ///
+  /// This is the deterministic fallback used when the LLM router is unavailable.
+  /// It is intentionally conservative: a block that merely *mentions* a
+  /// `<think>` block (e.g. a language rule "everything after the closing think
+  /// tag must be Russian", or a meta block describing OOC behavior) is NOT
+  /// reasoning. Such false positives previously caused language/lore blocks to
+  /// be dropped silently. When in doubt, keep the block (return false) so the
+  /// router/keyword bucketing can still place it.
   @visibleForTesting
   static bool isReasoningBlock(PresetBlock block) {
     final name = block.name.toLowerCase();
     final id = block.id.toLowerCase();
-    final content = block.content.toLowerCase();
 
     // Strong name/id signals (cheap, high-precision).
     const nameNeedles = [
@@ -599,14 +679,55 @@ $blocksSummary''';
       if (name.contains(needle) || id.contains(needle)) return true;
     }
 
-    // Content signal: a block whose primary purpose is to drive hidden
-    // <think> reasoning. Require the literal tag to avoid false positives on
-    // blocks that merely mention "think".
-    if (content.contains('<think>') && content.contains('</think>')) {
-      return true;
+    return _contentIsReasoningTemplate(block.content);
+  }
+
+  /// Content-based reasoning detection. Distinguishes a block that IS a
+  /// reasoning/CoT template from one that merely references `<think>`.
+  ///
+  /// Two positive signals:
+  /// 1. The block is *dominated* by think-tag content — most of the block lives
+  ///    inside the reasoning tags (a real CoT scaffold).
+  /// 2. The block actively *directs the model to produce* a think block (an
+  ///    action verb tied to the tag, e.g. `use`, `plan internally`, `before
+  ///    replying`). A passive description (the think block "stays English") is
+  ///    excluded.
+  static bool _contentIsReasoningTemplate(String content) {
+    if (content.isEmpty) return false;
+    final lower = content.toLowerCase();
+    if (!lower.contains('<think>')) return false;
+
+    // Signal 1: think tags dominate the block.
+    final insideThink = RegExp(
+      r'<think>([\s\S]*?)</think>',
+      caseSensitive: false,
+    );
+    var insideChars = 0;
+    for (final m in insideThink.allMatches(content)) {
+      insideChars += (m.group(1) ?? '').length;
+    }
+    final ratio = insideChars / content.length;
+    if (ratio >= _reasoningDominanceRatio) return true;
+
+    // Signal 2: an explicit directive to emit a <think> reasoning block. These
+    // patterns require an action verb tied to the tag, so passive mentions
+    // ("after </think>", "the <think> block remains English") do not match.
+    const directivePatterns = [
+      r'use\s+<think>',
+      r'<think>[^<]*</think>\s*(?:for|to)\b',
+      r'(?:plan|think|reason)\s+(?:internally|step[- ]by[- ]step)[^.]*<think>',
+      r'(?:before|prior to)\s+(?:replying|responding|answering)[^.]*<think>',
+      r'wrap\s+(?:your\s+)?(?:reasoning|planning|thinking)\s+in\s+<think>',
+    ];
+    for (final p in directivePatterns) {
+      if (RegExp(p, caseSensitive: false).hasMatch(lower)) return true;
     }
     return false;
   }
+
+  /// Fraction of a block that must live inside `<think>...</think>` for the
+  /// block to count as a reasoning template via signal 1.
+  static const double _reasoningDominanceRatio = 0.4;
 
   String _bucketForBlock(PresetBlock block) {
     final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();

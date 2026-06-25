@@ -332,6 +332,8 @@ class StudioConfigRows extends Table {
       integer().withDefault(const Constant(15))();
   TextColumn get routingMode =>
       text().withDefault(const Constant('verbatim'))();
+  TextColumn get broadcastBlocksJson =>
+      text().withDefault(const Constant('[]'))();
   TextColumn get selectedBlockIdsJson =>
       text().withDefault(const Constant('[]'))();
   BoolColumn get selectedBlockIdsInitialized =>

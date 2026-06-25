@@ -142,6 +142,17 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         throw Exception('Decomposition returned no agents');
       }
 
+      // Capture cross-cutting "broadcast" blocks (output language + prose
+      // guards) verbatim so the POST-cleaner can apply the user's own rules.
+      final broadcastBlocks = decompositionService
+          .collectBroadcastBlocks(preset)
+          .map((b) {
+            final name = b.name.isNotEmpty ? b.name : b.id;
+            return '[Block: $name]\n${b.content.trim()}';
+          })
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
+
       final now = currentTimestampSeconds();
       final profileId = _config?.profileId.isNotEmpty == true
           ? _config!.profileId
@@ -165,6 +176,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         buildApiConfigId: buildApiConfig.id,
         runApiConfigId: contextInfo.runApiConfig?.id ?? '',
         builderPromptTemplate: _builderPromptTemplate,
+        broadcastBlocks: broadcastBlocks,
         createdAt: now,
         updatedAt: now,
       );

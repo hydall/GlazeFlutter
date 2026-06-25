@@ -34,7 +34,16 @@ class RouterBucket {
   });
 }
 
+/// Reserved bucket id meaning "this block is a chain-of-thought / reasoning
+/// template — drop it, do not route it to any agent". The multi-agent pipeline
+/// already externalizes reasoning, so a per-turn `<think>` directive is
+/// redundant. See docs/PLAN_AGENTIC_STUDIO.md §11.
+const String kRouterDropBucketId = 'drop';
+
 /// Result of a routing pass: a map of `blockId -> bucketId`.
+///
+/// A bucket id of [kRouterDropBucketId] means the LLM judged the block to be a
+/// reasoning/CoT template that should be dropped (not assigned to any agent).
 ///
 /// [fromLlm] records whether the LLM classifier produced the map (true) or
 /// the caller should fall back to its deterministic keyword router (false).
@@ -50,6 +59,9 @@ class BlockRoutingMap {
   );
 
   String? bucketFor(String blockId) => blockToBucket[blockId];
+
+  /// True if the LLM explicitly marked [blockId] as a reasoning block to drop.
+  bool isDropped(String blockId) => blockToBucket[blockId] == kRouterDropBucketId;
 }
 
 /// LLM-powered classifier that routes preset blocks to Studio agent buckets.
@@ -91,7 +103,8 @@ class StudioBlockRouter {
         _log('empty classifier response; falling back to keywords');
         return BlockRoutingMap.empty;
       }
-      final validBucketIds = buckets.map((b) => b.id).toSet();
+      final validBucketIds = buckets.map((b) => b.id).toSet()
+        ..add(kRouterDropBucketId);
       final validBlockIds = blocks.map((b) => b.id).toSet();
       final parsed = _parse(text, validBucketIds, validBlockIds);
       if (parsed.isEmpty) {
@@ -147,12 +160,17 @@ class StudioBlockRouter {
 Available agent buckets:
 $agentLines
 
+There is also ONE special bucket:
+- $kRouterDropBucketId: DROP. Use ONLY for a block that is itself a chain-of-thought / reasoning / thinking TEMPLATE — i.e. the block's primary purpose is to make the model produce hidden step-by-step reasoning (e.g. a "CoT" block whose body is mostly a "<think> ... </think>" scaffold of internal planning steps). This multi-agent pipeline already does the reasoning, so such a block is redundant and must be dropped.
+
 Routing rules:
-- Assign every block to exactly ONE bucket id from the list above.
+- Assign every block to exactly ONE bucket id (one of the agent buckets above, or "$kRouterDropBucketId").
 - Choose the bucket whose purpose best matches what the block actually does, judging by its name AND content (not just keywords).
-- Chain-of-thought / reasoning / thinking-template blocks (e.g. "CoT", "<think>", reasoning scaffolds) describe HOW the model should reason. Route them to the bucket whose purpose covers character behavior/agency or, if none fits, to the final responder bucket. Never invent a bucket.
+- Use "$kRouterDropBucketId" ONLY for genuine reasoning/CoT templates as defined above. A block that merely MENTIONS reasoning or a <think> tag is NOT a reasoning template:
+  * A language/format block (e.g. "everything after </think> must be written in Russian") is about output language — route it to the final responder bucket, do NOT drop it.
+  * A meta/persona/lore block that references a <think> block while describing OOC behavior is NOT a reasoning template — route it to the matching agent bucket, do NOT drop it.
 - A block that defines the final output format, language, or the visible reply itself belongs to the final responder bucket.
-- If genuinely unsure, pick the final responder bucket.
+- If genuinely unsure, pick the final responder bucket. NEVER drop a block when unsure. Never invent a bucket.
 
 Output STRICT JSON only, no markdown fences, no prose, in this exact shape:
 {"assignments": [{"block": "<block id>", "bucket": "<bucket id>"}, ...]}

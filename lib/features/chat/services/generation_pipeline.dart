@@ -558,11 +558,26 @@ class GenerationPipeline {
       }
       if (lastAssistant == null) return;
 
+      // Load broadcast blocks (output language + prose guards) captured at
+      // Studio build time so the cleaner applies the user's own rules instead
+      // of a hardcoded English-only cliché list. Absent (no Studio) = defaults.
+      List<String> broadcastBlocks = const [];
+      try {
+        final studioConfig = await ref
+            .read(studioConfigRepoProvider)
+            .getBySessionId(sessionId);
+        broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
+      } catch (e) {
+        debugPrint('[GenerationPipeline] post-cleaner broadcast load failed: $e');
+      }
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
       final cleanerService = ref.read(postCleanerServiceProvider);
       final result = await cleanerService.runCleaner(
         sessionId: sessionId,
         settings: book.settings,
         assistantText: lastAssistant.content,
+        broadcastBlocks: broadcastBlocks,
       );
 
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;

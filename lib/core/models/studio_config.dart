@@ -39,6 +39,15 @@ abstract class StudioConfig with _$StudioConfig {
     /// of truth. `'compiled'` = LLM synthesizes a compiled instruction from
     /// the blocks (legacy behavior). See docs/PLAN_AGENTIC_STUDIO.md §11.
     @Default('verbatim') String routingMode,
+
+    /// Verbatim content of "broadcast" preset blocks — cross-cutting rules
+    /// (output language + prose-quality guards: anti-loop/echo/cliché/slop,
+    /// banlists) that must govern not only their primary agent but also the
+    /// POST-cleaner rewrite. Captured at build time so the POST-cleaner can
+    /// apply the user's own rules verbatim without re-running any LLM. Each
+    /// entry is one block's `[Block: name]\n<content>` text. See
+    /// docs/PLAN_AGENTIC_STUDIO.md §11.
+    @Default([]) List<String> broadcastBlocks,
     @Default([]) List<String> selectedBlockIds,
     @Default(false) bool selectedBlockIdsInitialized,
     @Default(0) int createdAt,

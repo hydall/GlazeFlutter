@@ -252,4 +252,44 @@ void main() {
       expect(result.wasCleaned, isTrue);
     });
   });
+
+  group('PostCleanerService.buildCleanerPrompt', () {
+    test('without broadcast blocks uses default editor rules', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'He felt a shiver run down his spine.',
+      );
+      expect(prompt, contains('prose editor'));
+      expect(prompt, contains('Assistant response to clean:'));
+      expect(prompt, contains('He felt a shiver run down his spine.'));
+      // No authoritative-rules section when there are no broadcast blocks.
+      expect(prompt, isNot(contains('AUTHORITATIVE RULES')));
+    });
+
+    test('injects broadcast blocks as authoritative rules', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Текст ответа.',
+        broadcastBlocks: const [
+          '[Block: 🇷🇺 LANGUAGE: Russian]\nRUSSIAN ONLY. Use «ёлочки» quotes.',
+          '[Block: Anti-Cliché]\nBan: "symphony of", "tapestry of".',
+        ],
+      );
+      expect(prompt, contains('AUTHORITATIVE RULES'));
+      expect(prompt, contains('RUSSIAN ONLY'));
+      expect(prompt, contains('«ёлочки»'));
+      expect(prompt, contains('Anti-Cliché'));
+      // The authoritative section must come before the text to clean.
+      expect(
+        prompt.indexOf('AUTHORITATIVE RULES'),
+        lessThan(prompt.indexOf('Assistant response to clean:')),
+      );
+    });
+
+    test('ignores blank broadcast entries', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'x',
+        broadcastBlocks: const ['', '   '],
+      );
+      expect(prompt, isNot(contains('AUTHORITATIVE RULES')));
+    });
+  });
 }
