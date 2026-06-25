@@ -188,45 +188,45 @@ POST (после ответа):
 
 **Стратегия веток (решение владельца):** Hydall делегировал бэкенд автору этой ветки. Поэтому **всё делается на текущей ветке `feat/studio-hard-controllers`, отдельными коммитами по этапам**, и в конце объединяется в **один PR** против `hydall/GlazeFlutter:master`. Отдельные PR на каждый этап НЕ создаём. Каждый этап остаётся самодостаточным коммитом (свои тесты + `flutter analyze` чист) — чтобы историю было легко читать и при необходимости откатить отдельный этап. Этапы упорядочены по зависимостям: каждый последующий опирается на предыдущий.
 
-### Этап 0 — Фундамент данных: `tracker_rows` (DB)
+### Этап 0 — Фундамент данных: `tracker_rows` (DB) ✅ DONE
 
 **Цель:** новое хранилище трекеров с атомарными repo-методами.
 
-- `lib/core/db/tables.dart`: новая таблица `TrackerRows` — `id` (PK), `sessionId` (FK), `name`, `value`, `scope` (`chat`/`character`/`global`), `updatedAt`, `provenance` (какой агент/ход записал).
-- `lib/core/db/app_db.dart`: schema **v44 → v45**, миграция `onUpgrade` создаёт таблицу (defensive: `CREATE TABLE IF NOT EXISTS`).
-- `lib/core/db/repositories/tracker_repo.dart` (новый): **атомарные** методы `upsertTracker`, `readTrackers(sessionId)`, `deleteTracker`, `clearForSession` — все в транзакции (см. `docs/rules/database.md`, никаких ad-hoc read→mutate→put).
-- `lib/core/models/tracker.dart` (новый, freezed): модель `Tracker`.
-- `dart run build_runner build`.
-- Тесты: `test/tracker_repo_test.dart` — upsert/read/scope-изоляция/конкурентная запись.
+**Реализовано** (commit `e688358`):
+- `lib/core/db/tables.dart`: таблица `TrackerRows` — композитный PK `{sessionId, name}`, колонки `value`/`scope`/`provenance`/`updatedAt`, индексы по `sessionId` и `{sessionId, scope}`.
+- `lib/core/db/app_db.dart`: schema **v44 → v45**, guarded-миграция (`sqlite_master` проверка).
+- `lib/core/db/repositories/tracker_repo.dart`: атомарные методы `upsert`/`upsertValue` (insertOnConflictUpdate по natural key), `get`, `getBySessionId`, `getBySessionAndScope`, `delete`, `clearForSession`, `replaceForSession` (в транзакции), `watchBySessionId`.
+- `lib/core/models/tracker.dart`: freezed-модель `Tracker`.
+- `lib/core/state/db_provider.dart`: `trackerRepoProvider` зарегистрирован.
+- Каскады: `trackerRows` добавлен в `chatRepo.deleteByCharacterId` и `characterRepo.delete` (правило database.md).
+- `docs/rules/database.md`: обновлён до v45.
+- Тесты: `test/tracker_repo_test.dart` — 15 тестов (upsert/overwrite/read/scope-isolation/cross-session/delete/clear/replace/watch), все зелёные.
 
-**DoD:** миграция применяется, repo-тесты зелёные, `flutter analyze` чист.
+**DoD:** ✅ миграция применяется, repo-тесты зелёные, `flutter analyze` чист.
 
-### Этап 1 — Оживить write-петлю памяти (ядро агентности)
+### Этап 1 — Оживить write-петлю памяти (ядро агентности) ✅ DONE
 
 **Цель:** `memory_agentic_service` умеет писать, а не только искать.
 
-- `lib/core/llm/memory_agentic_tools.dart`: реализовать заглушенные write-тулы:
-  - `writeMemory(text, keys)` → через существующий approval-путь `memory_book_controller` (draft → approve), **не** напрямую в `memory_book_rows`.
-  - `updateTracker(name, value, scope)` → через `tracker_repo.upsertTracker` (Этап 0).
-- `lib/core/llm/memory_agentic_policy.dart`: убрать хардкод `readOnly: true` → читать из конфига/тоггла. **Каждый** write проходит `canUse(...)` (default-deny; аналог `_requireCapability`).
-- `lib/core/llm/memory_agentic_service.dart`: реальный tool-loop (модель может вызвать write-тул; результат возвращается в модель). Отмена по общему `CancelToken` основной генерации (`docs/rules/race-conditions.md`).
-- Approval-режим: по умолчанию write-тулы пишут **draft** (human-approval, как сейчас drafts); auto-write — только при явном тоггле.
-- Тесты: tool-loop с мок-LLM (модель вызывает `updateTracker` → проверяем строку в `tracker_rows`); policy-gate отклоняет write при `readOnly`.
+**Реализовано** (commit `d202d42`):
+- `lib/core/models/memory_book.dart`: `MemoryBookSettings.agenticWriteEnabled` (default `false`) — gate для write-loop.
+- `lib/core/llm/memory_agentic_tools.dart`: `updateTracker()` + `writeMemory()` tool definitions (OpenAI format); `writeTools()` / `forPolicy()` возвращают write tools когда policy разрешает; `TrackerWriteRequest`/`MemoryWriteRequest`/`TrackerWriteResult`/`MemoryWriteResult` типы.
+- `lib/core/llm/memory_agentic_service.dart`: `runWriteLoop()` — post-turn sidecar JSON loop. LLM видит историю + трекеры → возвращает `{trackers:[...], memories:[...]}` → `_executeTrackerWrites()` пишет через `TrackerRepo.upsertValue` → `_executeMemoryWrites()` добавляет `MemoryDraft` (source=`agentic`, status=`pending_generation`) в `MemoryBook.pendingDrafts`. CancelToken проверяется после каждого await (race-conditions.md Rule 1). Policy gate (default-deny) на каждый write.
+- Тесты: `test/memory_agentic_write_test.dart` — 23 теста (tool definitions, policy gate, request parsing, TrackerRepo write integration, MemoryWriteLoopResult).
 
-**DoD:** агент реально пишет трекер/драфт памяти под gate; тесты зелёные.
+**DoD:** ✅ агент реально пишет трекер/драфт памяти под gate; тесты зелёные.
 
-### Этап 2 — Триггер «ход зафиксирован» (PRE/POST), без свайпов
+### Этап 2 — Триггер «ход зафиксирован» (PRE/POST), без свайпов ✅ DONE
 
 **Цель:** агенты запускаются на принятом ходу, не на свайпе/регене.
 
-- Точка финализации хода: `stream_generation_service.dart` (после save финального сообщения, перед cleanup — порядок по `docs/rules/generation.md`).
-- Флаг «это свайп/реген» уже есть (`studioFinalOnly`/swipe-путь) → **подавляет** запуск write-петли.
-- PRE: перед MAIN — `memory_agentic_service` (search + опц. write трекеров).
-- POST: после MAIN, на принятом ходу — post-чистильщик (Этап 4).
-- Идемпотентность: один принятый ход = максимум один запуск write-петли (защита от двойного триггера при гонках).
-- Тесты: свайп НЕ триггерит write; принятый ход триггерит ровно раз.
+**Реализовано** (commit `4696e10`):
+- `lib/features/chat/services/generation_pipeline.dart`: trigger `_runAgenticWriteLoop` после `_autoCreateMemoryDrafts`, **только на normal path** (`regenTargetId == null && !studioFinalOnly`). Реген-ветка возвращает раньше — свайпы/регены/studioFinalOnly никогда не достигают trigger. Fire-and-forget (`unawaited`).
+- `_runAgenticWriteLoop`: читает MemoryBook (gate `agenticWriteEnabled`), трекеры из TrackerRepo, историю → `MemoryAgenticService.runWriteLoop`. Staleness guard (`abortHandler.isCurrentGen(genId)`) после каждого await.
+- `extractRecentHistoryText`: top-level `@visibleForTesting` pure function — последние N сообщений как `"Role: content"`, пропускает error/typing/empty.
+- Тесты: `test/generation_pipeline_write_loop_test.dart` — 13 тестов (extractRecentHistoryText 9 случаев + trigger suppression guard 4 случая).
 
-**DoD:** запись памяти не задваивается на свайпах; ровно один запуск на принятый ход.
+**DoD:** ✅ запись памяти не задваивается на свайпах; ровно один запуск на принятый ход. 70/70 тестов зелёные.
 
 ### Этап 3 — Оркестратор пресета: маршрутизация вместо переваривания
 
