@@ -1138,25 +1138,39 @@ class MemoryStudioService {
   }
 
   String _safeControllerFallback(StudioAgent agent) {
-    final instruction = _trimForStudioContext(agent.promptShard, 1400);
-    final source = agent.sourceBlockNames.trim();
     final buffer = StringBuffer()
       ..writeln('STUDIO_BRIEF:')
       ..writeln(
-        '- ${agent.name.isNotEmpty ? agent.name : 'Studio controller'} output was discarded because it wrote scene prose/dialogue instead of an operational brief.',
+        '- ${agent.name.isNotEmpty ? agent.name : 'Studio controller'} did not produce a valid operational brief this turn.',
       )
       ..writeln(
-        '- Use this controller only as hidden guidance for the final responder; do not quote, continue, or imitate the discarded draft.',
+        '- Ignore this controller output for current-scene content. Do not quote, continue, imitate, or expose it.',
       );
-    if (source.isNotEmpty) {
-      buffer.writeln('- Source blocks: $source.');
-    }
-    if (instruction.isNotEmpty) {
-      buffer
-        ..writeln('- Controller instruction to enforce:')
-        ..write(instruction);
-    }
+    buffer.write(_safeControllerGuidance(agent.name));
     return buffer.toString().trim();
+  }
+
+  String _safeControllerGuidance(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('continuity')) {
+      return '- Continue using only confirmed context, memory, lore, and recent chat. Do not invent unknown facts.';
+    }
+    if (lower.contains('agency') || lower.contains('character')) {
+      return '- Preserve user agency and character authenticity. Never write user dialogue, actions, thoughts, feelings, or decisions.';
+    }
+    if (lower.contains('narrative') || lower.contains('pacing')) {
+      return '- Keep pacing controlled, concrete, and scene-advancing. Avoid filler, repetition, and unsupported escalation.';
+    }
+    if (lower.contains('dialogue')) {
+      return '- Use dialogue only when character-plausible. Keep speech concise and properly quoted.';
+    }
+    if (lower.contains('guard') || lower.contains('loop')) {
+      return '- Avoid repeated openings, recycled phrasing, cliches, echoing the user, and banned prose habits.';
+    }
+    if (lower.contains('world') || lower.contains('npc')) {
+      return '- Add world/NPC activity only when supported by the scene and never let it steal focus.';
+    }
+    return '- Apply this controller only as hidden operational guidance.';
   }
 
   bool _isMetaBriefName(String name) {
