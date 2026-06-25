@@ -1,8 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
 import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/studio_request_preset.dart';
 import '../../../core/llm/transport/transport_factory.dart';
@@ -47,6 +45,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   String? _selectedFinalStudioPresetId;
   String? _selectedBuildApiConfigId;
   String? _selectedRunApiConfigId;
+  List<StudioPresetOverride> _studioPresetOverrides = const [];
   bool _loading = true;
   bool _building = false;
   final Map<String, List<String>> _modelsByApiConfigId = {};
@@ -73,6 +72,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _selectedFinalStudioPresetId = contextInfo.finalStudioPresetId;
           _selectedBuildApiConfigId = contextInfo.buildApiConfig?.id;
           _selectedRunApiConfigId = contextInfo.runApiConfig?.id;
+          _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
           _loading = false;
         });
       }
@@ -125,6 +125,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         finalPresetId: '',
         agentStudioPresetId: contextInfo.agentStudioPresetId,
         finalStudioPresetId: contextInfo.finalStudioPresetId,
+        studioPresetOverrides: _studioPresetOverrides,
         sourcePresetHash: StudioDecompositionService.computePresetHash(
           preset.blocks.where((b) => b.enabled).toList(),
         ),
@@ -236,6 +237,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         runApiConfigId: contextInfo.runApiConfig?.id ?? '',
         agentStudioPresetId: contextInfo.agentStudioPresetId,
         finalStudioPresetId: contextInfo.finalStudioPresetId,
+        studioPresetOverrides: _studioPresetOverrides,
         updatedAt: currentTimestampSeconds(),
       );
       await ref.read(studioConfigRepoProvider).upsert(updated);
@@ -497,6 +499,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, dialogSetState) {
+            final presets = resolvedStudioRequestPresets(
+              _studioPresetOverrides,
+            );
             return AlertDialog(
               title: const Text('Studio preset settings'),
               content: SizedBox(
@@ -509,6 +514,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       label: 'Agent Studio preset',
                       value: _selectedAgentStudioPresetId,
                       fallbackId: _contextInfo.agentStudioPresetId,
+                      presets: presets,
                       onChanged: (value) async {
                         setState(() => _selectedAgentStudioPresetId = value);
                         dialogSetState(() {});
@@ -520,6 +526,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       label: 'Final Studio preset',
                       value: _selectedFinalStudioPresetId,
                       fallbackId: _contextInfo.finalStudioPresetId,
+                      presets: presets,
                       onChanged: (value) async {
                         setState(() => _selectedFinalStudioPresetId = value);
                         dialogSetState(() {});
@@ -528,14 +535,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                     ),
                     const SizedBox(height: 16),
                     OutlinedButton.icon(
-                      onPressed: () {
-                        final router = GoRouter.of(context);
-                        Navigator.of(dialogContext).pop();
-                        Navigator.of(context).pop();
-                        router.push('/tools/presets');
-                      },
+                      onPressed: () => _showStudioPresetEditorDialog(
+                        parentDialogContext: dialogContext,
+                        parentSetState: dialogSetState,
+                      ),
                       icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Edit app presets'),
+                      label: const Text('Edit Studio presets'),
                     ),
                   ],
                 ),
@@ -553,14 +558,189 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
+  Future<void> _showStudioPresetEditorDialog({
+    required BuildContext parentDialogContext,
+    required StateSetter parentSetState,
+  }) async {
+    final presets = resolvedStudioRequestPresets(_studioPresetOverrides);
+    var editingId = _selectedFinalStudioPresetId?.isNotEmpty == true
+        ? _selectedFinalStudioPresetId!
+        : defaultFinalStudioPresetId;
+    var editing = presets.firstWhere(
+      (preset) => preset.id == editingId,
+      orElse: () => presets.first,
+    );
+    final nameController = TextEditingController(text: editing.name);
+    final intermediateController = TextEditingController(
+      text: editing.intermediateInstruction,
+    );
+    final finalController = TextEditingController(
+      text: editing.finalInstruction,
+    );
+
+    void loadPreset(StudioRequestPreset preset) {
+      editingId = preset.id;
+      editing = preset;
+      nameController.text = preset.name;
+      intermediateController.text = preset.intermediateInstruction;
+      finalController.text = preset.finalInstruction;
+    }
+
+    try {
+      await showDialog<void>(
+        context: parentDialogContext,
+        builder: (editorContext) {
+          return StatefulBuilder(
+            builder: (editorContext, editorSetState) {
+              final available = resolvedStudioRequestPresets(
+                _studioPresetOverrides,
+              );
+              return AlertDialog(
+                title: const Text('Edit Studio preset'),
+                content: SizedBox(
+                  width: 620,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        DropdownButtonFormField<String>(
+                          initialValue: editingId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Studio preset',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          items: available
+                              .map(
+                                (preset) => DropdownMenuItem(
+                                  value: preset.id,
+                                  child: Text(preset.name),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (id) {
+                            final preset = available.firstWhere(
+                              (p) => p.id == id,
+                              orElse: () => available.first,
+                            );
+                            editorSetState(() => loadPreset(preset));
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Name',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: intermediateController,
+                          decoration: const InputDecoration(
+                            labelText: 'Intermediate agent instruction',
+                            alignLabelWithHint: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          minLines: 4,
+                          maxLines: 8,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: finalController,
+                          decoration: const InputDecoration(
+                            labelText: 'Final agent instruction',
+                            alignLabelWithHint: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          minLines: 4,
+                          maxLines: 8,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () async {
+                      final base = defaultStudioRequestPresetById(editingId);
+                      await _saveStudioPresetOverride(
+                        studioRequestPresetToOverride(base),
+                      );
+                      if (!mounted) return;
+                      editorSetState(() => loadPreset(base));
+                      parentSetState(() {});
+                    },
+                    child: const Text('Reset'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(editorContext).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () async {
+                      final updated = StudioPresetOverride(
+                        id: editingId,
+                        name: nameController.text.trim(),
+                        intermediateInstruction: intermediateController.text,
+                        finalInstruction: finalController.text,
+                      );
+                      await _saveStudioPresetOverride(updated);
+                      if (!mounted) return;
+                      parentSetState(() {});
+                      if (!editorContext.mounted) return;
+                      Navigator.of(editorContext).pop();
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      nameController.dispose();
+      intermediateController.dispose();
+      finalController.dispose();
+    }
+  }
+
+  Future<void> _saveStudioPresetOverride(StudioPresetOverride override) async {
+    final next = <StudioPresetOverride>[];
+    var replaced = false;
+    for (final item in _studioPresetOverrides) {
+      if (item.id == override.id) {
+        next.add(override);
+        replaced = true;
+      } else {
+        next.add(item);
+      }
+    }
+    if (!replaced) next.add(override);
+
+    setState(() => _studioPresetOverrides = next);
+    if (_config != null) {
+      final updated = _config!.copyWith(
+        studioPresetOverrides: next,
+        updatedAt: currentTimestampSeconds(),
+      );
+      await ref.read(studioConfigRepoProvider).upsert(updated);
+      if (mounted) setState(() => _config = updated);
+    }
+  }
+
   Widget _studioRequestPresetSelector({
     required String label,
     required String? value,
     required String fallbackId,
+    required List<StudioRequestPreset> presets,
     required Future<void> Function(String?) onChanged,
   }) {
-    final effectiveValue =
-        studioRequestPresets.any((preset) => preset.id == value)
+    final effectiveValue = presets.any((preset) => preset.id == value)
         ? value
         : fallbackId;
     return DropdownButtonFormField<String>(
@@ -571,7 +751,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         isDense: true,
         border: const OutlineInputBorder(),
       ),
-      items: studioRequestPresets
+      items: presets
           .map(
             (preset) =>
                 DropdownMenuItem(value: preset.id, child: Text(preset.name)),

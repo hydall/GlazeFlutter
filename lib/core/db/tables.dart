@@ -292,6 +292,8 @@ class StudioConfigRows extends Table {
       text().withDefault(const Constant(''))();
   TextColumn get finalStudioPresetId =>
       text().withDefault(const Constant(''))();
+  TextColumn get studioPresetOverridesJson =>
+      text().withDefault(const Constant('[]'))();
   TextColumn get sourcePresetHash => text().withDefault(const Constant(''))();
   TextColumn get buildApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();

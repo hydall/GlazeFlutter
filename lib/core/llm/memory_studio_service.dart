@@ -553,6 +553,7 @@ class MemoryStudioService {
     final studioPreset = studioRequestPresetById(
       isFinalResponse ? config.finalStudioPresetId : config.agentStudioPresetId,
       finalPreset: isFinalResponse,
+      overrides: config.studioPresetOverrides,
     );
     final stageInstruction = isFinalResponse
         ? studioPreset.finalInstruction

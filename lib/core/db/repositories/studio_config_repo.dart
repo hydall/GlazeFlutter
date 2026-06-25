@@ -33,6 +33,11 @@ class StudioConfigRepo {
             finalPresetId: Value(config.finalPresetId),
             agentStudioPresetId: Value(config.agentStudioPresetId),
             finalStudioPresetId: Value(config.finalStudioPresetId),
+            studioPresetOverridesJson: Value(
+              jsonEncode(
+                config.studioPresetOverrides.map((p) => p.toJson()).toList(),
+              ),
+            ),
             sourcePresetHash: Value(config.sourcePresetHash),
             buildApiConfigId: Value(config.buildApiConfigId),
             runApiConfigId: Value(config.runApiConfigId),
@@ -85,6 +90,15 @@ class StudioConfigRepo {
     } catch (_) {
       selectedBlockIds = const [];
     }
+    List<StudioPresetOverride> studioPresetOverrides;
+    try {
+      final list = jsonDecode(row.studioPresetOverridesJson) as List<dynamic>;
+      studioPresetOverrides = list
+          .map((e) => StudioPresetOverride.fromJson(e as Map<String, dynamic>))
+          .toList(growable: false);
+    } catch (_) {
+      studioPresetOverrides = const [];
+    }
 
     return StudioConfig(
       sessionId: row.sessionId,
@@ -94,6 +108,7 @@ class StudioConfigRepo {
       finalPresetId: row.finalPresetId,
       agentStudioPresetId: row.agentStudioPresetId,
       finalStudioPresetId: row.finalStudioPresetId,
+      studioPresetOverrides: studioPresetOverrides,
       sourcePresetHash: row.sourcePresetHash,
       buildApiConfigId: row.buildApiConfigId,
       runApiConfigId: row.runApiConfigId,

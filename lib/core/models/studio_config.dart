@@ -18,6 +18,7 @@ abstract class StudioConfig with _$StudioConfig {
     @Default('') String finalPresetId,
     @Default('') String agentStudioPresetId,
     @Default('') String finalStudioPresetId,
+    @Default([]) List<StudioPresetOverride> studioPresetOverrides,
     @Default('') String sourcePresetHash,
     @Default('') String buildApiConfigId,
     @Default('') String runApiConfigId,
@@ -29,6 +30,19 @@ abstract class StudioConfig with _$StudioConfig {
 
   factory StudioConfig.fromJson(Map<String, dynamic> json) =>
       _$StudioConfigFromJson(json);
+}
+
+@freezed
+abstract class StudioPresetOverride with _$StudioPresetOverride {
+  const factory StudioPresetOverride({
+    required String id,
+    @Default('') String name,
+    @Default('') String intermediateInstruction,
+    @Default('') String finalInstruction,
+  }) = _StudioPresetOverride;
+
+  factory StudioPresetOverride.fromJson(Map<String, dynamic> json) =>
+      _$StudioPresetOverrideFromJson(json);
 }
 
 /// A single agent in the Studio pipeline.

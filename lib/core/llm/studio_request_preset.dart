@@ -1,3 +1,5 @@
+import '../models/studio_config.dart';
+
 class StudioRequestPreset {
   final String id;
   final String name;
@@ -10,6 +12,21 @@ class StudioRequestPreset {
     required this.intermediateInstruction,
     required this.finalInstruction,
   });
+
+  StudioRequestPreset copyWith({
+    String? id,
+    String? name,
+    String? intermediateInstruction,
+    String? finalInstruction,
+  }) {
+    return StudioRequestPreset(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      intermediateInstruction:
+          intermediateInstruction ?? this.intermediateInstruction,
+      finalInstruction: finalInstruction ?? this.finalInstruction,
+    );
+  }
 }
 
 const studioRequestPresets = <StudioRequestPreset>[
@@ -37,12 +54,55 @@ const defaultFinalStudioPresetId = 'norimyn_studio_final';
 StudioRequestPreset studioRequestPresetById(
   String id, {
   required bool finalPreset,
+  List<StudioPresetOverride> overrides = const [],
 }) {
   final fallbackId = finalPreset
       ? defaultFinalStudioPresetId
       : defaultAgentStudioPresetId;
-  return studioRequestPresets.firstWhere(
-    (preset) => preset.id == (id.isNotEmpty ? id : fallbackId),
+  final resolvedId = id.isNotEmpty ? id : fallbackId;
+  final base = studioRequestPresets.firstWhere(
+    (preset) => preset.id == resolvedId,
     orElse: () => studioRequestPresets.firstWhere((p) => p.id == fallbackId),
+  );
+  final override = overrides.where((p) => p.id == base.id).firstOrNull;
+  if (override == null) return base;
+  return base.copyWith(
+    name: override.name.trim().isNotEmpty ? override.name.trim() : base.name,
+    intermediateInstruction: override.intermediateInstruction.trim().isNotEmpty
+        ? override.intermediateInstruction
+        : base.intermediateInstruction,
+    finalInstruction: override.finalInstruction.trim().isNotEmpty
+        ? override.finalInstruction
+        : base.finalInstruction,
+  );
+}
+
+List<StudioRequestPreset> resolvedStudioRequestPresets(
+  List<StudioPresetOverride> overrides,
+) {
+  return studioRequestPresets
+      .map(
+        (preset) => studioRequestPresetById(
+          preset.id,
+          finalPreset: preset.id == defaultFinalStudioPresetId,
+          overrides: overrides,
+        ),
+      )
+      .toList(growable: false);
+}
+
+StudioPresetOverride studioRequestPresetToOverride(StudioRequestPreset preset) {
+  return StudioPresetOverride(
+    id: preset.id,
+    name: preset.name,
+    intermediateInstruction: preset.intermediateInstruction,
+    finalInstruction: preset.finalInstruction,
+  );
+}
+
+StudioRequestPreset defaultStudioRequestPresetById(String id) {
+  return studioRequestPresets.firstWhere(
+    (preset) => preset.id == id,
+    orElse: () => studioRequestPresets.first,
   );
 }
