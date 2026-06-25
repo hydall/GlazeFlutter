@@ -401,7 +401,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         constraints: BoxConstraints(maxWidth: 650, maxHeight: size.height - 48),
         child: SizedBox(
           width: size.width < 650 ? size.width - 32 : 650,
-          height: size.height < 648 ? size.height - 48 : 600,
+          height: size.height < 820 ? size.height - 48 : 760,
           child: Stack(
             children: [
               Column(
@@ -665,18 +665,23 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               await _refreshContextInfo(persistSelection: true);
             },
           ),
-          if (_config != null && _config!.agents.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _bulkAgentSettingsCard(),
-          ],
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: _showBuilderPromptDialog,
-              icon: const Icon(Icons.article_outlined, size: 18),
-              label: const Text('Builder prompt'),
-            ),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _showBuilderPromptDialog,
+                icon: const Icon(Icons.article_outlined, size: 18),
+                label: const Text('Builder prompt'),
+              ),
+              if (_config != null && _config!.agents.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _showBulkAgentSettingsDialog,
+                  icon: const Icon(Icons.groups_2_outlined, size: 18),
+                  label: const Text('Bulk agents'),
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -1376,103 +1381,122 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
-  Widget _bulkAgentSettingsCard() {
-    final selectedConfig = _contextInfo.apiConfigs
-        .where((config) => config.id == _bulkAgentApiConfigId)
-        .firstOrNull;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: context.cs.surface.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: context.cs.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.groups_2_outlined,
-                size: 18,
-                color: context.cs.primary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Apply to all agents',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: context.cs.onSurfaceVariant,
-                  ),
+  Future<void> _showBulkAgentSettingsDialog() async {
+    var apiConfigId = _bulkAgentApiConfigId;
+    var modelOverride = _bulkAgentModelOverride;
+    var temperature = _bulkAgentTemperature;
+    var maxTokens = _bulkAgentMaxTokens;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, dialogSetState) {
+            final selectedConfig = _contextInfo.apiConfigs
+                .where((config) => config.id == apiConfigId)
+                .firstOrNull;
+            return AlertDialog(
+              title: const Text('Bulk agent settings'),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Configure shared values, then press Apply to all. Individual agents can still be edited separately afterwards.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _bulkAgentApiSelector(
+                      value: apiConfigId,
+                      onChanged: (id) => dialogSetState(() => apiConfigId = id),
+                    ),
+                    const SizedBox(height: 8),
+                    _bulkAgentProviderModelSelector(
+                      config: selectedConfig,
+                      modelOverride: modelOverride,
+                      onChanged: (model) {
+                        dialogSetState(() {
+                          modelOverride = model == selectedConfig?.model
+                              ? ''
+                              : model ?? '';
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: temperature,
+                            decoration: const InputDecoration(
+                              labelText: 'All temp',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            onChanged: (value) => temperature = value,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: maxTokens,
+                            decoration: const InputDecoration(
+                              labelText: 'All max tokens',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (value) => maxTokens = value,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _bulkAgentApiSelector(),
-          const SizedBox(height: 8),
-          _bulkAgentProviderModelSelector(selectedConfig),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  key: ValueKey('bulk_temp_$_bulkAgentTemperature'),
-                  initialValue: _bulkAgentTemperature,
-                  decoration: const InputDecoration(
-                    labelText: 'All temp',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  onChanged: (value) {
-                    _bulkAgentTemperature = value;
-                    final temp = double.tryParse(value);
-                    if (temp != null) _applyBulkAgentTemperature(temp);
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  onPressed: () {
+                    _bulkAgentApiConfigId = apiConfigId;
+                    _bulkAgentModelOverride = modelOverride;
+                    _bulkAgentTemperature = temperature;
+                    _bulkAgentMaxTokens = maxTokens;
+                    _applyBulkAgentSettings();
+                    Navigator.of(dialogContext).pop();
                   },
+                  icon: const Icon(Icons.done_all, size: 18),
+                  label: const Text('Apply to all'),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  key: ValueKey('bulk_tokens_$_bulkAgentMaxTokens'),
-                  initialValue: _bulkAgentMaxTokens,
-                  decoration: const InputDecoration(
-                    labelText: 'All max tokens',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) {
-                    _bulkAgentMaxTokens = value;
-                    final tokens = int.tryParse(value);
-                    if (tokens != null) _applyBulkAgentMaxTokens(tokens);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _bulkAgentApiSelector() {
-    final value =
-        _contextInfo.apiConfigs.any(
-          (config) => config.id == _bulkAgentApiConfigId,
-        )
-        ? _bulkAgentApiConfigId
+  Widget _bulkAgentApiSelector({
+    required String? value,
+    required void Function(String?) onChanged,
+  }) {
+    final effectiveValue =
+        _contextInfo.apiConfigs.any((config) => config.id == value)
+        ? value
         : null;
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      initialValue: effectiveValue,
       isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'All agents model config',
@@ -1492,22 +1516,25 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             .where((item) => item.id == id)
             .firstOrNull;
         if (config == null) return;
-        _bulkAgentApiConfigId = config.id;
-        _applyBulkAgentApiConfig(config);
+        onChanged(config.id);
       },
     );
   }
 
-  Widget _bulkAgentProviderModelSelector(ApiConfig? config) {
+  Widget _bulkAgentProviderModelSelector({
+    required ApiConfig? config,
+    required String modelOverride,
+    required void Function(String?) onChanged,
+  }) {
     if (config == null) return const SizedBox.shrink();
     final fetched = _modelsByApiConfigId[config.id] ?? const <String>[];
     final models = <String>[
       if (config.model.isNotEmpty) config.model,
       ...fetched,
-      if (_bulkAgentModelOverride.isNotEmpty) _bulkAgentModelOverride,
+      if (modelOverride.isNotEmpty) modelOverride,
     ].where((model) => model.trim().isNotEmpty).toSet().toList()..sort();
-    final selectedModel = _bulkAgentModelOverride.isNotEmpty
-        ? _bulkAgentModelOverride
+    final selectedModel = modelOverride.isNotEmpty
+        ? modelOverride
         : config.model.isNotEmpty
         ? config.model
         : null;
@@ -1536,12 +1563,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                 )
                 .toList(),
             hint: Text(config.model.isNotEmpty ? config.model : 'Fetch models'),
-            onChanged: (model) {
-              _bulkAgentModelOverride = model == config.model
-                  ? ''
-                  : model ?? '';
-              _applyBulkAgentModelOverride(_bulkAgentModelOverride);
-            },
+            onChanged: onChanged,
           ),
         ),
         const SizedBox(width: 8),
@@ -1560,27 +1582,30 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
-  void _applyBulkAgentApiConfig(ApiConfig config) {
-    _updateAllAgents(
-      (agent) => agent.copyWith(
-        modelSource: 'custom',
-        model: config.id,
-        modelOverride: _bulkAgentModelOverride,
-        endpoint: config.endpoint,
-      ),
-    );
-  }
-
-  void _applyBulkAgentModelOverride(String modelOverride) {
-    _updateAllAgents((agent) => agent.copyWith(modelOverride: modelOverride));
-  }
-
-  void _applyBulkAgentTemperature(double temperature) {
-    _updateAllAgents((agent) => agent.copyWith(temperature: temperature));
-  }
-
-  void _applyBulkAgentMaxTokens(int maxTokens) {
-    _updateAllAgents((agent) => agent.copyWith(maxTokens: maxTokens));
+  void _applyBulkAgentSettings() {
+    final config = _contextInfo.apiConfigs
+        .where((item) => item.id == _bulkAgentApiConfigId)
+        .firstOrNull;
+    final temperature = double.tryParse(_bulkAgentTemperature);
+    final maxTokens = int.tryParse(_bulkAgentMaxTokens);
+    _updateAllAgents((agent) {
+      var next = agent;
+      if (config != null) {
+        next = next.copyWith(
+          modelSource: 'custom',
+          model: config.id,
+          modelOverride: _bulkAgentModelOverride,
+          endpoint: config.endpoint,
+        );
+      }
+      if (temperature != null) {
+        next = next.copyWith(temperature: temperature);
+      }
+      if (maxTokens != null) {
+        next = next.copyWith(maxTokens: maxTokens);
+      }
+      return next;
+    });
   }
 
   Widget _customApiSelector(StudioAgent agent) {
