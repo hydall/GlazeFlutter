@@ -603,6 +603,11 @@ class MemoryStudioService {
           messages.addAll(context.dynamicContext.map((m) => m.toApiMap()));
           break;
         default:
+          final promptMessages = context.messagesForKind(block.kind);
+          if (promptMessages.isNotEmpty) {
+            messages.addAll(promptMessages.map((m) => m.toApiMap()));
+            break;
+          }
           final content = block.content.trim();
           if (content.isNotEmpty) {
             messages.add({
@@ -648,6 +653,10 @@ class MemoryStudioService {
     final staticContext = <PromptMessage>[];
     final dynamicContext = <PromptMessage>[];
     final history = <PromptMessage>[];
+    final byKind = <String, List<PromptMessage>>{};
+    void addByKind(String kind, PromptMessage message) {
+      byKind.putIfAbsent(kind, () => <PromptMessage>[]).add(message);
+    }
 
     for (final message in promptResult.messages) {
       if (message.content.trim().isEmpty) continue;
@@ -655,7 +664,9 @@ class MemoryStudioService {
       if (message.isHistory) {
         history.add(message);
       } else if (blockId != null && staticIds.contains(blockId)) {
-        staticContext.add(message);
+        addByKind(blockId, message);
+      } else if (blockId != null && dynamicIds.contains(blockId)) {
+        addByKind(blockId, message);
       } else if (_isStudioDynamicMessage(message, dynamicIds)) {
         dynamicContext.add(message);
       } else {
@@ -663,23 +674,29 @@ class MemoryStudioService {
       }
     }
 
-    staticContext.insertAll(
-      0,
-      mandatoryFallback.map(
-        (m) => PromptMessage(
-          role: 'system',
-          content:
-              '[Mandatory fallback: ${_studioBlockLabel(m, presetBlockNames)}]\n${_trimForStudioContext(m.content, 6000)}',
-          blockId: m.blockId,
-          blockName: m.blockName,
-        ),
-      ),
-    );
+    for (final m in mandatoryFallback) {
+      final blockId = m.blockId;
+      final fallback = PromptMessage(
+        role: 'system',
+        content:
+            '[Mandatory fallback: ${_studioBlockLabel(m, presetBlockNames)}]\n${_trimForStudioContext(m.content, 6000)}',
+        blockId: blockId,
+        blockName: m.blockName,
+      );
+      if (blockId != null && blockId.isNotEmpty) {
+        byKind
+            .putIfAbsent(blockId, () => <PromptMessage>[])
+            .insert(0, fallback);
+      } else {
+        staticContext.insert(0, fallback);
+      }
+    }
 
     return _StudioContextBuckets(
       staticContext: staticContext,
       history: history,
       dynamicContext: dynamicContext,
+      byKind: byKind,
     );
   }
 
@@ -851,12 +868,17 @@ class _StudioContextBuckets {
   final List<PromptMessage> staticContext;
   final List<PromptMessage> history;
   final List<PromptMessage> dynamicContext;
+  final Map<String, List<PromptMessage>> byKind;
 
   const _StudioContextBuckets({
     required this.staticContext,
     required this.history,
     required this.dynamicContext,
+    required this.byKind,
   });
+
+  List<PromptMessage> messagesForKind(String kind) =>
+      byKind[kind] ?? const <PromptMessage>[];
 }
 
 class _ResolvedAgentConfig {
