@@ -16,6 +16,7 @@ import '../llm/memory_consolidation_service.dart';
 import '../llm/memory_agentic_service.dart';
 import '../llm/memory_studio_service.dart';
 import '../llm/studio_decomposition_service.dart';
+import '../llm/post_cleaner_service.dart';
 import 'memory_settings_provider.dart';
 
 /// Provider for the memory needs classifier service.
@@ -93,4 +94,10 @@ final memoryStudioServiceProvider = Provider<MemoryStudioService>((ref) {
 final studioDecompositionServiceProvider =
     Provider<StudioDecompositionService>((ref) {
   return StudioDecompositionService(ref);
+});
+
+/// POST-cleaner service (Stage 4). Rewrites the final assistant message
+/// to remove clichés and repetition. Fire-and-forget after generation.
+final postCleanerServiceProvider = Provider<PostCleanerService>((ref) {
+  return PostCleanerService(ref);
 });

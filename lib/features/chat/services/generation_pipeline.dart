@@ -220,6 +220,17 @@ class GenerationPipeline {
             genId: genId,
           ),
         );
+
+        // Stage 4: POST-cleaner — silently rewrite the final assistant
+        // message to remove clichés/repetition. Fire-and-forget; falls back
+        // to original text on error. Original preserved as a swipe.
+        unawaited(
+          _runPostCleaner(
+            sessionId: result.session!.id,
+            messages: result.session!.messages,
+            genId: genId,
+          ),
+        );
       }
 
       return GenerationOutcome(
@@ -509,6 +520,62 @@ class GenerationPipeline {
       );
     } catch (e) {
       debugPrint('[GenerationPipeline] agentic write-loop failed: $e');
+    }
+  }
+
+  /// Stage 4: POST-cleaner trigger.
+  ///
+  /// Fire-and-forget — silently rewrites the last assistant message to
+  /// remove clichés/repetition. Only runs on the normal (non-regen) path.
+  /// Reads MemoryBook settings to check `postCleanerEnabled`. Falls back to
+  /// original text on any error. The original is preserved as a swipe.
+  ///
+  /// Staleness guard: checks `abortHandler.isCurrentGen(genId)` before
+  /// applying the cleaned text.
+  Future<void> _runPostCleaner({
+    required String sessionId,
+    required List<ChatMessage> messages,
+    required int genId,
+  }) async {
+    if (!ref.mounted) return;
+
+    try {
+      final bookRepo = ref.read(memoryBookRepoProvider);
+      final book = await bookRepo.getBySessionId(sessionId);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (book == null || !book.settings.postCleanerEnabled) return;
+
+      // Find the last assistant message.
+      ChatMessage? lastAssistant;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role == 'assistant' &&
+            !messages[i].isError &&
+            !messages[i].isTyping &&
+            messages[i].content.trim().isNotEmpty) {
+          lastAssistant = messages[i];
+          break;
+        }
+      }
+      if (lastAssistant == null) return;
+
+      final cleanerService = ref.read(postCleanerServiceProvider);
+      final result = await cleanerService.runCleaner(
+        sessionId: sessionId,
+        settings: book.settings,
+        assistantText: lastAssistant.content,
+      );
+
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (!result.wasCleaned) return;
+
+      await cleanerService.applyCleanedText(
+        sessionId: sessionId,
+        messageId: lastAssistant.id,
+        cleanedText: result.cleanedText,
+        originalText: lastAssistant.content,
+      );
+    } catch (e) {
+      debugPrint('[GenerationPipeline] post-cleaner failed: $e');
     }
   }
 }

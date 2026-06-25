@@ -128,6 +128,12 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     /// default — the agent runs read-only (searchMemory only) unless this is
     /// explicitly enabled. See docs/PLAN_AGENTIC_STUDIO.md Stage 1.
     @Default(false) bool agenticWriteEnabled,
+    /// Enables the POST-cleaner: after generation, a sidecar LLM call
+    /// rewrites the final assistant message to remove clichés and repetition.
+    /// The original text is preserved as a swipe; the cleaned version replaces
+    /// the active text. Falls back to original on error. See
+    /// docs/PLAN_AGENTIC_STUDIO.md Stage 4.
+    @Default(false) bool postCleanerEnabled,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>
