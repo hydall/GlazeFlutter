@@ -287,19 +287,73 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
     return Dialog(
-      child: SizedBox(
-        width: 650,
-        height: 600,
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildBody(),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 650,
+          maxHeight: size.height - 48,
+        ),
+        child: SizedBox(
+          width: size.width < 650 ? size.width - 32 : 650,
+          height: size.height < 648 ? size.height - 48 : 600,
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  _buildHeader(),
+                  Expanded(
+                    child: _loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _buildBody(),
+                  ),
+                ],
+              ),
+              if (_building) _buildBuildingOverlay(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBuildingOverlay() {
+    return Positioned.fill(
+      child: AbsorbPointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.28),
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Building Studio...',
+                      style: TextStyle(
+                        color: context.cs.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -371,43 +425,45 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildContextInfoCard(),
-            const SizedBox(height: 24),
-            Icon(
-              Icons.movie_filter_outlined,
-              size: 64,
-              color: context.cs.primary.withValues(alpha: 0.5),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Studio Mode decomposes your preset into agent tasks.\n'
-              'Each agent gets its own instructions and model config.\n'
-              'Agents collaborate to produce the final RP response.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: context.cs.onSurfaceVariant,
-                fontSize: 13,
-                height: 1.5,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildContextInfoCard(),
+              const SizedBox(height: 24),
+              Icon(
+                Icons.movie_filter_outlined,
+                size: 64,
+                color: context.cs.primary.withValues(alpha: 0.5),
               ),
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: _building ? null : _buildStudio,
-              icon: _building
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.auto_awesome),
-              label: Text(_building ? 'Building...' : 'Build Studio'),
-            ),
-          ],
+              const SizedBox(height: 24),
+              Text(
+                'Studio Mode decomposes your preset into agent tasks.\n'
+                'Each agent gets its own instructions and model config.\n'
+                'Agents collaborate to produce the final RP response.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: context.cs.onSurfaceVariant,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 32),
+              FilledButton.icon(
+                onPressed: _building ? null : _buildStudio,
+                icon: _building
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_awesome),
+                label: Text(_building ? 'Building...' : 'Build Studio'),
+              ),
+            ],
+          ),
         ),
       ),
     );
