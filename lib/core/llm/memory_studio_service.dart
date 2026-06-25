@@ -555,31 +555,68 @@ class MemoryStudioService {
       finalPreset: isFinalResponse,
       overrides: config.studioPresetOverrides,
     );
-    final stageInstruction = isFinalResponse
-        ? studioPreset.finalInstruction
-        : studioPreset.intermediateInstruction;
-    final control = StringBuffer()
-      ..writeln(agent.promptShard.trim())
-      ..writeln()
-      ..writeln(stageInstruction);
-    final briefMessages =
-        (isFinalResponse ? priorBriefs : const <StudioStageBrief>[])
-            .where((b) => b.brief.trim().isNotEmpty)
-            .map(
-              (b) => {
-                'role': 'system',
-                'content': 'Studio agent brief: ${b.agentName}\n${b.brief}',
-              },
-            );
+    final context = _studioContextBuckets(
+      promptResult,
+      promptPayload: promptPayload,
+    );
+    final blocks = studioPreset.blocks.where((b) => b.enabled).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final messages = <Map<String, dynamic>>[];
 
-    return [
-      {'role': _normalizeRole(agent.role), 'content': control.toString()},
-      ...briefMessages,
-      ..._studioContextMessages(promptResult, promptPayload: promptPayload),
-    ];
+    for (final block in blocks) {
+      switch (block.kind) {
+        case 'agent_instruction':
+          final control = StringBuffer();
+          if (agent.promptShard.trim().isNotEmpty) {
+            control
+              ..writeln(agent.promptShard.trim())
+              ..writeln();
+          }
+          control.writeln(block.content.trim());
+          messages.add({
+            'role': _normalizeRole(
+              block.role.isNotEmpty ? block.role : agent.role,
+            ),
+            'content': control.toString().trim(),
+          });
+          break;
+        case 'previous_agents':
+          if (!isFinalResponse) break;
+          messages.addAll(
+            priorBriefs
+                .where((b) => b.brief.trim().isNotEmpty)
+                .map(
+                  (b) => {
+                    'role': _normalizeRole(block.role),
+                    'content': 'Studio agent brief: ${b.agentName}\n${b.brief}',
+                  },
+                ),
+          );
+          break;
+        case 'static_context':
+          messages.addAll(context.staticContext.map((m) => m.toApiMap()));
+          break;
+        case 'chat_history':
+          messages.addAll(context.history.map((m) => m.toApiMap()));
+          break;
+        case 'dynamic_context':
+          messages.addAll(context.dynamicContext.map((m) => m.toApiMap()));
+          break;
+        default:
+          final content = block.content.trim();
+          if (content.isNotEmpty) {
+            messages.add({
+              'role': _normalizeRole(block.role),
+              'content': content,
+            });
+          }
+      }
+    }
+
+    return messages;
   }
 
-  List<Map<String, dynamic>> _studioContextMessages(
+  _StudioContextBuckets _studioContextBuckets(
     PromptResult promptResult, {
     required PromptPayload promptPayload,
   }) {
@@ -626,18 +663,24 @@ class MemoryStudioService {
       }
     }
 
-    return [
-      ...mandatoryFallback.map(
-        (m) => _contextMessage(
-          'Mandatory fallback: ${_studioBlockLabel(m, presetBlockNames)}',
-          m.content,
-          6000,
+    staticContext.insertAll(
+      0,
+      mandatoryFallback.map(
+        (m) => PromptMessage(
+          role: 'system',
+          content:
+              '[Mandatory fallback: ${_studioBlockLabel(m, presetBlockNames)}]\n${_trimForStudioContext(m.content, 6000)}',
+          blockId: m.blockId,
+          blockName: m.blockName,
         ),
       ),
-      ...staticContext.map((m) => m.toApiMap()),
-      ...history.map((m) => m.toApiMap()),
-      ...dynamicContext.map((m) => m.toApiMap()),
-    ];
+    );
+
+    return _StudioContextBuckets(
+      staticContext: staticContext,
+      history: history,
+      dynamicContext: dynamicContext,
+    );
   }
 
   bool _isStudioDynamicMessage(PromptMessage message, Set<String> dynamicIds) {
@@ -727,17 +770,6 @@ class MemoryStudioService {
     return fallback;
   }
 
-  Map<String, dynamic> _contextMessage(
-    String label,
-    String content,
-    int maxChars,
-  ) {
-    return {
-      'role': 'system',
-      'content': '[$label]\n${_trimForStudioContext(content, maxChars)}',
-    };
-  }
-
   String _studioBlockLabel(
     PromptMessage msg,
     Map<String, String> presetBlockNames,
@@ -813,6 +845,18 @@ class MemoryStudioService {
   void _log(String message) {
     debugPrint('[Studio] $message');
   }
+}
+
+class _StudioContextBuckets {
+  final List<PromptMessage> staticContext;
+  final List<PromptMessage> history;
+  final List<PromptMessage> dynamicContext;
+
+  const _StudioContextBuckets({
+    required this.staticContext,
+    required this.history,
+    required this.dynamicContext,
+  });
 }
 
 class _ResolvedAgentConfig {

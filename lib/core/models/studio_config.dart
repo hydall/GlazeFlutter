@@ -39,10 +39,27 @@ abstract class StudioPresetOverride with _$StudioPresetOverride {
     @Default('') String name,
     @Default('') String intermediateInstruction,
     @Default('') String finalInstruction,
+    @Default([]) List<StudioPresetBlock> blocks,
   }) = _StudioPresetOverride;
 
   factory StudioPresetOverride.fromJson(Map<String, dynamic> json) =>
       _$StudioPresetOverrideFromJson(json);
+}
+
+@freezed
+abstract class StudioPresetBlock with _$StudioPresetBlock {
+  const factory StudioPresetBlock({
+    required String id,
+    @Default('') String title,
+    @Default('custom_text') String kind,
+    @Default('system') String role,
+    @Default('') String content,
+    @Default(true) bool enabled,
+    @Default(0) int order,
+  }) = _StudioPresetBlock;
+
+  factory StudioPresetBlock.fromJson(Map<String, dynamic> json) =>
+      _$StudioPresetBlockFromJson(json);
 }
 
 /// A single agent in the Studio pipeline.

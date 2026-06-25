@@ -570,20 +570,14 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       (preset) => preset.id == editingId,
       orElse: () => presets.first,
     );
+    var editingBlocks = _orderedStudioBlocks(editing.blocks);
     final nameController = TextEditingController(text: editing.name);
-    final intermediateController = TextEditingController(
-      text: editing.intermediateInstruction,
-    );
-    final finalController = TextEditingController(
-      text: editing.finalInstruction,
-    );
 
     void loadPreset(StudioRequestPreset preset) {
       editingId = preset.id;
       editing = preset;
+      editingBlocks = _orderedStudioBlocks(preset.blocks);
       nameController.text = preset.name;
-      intermediateController.text = preset.intermediateInstruction;
-      finalController.text = preset.finalInstruction;
     }
 
     try {
@@ -598,81 +592,266 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               return AlertDialog(
                 title: const Text('Edit Studio preset'),
                 content: SizedBox(
-                  width: 620,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        DropdownButtonFormField<String>(
-                          initialValue: editingId,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Studio preset',
-                            isDense: true,
-                            border: OutlineInputBorder(),
+                  width: 720,
+                  height: 620,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: editingId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Studio preset',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: available
+                            .map(
+                              (preset) => DropdownMenuItem(
+                                value: preset.id,
+                                child: Text(preset.name),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (id) {
+                          final preset = available.firstWhere(
+                            (p) => p.id == id,
+                            orElse: () => available.first,
+                          );
+                          editorSetState(() => loadPreset(preset));
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Name',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Text(
+                            'Prompt blocks',
+                            style: Theme.of(context).textTheme.titleSmall,
                           ),
-                          items: available
-                              .map(
-                                (preset) => DropdownMenuItem(
-                                  value: preset.id,
-                                  child: Text(preset.name),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: () {
+                              final nextOrder = editingBlocks.length;
+                              editorSetState(() {
+                                editingBlocks = [
+                                  ...editingBlocks,
+                                  StudioPresetBlock(
+                                    id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+                                    title: 'Custom block',
+                                    kind: 'custom_text',
+                                    role: 'system',
+                                    content: '',
+                                    order: nextOrder,
+                                  ),
+                                ];
+                              });
+                            },
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Add block'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ReorderableListView.builder(
+                          buildDefaultDragHandles: false,
+                          itemCount: editingBlocks.length,
+                          onReorderItem: (oldIndex, newIndex) {
+                            editorSetState(() {
+                              final blocks = [...editingBlocks];
+                              final item = blocks.removeAt(oldIndex);
+                              blocks.insert(newIndex, item);
+                              editingBlocks = _reorderStudioBlocks(blocks);
+                            });
+                          },
+                          itemBuilder: (context, index) {
+                            final block = editingBlocks[index];
+                            return Card(
+                              key: ValueKey(block.id),
+                              child: ExpansionTile(
+                                leading: ReorderableDragStartListener(
+                                  index: index,
+                                  child: const Icon(Icons.drag_handle),
                                 ),
-                              )
-                              .toList(),
-                          onChanged: (id) {
-                            final preset = available.firstWhere(
-                              (p) => p.id == id,
-                              orElse: () => available.first,
+                                title: Text(
+                                  block.title.isNotEmpty
+                                      ? block.title
+                                      : block.kind,
+                                ),
+                                subtitle: Text('${block.kind} • ${block.role}'),
+                                trailing: Switch(
+                                  value: block.enabled,
+                                  onChanged: (value) {
+                                    editorSetState(() {
+                                      editingBlocks = _updateStudioBlock(
+                                        editingBlocks,
+                                        block.id,
+                                        (current) =>
+                                            current.copyWith(enabled: value),
+                                      );
+                                    });
+                                  },
+                                ),
+                                childrenPadding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  0,
+                                  16,
+                                  16,
+                                ),
+                                children: [
+                                  TextFormField(
+                                    key: ValueKey('${block.id}_title'),
+                                    initialValue: block.title,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Block title',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    onChanged: (value) {
+                                      editingBlocks = _updateStudioBlock(
+                                        editingBlocks,
+                                        block.id,
+                                        (current) =>
+                                            current.copyWith(title: value),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: DropdownButtonFormField<String>(
+                                          initialValue: block.kind,
+                                          isExpanded: true,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Kind',
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                          ),
+                                          items: _studioBlockKinds
+                                              .map(
+                                                (kind) => DropdownMenuItem(
+                                                  value: kind,
+                                                  child: Text(kind),
+                                                ),
+                                              )
+                                              .toList(),
+                                          onChanged: (value) {
+                                            if (value == null) return;
+                                            editorSetState(() {
+                                              editingBlocks =
+                                                  _updateStudioBlock(
+                                                    editingBlocks,
+                                                    block.id,
+                                                    (current) => current
+                                                        .copyWith(kind: value),
+                                                  );
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 150,
+                                        child: DropdownButtonFormField<String>(
+                                          initialValue: block.role,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Role',
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                          ),
+                                          items: const [
+                                            DropdownMenuItem(
+                                              value: 'system',
+                                              child: Text('system'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: 'user',
+                                              child: Text('user'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: 'assistant',
+                                              child: Text('assistant'),
+                                            ),
+                                          ],
+                                          onChanged: (value) {
+                                            if (value == null) return;
+                                            editorSetState(() {
+                                              editingBlocks =
+                                                  _updateStudioBlock(
+                                                    editingBlocks,
+                                                    block.id,
+                                                    (current) => current
+                                                        .copyWith(role: value),
+                                                  );
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    key: ValueKey('${block.id}_content'),
+                                    initialValue: block.content,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Content',
+                                      alignLabelWithHint: true,
+                                      border: OutlineInputBorder(),
+                                      helperText:
+                                          'Used by agent_instruction/custom_text. Context kinds inject live prompt data.',
+                                    ),
+                                    minLines: 3,
+                                    maxLines: 8,
+                                    onChanged: (value) {
+                                      editingBlocks = _updateStudioBlock(
+                                        editingBlocks,
+                                        block.id,
+                                        (current) =>
+                                            current.copyWith(content: value),
+                                      );
+                                    },
+                                  ),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton.icon(
+                                      onPressed: () {
+                                        editorSetState(() {
+                                          editingBlocks = _reorderStudioBlocks(
+                                            editingBlocks
+                                                .where((b) => b.id != block.id)
+                                                .toList(),
+                                          );
+                                        });
+                                      },
+                                      icon: const Icon(Icons.delete_outline),
+                                      label: const Text('Delete'),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             );
-                            editorSetState(() => loadPreset(preset));
                           },
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: nameController,
-                          decoration: const InputDecoration(
-                            labelText: 'Name',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: intermediateController,
-                          decoration: const InputDecoration(
-                            labelText: 'Intermediate agent instruction',
-                            alignLabelWithHint: true,
-                            border: OutlineInputBorder(),
-                          ),
-                          minLines: 4,
-                          maxLines: 8,
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: finalController,
-                          decoration: const InputDecoration(
-                            labelText: 'Final agent instruction',
-                            alignLabelWithHint: true,
-                            border: OutlineInputBorder(),
-                          ),
-                          minLines: 4,
-                          maxLines: 8,
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () async {
+                    onPressed: () {
                       final base = defaultStudioRequestPresetById(editingId);
-                      await _saveStudioPresetOverride(
-                        studioRequestPresetToOverride(base),
-                      );
-                      if (!mounted) return;
                       editorSetState(() => loadPreset(base));
-                      parentSetState(() {});
                     },
                     child: const Text('Reset'),
                   ),
@@ -685,8 +864,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       final updated = StudioPresetOverride(
                         id: editingId,
                         name: nameController.text.trim(),
-                        intermediateInstruction: intermediateController.text,
-                        finalInstruction: finalController.text,
+                        blocks: _reorderStudioBlocks(editingBlocks),
                       );
                       await _saveStudioPresetOverride(updated);
                       if (!mounted) return;
@@ -704,10 +882,36 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       );
     } finally {
       nameController.dispose();
-      intermediateController.dispose();
-      finalController.dispose();
     }
   }
+
+  List<StudioPresetBlock> _orderedStudioBlocks(List<StudioPresetBlock> blocks) {
+    final next = [...blocks]..sort((a, b) => a.order.compareTo(b.order));
+    return _reorderStudioBlocks(next);
+  }
+
+  List<StudioPresetBlock> _reorderStudioBlocks(List<StudioPresetBlock> blocks) {
+    return [
+      for (var i = 0; i < blocks.length; i++) blocks[i].copyWith(order: i),
+    ];
+  }
+
+  List<StudioPresetBlock> _updateStudioBlock(
+    List<StudioPresetBlock> blocks,
+    String id,
+    StudioPresetBlock Function(StudioPresetBlock current) update,
+  ) {
+    return [for (final block in blocks) block.id == id ? update(block) : block];
+  }
+
+  static const _studioBlockKinds = [
+    'agent_instruction',
+    'previous_agents',
+    'static_context',
+    'chat_history',
+    'dynamic_context',
+    'custom_text',
+  ];
 
   Future<void> _saveStudioPresetOverride(StudioPresetOverride override) async {
     final next = <StudioPresetOverride>[];
