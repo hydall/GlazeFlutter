@@ -215,6 +215,7 @@ class MemoryStudioService {
             status: 'ok',
             response: agentResult.text,
             reasoning: agentResult.reasoning,
+            rawResponseJson: agentResult.rawResponseJson,
             stageBriefs: briefs,
           );
         }
@@ -285,12 +286,17 @@ class MemoryStudioService {
       priorBriefs: priorBriefs,
       isFinalResponse: isFinalResponse,
     );
+    final requestMessages =
+        isFinalResponse &&
+            (!resolved.requestReasoning || resolved.omitReasoning)
+        ? _stripPromptLevelReasoning(messages)
+        : messages;
     final shouldStream = resolved.stream;
     final request = ChatTransportRequest(
       endpoint: resolved.endpoint,
       apiKey: resolved.apiKey,
       model: resolved.model,
-      messages: messages,
+      messages: requestMessages,
       maxTokens: agent.maxTokens,
       temperature: agent.temperature,
       topP: resolved.topP,
@@ -319,10 +325,10 @@ class MemoryStudioService {
       protocol: resolved.protocol,
       model: resolved.model,
       tokenEstimate: estimateTokens(
-        messages.map((m) => m['content']?.toString() ?? '').join('\n'),
+        requestMessages.map((m) => m['content']?.toString() ?? '').join('\n'),
       ),
       contextSize: resolved.contextSize,
-      messages: messages,
+      messages: requestMessages,
       body: _buildRequestPreviewBody(resolved.protocol, request),
     );
     final transport = pickChatTransport(resolved.protocol);
@@ -362,7 +368,7 @@ class MemoryStudioService {
       });
     }
 
-    final inputChars = messages.fold<int>(
+    final inputChars = requestMessages.fold<int>(
       0,
       (sum, m) => sum + (m['content']?.toString().length ?? 0),
     );
@@ -370,7 +376,7 @@ class MemoryStudioService {
       'agent start session=$sessionId name="${agent.name}" '
       'final=$isFinalResponse source=${agent.modelSource} '
       'protocol=${resolved.protocol} model=${resolved.model} '
-      'messages=${messages.length} inputChars=$inputChars '
+      'messages=${requestMessages.length} inputChars=$inputChars '
       'stream=$shouldStream maxTokens=${agent.maxTokens} temp=${agent.temperature} '
       'timeoutMs=$timeoutMs persistedTimeoutMs=${agent.timeoutMs}',
     );
@@ -465,6 +471,7 @@ class MemoryStudioService {
                     ? accumulated
                     : text.trim(),
                 reasoning: reasoningText,
+                rawResponseJson: rawResponseJson,
               ),
             );
           }
@@ -638,6 +645,42 @@ class MemoryStudioService {
     }
 
     return messages;
+  }
+
+  List<Map<String, dynamic>> _stripPromptLevelReasoning(
+    List<Map<String, dynamic>> messages,
+  ) {
+    return [
+      for (final message in messages)
+        {
+          ...message,
+          if (message['content'] is String)
+            'content': _stripThinkDirective(message['content'] as String),
+        },
+    ];
+  }
+
+  String _stripThinkDirective(String content) {
+    var result = content;
+    final patterns = <RegExp>[
+      RegExp(
+        r'\s*Plan internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\s*Think internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\s*Use\s+<think>[\s\S]*?</think>\s*(?:for|to)[^.]*\. ?',
+        caseSensitive: false,
+      ),
+    ];
+    for (final pattern in patterns) {
+      result = result.replaceAll(pattern, ' ');
+    }
+    result = result.replaceAll(RegExp(r'\s{2,}'), ' ');
+    return result.trim();
   }
 
   String _expandStudioBlockContent(
@@ -1045,6 +1088,7 @@ class StudioPipelineResult {
   final String status;
   final String response;
   final String reasoning;
+  final String? rawResponseJson;
   final List<StudioStageBrief> stageBriefs;
   final String? error;
 
@@ -1052,6 +1096,7 @@ class StudioPipelineResult {
     required this.status,
     required this.response,
     this.reasoning = '',
+    this.rawResponseJson,
     this.stageBriefs = const [],
     this.error,
   });
@@ -1060,8 +1105,13 @@ class StudioPipelineResult {
 class _StudioAgentRunResult {
   final String text;
   final String reasoning;
+  final String? rawResponseJson;
 
-  const _StudioAgentRunResult({required this.text, this.reasoning = ''});
+  const _StudioAgentRunResult({
+    required this.text,
+    this.reasoning = '',
+    this.rawResponseJson,
+  });
 }
 
 class StudioStageBrief {

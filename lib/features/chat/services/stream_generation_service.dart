@@ -262,7 +262,7 @@ class StreamGenerationService {
           pendingSessionVars: pendingSessionVars,
           genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
           tokens: estimateTokens(studioResult.response),
-          rawResponse: studioResult.response,
+          rawResponse: studioResult.rawResponseJson ?? studioResult.response,
           previousSwipes: previousSwipes,
           previousSwipeId: previousSwipeId,
           previousReasoning: previousReasoning,
