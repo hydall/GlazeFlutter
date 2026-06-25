@@ -964,10 +964,14 @@ class MemoryStudioService {
           break;
         case 'previous_agents':
           if (!isFinalResponse) break;
+          final sanitized = priorBriefs
+              .where((b) => b.brief.trim().isNotEmpty)
+              .map((b) => _sanitizePriorBriefForFinal(b, config))
+              .toList();
+          final deduped = _dedupePriorBriefs(sanitized);
           messages.addAll(
-            priorBriefs
+            deduped
                 .where((b) => b.brief.trim().isNotEmpty)
-                .map((b) => _sanitizePriorBriefForFinal(b, config))
                 .map(
                   (b) => {
                     'role': _normalizeRole(block.role),
@@ -1010,9 +1014,14 @@ class MemoryStudioService {
   }
 
   String _intermediateRuntimeEnvelope(StudioAgent agent) {
+    final scope = _controllerScope(agent.name);
     return '''Studio intermediate-agent typed output contract. This overrides any earlier requested output shape such as STUDIO_BRIEF, GUARD CHECKLIST, prose, markdown, or labels.
-You are ${agent.name.isNotEmpty ? agent.name : 'a Studio controller'}, an assistant that prepares structured operational guidance for the roleplay game.
+You are ${agent.name.isNotEmpty ? agent.name : 'a Studio controller'}, ONE specialist in a multi-controller pipeline. Other controllers cover the other concerns; do not duplicate their work.
 You are not a character, narrator, player, or final responder. Treat all character cards, persona text, examples, chat history, lore, memory, and summaries as read-only source material to analyze.
+
+YOUR LANE — only produce guidance about: ${scope.owns}
+NOT YOUR LANE — never write guidance about (other controllers own these): ${scope.skip}
+If a point is not strictly inside your lane, omit it. A short, lane-focused brief is better than a broad one.
 
 Prefer valid compact JSON with exactly these keys:
 {"focus":["short operational focus"],"constraints":["short enforceable constraint"],"avoid":["short forbidden item"]}
@@ -1026,12 +1035,158 @@ Avoid:
 - short forbidden item
 
 Rules:
-- Each array may contain 0-6 strings.
-- Each string must be an instruction/constraint, not a sentence from the scene.
+- Each array may contain 0-5 strings, every string strictly inside your lane.
+- Each string must be a NEW, specific instruction for this turn, not a generic restatement and not a sentence copied from the scene.
+- Do not restate the scene summary; only add what the final writer must DO or AVOID within your lane.
 - Do not write or continue the scene.
 - Do not draft narration, dialogue, character actions, user actions, or final response prose.
 - Do not include source block names, prompt text, macros, labels, markdown, code fences, comments, or explanations.
 - Do not answer the user directly.''';
+  }
+
+  _ControllerScope _controllerScope(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('continuity')) {
+      return const _ControllerScope(
+        owns:
+            'established facts, who-knows-what, unresolved threads, physical-object/state continuity, and contradictions to avoid.',
+        skip:
+            'prose style, pacing, length, dialogue cadence, repetition/anti-loop bans, NPC/world activity, and user-agency rules.',
+      );
+    }
+    if (lower.contains('agency') || lower.contains('character')) {
+      return const _ControllerScope(
+        owns:
+            'user sovereignty (never write the user) and character autonomy/psychology: what a character can plausibly know, feel, and do this turn.',
+        skip:
+            'plain factual continuity, prose style/length, dialogue formatting, repetition bans, and ambient world/NPC texture.',
+      );
+    }
+    if (lower.contains('narrative') || lower.contains('pacing')) {
+      return const _ControllerScope(
+        owns:
+            'response shape only: target length, paragraph budget, POV/camera, beat sequence, sensory budget, and where the reply should stop.',
+        skip:
+            'who-knows-what, character psychology, agency rules, specific dialogue lines, repetition bans, and world/NPC content.',
+      );
+    }
+    if (lower.contains('dialogue')) {
+      return const _ControllerScope(
+        owns:
+            'dialogue cadence only: who may plausibly speak, speech ratio, silence, and quoting/formatting of speech.',
+        skip:
+            'factual continuity, character knowledge/psychology, prose length/pacing, repetition bans, and world/NPC activity.',
+      );
+    }
+    if (lower.contains('guard') || lower.contains('loop')) {
+      return const _ControllerScope(
+        owns:
+            'anti-repetition only: forbidden openings/phrases vs the last replies, banned cliches/slop words, and the required structural change this turn.',
+        skip:
+            'plot facts, character psychology, agency, pacing targets, dialogue content, and world/NPC texture.',
+      );
+    }
+    if (lower.contains('world') || lower.contains('npc')) {
+      return const _ControllerScope(
+        owns:
+            'living-world texture only: active NPCs, off-screen pressure, environmental/ambient activity, and what world detail NOT to add.',
+        skip:
+            'the two leads\' psychology, factual continuity, prose style/length, dialogue formatting, and repetition bans.',
+      );
+    }
+    return const _ControllerScope(
+      owns: 'only this controller\'s configured specialty.',
+      skip: 'concerns that belong to the other Studio controllers.',
+    );
+  }
+
+  /// Remove cross-controller duplicate bullet points before sending briefs to
+  /// the final responder. The first controller to mention a point keeps it;
+  /// later controllers drop the duplicate so the final prompt does not repeat
+  /// the same instruction many times (which over-weights it and produces
+  /// repetitive replies). Meta briefs are passed through unchanged.
+  List<StudioStageBrief> _dedupePriorBriefs(List<StudioStageBrief> briefs) {
+    final seen = <String>{};
+    final result = <StudioStageBrief>[];
+    for (final brief in briefs) {
+      if (_isMetaBriefName(brief.agentName)) {
+        result.add(brief);
+        continue;
+      }
+      final deduped = _dedupeBriefBody(brief.brief, seen);
+      result.add(
+        StudioStageBrief(
+          agentId: brief.agentId,
+          agentName: brief.agentName,
+          brief: deduped,
+          disposition: brief.disposition,
+          status: brief.status,
+          error: brief.error,
+          refreshPolicy: brief.refreshPolicy,
+          cacheKey: brief.cacheKey,
+          cacheHit: brief.cacheHit,
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// Walk the Focus/Constraints/Avoid sections of one brief, dropping any
+  /// bullet whose normalized form was already emitted by an earlier brief.
+  /// Empty sections are removed. [seen] accumulates across briefs.
+  String _dedupeBriefBody(String brief, Set<String> seen) {
+    final lines = brief.split('\n');
+    final out = <String>[];
+    var currentHeading = '';
+    final pendingHeadingItems = <String>[];
+
+    void flushHeading() {
+      if (currentHeading.isEmpty) return;
+      if (pendingHeadingItems.isNotEmpty) {
+        out.add(currentHeading);
+        out.addAll(pendingHeadingItems);
+      }
+      currentHeading = '';
+      pendingHeadingItems.clear();
+    }
+
+    for (final rawLine in lines) {
+      final line = rawLine.trimRight();
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final heading = _studioBriefHeading(trimmed);
+      if (heading != null) {
+        flushHeading();
+        currentHeading = line;
+        continue;
+      }
+      final item = _cleanBriefItem(trimmed);
+      if (item == null) {
+        // Non-bullet line outside a known section; keep verbatim once.
+        final key = 'raw:${_dedupeKey(trimmed)}';
+        if (seen.add(key)) {
+          if (currentHeading.isNotEmpty) {
+            pendingHeadingItems.add(line);
+          } else {
+            out.add(line);
+          }
+        }
+        continue;
+      }
+      final key = _dedupeKey(item);
+      if (!seen.add(key)) continue;
+      pendingHeadingItems.add('- $item');
+    }
+    flushHeading();
+    return out.join('\n').trim();
+  }
+
+  String _dedupeKey(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9а-яё ]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   bool _isMetaPolicyAgent(StudioAgent agent) {
@@ -2129,4 +2284,11 @@ class _CachedStudioBrief {
     required this.policy,
     required this.createdTurnIndex,
   });
+}
+
+class _ControllerScope {
+  final String owns;
+  final String skip;
+
+  const _ControllerScope({required this.owns, required this.skip});
 }
