@@ -64,7 +64,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **45**
+Current version: **46**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -95,6 +95,7 @@ Migration history:
 - v43: added Studio `builderPromptTemplate` override for editable Studio rebuild prompts
 - v44: added Studio `maxFinalHistoryMessages` INTEGER DEFAULT 15 — caps trailing chat messages sent to the final Studio agent (0 = unlimited); intermediate agents still see full history
 - v45: added `tracker_rows` table — agentic memory trackers (lightweight key-value state written by the memory agent, e.g. 'mood: happy', 'inventory: chip in pocket'). Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades alongside `memory_book_rows`
+- v46: added `studio_config_rows.routing_mode` TEXT DEFAULT `'verbatim'` — controls how preset blocks become agent instructions during decomposition (`verbatim` = blocks concatenated дословно, no LLM call; `compiled` = legacy LLM digest). See docs/PLAN_AGENTIC_STUDIO.md §11
 
 ---
 

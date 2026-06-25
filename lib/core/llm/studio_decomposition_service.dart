@@ -203,6 +203,7 @@ class StudioDecompositionService {
     required String sessionId,
     ApiConfig? apiConfig,
     String builderPromptTemplate = '',
+    String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
     final enabledBlocks = preset.blocks.where((b) => b.enabled).toList();
@@ -231,6 +232,7 @@ class StudioDecompositionService {
           now: now,
           apiConfig: apiConfig,
           builderPromptTemplate: builderPromptTemplate,
+          routingMode: routingMode,
           cancelToken: cancelToken,
         ),
       );
@@ -248,6 +250,7 @@ class StudioDecompositionService {
     required StudioAgent agent,
     ApiConfig? apiConfig,
     String builderPromptTemplate = '',
+    String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
     final enabledBlocks = preset.blocks.where((b) => b.enabled).toList();
@@ -259,6 +262,7 @@ class StudioDecompositionService {
       blocks: blocks,
       apiConfig: apiConfig,
       builderPromptTemplate: builderPromptTemplate,
+      routingMode: routingMode,
       cancelToken: cancelToken,
     );
     return _normalizeStudioAgent(
@@ -282,6 +286,7 @@ class StudioDecompositionService {
     required int now,
     ApiConfig? apiConfig,
     String builderPromptTemplate = '',
+    String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
     final promptShard = await _synthesizePromptShard(
@@ -289,6 +294,7 @@ class StudioDecompositionService {
       blocks: blocks,
       apiConfig: apiConfig,
       builderPromptTemplate: builderPromptTemplate,
+      routingMode: routingMode,
       cancelToken: cancelToken,
     );
     return StudioAgent(
@@ -313,9 +319,19 @@ class StudioDecompositionService {
     required List<PresetBlock> blocks,
     ApiConfig? apiConfig,
     String builderPromptTemplate = '',
+    String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
     if (blocks.isEmpty) return spec.fallbackPrompt;
+
+    // Stage 3: verbatim routing — concatenate blocks directly, no LLM call.
+    // The preset is the source of truth; the agent sees its assigned blocks
+    // дословно. See docs/PLAN_AGENTIC_STUDIO.md §11.
+    if (routingMode == 'verbatim') {
+      return _synthesizeRoutedShard(spec: spec, blocks: blocks);
+    }
+
+    // Legacy: LLM-compiled shard (переваривание).
     final prompt = _buildControllerPrompt(
       spec: spec,
       blocks: blocks,
@@ -340,6 +356,40 @@ class StudioDecompositionService {
       _log('controller build error name="${spec.name}" error=$e');
     }
     return '${spec.fallbackPrompt}\n\nSource blocks: ${_sourceBlockNames(blocks)}';
+  }
+
+  /// Stage 3: Verbatim routing — produces the promptShard by concatenating
+  /// assigned preset blocks дословно, without any LLM compilation.
+  ///
+  /// Each block is emitted with a header `[Block: <name>]` followed by its
+  /// content. Blocks are in preset order (priority = position in preset, §12).
+  /// A conflict-resolution footer is appended: "при конфликте следуй последнему
+  /// блоку".
+  ///
+  /// This makes the preset the direct source of truth for the agent — no
+  /// intermediary LLM distorts the user's instructions. See
+  /// docs/PLAN_AGENTIC_STUDIO.md §11.
+  String _synthesizeRoutedShard({
+    required _ControllerSpec spec,
+    required List<PresetBlock> blocks,
+  }) {
+    final parts = <String>[];
+    for (final block in blocks) {
+      final name = block.name.isNotEmpty ? block.name : block.id;
+      final content = block.content.trim();
+      if (content.isEmpty) continue;
+      parts.add('[Block: $name]\n$content');
+    }
+    if (parts.isEmpty) return spec.fallbackPrompt;
+
+    final body = parts.join('\n\n---\n\n');
+    // Conflict resolution footer (§12): when two blocks contradict, the one
+    // later in the preset wins (higher priority = closer to the end).
+    const conflictFooter =
+        '\n\n---\n\n[Conflict resolution: if two blocks above contradict each '
+        'other, follow the one that appears LAST.]';
+
+    return '$body$conflictFooter';
   }
 
   String _buildControllerPrompt({

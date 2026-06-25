@@ -139,6 +139,7 @@ class StudioConfigRepo implements SyncStudioConfigStore {
             runApiConfigId: Value(config.runApiConfigId),
             builderPromptTemplate: Value(config.builderPromptTemplate),
             maxFinalHistoryMessages: Value(config.maxFinalHistoryMessages),
+            routingMode: Value(config.routingMode),
             selectedBlockIdsJson: Value(jsonEncode(config.selectedBlockIds)),
             selectedBlockIdsInitialized: Value(
               config.selectedBlockIdsInitialized,
@@ -217,6 +218,7 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       runApiConfigId: row.runApiConfigId,
       builderPromptTemplate: row.builderPromptTemplate,
       maxFinalHistoryMessages: row.maxFinalHistoryMessages,
+      routingMode: row.routingMode,
       selectedBlockIds: selectedBlockIds,
       selectedBlockIdsInitialized: row.selectedBlockIdsInitialized,
       createdAt: row.createdAt,

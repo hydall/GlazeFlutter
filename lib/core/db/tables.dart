@@ -330,6 +330,8 @@ class StudioConfigRows extends Table {
       text().withDefault(const Constant(''))();
   IntColumn get maxFinalHistoryMessages =>
       integer().withDefault(const Constant(15))();
+  TextColumn get routingMode =>
+      text().withDefault(const Constant('verbatim'))();
   TextColumn get selectedBlockIdsJson =>
       text().withDefault(const Constant('[]'))();
   BoolColumn get selectedBlockIdsInitialized =>

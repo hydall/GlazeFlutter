@@ -33,6 +33,12 @@ abstract class StudioConfig with _$StudioConfig {
     /// final writer is intentionally limited so it leans on the agent briefs
     /// instead of re-reading the whole transcript. 0 = no limit.
     @Default(15) int maxFinalHistoryMessages,
+    /// How preset blocks are turned into agent instructions during
+    /// decomposition. `'verbatim'` (default) = blocks are concatenated
+    /// verbatim into the promptShard, no LLM call — the preset is the source
+    /// of truth. `'compiled'` = LLM synthesizes a compiled instruction from
+    /// the blocks (legacy behavior). See docs/PLAN_AGENTIC_STUDIO.md §11.
+    @Default('verbatim') String routingMode,
     @Default([]) List<String> selectedBlockIds,
     @Default(false) bool selectedBlockIdsInitialized,
     @Default(0) int createdAt,

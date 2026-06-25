@@ -124,6 +124,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         sessionId: widget.sessionId,
         apiConfig: buildApiConfig,
         builderPromptTemplate: _builderPromptTemplate,
+        routingMode: _config?.routingMode ?? 'verbatim',
       );
 
       if (agents.isEmpty) {
@@ -207,6 +208,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             agent: agent,
             apiConfig: buildApiConfig,
             builderPromptTemplate: _builderPromptTemplate,
+            routingMode: _config?.routingMode ?? 'verbatim',
           );
 
       if (!mounted || _config == null) return;

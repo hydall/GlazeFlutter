@@ -39,7 +39,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 45;
+  int get schemaVersion => 46;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -539,6 +539,20 @@ class AppDatabase extends _$AppDatabase {
         final tableNames = tables.map((r) => r.read<String>('name')).toSet();
         if (!tableNames.contains('tracker_rows')) {
           await m.createTable(trackerRows);
+        }
+      }
+      if (from < 46) {
+        // Stage 3: routing mode for preset orchestrator — 'verbatim' (default,
+        // blocks go to agents дословно) vs 'compiled' (legacy LLM digest).
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('routing_mode')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.routingMode,
+          );
         }
       }
     },
