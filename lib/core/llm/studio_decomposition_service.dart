@@ -10,6 +10,7 @@ import '../models/api_config.dart';
 import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../utils/time_helpers.dart';
+import 'macro_engine.dart';
 import 'studio_block_router.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
@@ -210,14 +211,21 @@ class StudioDecompositionService {
     final allEnabled = preset.blocks.where((b) => b.enabled).toList();
     if (allEnabled.isEmpty) return const [];
 
+    // Expand setvar/getvar macros in block order BEFORE routing. This
+    // resolves the variable pipeline (setvar→store→getvar) so rule values
+    // reach their destination blocks. setvar-only blocks (e.g. LENGTH) have
+    // their rule values surfaced as content. The CoT dispatcher — which
+    // previously read all variables via getvar — can then be safely dropped
+    // without losing rules. See docs/PLAN_AGENTIC_STUDIO.md §11.
+    final expandedBlocks = expandBlocksForRouting(allEnabled);
+
     // CoT / reasoning / thinking blocks are NOT routed to any agent: the
     // multi-agent pipeline IS the externalized chain-of-thought, so a per-turn
     // <think> directive inside an agent is redundant and conflicts with the
     // "produce a brief, not prose / no hidden reasoning" contract. Drop them
-    // before routing. See docs/PLAN_AGENTIC_STUDIO.md §11 and the final/
-    // intermediate reasoning guards below.
-    final reasoningBlocks = allEnabled.where(isReasoningBlock).toList();
-    final enabledBlocks = allEnabled
+    // after macro expansion. See docs/PLAN_AGENTIC_STUDIO.md §11.
+    final reasoningBlocks = expandedBlocks.where(isReasoningBlock).toList();
+    final enabledBlocks = expandedBlocks
         .where((b) => !isReasoningBlock(b))
         .toList();
     if (reasoningBlocks.isNotEmpty) {
@@ -288,10 +296,95 @@ class StudioDecompositionService {
   /// Returns blocks in preset order (priority = position, §12). Reasoning/CoT
   /// blocks are excluded.
   List<PresetBlock> collectBroadcastBlocks(Preset preset) {
-    return preset.blocks
-        .where((b) => b.enabled && !isReasoningBlock(b))
-        .where(isBroadcastBlock)
+    final allEnabled = preset.blocks.where((b) => b.enabled).toList();
+    final expanded = expandBlocksForRouting(allEnabled);
+    return expanded
+        .where((b) => !isReasoningBlock(b) && isBroadcastBlock(b))
         .toList();
+  }
+
+  /// Expands `{{setvar}}`/`{{getvar}}`/`{{trim}}` macros across all blocks in
+  /// preset order, threading the variable store forward (matching
+  /// `prompt_builder.dart` block-order semantics).
+  ///
+  /// This resolves the setvar→getvar pipeline at BUILD time so that rule
+  /// values reach their destination blocks even when the CoT dispatcher
+  /// (which previously read all variables via getvar) is dropped as a
+  /// reasoning block. Other macros (`{{char}}`, `{{user}}`, …) are left
+  /// untouched for chat-time expansion.
+  ///
+  /// **setvar-only blocks** (pure `{{setvar::…}}` — content is empty after
+  /// expansion but variables were set) are surfaced: their rule-like variable
+  /// values (`*_rules`, `*_target`, or multi-line/long text) become the
+  /// block's content, so the rules reach an agent instead of vanishing.
+  /// Technical flags (`*_mode`, `*_min`, `*_max` — short single-word/number
+  /// values) are discarded.
+  ///
+  /// Returns a new list of [PresetBlock]s with expanded content, in the same
+  /// order. Blocks whose expanded content is still empty (no setvar, no
+  /// getvar, no text) are dropped.
+  @visibleForTesting
+  static List<PresetBlock> expandBlocksForRouting(List<PresetBlock> blocks) {
+    var sessionVars = <String, String>{};
+    var globalVars = <String, String>{};
+    final result = <PresetBlock>[];
+
+    for (final block in blocks) {
+      final beforeVars = Map<String, String>.from(sessionVars);
+
+      final expanded = expandVariableMacros(
+        block.content,
+        sessionVars: sessionVars,
+        globalVars: globalVars,
+      );
+      sessionVars = expanded.sessionVars;
+      globalVars = expanded.globalVars;
+
+      var content = expanded.text.trim();
+
+      // setvar-only block: surface rule-like variable values as content.
+      if (content.isEmpty) {
+        final newEntries = expanded.sessionVars.entries.where((e) {
+          final beforeVal = beforeVars[e.key];
+          if (beforeVal != null &&
+              beforeVal == e.value &&
+              !_wasSetByThisBlock(e.key, block.content)) {
+            return false;
+          }
+          return _isRuleVariable(e.key, e.value);
+        });
+        final surfaced = newEntries
+            .map((e) => e.value.trim())
+            .where((v) => v.isNotEmpty)
+            .join('\n\n');
+        content = surfaced;
+      }
+
+      if (content.isEmpty) continue;
+      result.add(block.copyWith(content: content));
+    }
+    return result;
+  }
+
+  /// True if [blockContent] contains a `{{setvar::name::…}}` for [name].
+  /// Used to confirm a variable was set by THIS block (not just inherited).
+  static bool _wasSetByThisBlock(String name, String blockContent) {
+    final tag = '{{setvar::$name::';
+    return blockContent.contains(tag);
+  }
+
+  /// True if a variable name + value look like a rule payload (vs a technical
+  /// flag). Rule-like names end with `_rules`, `_rule`, or `_target`. Values
+  /// that are multi-line or long (50+ chars) are also treated as rules.
+  static bool _isRuleVariable(String name, String value) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('_rules') ||
+        lower.endsWith('_rule') ||
+        lower.endsWith('_target')) {
+      return true;
+    }
+    if (value.contains('\n') || value.length > 50) return true;
+    return false;
   }
 
   /// Regenerate the build-time prompt shard for one visible Studio agent.
@@ -304,13 +397,16 @@ class StudioDecompositionService {
     String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
-    final enabledBlocks = preset.blocks
-        .where((b) => b.enabled && !isReasoningBlock(b))
+    final allEnabled = preset.blocks
+        .where((b) => b.enabled)
+        .toList();
+    final expandedBlocks = expandBlocksForRouting(allEnabled)
+        .where((b) => !isReasoningBlock(b))
         .toList();
     final spec = _specForAgent(agent);
     // Single-agent regen reuses deterministic bucketing (no LLM router call);
     // the build-time LLM map only matters for a full decompose().
-    final assignments = _assignBlocks(enabledBlocks, BlockRoutingMap.empty);
+    final assignments = _assignBlocks(expandedBlocks, BlockRoutingMap.empty);
     final blocks = assignments[spec.id] ?? const <PresetBlock>[];
     final promptShard = await _synthesizePromptShard(
       spec: spec,
@@ -604,6 +700,14 @@ $blocksSummary''';
       'русск',
       'russian',
       'output_language',
+      // Response length / paragraph budget (cross-cutting: governs final
+      // reply AND POST-cleaner rewrite length).
+      'length:',
+      'length_rules',
+      'length_target',
+      'длинный ответ',
+      'короткий ответ',
+      'средний ответ',
       // Prose-quality guards.
       'anti-loop',
       'anti loop',

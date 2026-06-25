@@ -360,5 +360,151 @@ void main() {
         isFalse,
       );
     });
+
+    test('flags LENGTH blocks', () {
+      for (final n in [
+        '📏 LENGTH: Medium ~ Средний ответ',
+        '📏 LENGTH: Long ~ Длинный ответ',
+        '📏 LENGTH: Short ~ Короткий ответ',
+      ]) {
+        expect(
+          StudioDecompositionService.isBroadcastBlock(_block(id: 'x', name: n)),
+          isTrue,
+          reason: '"$n" should broadcast to final + cleaner',
+        );
+      }
+    });
+  });
+
+  group('expandBlocksForRouting (setvar/getvar pipeline)', () {
+    test('surfaces setvar-only block rules as content', () {
+      // LENGTH block: pure setvar, no visible text after expansion.
+      final lengthBlock = PresetBlock(
+        id: 'length_medium',
+        name: '📏 LENGTH: Medium ~ Средний ответ',
+        role: 'system',
+        content: '{{setvar::length_words_min::800}}{{trim}}\n'
+            '{{setvar::length_words_max::900}}{{trim}}\n'
+            '{{setvar::length_mode::medium}}{{trim}}\n'
+            '{{setvar::length_target::800-900 Russian words, 6-8 paragraphs}}{{trim}}\n'
+            '{{setvar::length_rules::\n'
+            '- Main narrative must be 800-900 Russian words.\n'
+            '- Use 6-8 paragraphs.\n'
+            '- Each paragraph should be 3-5 sentences.}}{{trim}}',
+      );
+      final result = StudioDecompositionService.expandBlocksForRouting([
+        lengthBlock,
+      ]);
+      expect(result, hasLength(1));
+      expect(result.first.content, contains('800-900 Russian words'));
+      expect(result.first.content, contains('6-8 paragraphs'));
+      // Technical flags (mode/min/max) should NOT appear as standalone.
+      expect(result.first.content, isNot(contains('medium')));
+    });
+
+    test('resolves getvar in a self-contained block (Ban)', () {
+      final banBlock = PresetBlock(
+        id: 'ban_rus',
+        name: '❌Ban Rus',
+        role: 'system',
+        content: '{{setvar::ban_rules::\n'
+            'Forbidden words:\n- озон\n- мускус\n}}{{trim}}\n\n'
+            '<ban_rules>\n{{getvar::ban_rules}}\n</ban_rules>',
+      );
+      final result = StudioDecompositionService.expandBlocksForRouting([
+        banBlock,
+      ]);
+      expect(result, hasLength(1));
+      // getvar should be resolved to the ban list text.
+      expect(result.first.content, contains('Forbidden words'));
+      expect(result.first.content, contains('озон'));
+      expect(result.first.content, contains('мускус'));
+      // No raw macro tags should remain.
+      expect(result.first.content, isNot(contains('{{')));
+    });
+
+    test('resolves getvar across blocks (setvar in A, getvar in B)', () {
+      final setter = PresetBlock(
+        id: 'core_vars',
+        name: '✨ Core Variables',
+        role: 'system',
+        content: '{{setvar::agency_rules::\n'
+            '- Never write for {{user}}.\n'
+            '- Characters act from established knowledge.}}{{trim}}',
+      );
+      final getter = PresetBlock(
+        id: 'cot_gemini',
+        name: 'CoT Gemini',
+        role: 'system',
+        content: 'Rules:\n{{getvar::agency_rules}}\nEnd.',
+      );
+      final result = StudioDecompositionService.expandBlocksForRouting([
+        setter,
+        getter,
+      ]);
+      // setter is setvar-only → surfaced as content.
+      expect(result, hasLength(2));
+      expect(result[0].content, contains('Never write for'));
+      expect(result[0].content, contains('established knowledge'));
+      // getter has getvar resolved from setter's variable.
+      expect(result[1].content, contains('Never write for'));
+      expect(result[1].content, contains('End.'));
+      expect(result[1].content, isNot(contains('{{getvar')));
+    });
+
+    test('drops blocks that are empty after expansion (no setvar, no text)', () {
+      final empty = PresetBlock(
+        id: 'empty_block',
+        name: 'Empty',
+        role: 'system',
+        content: '{{trim}}',
+      );
+      final result = StudioDecompositionService.expandBlocksForRouting([
+        empty,
+      ]);
+      expect(result, isEmpty);
+    });
+
+    test('leaves non-variable macros untouched for chat-time expansion', () {
+      final block = PresetBlock(
+        id: 'narrative',
+        name: 'Narrative',
+        role: 'system',
+        content: '{{char}} looks at {{user}} and says: hello.\n'
+            '{{setvar::pov_mode::third}}{{trim}}',
+      );
+      final result = StudioDecompositionService.expandBlocksForRouting([
+        block,
+      ]);
+      // {{char}} and {{user}} should remain as literals.
+      expect(result.first.content, contains('{{char}}'));
+      expect(result.first.content, contains('{{user}}'));
+      // setvar should be removed.
+      expect(result.first.content, isNot(contains('{{setvar')));
+    });
+
+    test('surfaces multiple rule variables from one setvar-only block', () {
+      final coreVars = PresetBlock(
+        id: 'core_vars',
+        name: '✨ Core Variables',
+        role: 'system',
+        content: '{{setvar::ground_truth_mode::strict}}{{trim}}\n'
+            '{{setvar::ground_truth_rules::\n'
+            '- Explicit user facts override drama.}}{{trim}}\n'
+            '{{setvar::agency_mode::enforce}}{{trim}}\n'
+            '{{setvar::agency_rules::\n'
+            '- Never write for {{user}}.}}{{trim}}',
+      );
+      final result = StudioDecompositionService.expandBlocksForRouting([
+        coreVars,
+      ]);
+      expect(result, hasLength(1));
+      // Both *_rules values should be surfaced.
+      expect(result.first.content, contains('Explicit user facts override'));
+      expect(result.first.content, contains('Never write for'));
+      // Technical modes should NOT appear.
+      expect(result.first.content, isNot(contains('strict')));
+      expect(result.first.content, isNot(contains('enforce')));
+    });
   });
 }
