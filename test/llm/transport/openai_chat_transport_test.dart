@@ -5,6 +5,7 @@ import 'package:glaze_flutter/core/llm/transport/openai_chat_transport.dart';
 ChatTransportRequest _req({
   String endpoint = 'https://api.openai.com',
   String sessionIdMode = 'openrouter',
+  bool omitReasoning = false,
 }) {
   return ChatTransportRequest(
     endpoint: endpoint,
@@ -18,6 +19,7 @@ ChatTransportRequest _req({
     topP: 0.9,
     sessionId: 'sess-1',
     sessionIdMode: sessionIdMode,
+    omitReasoning: omitReasoning,
   );
 }
 
@@ -46,5 +48,19 @@ void main() {
 
       expect(body.containsKey('session_id'), isFalse);
     });
+  });
+
+  group('reasoning', () {
+    test(
+      'omit reasoning sends explicit exclusion for compatible providers',
+      () {
+        final body = OpenAiChatTransport.buildBody(
+          _req(endpoint: 'https://custom.example/v1', omitReasoning: true),
+        );
+
+        expect(body['reasoning'], {'exclude': true});
+        expect(body.containsKey('reasoning_effort'), isFalse);
+      },
+    );
   });
 }
