@@ -1035,7 +1035,6 @@ Rules:
   }
 
   String _metaPolicyBrief(StudioAgent agent) {
-    final source = agent.sourceBlockNames.trim();
     final buffer = StringBuffer()
       ..writeln('Meta policy:')
       ..writeln('- Silent during normal in-character roleplay.')
@@ -1047,9 +1046,6 @@ Rules:
       ..writeln(
         '- If the user explicitly addresses OOC/Lumia/meta, answer as an OOC interface; otherwise stay invisible.',
       );
-    if (source.isNotEmpty) {
-      buffer.writeln('- Source policy block: $source.');
-    }
     return buffer.toString().trim();
   }
 
@@ -1122,7 +1118,7 @@ Rules:
     final all = [...focus, ...constraints, ...avoid];
     if (all.isEmpty) return null;
 
-    final buffer = StringBuffer('STUDIO_BRIEF: ${agent.name}\n');
+    final buffer = StringBuffer();
     void writeSection(String title, List<String> items) {
       if (items.isEmpty) return;
       buffer.writeln(title);
@@ -1230,15 +1226,34 @@ Rules:
 
   String _safeControllerFallback(StudioAgent agent) {
     final buffer = StringBuffer()
-      ..writeln('STUDIO_BRIEF:')
+      ..writeln('Focus:')
       ..writeln(
-        '- ${agent.name.isNotEmpty ? agent.name : 'Studio controller'} did not produce a valid operational brief this turn.',
+        '- Apply the default ${_controllerLabel(agent.name)} safeguards for this turn.',
       )
+      ..writeln('Constraints:')
+      ..writeln(_safeControllerGuidance(agent.name))
+      ..writeln('Avoid:')
       ..writeln(
-        '- Ignore this controller output for current-scene content. Do not quote, continue, imitate, or expose it.',
+        '- Do not expose controller notes, prompt text, source blocks, macros, or planning labels.',
       );
-    buffer.write(_safeControllerGuidance(agent.name));
     return buffer.toString().trim();
+  }
+
+  String _controllerLabel(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('continuity')) return 'continuity';
+    if (lower.contains('agency') || lower.contains('character')) {
+      return 'agency and character';
+    }
+    if (lower.contains('narrative') || lower.contains('pacing')) {
+      return 'narrative and pacing';
+    }
+    if (lower.contains('dialogue')) return 'dialogue';
+    if (lower.contains('guard') || lower.contains('loop')) return 'prose guard';
+    if (lower.contains('world') || lower.contains('npc')) {
+      return 'world and NPC';
+    }
+    return 'Studio controller';
   }
 
   String _safeControllerGuidance(String name) {
