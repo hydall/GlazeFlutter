@@ -266,32 +266,69 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
       prefix = '  ';
     }
 
+    final changedWordBg = line.type == DiffLineType.removed
+        ? Colors.red.withValues(alpha: 0.35)
+        : Colors.green.withValues(alpha: 0.35);
+
+    final spans = <TextSpan>[];
+    spans.add(TextSpan(
+      text: prefix,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.bold,
+        color: fg.withValues(alpha: 0.5),
+        fontFamily: 'monospace',
+      ),
+    ));
+
+    if (line.words != null && line.words!.isNotEmpty) {
+      for (var wi = 0; wi < line.words!.length; wi++) {
+        final w = line.words![wi];
+        // Add space between words (except before the first).
+        if (wi > 0) {
+          spans.add(TextSpan(
+            text: ' ',
+            style: TextStyle(fontSize: 13, height: 1.4, color: fg),
+          ));
+        }
+        if (w.isChanged) {
+          spans.add(TextSpan(
+            text: w.text.isEmpty ? '\u200B' : w.text,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: fg,
+              backgroundColor: changedWordBg,
+            ),
+          ));
+        } else {
+          spans.add(TextSpan(
+            text: w.text,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: fg,
+            ),
+          ));
+        }
+      }
+    } else {
+      spans.add(TextSpan(
+        text: line.text,
+        style: TextStyle(
+          fontSize: 13,
+          height: 1.4,
+          color: fg,
+        ),
+      ));
+    }
+
     return Container(
       width: double.infinity,
       color: bg,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       child: SelectableText.rich(
-        TextSpan(
-          children: [
-            TextSpan(
-              text: prefix,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: fg.withValues(alpha: 0.5),
-                fontFamily: 'monospace',
-              ),
-            ),
-            TextSpan(
-              text: line.text,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.4,
-                color: fg,
-              ),
-            ),
-          ],
-        ),
+        TextSpan(children: spans),
       ),
     );
   }

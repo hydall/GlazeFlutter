@@ -253,6 +253,7 @@ class ChatRepo implements SyncChatStore {
             content: content,
             agentSwipes: agentSwipes,
             agentSwipeId: agentSwipes.length - 1,
+            swipesMeta: _syncAgentSwipesToMeta(msg.swipesMeta, msg.swipeId, agentSwipes, agentSwipes.length - 1),
           );
           found = true;
           break;
@@ -271,6 +272,29 @@ class ChatRepo implements SyncChatStore {
       );
       return true;
     });
+  }
+
+  /// Sync [agentSwipes] + [agentSwipeId] into `swipesMeta[swipeId]` so that
+  /// green-swipe round-trips preserve agent swipes even without an explicit
+  /// `setSwipe` navigation-away. This eliminates the dual-storage mismatch
+  /// where `appendAgentSwipe` wrote only the top-level field.
+  static List<Map<String, dynamic>> _syncAgentSwipesToMeta(
+    List<Map<String, dynamic>> swipesMeta,
+    int swipeId,
+    List<AgentSwipe> agentSwipes,
+    int agentSwipeId,
+  ) {
+    if (swipeId < 0) return swipesMeta;
+    final meta = List<Map<String, dynamic>>.from(swipesMeta);
+    while (meta.length <= swipeId) {
+      meta.add(<String, dynamic>{});
+    }
+    meta[swipeId] = {
+      ...meta[swipeId],
+      'agentSwipes': agentSwipes.map((e) => e.toJson()).toList(),
+      'agentSwipeId': agentSwipeId,
+    };
+    return meta;
   }
 
   /// Deletes all sessions belonging to [characterId], along with all per-session

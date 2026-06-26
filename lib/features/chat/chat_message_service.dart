@@ -286,6 +286,9 @@ class ChatMessageService {
       return session;
     }
     final swipe = msg.agentSwipes[agentSwipeId];
+    final swipesMeta = _syncAgentSwipesToMeta(
+      msg.swipesMeta, msg.swipeId, msg.agentSwipes, agentSwipeId,
+    );
     final updated = msg.copyWith(
       agentSwipeId: agentSwipeId,
       content: swipe.content,
@@ -293,10 +296,31 @@ class ChatMessageService {
       genTime: swipe.genTime,
       tokens: swipe.tokens,
       studioOutputs: swipe.studioOutputs,
+      swipesMeta: swipesMeta,
     );
     final newMessages = List<ChatMessage>.from(session.messages);
     newMessages[messageIndex] = updated;
     return _persist(session, newMessages);
+  }
+
+  /// Sync agentSwipes + agentSwipeId into swipesMeta[swipeId].
+  static List<Map<String, dynamic>> _syncAgentSwipesToMeta(
+    List<Map<String, dynamic>> swipesMeta,
+    int swipeId,
+    List<AgentSwipe> agentSwipes,
+    int agentSwipeId,
+  ) {
+    if (swipeId < 0 || agentSwipes.isEmpty) return swipesMeta;
+    final meta = List<Map<String, dynamic>>.from(swipesMeta);
+    while (meta.length <= swipeId) {
+      meta.add(<String, dynamic>{});
+    }
+    meta[swipeId] = {
+      ...meta[swipeId],
+      'agentSwipes': agentSwipes.map((e) => e.toJson()).toList(),
+      'agentSwipeId': agentSwipeId,
+    };
+    return meta;
   }
 
   /// Parse the per-swipe triggered entries stored in [swipesMeta]. Each
@@ -432,19 +456,23 @@ class ChatMessageService {
         ? (dir > 0 ? 'slide-next' : 'slide-prev')
         : 'fade';
 
-    final newIndex = msg.agentSwipeId + dir;
+    var newIndex = msg.agentSwipeId + dir;
 
-    // Right-edge on the last message → full regen (new green swipe).
-    if (dir > 0 &&
-        newIndex >= msg.agentSwipes.length &&
-        isLastMessage) {
-      return const ChangeSwipeResult.needsRegen();
-    }
-    if (newIndex < 0 || newIndex >= msg.agentSwipes.length) {
-      return const ChangeSwipeResult.noop();
+    // Wrap-around: index < 0 → last; index >= length → 0.
+    if (newIndex < 0) {
+      newIndex = msg.agentSwipes.length - 1;
+    } else if (newIndex >= msg.agentSwipes.length) {
+      // Right-edge on the last message → full regen (new green swipe).
+      if (isLastMessage) {
+        return const ChangeSwipeResult.needsRegen();
+      }
+      newIndex = 0;
     }
 
     final swipe = msg.agentSwipes[newIndex];
+    final swipesMeta = _syncAgentSwipesToMeta(
+      msg.swipesMeta, msg.swipeId, msg.agentSwipes, newIndex,
+    );
     final updated = msg.copyWith(
       agentSwipeId: newIndex,
       content: swipe.content,
@@ -453,6 +481,7 @@ class ChatMessageService {
       tokens: swipe.tokens,
       studioOutputs: swipe.studioOutputs,
       swipeDirection: animDir,
+      swipesMeta: swipesMeta,
     );
     final newMessages = List<ChatMessage>.from(session.messages)
       ..[messageIndex] = updated;

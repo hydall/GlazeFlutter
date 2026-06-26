@@ -158,6 +158,19 @@ class GenerationPipeline {
           if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
             return null;
           }
+
+          // POST-cleaner on regen: run after successful regen (both full
+          // and studioFinalOnly). The cleaner rewrites the regenerated
+          // assistant message, preserving the original as a 'final' swipe.
+          if (!studioFinalOnly) {
+            unawaited(
+              _runPostCleaner(
+                sessionId: result.session!.id,
+                messages: result.session!.messages,
+                genId: genId,
+              ),
+            );
+          }
         }
         return regenOutcome;
       }

@@ -14,51 +14,57 @@ void main() {
       }
     });
 
-    test('completely different text → all removed + all added', () {
+    test('completely different text → all removed + all added (paired)', () {
       final result = computeLineDiff('x\ny', 'a\nb');
+      // With word-level pairing, removed and added are paired 1:1
       expect(result.removedLines, 2);
       expect(result.addedLines, 2);
-      // First two left lines are removed, last two right lines are added
+      // Left lines: x (removed, paired with a), y (removed, paired with b)
       expect(result.leftLines[0].type, DiffLineType.removed);
+      expect(result.leftLines[0].text, 'x');
       expect(result.leftLines[1].type, DiffLineType.removed);
-      expect(result.rightLines[2].type, DiffLineType.added);
-      expect(result.rightLines[3].type, DiffLineType.added);
-      expect(result.rightLines[2].text, 'a');
-      expect(result.rightLines[3].text, 'b');
+      expect(result.leftLines[1].text, 'y');
+      // Right lines: a (added, paired with x), b (added, paired with y)
+      expect(result.rightLines[0].type, DiffLineType.added);
+      expect(result.rightLines[0].text, 'a');
+      expect(result.rightLines[1].type, DiffLineType.added);
+      expect(result.rightLines[1].text, 'b');
     });
 
-    test('middle line removed from left', () {
+    test('middle line removed from left (no matching right line)', () {
       final result = computeLineDiff('a\nb\nc', 'a\nc');
       expect(result.removedLines, 1);
       expect(result.addedLines, 0);
-      // Left has 3 entries (a, b-removed, c), right has 3 (a, ''-removed, c)
-      expect(result.leftLines[1].text, 'b');
+      // a=same, b=removed (unpaired), c=same
+      expect(result.leftLines[0].type, DiffLineType.same);
       expect(result.leftLines[1].type, DiffLineType.removed);
-      expect(result.rightLines[1].text, '');
+      expect(result.leftLines[1].text, 'b');
       expect(result.rightLines[1].type, DiffLineType.removed);
+      expect(result.rightLines[1].text, '');
     });
 
-    test('middle line added on right', () {
+    test('middle line added on right (no matching left line)', () {
       final result = computeLineDiff('a\nc', 'a\nb\nc');
       expect(result.addedLines, 1);
       expect(result.removedLines, 0);
-      // Left has 3 entries (a, ''-added, c), right has 3 (a, b-added, c)
-      expect(result.rightLines[1].text, 'b');
+      // a=same, b=added (unpaired), c=same
       expect(result.rightLines[1].type, DiffLineType.added);
-      expect(result.leftLines[1].text, '');
+      expect(result.rightLines[1].text, 'b');
       expect(result.leftLines[1].type, DiffLineType.added);
+      expect(result.leftLines[1].text, '');
     });
 
-    test('line changed (removed + added)', () {
+    test('line changed → paired removed+added with word diff', () {
       final result = computeLineDiff('a\nold\nc', 'a\nnew\nc');
       expect(result.removedLines, 1);
       expect(result.addedLines, 1);
-      // Find the removed line on the left
       final removedLeft = result.leftLines.where((l) => l.type == DiffLineType.removed).first;
       expect(removedLeft.text, 'old');
-      // Find the added line on the right
       final addedRight = result.rightLines.where((l) => l.type == DiffLineType.added).first;
       expect(addedRight.text, 'new');
+      // Word diff should be present
+      expect(removedLeft.words, isNotNull);
+      expect(addedRight.words, isNotNull);
     });
 
     test('empty original → all added', () {
@@ -87,7 +93,6 @@ void main() {
       expect(result.addedLines, 2);
       expect(result.leftLines[0].type, DiffLineType.same);
       expect(result.leftLines[1].type, DiffLineType.same);
-      // Added lines are at the end of right
       final added = result.rightLines.where((l) => l.type == DiffLineType.added).toList();
       expect(added.length, 2);
       expect(added[0].text, 'c');
@@ -109,6 +114,38 @@ void main() {
       expect(removedLine.text, 'Second paragraph is old text.');
       final addedLine = result.rightLines.where((l) => l.type == DiffLineType.added).first;
       expect(addedLine.text, 'Second paragraph is new text.');
+    });
+
+    test('word-level diff highlights only changed words within a line', () {
+      final result = computeLineDiff('The quick brown fox', 'The slow brown fox');
+      expect(result.removedLines, 1);
+      expect(result.addedLines, 1);
+      final removedLine = result.leftLines.where((l) => l.type == DiffLineType.removed).first;
+      final addedLine = result.rightLines.where((l) => l.type == DiffLineType.added).first;
+      expect(removedLine.words, isNotNull);
+      expect(addedLine.words, isNotNull);
+      // "quick" should be marked as changed on the left
+      final changedLeft = removedLine.words!.where((w) => w.isChanged).toList();
+      expect(changedLeft.any((w) => w.text == 'quick'), true);
+      // "slow" should be marked as changed on the right
+      final changedRight = addedLine.words!.where((w) => w.isChanged).toList();
+      expect(changedRight.any((w) => w.text == 'slow'), true);
+      // "The", "brown", "fox" should NOT be changed
+      final sameLeft = removedLine.words!.where((w) => !w.isChanged).map((w) => w.text).toList();
+      expect(sameLeft.contains('The'), true);
+      expect(sameLeft.contains('brown'), true);
+      expect(sameLeft.contains('fox'), true);
+    });
+
+    test('word-level diff with multiple changed words', () {
+      final result = computeLineDiff('one two three four', 'five six three seven');
+      final removedLine = result.leftLines.where((l) => l.type == DiffLineType.removed).first;
+      final addedLine = result.rightLines.where((l) => l.type == DiffLineType.added).first;
+      // "three" is common → not changed; others are changed
+      final sameLeft = removedLine.words!.where((w) => !w.isChanged).map((w) => w.text).toList();
+      expect(sameLeft.contains('three'), true);
+      final sameRight = addedLine.words!.where((w) => !w.isChanged).map((w) => w.text).toList();
+      expect(sameRight.contains('three'), true);
     });
   });
 }
