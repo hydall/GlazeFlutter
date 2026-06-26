@@ -2,9 +2,27 @@
 
 Status: **DRAFT / IMPLEMENTATION PLAN**.
 
-Goal: evolve the existing POST-cleaner from a style-only rewrite pass into a conservative continuity-aware editor. It should still primarily remove cliches, repetition, filler, and AI-isms, but it should also catch local scene mistakes from recent chat history: who said what, who is present, what characters are wearing or holding, current positions, and what just happened.
+Phase 1 shipped (commit `d47f9d3`): recent chat history + Studio controller
+notes wired into the cleaner prompt with conservative continuity rules.
 
-Non-goal: do not turn the cleaner into a second final writer. It must not invent new story beats, add exposition, or rewrite the scene from scratch.
+Goal: evolve the existing POST-cleaner from a style-only rewrite pass into a
+two-stage continuity-aware editor:
+
+1. **Character/World Auditor** — a diagnostic sidecar pass that checks the final
+   response against the **full generation context** (character card, persona,
+   lorebooks, memory, summary, arcs, entities) and returns a compact list of
+   contradictions. It does NOT rewrite text.
+2. **Style Cleaner + Continuity Editor** — the existing cleaner, enhanced with
+   recent chat history and Studio controller notes, receives the auditor's
+   issues as explicit fix instructions and produces a single cleaned output.
+
+Non-goals:
+
+- Do not turn the cleaner into a second final writer.
+- Do not create additional agent swipes. The result is one `cleaned` swipe, as
+  today.
+- Do not re-query memory/lorebooks after generation. The auditor uses the exact
+  `PromptPayload` snapshot from the generation that produced the response.
 
 ---
 
@@ -12,320 +30,418 @@ Non-goal: do not turn the cleaner into a second final writer. It must not invent
 
 The cleaner lives in `lib/core/llm/post_cleaner_service.dart`.
 
-Current inputs:
+### Phase 1 (shipped)
 
-- `assistantText` — final assistant response to clean.
-- `broadcastBlocks` — Studio build-time cross-cutting rules, mostly output language and prose-quality guards.
-- `MemoryBookSettings` — sidecar model, temperature, max tokens, timeout, and enable flag.
+- `PostCleanerService.runCleaner` accepts `recentMessages` and `studioOutputs`.
+- `buildCleanerPrompt` includes `RECENT CHAT HISTORY` (last 12 messages,
+  trimmed to 3000 chars each) and `STUDIO CONTROLLER NOTES` before style rules,
+  plus conservative `Continuity rules` that appear only when context is present.
+- `GenerationPipeline._runPostCleaner` collects the bounded history window and
+  passes `lastAssistant.studioOutputs` to `runCleaner`.
+- 7 new tests cover history inclusion, ordering, trimming, empty-skip, studio
+  output formatting, and combined context ordering.
+- `flutter analyze` — 0 issues. `flutter test` — 36/36 passed.
 
-Current behavior:
+### What is still missing
 
-- Builds a prompt with style cleanup instructions.
-- Calls the sidecar LLM once via `SidecarLlmClient`.
-- Rejects empty output and extreme length ratio changes.
-- Saves the cleaned output as a nested `AgentSwipe(kind: 'cleaned')` while preserving the final-agent text as `kind: 'final'`.
-
-Current limitation:
-
-- The cleaner does not see the chat history. It cannot reliably detect local continuity mistakes such as a character answering a question they did not hear, a speaker being swapped, clothing reverting, an item changing owner, or an NPC forgetting the current scene position.
+- The cleaner does NOT see character card (description, personality, scenario),
+  persona, lorebooks, memory, summary, arcs, or entities. It cannot detect
+  contradictions against the character's personality or world facts.
+- `PromptPayload` is available during generation but is not passed to
+  `_runPostCleaner`. The cleaner has no access to the generation context.
 
 ---
 
-## 2. Product Behavior
+## 2. Architecture: Two-Pass Audit + Clean
 
-The cleaner should perform two tasks in one sidecar pass:
+### 2.1 Flow
 
-1. Style cleanup.
-2. Conservative local continuity check against the recent chat history.
+```
+Generation completes
+  → PromptPayload available (character, persona, lorebooks, memory, summary,
+     arcs, entities — the exact context the final agent saw)
 
-Continuity checks should cover only facts directly supported by the supplied context:
+Pass 0: Character/World Auditor (diagnostic, no text rewrite)
+  input:  assistantText + PromptPayload fields + recentMessages (short window)
+  output: List<String> issues  (empty = no contradictions found)
 
-- who said or asked something;
-- who is present in the current scene;
-- where characters are positioned;
-- what characters are wearing or holding;
-- object ownership and visible props;
-- recent actions and unanswered or already answered questions;
-- whether characters currently know each other;
-- whether a character should stay silent or speak based on the immediate scene.
+Pass 1: Style Cleaner + Continuity Editor (existing cleaner, enhanced)
+  input:  assistantText + recentMessages + studioOutputs + broadcastBlocks
+          + auditIssues (from Pass 0)
+  output: cleanedText
 
-The cleaner may fix only clear contradictions. If the context is ambiguous, it must preserve the original response and only clean style.
+Result: one AgentSwipe(kind: 'cleaned') — same as today.
+```
+
+### 2.2 Why two passes, not one
+
+A single pass that receives character card + lorebooks + memory + history +
+studio notes + style rules would have an oversized prompt and conflicting
+instructions: "check facts" vs "clean style" vs "don't add content". The model
+can get confused and start rewriting the scene.
+
+Splitting diagnosis and rewrite:
+- Auditor only finds problems (cheap, small max_tokens, JSON output).
+- Cleaner only applies fixes + style (already works, just gets explicit
+  instructions for what to fix).
+- If auditor finds no issues, cleaner runs exactly as Phase 1 — no overhead
+  beyond one short audit call.
+
+### 2.3 Why no third swipe
+
+Pass 0 does not produce a swipe. It returns `List<String> issues` passed as a
+prompt parameter to Pass 1. The `agentSwipes[]` array stays at 2 entries:
+`final` + `cleaned`.
+
+Optionally, `issues` can be stored in `AgentSwipe.studioOutputs` of the
+cleaned swipe as a diagnostic trace, so the diff viewer can show what the
+auditor found. This is optional and does not affect swipe count or UI.
 
 ---
 
 ## 3. Source Priority
 
-When multiple sources are available, the prompt should define this priority order:
-
-1. **Recent chat history** — authoritative for current scene state.
-2. **Injected memory context** — authoritative for stable background facts, but only after it is wired in a later phase.
-3. **Studio controller notes** — authoritative for intended behavior, agency, and constraints.
-4. **Broadcast style rules** — authoritative for prose, language, formatting, and anti-cliche rules.
+```
+1. Recent chat history       — current scene state (who/where/what just happened)
+2. Character card            — personality, scenario, description (stable identity)
+3. Persona                   — user identity (name, role, description)
+4. Injected lorebooks        — world facts ({{lorebooks}} snapshot)
+5. Injected memory           — long-term facts ({{memory}} snapshot)
+6. Summary                   — condensed history ({{summary}})
+7. Arcs                      — narrative arc summaries ({{arc}})
+8. Entities                   — active entity list ({{entities}})
+9. Studio controller notes   — intended behavior/agency/constraints
+10. Broadcast style rules    — prose, language, formatting, anti-cliche
+```
 
 Conflict rule:
-
-- If recent history conflicts with memory, prefer recent history for current scene state.
-- If memory conflicts with Studio notes, prefer memory for stable facts and Studio notes for behavior constraints.
-- If sources are still ambiguous, keep the final-agent response and only clean style.
+- Recent history wins for current scene state.
+- Character card wins for stable identity/personality.
+- Lorebooks/memory win for world facts and long-term facts.
+- Studio notes win for behavior constraints (who should speak/stay silent).
+- If ambiguous, preserve the original and only clean style.
 
 ---
 
-## 4. Phase 1: Recent Chat History
+## 4. Phase 2: PromptPayload Pass-Through
 
-Implement first. This gives the largest improvement for the observed failure class without adding new persistence.
+### 4.1 Key Decision: Carry PromptPayload to Post-Cleaner
 
-### 4.1 Data Flow
+Instead of re-querying memory/lorebooks after generation (which can produce
+different results if data changed), the `PromptPayload` built during generation
+is passed directly to `_runPostCleaner`.
 
-Update `GenerationPipeline._runPostCleaner` in `lib/features/chat/services/generation_pipeline.dart`:
+This means:
+- **No separate "wire memory" phase.** `PromptPayload` already contains
+  `memoryContent`, `memorySelection.entries`, `arcContent`, `entitiesContent`,
+  `summaryContent`, `vectorEntries`, `lorebooks`, `character`, `persona`.
+- **No DB migration.** No new fields on `ChatMessage`.
+- **No re-query cost.** The payload is already in memory.
+- **Exact snapshot.** The auditor sees exactly what the final agent saw.
 
-- Find the index of the last assistant message being cleaned.
-- Build a bounded list of messages before that assistant response.
-- Pass that list to `PostCleanerService.runCleaner`.
-- Also pass the last assistant message's `studioOutputs` so the cleaner can reuse the controller notes that shaped the final response.
+### 4.2 Data Flow Changes
 
-Recommended defaults:
+**`ChatGenerationService.generate()`** currently builds `PromptPayload`
+internally via `PromptPayloadBuilder.buildFromSession()`. It needs to expose
+the payload in its result so `GenerationPipeline` can pass it downstream.
 
-- Last `12` messages before the assistant response.
-- Trim each message to a maximum of `3000` characters.
-- Keep role, optional persona name, message id suffix, and content.
+Changes:
+- `GenerationResult` (or equivalent) carries `PromptPayload? promptPayload`.
+- `GenerationPipeline.run()` receives the payload from `service.generate()`.
+- `GenerationPipeline._runPostCleaner` accepts `PromptPayload` and extracts:
+  - `payload.character` → description, personality, scenario,
+    `post_history_instructions`
+  - `payload.persona` → name, prompt/description
+  - `payload.summaryContent` → `{{summary}}` text
+  - `payload.memoryContent` / `payload.memoryMacroContent` → `{{memory}}` text
+  - `payload.arcContent` → `{{arc}}` text
+  - `payload.entitiesContent` → `{{entities}}` text
+  - `payload.lorebooks` + `payload.vectorEntries` → assemble lorebooks content
+    (reuse `prompt_builder`'s lorebook assembly or pass pre-built content)
+  - `payload.memorySelection.entries` → individual memory entry texts (if
+    `memoryContent` is not sufficient and per-entry detail is needed)
 
-Do not include the assistant response being cleaned inside `RECENT CHAT HISTORY`; it is supplied separately as `ASSISTANT RESPONSE TO CLEAN`.
+### 4.3 What if PromptPayload is null?
 
-### 4.2 Prompt Shape
+`PromptPayload` can be null if generation failed early or used a fallback path.
+In that case, the auditor is skipped and the cleaner runs as Phase 1 (style +
+history + studio notes only). No crash, no degraded behavior.
 
-Extend `PostCleanerService.buildCleanerPrompt` into a context-aware builder:
+---
+
+## 5. Phase 2: Character/World Auditor
+
+### 5.1 Auditor Service
+
+New method in `PostCleanerService`:
+
+```dart
+Future<List<String>> runCharacterAudit({
+  required String assistantText,
+  required Character character,
+  Persona? persona,
+  String? lorebooksContent,
+  String? memoryContent,
+  String? summaryContent,
+  String? arcContent,
+  String? entitiesContent,
+  List<ChatMessage> recentMessages,
+  MemoryBookSettings settings,
+  CancelToken? cancelToken,
+})
+```
+
+Returns:
+- `[]` — no contradictions found.
+- `['issue 1', 'issue 2', ...]` — list of specific contradictions.
+
+### 5.2 Auditor Prompt
 
 ```text
-You are a conservative prose editor for a roleplay story.
+You are a continuity auditor for a roleplay story. Your job is to find
+contradictions between the assistant response and the provided context.
 
-Your primary job is to clean style: remove cliches, repetitive phrasing,
-filler, and common AI-isms.
+CHARACTER PROFILE:
+Description: ...
+Personality: ...
+Scenario: ...
 
-Before editing style, silently check the assistant response against RECENT
-CHAT HISTORY and STUDIO CONTROLLER NOTES.
+USER PERSONA:
+Name: ...
+Description: ...
+
+INJECTED WORLD/LORE CONTEXT:
+...
+
+INJECTED MEMORY CONTEXT:
+...
+
+SUMMARY:
+...
+
+ARCS:
+...
+
+ENTITIES:
+...
 
 RECENT CHAT HISTORY:
-[assistant #41]
 ...
 
-[user #42]
+ASSISTANT RESPONSE TO AUDIT:
 ...
 
-STUDIO CONTROLLER NOTES:
-[Continuity Controller]
-...
+Instructions:
+- Check the response against ALL provided context.
+- Report ONLY direct contradictions: wrong names, wrong relationships, wrong
+  locations, personality conflicts, world-fact errors, persona identity errors.
+- Do NOT report style issues, cliches, or prose quality.
+- Do NOT suggest fixes or rewrites. Only describe the contradiction.
+- If no contradictions found, return: {"ok": true}
+- If contradictions found, return: {"ok": false, "issues": ["...", "..."]}
 
-AUTHORITATIVE STYLE RULES:
-...
-
-Rules:
-- Keep the same meaning, events, character voices, POV, tense, output language, and formatting.
-- Fix only clear local continuity contradictions directly contradicted by the provided context.
-- You may correct who said what, who is present, current position, clothing, held objects, object ownership, and recent actions.
-- If the context is ambiguous, keep the original wording.
-- Do not invent missing details.
-- Do not add new events, explanations, dialogue, memories, or motivations.
-- Prefer minimal edits: remove, shorten, or neutralize the incorrect phrase.
-- Return only the cleaned text.
-
-ASSISTANT RESPONSE TO CLEAN:
-...
+Return ONLY the JSON, no other text.
 ```
 
-### 4.3 Context Formatting Rules
+### 5.3 Auditor Output Parsing
 
-History formatting should be compact and literal:
-
-```text
-[user #m123]
-*сажусь за барную стойку.* "А меню у вас существует?"
-```
-
-Avoid summarizing in Phase 1. Summaries can introduce new errors and make post-cleaner debugging harder. Raw recent messages are more reliable.
-
-### 4.4 Safety Guards
-
-Keep the existing length-ratio guard. Add lightweight output guards if needed:
-
-- reject outputs that start with explanation labels such as `Here is`, `Explanation:`, `Cleaned:`, or `Diff:`;
-- reject empty or refusal-like outputs;
-- keep existing no-change behavior when the cleaner returns identical text.
-
-Do not add aggressive semantic diffing in Phase 1. It is easy to false-positive on legitimate prose cleanup.
-
----
-
-## 5. Phase 2: Injected Memory Context
-
-Add after Phase 1 is working. The cleaner should check against memory that was actually injected into the original generation prompt, not perform a fresh memory search.
-
-### 5.1 Principle
-
-The cleaner must use memory only as a contradiction checker.
-
-Allowed:
-
-- correct a wrong name;
-- correct relationship labels;
-- correct ownership of an item;
-- correct a directly contradicted past event;
-- remove a sentence that contradicts memory and cannot be safely corrected.
-
-Not allowed:
-
-- add new memory exposition;
-- make a character mention memory facts unprompted;
-- override current scene state from recent chat history;
-- use memory as inspiration for new dialogue or actions.
-
-### 5.2 Preferred Data Flow
-
-Persist or carry the memory blocks selected for the original generation.
-
-Preferred shape:
-
+Parse JSON response:
 ```json
-{
-  "injectedMemoryBlocks": [
-    {
-      "source": "memory_book",
-      "id": "...",
-      "title": "...",
-      "content": "...",
-      "scope": "chat|character|global",
-      "priority": 0
-    }
-  ]
-}
+{"ok": true}
+{"ok": false, "issues": ["Lucy is described as speaking but should be silent per scenario.", "Menu is described as paper but lore says wall of names."]}
 ```
 
-Potential storage locations:
+If parsing fails or the response is not valid JSON:
+- Log a warning.
+- Return `null` (skip audit, cleaner runs without audit notes).
 
-- `ChatMessage.memoryCoverage` if the existing shape can hold full injected text safely;
-- a new metadata field on `ChatMessage` if full injected blocks should be first-class;
-- `swipesMeta` for per-green-swipe generation metadata if memory differs by branch/swipe.
+### 5.4 Auditor Settings
 
-Avoid re-querying memory by ID after generation unless there is no alternative. Memory may have changed between generation and post-cleaner, which would make the cleaner validate against context the final writer did not see.
+- Cheap model (reuse sidecar model, or allow separate model override).
+- Low temperature (0.0–0.1).
+- Small `max_tokens` (512–1024, enough for JSON with a few issues).
+- Short timeout (sidecar timeout is fine).
 
-### 5.3 Prompt Section
+---
 
-Add a section between recent history and Studio notes:
+## 6. Phase 2: Cleaner with Audit Notes
+
+### 6.1 Enhanced Prompt
+
+When `auditIssues` is non-empty, `buildCleanerPrompt` adds:
 
 ```text
-INJECTED MEMORY CONTEXT:
-These memory entries were included in the original generation context.
-Use them only to detect direct contradictions.
-Do not introduce memory facts that the assistant response did not already touch.
-If recent chat history conflicts with memory, recent chat history wins for current scene state.
+CHARACTER CONSISTENCY NOTES (from auditor — fix these):
+- Lucy is described as speaking but should be silent per scenario.
+- Menu is described as paper but lore says wall of names.
+
+Apply minimal fixes for these issues while also cleaning style.
+Do not add new content to resolve them. Prefer deletion or neutral rewording.
 ```
 
----
+This section appears after `RECENT CHAT HISTORY` and `STUDIO CONTROLLER
+NOTES`, before `AUTHORITATIVE STYLE RULES`.
 
-## 6. Phase 3: Optional Strict Fact-Check Mode
+### 6.2 No Audit Issues
 
-Only consider this if the single-pass cleaner still misses too many contradictions.
-
-Strict mode would be a two-pass sidecar flow:
-
-1. Fact-check pass returns a compact JSON list of continuity problems.
-2. Cleaner pass applies style cleanup plus minimal fixes for those problems.
-
-Benefits:
-
-- easier debugging;
-- possible UI display of detected issues;
-- stronger separation between detection and rewrite.
-
-Costs:
-
-- more latency;
-- more tokens;
-- more failure modes;
-- another operation type in logs.
-
-Default recommendation: do not implement strict mode until the one-pass context-aware cleaner is evaluated.
+When `auditIssues` is `null` or empty, the cleaner runs exactly as Phase 1.
+No `CHARACTER CONSISTENCY NOTES` section is added.
 
 ---
 
-## 7. Code Touchpoints
+## 7. Settings & UI
 
-Expected Phase 1 files:
+### 7.1 New Settings Fields
+
+Add to `MemoryBookSettings`:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `postCleanerContinuityEnabled` | bool | `true` | Enable recent-history continuity check (Phase 1 behavior). |
+| `postCleanerCharacterCheckEnabled` | bool | `false` | Enable character/world audit pass (Phase 2). Opt-in. |
+| `postCleanerHistoryMessages` | int | `12` | Number of recent messages to include. |
+| `postCleanerMaxCharsPerMessage` | int | `3000` | Max chars per history message. |
+
+### 7.2 UI Location
+
+In `studio_menu_dialog.dart`, within the existing POST-cleaner section
+(after the "POST-cleaner (anti-cliche rewrite)" switch):
+
+```
+[switch] POST-cleaner (anti-cliché rewrite)          [existing]
+[switch] Continuity check (recent history)            [new]
+[switch] Character & world audit (extra sidecar call) [new]
+[tile]   History messages: 12                        [new]
+[tile]   Max chars per message: 3000                  [new]
+[tile]   Cleaner temperature: 0.30                    [existing]
+[tile]   Cleaner max tokens: Auto                     [existing]
+```
+
+The character audit switch is opt-in (`false` by default) because it adds a
+second sidecar call and cost. The continuity check is on by default since it
+only enriches the existing cleaner prompt with no extra LLM call.
+
+---
+
+## 8. Code Touchpoints
+
+### Phase 2 files
+
+- `lib/features/chat/services/chat_generation_service.dart`
+  - Expose `PromptPayload` in the generation result.
 
 - `lib/features/chat/services/generation_pipeline.dart`
-  - collect bounded recent history before the cleaned assistant message;
-  - pass recent history and Studio outputs to `PostCleanerService.runCleaner`.
+  - Receive `PromptPayload` from `service.generate()`.
+  - Pass it to `_runPostCleaner`.
+  - `_runPostCleaner` extracts context fields from payload.
+  - Conditionally calls `runCharacterAudit` when `characterCheckEnabled`.
 
 - `lib/core/llm/post_cleaner_service.dart`
-  - introduce a small context object or additional parameters;
-  - format recent messages;
-  - format Studio controller notes;
-  - update `buildCleanerPrompt`.
+  - Add `runCharacterAudit` method.
+  - Add `buildAuditPrompt` (visible for testing).
+  - Add JSON parsing for auditor response.
+  - Extend `runCleaner` with `auditIssues` parameter.
+  - Extend `buildCleanerPrompt` with `auditNotes` section.
 
-- `test/...`
-  - add prompt-builder tests for history inclusion, trimming, and conservative rules;
-  - add tests that empty history preserves current prompt behavior where practical.
-
-Possible Phase 2 files:
-
-- `lib/core/llm/prompt_payload_builder.dart`
 - `lib/core/llm/prompt_builder.dart`
-- `lib/core/models/chat_message.dart`
-- `lib/core/db/repositories/chat_repo.dart`
-- `lib/core/llm/post_cleaner_service.dart`
+  - Expose lorebook content assembly for reuse by the auditor (or replicate
+    the compact assembly in the auditor).
 
-Exact Phase 2 touchpoints depend on where injected memory metadata is captured.
+- `lib/core/models/memory_book.dart`
+  - Add `postCleanerContinuityEnabled`, `postCleanerCharacterCheckEnabled`,
+    `postCleanerHistoryMessages`, `postCleanerMaxCharsPerMessage`.
+  - Run `dart run build_runner build` after model changes.
 
----
+- `lib/features/chat/widgets/studio_menu_dialog.dart`
+  - Add new switches and tiles for the settings above.
 
-## 8. Testing Plan
-
-Phase 1 tests:
-
-- `buildCleanerPrompt` includes recent chat history before the assistant response.
-- History is trimmed and bounded.
-- Prompt includes explicit conservative continuity rules.
-- Prompt preserves broadcast rules and keeps them authoritative for style/language.
-- Studio controller notes are included when provided and omitted cleanly when absent.
-
-Manual validation scenarios:
-
-- NPC does not confuse who asked the last question.
-- NPC does not speak for a silent character when history indicates that another character should answer.
-- Clothing and held objects do not revert within a short scene.
-- Character positions at a table/bar/door remain consistent.
-- Cleaner still performs style cleanup without expanding the scene.
-
-Phase 2 tests:
-
-- Injected memory context is included only when available.
-- Prompt prioritizes recent history over memory for current scene state.
-- Memory rules prohibit adding exposition from memory.
+- `test/post_cleaner_test.dart`
+  - Tests for `buildAuditPrompt` (context inclusion, JSON instruction).
+  - Tests for audit JSON parsing (ok, issues, malformed).
+  - Tests for `buildCleanerPrompt` with `auditNotes` section.
+  - Tests for `runCleaner` skipping audit when disabled or payload null.
 
 ---
 
-## 9. Rollout
+## 9. Testing Plan
 
-Phase 1 should be enabled behind the existing POST-cleaner enable flag. No new UI is required for MVP.
+### Unit tests
 
-Recommended implementation sequence:
+- `buildAuditPrompt` includes character description, personality, scenario.
+- `buildAuditPrompt` includes persona name and description.
+- `buildAuditPrompt` includes lorebooks/memory/summary/arc/entity content when
+  present, omits cleanly when absent.
+- `buildAuditPrompt` includes recent chat history.
+- `buildAuditPrompt` instructs JSON-only output.
+- Audit JSON parsing: `{"ok": true}` → empty list.
+- Audit JSON parsing: `{"ok": false, "issues": [...]}` → list of strings.
+- Audit JSON parsing: malformed JSON → null (skip).
+- `buildCleanerPrompt` with audit notes adds `CHARACTER CONSISTENCY NOTES`
+  section.
+- `buildCleanerPrompt` without audit notes omits the section (Phase 1 behavior
+  preserved).
+- Order: history → studio notes → audit notes → style rules → text.
 
-1. Add context parameters and prompt tests.
-2. Wire recent history and Studio outputs from `GenerationPipeline`.
-3. Run `flutter analyze` and focused tests.
-4. Test manually on a chat where the final response has a clear local continuity slip.
-5. Only after Phase 1 is stable, design Phase 2 injected-memory capture.
+### Integration scenarios
 
-Do not expose strict fact-check mode or memory verification UI until there is evidence that the one-pass cleaner is insufficient.
+- Auditor finds no issues → cleaner runs as Phase 1.
+- Auditor finds issues → cleaner receives them and can fix.
+- `PromptPayload` is null → audit skipped, cleaner runs as Phase 1.
+- `characterCheckEnabled = false` → audit skipped, cleaner runs as Phase 1.
+
+### Manual validation
+
+- Character acts against personality → auditor catches it, cleaner fixes.
+- World fact contradicts lorebook → auditor catches it, cleaner fixes.
+- Persona identity is wrong → auditor catches it, cleaner fixes.
+- Character behaves correctly → auditor returns `{"ok": true}`, cleaner only
+  cleans style.
+- No crash when lorebooks/memory are empty.
 
 ---
 
-## 10. Success Criteria
+## 10. Rollout
+
+1. Add settings fields + `build_runner` regeneration.
+2. Add UI switches/tiles in `studio_menu_dialog.dart`.
+3. Expose `PromptPayload` from `ChatGenerationService`.
+4. Wire `PromptPayload` through `GenerationPipeline` to `_runPostCleaner`.
+5. Implement `runCharacterAudit` + `buildAuditPrompt`.
+6. Implement audit JSON parsing.
+7. Extend `buildCleanerPrompt` with `auditNotes` section.
+8. Wire audit call in `_runPostCleaner` (conditional on `characterCheckEnabled`).
+9. Run `flutter analyze` + `flutter test`.
+10. Manual test on the Lucy/Afterlife session.
+
+---
+
+## 11. Success Criteria
 
 The change is successful if:
 
-- post-cleaner still primarily improves prose style;
-- it catches obvious local continuity contradictions from recent history;
-- it does not add new story content;
-- it does not significantly increase latency beyond one extra sidecar call already used by the cleaner;
-- original final-agent output remains recoverable through nested agent swipes;
-- future memory-book verification can be added by supplying injected memory blocks without redesigning the cleaner.
+- The auditor catches character/personality/world contradictions the Phase 1
+  cleaner could not catch.
+- The cleaner applies minimal fixes for auditor issues without expanding the
+  scene.
+- When the auditor finds no issues, behavior is identical to Phase 1.
+- Only one `cleaned` swipe is produced — no third swipe.
+- `PromptPayload` carries the full generation context without re-querying.
+- Empty lorebooks/memory/summary do not crash the auditor.
+- The auditor JSON parsing is robust to malformed responses.
+- `flutter analyze` passes with no new errors.
+- All existing tests continue to pass.
+- Phase 1 behavior is preserved when `characterCheckEnabled = false`.
+
+---
+
+## 12. What Disappeared from the Old Plan
+
+The old plan had a separate **Phase 2: Injected Memory Context** that described
+how to persist or re-query injected memory blocks for the cleaner. This is no
+longer needed because `PromptPayload` already contains `memoryContent`,
+`memorySelection.entries`, `arcContent`, `entitiesContent`, and
+`summaryContent`. By passing the full payload to the auditor, memory
+verification is included automatically — no separate wiring phase required.
+
+The old **Phase 3: Optional Strict Fact-Check Mode** is now the core
+architecture (audit + clean two-pass flow), not an optional add-on.
