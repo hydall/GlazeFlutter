@@ -370,6 +370,9 @@ class MemoryStudioService {
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
       return StudioPipelineResult(status: 'error', response: '', error: '$e');
+    } finally {
+      _ref.read(studioRuntimeStateProvider.notifier).state =
+          const StudioRuntimeState.idle();
     }
   }
 
