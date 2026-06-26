@@ -2,8 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/llm/post_cleaner_service.dart';
 import 'package:glaze_flutter/core/models/agent_operation_record.dart';
+import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/persona.dart';
 
 void main() {
   group('PostCleanerResult', () {
@@ -446,6 +448,270 @@ void main() {
       expect(historyIdx, lessThan(studioIdx));
       expect(studioIdx, lessThan(rulesIdx));
       expect(rulesIdx, lessThan(textIdx));
+    });
+  });
+
+  group('PostCleanerService.buildCleanerPrompt with auditIssues', () {
+    test('includes CHARACTER CONSISTENCY NOTES when auditIssues non-empty', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Lucy says hello.',
+        auditIssues: const [
+          'Lucy is described as speaking but should be silent per scenario.',
+          'Menu is described as paper but lore says wall of names.',
+        ],
+      );
+      expect(prompt, contains('CHARACTER CONSISTENCY NOTES'));
+      expect(prompt, contains('Lucy is described as speaking'));
+      expect(prompt, contains('Menu is described as paper'));
+      expect(prompt, contains('Apply minimal fixes for these issues'));
+      expect(prompt, contains('Prefer deletion or neutral rewording'));
+    });
+
+    test('omits CHARACTER CONSISTENCY NOTES when auditIssues is null', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Text.',
+        auditIssues: null,
+      );
+      expect(prompt, isNot(contains('CHARACTER CONSISTENCY NOTES')));
+    });
+
+    test('omits CHARACTER CONSISTENCY NOTES when auditIssues is empty', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Text.',
+        auditIssues: const [],
+      );
+      expect(prompt, isNot(contains('CHARACTER CONSISTENCY NOTES')));
+    });
+
+    test('audit notes appear after studio notes, before style rules', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Ответ.',
+        broadcastBlocks: const ['RUSSIAN ONLY.'],
+        studioOutputs: [
+          {'name': 'Controller', 'content': 'Scene at bar.'},
+        ],
+        auditIssues: const ['Lucy should be silent.'],
+      );
+      final studioIdx = prompt.indexOf('STUDIO CONTROLLER NOTES:');
+      final auditIdx = prompt.indexOf('CHARACTER CONSISTENCY NOTES');
+      final rulesIdx = prompt.indexOf('AUTHORITATIVE RULES');
+      final textIdx = prompt.indexOf('Assistant response to clean:');
+      expect(studioIdx, lessThan(auditIdx));
+      expect(auditIdx, lessThan(rulesIdx));
+      expect(rulesIdx, lessThan(textIdx));
+    });
+
+    test('audit notes do not trigger continuity rules section (separate concern)', () {
+      // Continuity rules are for local scene state (history/studio), not for
+      // audit notes. Audit notes have their own fix-instructions.
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Text.',
+        auditIssues: const ['Some issue.'],
+      );
+      expect(prompt, contains('CHARACTER CONSISTENCY NOTES'));
+      expect(prompt, isNot(contains('Continuity rules:')));
+    });
+  });
+
+  group('PostCleanerService.buildAuditPrompt', () {
+    test('includes character name, description, personality, scenario', () {
+      final prompt = PostCleanerService.buildAuditPrompt(
+        assistantText: 'Lucy waves.',
+        character: const Character(
+          id: 'c1',
+          name: 'Lucy',
+          description: 'A silent bartender.',
+          personality: ' stoic, observant.',
+          scenario: 'The Afterlife bar.',
+          postHistoryInstructions: 'Never speak aloud.',
+        ),
+      );
+      expect(prompt, contains('CHARACTER PROFILE:'));
+      expect(prompt, contains('Name: Lucy'));
+      expect(prompt, contains('A silent bartender.'));
+      expect(prompt, contains('stoic, observant.'));
+      expect(prompt, contains('The Afterlife bar.'));
+      expect(prompt, contains('Post-history instructions: Never speak aloud.'));
+    });
+
+    test('omits empty character fields cleanly', () {
+      final prompt = PostCleanerService.buildAuditPrompt(
+        assistantText: 'Text.',
+        character: const Character(id: 'c1', name: 'Bob'),
+      );
+      expect(prompt, contains('Name: Bob'));
+      expect(prompt, isNot(contains('Description:')));
+      expect(prompt, isNot(contains('Personality:')));
+      expect(prompt, isNot(contains('Scenario:')));
+      expect(prompt, isNot(contains('Post-history')));
+    });
+
+    test('includes persona name and description when provided', () {
+      final prompt = PostCleanerService.buildAuditPrompt(
+        assistantText: 'Hi.',
+        character: const Character(id: 'c1', name: 'X'),
+        persona: const Persona(
+          id: 'p1',
+          name: 'Daniel',
+          prompt: 'A tired engineer.',
+        ),
+      );
+      expect(prompt, contains('USER PERSONA:'));
+      expect(prompt, contains('Name: Daniel'));
+      expect(prompt, contains('A tired engineer.'));
+    });
+
+    test('omits USER PERSONA section when persona is null', () {
+      final prompt = PostCleanerService.buildAuditPrompt(
+        assistantText: 'Hi.',
+        character: const Character(id: 'c1', name: 'X'),
+      );
+      expect(prompt, isNot(contains('USER PERSONA:')));
+    });
+
+    test('includes lorebooks/memory/summary/arc/entity sections when present', () {
+      final prompt = PostCleanerService.buildAuditPrompt(
+        assistantText: 'Text.',
+        character: const Character(id: 'c1', name: 'X'),
+        lorebooksContent: 'Wall of names behind the bar.',
+        memoryContent: 'Lucy never speaks aloud.',
+        summaryContent: 'Five turns have passed.',
+        arcContent: 'Investigation arc active.',
+        entitiesContent: '- Lucy (npc): silent bartender',
+      );
+      expect(prompt, contains('INJECTED WORLD/LORE CONTEXT:'));
+      expect(prompt, contains('Wall of names'));
+      expect(prompt, contains('INJECTED MEMORY CONTEXT:'));
+      expect(prompt, contains('Lucy never speaks'));
+      expect(prompt, contains('SUMMARY:'));
+      expect(prompt, contains('Five turns'));
+      expect(prompt, contains('ARCS:'));
+      expect(prompt, contains('Investigation arc'));
+      expect(prompt, contains('ENTITIES:'));
+      expect(prompt, contains('Lucy (npc)'));
+    });
+
+    test('omits empty context sections cleanly', () {
+      final prompt = PostCleanerService.buildAuditPrompt(
+        assistantText: 'Text.',
+        character: const Character(id: 'c1', name: 'X'),
+        lorebooksContent: '   ',
+        memoryContent: '',
+        summaryContent: null,
+      );
+      expect(prompt, isNot(contains('INJECTED WORLD/LORE CONTEXT:')));
+      expect(prompt, isNot(contains('INJECTED MEMORY CONTEXT:')));
+      expect(prompt, isNot(contains('SUMMARY:')));
+      expect(prompt, isNot(contains('ARCS:')));
+      expect(prompt, isNot(contains('ENTITIES:')));
+    });
+
+    test('includes recent chat history when provided', () {
+      final prompt = PostCleanerService.buildAuditPrompt(
+        assistantText: 'Lucy speaks.',
+        character: const Character(id: 'c1', name: 'Lucy'),
+        recentMessages: [
+          ChatMessage(id: 'm1', role: 'user', content: 'Say something.'),
+          ChatMessage(id: 'm2', role: 'assistant', content: '...'),
+        ],
+      );
+      expect(prompt, contains('RECENT CHAT HISTORY:'));
+      expect(prompt, contains('Say something.'));
+      expect(prompt, contains('...'));
+    });
+
+    test('instructs JSON-only output', () {
+      final prompt = PostCleanerService.buildAuditPrompt(
+        assistantText: 'Text.',
+        character: const Character(id: 'c1', name: 'X'),
+      );
+      expect(prompt, contains('{"ok": true}'));
+      expect(prompt, contains('{"ok": false, "issues":'));
+      expect(prompt, contains('Return ONLY the JSON, no other text.'));
+    });
+
+    test('response-to-audit appears after all context', () {
+      final prompt = PostCleanerService.buildAuditPrompt(
+        assistantText: 'The response.',
+        character: const Character(id: 'c1', name: 'X', description: 'D'),
+        memoryContent: 'Memory fact.',
+        recentMessages: [
+          ChatMessage(id: 'm1', role: 'user', content: 'Q?'),
+        ],
+      );
+      final profileIdx = prompt.indexOf('CHARACTER PROFILE:');
+      final memIdx = prompt.indexOf('INJECTED MEMORY CONTEXT:');
+      final histIdx = prompt.indexOf('RECENT CHAT HISTORY:');
+      final auditIdx = prompt.indexOf('ASSISTANT RESPONSE TO AUDIT:');
+      expect(profileIdx, lessThan(memIdx));
+      expect(memIdx, lessThan(histIdx));
+      expect(histIdx, lessThan(auditIdx));
+    });
+  });
+
+  group('PostCleanerService.parseAuditJson', () {
+    test('returns empty list for {"ok": true}', () {
+      expect(PostCleanerService.parseAuditJson('{"ok": true}'), isEmpty);
+    });
+
+    test('returns issues list for {"ok": false, "issues": [...]}', () {
+      final result = PostCleanerService.parseAuditJson(
+        '{"ok": false, "issues": ["Lucy speaks but should be silent.", "Wrong location."]}',
+      );
+      expect(result, isNotNull);
+      expect(result, hasLength(2));
+      expect(result![0], 'Lucy speaks but should be silent.');
+      expect(result[1], 'Wrong location.');
+    });
+
+    test('returns null for malformed JSON', () {
+      expect(PostCleanerService.parseAuditJson('not json at all'), isNull);
+      expect(PostCleanerService.parseAuditJson('{broken'), isNull);
+    });
+
+    test('returns null when ok field is missing or not boolean', () {
+      expect(PostCleanerService.parseAuditJson('{"issues": ["x"]}'), isNull);
+      expect(PostCleanerService.parseAuditJson('{"ok": "yes"}'), isNull);
+    });
+
+    test('returns null when ok=false but issues is missing or not a list', () {
+      expect(PostCleanerService.parseAuditJson('{"ok": false}'), isNull);
+      expect(
+        PostCleanerService.parseAuditJson('{"ok": false, "issues": "not a list"}'),
+        isNull,
+      );
+    });
+
+    test('filters out non-string and empty entries from issues', () {
+      final result = PostCleanerService.parseAuditJson(
+        '{"ok": false, "issues": ["valid", 42, "", "   ", "also valid"]}',
+      );
+      expect(result, isNotNull);
+      expect(result, hasLength(2));
+      expect(result![0], 'valid');
+      expect(result[1], 'also valid');
+    });
+
+    test('extracts JSON from markdown fences and surrounding prose', () {
+      const raw = 'Here is the audit:\n```json\n{"ok": true}\n```\nDone.';
+      expect(PostCleanerService.parseAuditJson(raw), isEmpty);
+    });
+
+    test('extracts JSON from prose before/after the JSON block', () {
+      const raw = 'Sure! {"ok": false, "issues": ["x"]} Hope that helps.';
+      final result = PostCleanerService.parseAuditJson(raw);
+      expect(result, isNotNull);
+      expect(result, hasLength(1));
+      expect(result![0], 'x');
+    });
+
+    test('returns null for empty input', () {
+      expect(PostCleanerService.parseAuditJson(''), isNull);
+      expect(PostCleanerService.parseAuditJson('   '), isNull);
+    });
+
+    test('returns null when no braces present', () {
+      expect(PostCleanerService.parseAuditJson('no braces here'), isNull);
     });
   });
 }

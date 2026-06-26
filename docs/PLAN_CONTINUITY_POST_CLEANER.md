@@ -1,9 +1,12 @@
 # PLAN: Continuity-Aware POST-Cleaner
 
-Status: **DRAFT / IMPLEMENTATION PLAN**.
+Status: **Phase 2 shipped**.
 
 Phase 1 shipped (commit `d47f9d3`): recent chat history + Studio controller
 notes wired into the cleaner prompt with conservative continuity rules.
+
+Phase 2 shipped: PromptPayload pass-through + Character/World Auditor +
+cleaner with audit notes.
 
 Goal: evolve the existing POST-cleaner from a style-only rewrite pass into a
 two-stage continuity-aware editor:
@@ -41,6 +44,63 @@ The cleaner lives in `lib/core/llm/post_cleaner_service.dart`.
 - 7 new tests cover history inclusion, ordering, trimming, empty-skip, studio
   output formatting, and combined context ordering.
 - `flutter analyze` — 0 issues. `flutter test` — 36/36 passed.
+
+### Sidecar split & Post-Building UI (shipped, commit `dda65b6`)
+
+- `MemoryBookSettings` extended with `postCleanerSource/Model/Endpoint/ApiKey/
+  TimeoutMs` (per-feature, `'inherit'`/empty/0 fallback to shared `sidecar*`).
+- `MemoryBookSettings` extended with `postCleanerContinuityEnabled` (default
+  `true`), `postCleanerCharacterCheckEnabled` (default `false`, opt-in),
+  `postCleanerHistoryMessages` (default `12`), `postCleanerMaxCharsPerMessage`
+  (default `3000`).
+- `SidecarLlmClient.resolveConfigForCleaner` + `resolveCleanerTimeout` prefer
+  cleaner-specific fields, fall back to shared sidecar fields.
+- `PostBuildingMenuDialog` (`post_building_menu_dialog.dart`) hosts all
+  post-cleaner settings, opened from MagicDrawer `post-building` item.
+- Post-cleaner settings removed from `studio_menu_dialog.dart`.
+
+### Phase 2 (shipped)
+
+- **PromptPayload pass-through:** `ChatState` gained a transient
+  `PromptPayload? promptPayload` field (not persisted, not UI state). The three
+  `StreamGenerationService.run()` exit points that produce a real assistant
+  message (studio agent_errors, studio success, non-studio `onComplete`) set
+  it via `.copyWith(promptPayload: payload)`. Early-abort and error paths leave
+  it null — the auditor is skipped there anyway.
+- **Character/World Auditor:** `PostCleanerService.runCharacterAudit` performs
+  a diagnostic sidecar call (temperature 0.0, max_tokens 1024) that returns
+  `List<String>?` — the contradictions, `[]` when clean, `null` on failure
+  (skip audit). `buildAuditPrompt` assembles character profile (name,
+  description, personality, scenario, post-history instructions), persona,
+  lorebooks/memory/summary/arc/entity content, recent history, and the
+  assistant response, with JSON-only output instructions.
+- **Audit JSON parsing:** `parseAuditJson` handles `{"ok": true}` → `[]`,
+  `{"ok": false, "issues": [...]}` → filtered string list, malformed/prose/
+  markdown-fenced → extracts first balanced `{...}` block, returns `null` on
+  failure. Filters non-string and empty issues.
+- **Cleaner with audit notes:** `runCleaner` accepts `List<String>? auditIssues`.
+  `buildCleanerPrompt` adds a `CHARACTER CONSISTENCY NOTES (from auditor — fix
+  these)` section between `STUDIO CONTROLLER NOTES` and `AUTHORITATIVE RULES`
+  when issues are non-empty, with explicit "apply minimal fixes, prefer
+  deletion or neutral rewording, do not add new content" instructions. When null
+  or empty, the section is omitted (Phase 1 behavior preserved).
+- **Lorebook content assembly:** `_assembleLorebooksContent(payload)` in
+  `generation_pipeline.dart` combines `preScannedEntries` (keyword path) and
+  `vectorEntries` (deep/vector path) into a plain-text snapshot. Simpler than
+  the full prompt builder's `_classifyLorebooks` — the auditor needs facts, not
+  positioning/formatting.
+- **Wiring:** `GenerationPipeline._runPostCleaner` accepts `PromptPayload?`,
+  conditionally calls `runCharacterAudit` when
+  `postCleanerCharacterCheckEnabled && promptPayload != null`, passes the
+  resulting issues to `runCleaner`. Both `_runPostCleaner` call sites (regen +
+  normal) thread `result.promptPayload`.
+- **Tests:** 24 new tests — `buildAuditPrompt` (character/persona/lore/memory/
+  summary/arc/entity inclusion, empty-section omission, JSON instructions,
+  ordering), `parseAuditJson` (ok, issues, malformed, missing fields, non-string
+  filtering, markdown-fence extraction, prose extraction, empty/blank input),
+  `buildCleanerPrompt` with auditIssues (section inclusion, null/empty omission,
+  ordering, separation from continuity rules). `flutter analyze` — 0 issues.
+  `flutter test` — 1334/1334 passed.
 
 ### What is still missing
 

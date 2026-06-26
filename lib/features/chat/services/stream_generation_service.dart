@@ -281,7 +281,7 @@ class StreamGenerationService {
             regenTargetId: regenTargetId,
             studioFinalOnly: studioFinalOnly,
             visibleStartIndex: vsi,
-          );
+          ).copyWith(promptPayload: payload);
           return finalState;
         }
         if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
@@ -338,7 +338,7 @@ class StreamGenerationService {
           regenTargetId: regenTargetId,
           studioFinalOnly: studioFinalOnly,
           visibleStartIndex: vsi,
-        );
+        ).copyWith(promptPayload: payload);
         if (memoryDiagnostics is Map<String, dynamic> &&
             finalState.session != null) {
           final messageId = _lastAssistantId(
@@ -489,7 +489,7 @@ class StreamGenerationService {
             regenTargetId: regenTargetId,
             studioFinalOnly: studioFinalOnly,
             visibleStartIndex: vsi,
-          );
+          ).copyWith(promptPayload: payload);
           if (memoryDiagnostics is Map<String, dynamic> &&
               finalState?.session != null) {
             final messageId = _lastAssistantId(

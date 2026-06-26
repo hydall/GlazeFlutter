@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/prompt_builder.dart' show PromptPayload;
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/agent_operation_record.dart';
@@ -167,6 +168,7 @@ class GenerationPipeline {
               sessionId: result.session!.id,
               messages: result.session!.messages,
               genId: genId,
+              promptPayload: result.promptPayload,
             ),
           );
         }
@@ -243,6 +245,7 @@ class GenerationPipeline {
             sessionId: result.session!.id,
             messages: result.session!.messages,
             genId: genId,
+            promptPayload: result.promptPayload,
           ),
         );
       }
@@ -600,6 +603,7 @@ class GenerationPipeline {
     required String sessionId,
     required List<ChatMessage> messages,
     required int genId,
+    PromptPayload? promptPayload,
   }) async {
     if (!ref.mounted) return;
 
@@ -674,6 +678,43 @@ class GenerationPipeline {
       );
 
       final cleanerService = ref.read(postCleanerServiceProvider);
+
+      // Pass 0: Character/World Auditor (diagnostic, optional). Runs only when
+      // characterCheckEnabled AND promptPayload is available (exact generation
+      // snapshot). Returns null on failure → cleaner runs without audit notes.
+      List<String>? auditIssues;
+      if (book.settings.postCleanerCharacterCheckEnabled &&
+          promptPayload != null) {
+        try {
+          final loreContent = _assembleLorebooksContent(promptPayload);
+          auditIssues = await cleanerService.runCharacterAudit(
+            assistantText: lastAssistant.content,
+            character: promptPayload.character,
+            persona: promptPayload.persona,
+            lorebooksContent: loreContent,
+            memoryContent: promptPayload.memoryContent ??
+                promptPayload.memoryMacroContent,
+            summaryContent: promptPayload.summaryContent,
+            arcContent: promptPayload.arcContent,
+            entitiesContent: promptPayload.entitiesContent,
+            recentMessages: recentMessages,
+            settings: book.settings,
+          );
+          if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
+            ref.read(postCleanerStateProvider.notifier).state =
+                const PostCleanerState.idle();
+            return;
+          }
+          debugPrint(
+            '[PostCleaner] audit session=$sessionId '
+            'issues=${auditIssues?.length ?? "null(skipped)"}',
+          );
+        } catch (e) {
+          debugPrint('[PostCleaner] audit failed session=$sessionId error=$e');
+          auditIssues = null;
+        }
+      }
+
       final result = await cleanerService.runCleaner(
         sessionId: sessionId,
         settings: book.settings,
@@ -681,6 +722,7 @@ class GenerationPipeline {
         broadcastBlocks: broadcastBlocks,
         recentMessages: recentMessages,
         studioOutputs: lastAssistant.studioOutputs,
+        auditIssues: auditIssues,
       );
 
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
@@ -837,4 +879,35 @@ AgentOperationStatus _agenticWriteStatusToOp(String status) {
     'invalid_output' => AgentOperationStatus.invalidOutput,
     _ => AgentOperationStatus.error,
   };
+}
+
+/// Assembles a plain-text lorebook context snapshot from the [PromptPayload]
+/// for the auditor. Combines vector entries (already retrieved, with content)
+/// and pre-scanned keyword entries (if available). This is a simpler assembly
+/// than the full prompt builder's `_classifyLorebooks` — the auditor only needs
+/// the facts, not the precise positioning/formatting.
+String? _assembleLorebooksContent(PromptPayload payload) {
+  final blocks = <String>[];
+
+  // Pre-scanned keyword entries (from buildFromSession path).
+  final preScanned = payload.preScannedEntries;
+  if (preScanned != null) {
+    for (final e in preScanned) {
+      final content = e.content.trim();
+      if (content.isEmpty) continue;
+      final name = e.comment.isNotEmpty ? e.comment : e.id;
+      blocks.add('[${e.lorebookName}] $name:\n$content');
+    }
+  }
+
+  // Vector entries (from buildFromPreFetched / deep mode).
+  for (final e in payload.vectorEntries) {
+    final content = e.content.trim();
+    if (content.isEmpty) continue;
+    final name = e.comment.isNotEmpty ? e.comment : e.id;
+    blocks.add('[vector] $name:\n$content');
+  }
+
+  if (blocks.isEmpty) return null;
+  return blocks.join('\n\n');
 }

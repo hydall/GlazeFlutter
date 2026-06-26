@@ -1,3 +1,4 @@
+import '../../core/llm/prompt_builder.dart' show PromptPayload;
 import '../../core/models/chat_message.dart';
 
 class ChatState {
@@ -12,6 +13,12 @@ class ChatState {
 
   final String? regenTargetId;
 
+  /// Transient snapshot of the prompt payload used for the last generation.
+  /// Not persisted, not part of UI state — carried through the pipeline so the
+  /// POST-cleaner's auditor can inspect the exact context the final agent saw
+  /// without re-querying memory/lorebooks. Null on fallback/early-abort paths.
+  final PromptPayload? promptPayload;
+
   static const int initialPageSize = 20;
   static const int olderPageSize = 20;
 
@@ -25,6 +32,7 @@ class ChatState {
     this.visibleStartIndex = 0,
     this.isLoadingOlder = false,
     this.regenTargetId,
+    this.promptPayload,
   });
 
   bool get hasMoreOlder => visibleStartIndex > 0;
@@ -49,6 +57,7 @@ class ChatState {
     int? visibleStartIndex,
     bool? isLoadingOlder,
     Object? regenTargetId = _unset,
+    PromptPayload? promptPayload,
   }) {
     return ChatState(
       session: session ?? this.session,
@@ -62,6 +71,7 @@ class ChatState {
       regenTargetId: regenTargetId == _unset
           ? this.regenTargetId
           : regenTargetId as String?,
+      promptPayload: promptPayload ?? this.promptPayload,
     );
   }
 }
