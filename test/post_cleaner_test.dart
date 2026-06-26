@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/llm/post_cleaner_service.dart';
 import 'package:glaze_flutter/core/models/agent_operation_record.dart';
+import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
 
 void main() {
@@ -318,6 +319,133 @@ void main() {
         broadcastBlocks: const ['', '   '],
       );
       expect(prompt, isNot(contains('AUTHORITATIVE RULES')));
+    });
+  });
+
+  group('PostCleanerService.buildCleanerPrompt with context', () {
+    test('includes recent chat history when provided', () {
+      final messages = [
+        ChatMessage(id: 'm1', role: 'user', content: 'Что ты помнишь?'),
+        ChatMessage(
+          id: 'm2',
+          role: 'assistant',
+          content: 'Я помню дождь.',
+        ),
+      ];
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Снова дождь.',
+        recentMessages: messages,
+      );
+      expect(prompt, contains('RECENT CHAT HISTORY:'));
+      expect(prompt, contains('Что ты помнишь?'));
+      expect(prompt, contains('Я помню дождь.'));
+      expect(prompt, contains('[user #m1]'));
+      expect(prompt, contains('[assistant #m2]'));
+      // History must come before the text to clean.
+      expect(
+        prompt.indexOf('RECENT CHAT HISTORY:'),
+        lessThan(prompt.indexOf('Assistant response to clean:')),
+      );
+    });
+
+    test('includes continuity rules only when context is present', () {
+      final promptWithHistory = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Текст.',
+        recentMessages: [
+          ChatMessage(id: 'm1', role: 'user', content: 'Привет.'),
+        ],
+      );
+      expect(promptWithHistory, contains('Continuity rules:'));
+
+      final promptNoContext = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Текст.',
+      );
+      expect(promptNoContext, isNot(contains('Continuity rules:')));
+      expect(promptNoContext, isNot(contains('RECENT CHAT HISTORY:')));
+    });
+
+    test('includes studio controller notes when provided', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Клэр протирает стойку.',
+        studioOutputs: [
+          {'name': 'Continuity Controller', 'content': 'Claire must respond.'},
+          {'name': 'Agency & Character Controller', 'content': 'Lucy stays silent.'},
+        ],
+      );
+      expect(prompt, contains('STUDIO CONTROLLER NOTES:'));
+      expect(prompt, contains('Continuity Controller'));
+      expect(prompt, contains('Claire must respond.'));
+      expect(prompt, contains('Agency & Character Controller'));
+      expect(prompt, contains('Lucy stays silent.'));
+    });
+
+    test('skips studio outputs with empty name or content', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'x',
+        studioOutputs: [
+          {'name': '', 'content': 'something'},
+          {'name': 'Good Agent', 'content': ''},
+          {'name': 'Valid', 'content': 'ok'},
+        ],
+      );
+      expect(prompt, contains('Valid'));
+      expect(prompt, contains('ok'));
+      expect(prompt, isNot(contains('something')));
+      expect(prompt, isNot(contains('Good Agent')));
+    });
+
+    test('trims long messages to the character limit', () {
+      final longContent = 'A' * 4000;
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'response',
+        recentMessages: [
+          ChatMessage(id: 'm1', role: 'user', content: longContent),
+        ],
+      );
+      // The trimmed content should not contain the full 4000 chars.
+      expect(prompt, isNot(contains(longContent)));
+      // But should contain the truncation marker.
+      expect(prompt, contains('…'));
+    });
+
+    test('skips messages with empty content', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'response',
+        recentMessages: [
+          ChatMessage(id: 'm1', role: 'user', content: ''),
+          ChatMessage(id: 'm2', role: 'assistant', content: '  '),
+          ChatMessage(id: 'm3', role: 'user', content: 'visible'),
+        ],
+      );
+      expect(prompt, contains('visible'));
+      expect(prompt, isNot(contains('#m1]')));
+      expect(prompt, isNot(contains('#m2]')));
+      expect(prompt, contains('#m3]'));
+    });
+
+    test('combines history, studio notes, and broadcast rules together', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'Финальный ответ.',
+        broadcastBlocks: const ['RUSSIAN ONLY.'],
+        recentMessages: [
+          ChatMessage(id: 'm1', role: 'user', content: 'Вопрос?'),
+        ],
+        studioOutputs: [
+          {'name': 'World Controller', 'content': 'Scene is at the bar.'},
+        ],
+      );
+      expect(prompt, contains('RECENT CHAT HISTORY:'));
+      expect(prompt, contains('STUDIO CONTROLLER NOTES:'));
+      expect(prompt, contains('AUTHORITATIVE RULES'));
+      expect(prompt, contains('Continuity rules:'));
+      // Order: history → studio → rules → rules list → continuity → text
+      final historyIdx = prompt.indexOf('RECENT CHAT HISTORY:');
+      final studioIdx = prompt.indexOf('STUDIO CONTROLLER NOTES:');
+      final rulesIdx = prompt.indexOf('AUTHORITATIVE RULES');
+      final textIdx = prompt.indexOf('Assistant response to clean:');
+      expect(historyIdx, lessThan(studioIdx));
+      expect(studioIdx, lessThan(rulesIdx));
+      expect(rulesIdx, lessThan(textIdx));
     });
   });
 }

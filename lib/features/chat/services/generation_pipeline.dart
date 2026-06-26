@@ -611,16 +611,33 @@ class GenerationPipeline {
 
       // Find the last assistant message.
       ChatMessage? lastAssistant;
+      int lastAssistantIndex = -1;
       for (var i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role == 'assistant' &&
             !messages[i].isError &&
             !messages[i].isTyping &&
             messages[i].content.trim().isNotEmpty) {
           lastAssistant = messages[i];
+          lastAssistantIndex = i;
           break;
         }
       }
       if (lastAssistant == null) return;
+
+      // Collect bounded recent chat history before the assistant response for
+      // conservative local continuity checks. Last 12 messages, excluding the
+      // response being cleaned itself.
+      const kMaxHistoryMessages = 12;
+      final recentMessages = <ChatMessage>[];
+      if (lastAssistantIndex > 0) {
+        final start =
+            (lastAssistantIndex - kMaxHistoryMessages).clamp(0, lastAssistantIndex);
+        for (var i = start; i < lastAssistantIndex; i++) {
+          final m = messages[i];
+          if (m.content.trim().isEmpty || m.isError) continue;
+          recentMessages.add(m);
+        }
+      }
 
       // Load broadcast blocks (output language + prose guards) captured at
       // Studio build time so the cleaner applies the user's own rules instead
@@ -641,7 +658,9 @@ class GenerationPipeline {
         'model=${book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel} '
         'timeoutMs=${book.settings.sidecarTimeoutMs} '
         'textChars=${lastAssistant.content.length} '
-        'broadcastBlocks=${broadcastBlocks.length}',
+        'broadcastBlocks=${broadcastBlocks.length} '
+        'historyMessages=${recentMessages.length} '
+        'studioOutputs=${lastAssistant.studioOutputs.length}',
       );
 
       ref.read(postCleanerStateProvider.notifier).state = PostCleanerState.running(
@@ -656,6 +675,8 @@ class GenerationPipeline {
         settings: book.settings,
         assistantText: lastAssistant.content,
         broadcastBlocks: broadcastBlocks,
+        recentMessages: recentMessages,
+        studioOutputs: lastAssistant.studioOutputs,
       );
 
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
