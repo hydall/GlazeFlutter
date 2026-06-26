@@ -148,6 +148,8 @@ class ChatMessageSync {
       final errorChanged = o.isError != n.isError;
       final guidanceChanged = o.guidanceText != n.guidanceText;
       final greetingChanged = o.greetingIndex != n.greetingIndex;
+      final studioOutputsChanged = o.studioOutputs.length != n.studioOutputs.length ||
+          _studioOutputsDiffer(o.studioOutputs, n.studioOutputs);
 
       final needsUpdate =
           contentChanged ||
@@ -159,7 +161,8 @@ class ChatMessageSync {
           typingChanged ||
           errorChanged ||
           guidanceChanged ||
-          greetingChanged;
+          greetingChanged ||
+          studioOutputsChanged;
 
       if (needsUpdate) {
         bridge.updateMessage(n);
@@ -206,4 +209,18 @@ bool chatMessageListsIdentical(List<ChatMessage> a, List<ChatMessage> b) {
     if (!identical(a[i], b[i])) return false;
   }
   return true;
+}
+
+/// Compares two studioOutputs lists by checking the `status` and `content`
+/// fields of each output entry. Returns true if any entry differs.
+bool _studioOutputsDiffer(
+  List<Map<String, dynamic>> a,
+  List<Map<String, dynamic>> b,
+) {
+  if (a.length != b.length) return true;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i]['status'] != b[i]['status']) return true;
+    if (a[i]['content'] != b[i]['content']) return true;
+  }
+  return false;
 }
