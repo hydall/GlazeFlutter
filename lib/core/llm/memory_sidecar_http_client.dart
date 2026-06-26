@@ -81,11 +81,11 @@ Future<MemorySidecarCallOutcome> callSidecarWithLog({
     if (chatConfig == null) {
       throw Exception('No chat API config available for sidecar');
     }
-    endpoint = chatConfig.endpoint ?? '';
-    apiKey = chatConfig.apiKey ?? '';
+    endpoint = chatConfig.endpoint;
+    apiKey = chatConfig.apiKey;
     model = settings.sidecarModel.isNotEmpty
         ? settings.sidecarModel
-        : (chatConfig.model ?? '');
+        : chatConfig.model;
     protocol = chatConfig.protocol;
   }
 

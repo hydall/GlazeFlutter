@@ -7,7 +7,6 @@ import 'memory_needs_classifier_service.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
-import '../state/memory_settings_provider.dart';
 import '../../features/settings/api_list_provider.dart';
 
 /// Builds a [MemoryClassifierTextClient] that resolves the classifier model
@@ -35,11 +34,11 @@ MemoryClassifierTextClient buildClassifierClient(Ref ref) {
       if (chatConfig == null) {
         throw Exception('No chat API config available for classifier');
       }
-      endpoint = chatConfig.endpoint ?? '';
-      apiKey = chatConfig.apiKey ?? '';
+      endpoint = chatConfig.endpoint;
+      apiKey = chatConfig.apiKey;
       model = settings.classifierModel.isNotEmpty
           ? settings.classifierModel
-          : (chatConfig.model ?? '');
+          : chatConfig.model;
       protocol = chatConfig.protocol;
     }
 
@@ -52,7 +51,7 @@ MemoryClassifierTextClient buildClassifierClient(Ref ref) {
     final completer = Completer<String>();
     final transport = pickChatTransport(protocol);
 
-    transport.stream(
+    unawaited(transport.stream(
       request: ChatTransportRequest(
         endpoint: endpoint,
         apiKey: apiKey,
@@ -72,7 +71,7 @@ MemoryClassifierTextClient buildClassifierClient(Ref ref) {
       onError: (error) {
         if (!completer.isCompleted) completer.completeError(error);
       },
-    );
+    ));
 
     return completer.future;
   };

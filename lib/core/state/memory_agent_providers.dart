@@ -1,8 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'db_provider.dart';
-import '../db/repositories/memory_entity_repo.dart';
-import '../db/repositories/memory_salience_repo.dart';
 import '../llm/memory_classifier_http_client.dart';
 import '../llm/memory_needs_classifier_service.dart';
 import '../llm/memory_sidecar_http_client.dart';
@@ -56,8 +54,8 @@ final memoryGraphBuilderProvider = Provider<MemoryGraphBuilder>((ref) {
 
 /// Provenance index for derived state artifacts (catalog, sidecar, tracker).
 final memoryProvenanceIndexProvider =
-    Provider<MemoryProvenanceIndex<MemoryDerivedArtifact>>((ref) {
-  final index = MemoryProvenanceIndex<MemoryDerivedArtifact>();
+    Provider<MemoryProvenanceIndex<MemoryDerivedArtifact<dynamic>>>((ref) {
+  final index = MemoryProvenanceIndex<MemoryDerivedArtifact<dynamic>>();
   ref.onDispose(index.clear);
   return index;
 });
@@ -72,7 +70,6 @@ final memoryPostTurnServiceProvider = Provider<MemoryPostTurnService>((ref) {
   return MemoryPostTurnService(
     ref.watch(memoryBookRepoProvider),
     ref.watch(memorySalienceRepoProvider),
-    ref.watch(memoryConsolidationRepoProvider),
     ref.watch(memoryCadenceServiceProvider),
     ref.watch(memoryGraphBuilderProvider),
     () => ref.read(memoryGlobalSettingsProvider),

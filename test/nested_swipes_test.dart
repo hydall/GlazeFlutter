@@ -64,8 +64,8 @@ void main() {
         agentSwipeId: 1,
       );
       final json = msg.toJson();
-      expect(json['agentSwipes'], isA<List>());
-      expect((json['agentSwipes'] as List).length, 2);
+      expect(json['agentSwipes'], isA<List<dynamic>>());
+      expect((json['agentSwipes'] as List<dynamic>).length, 2);
       expect(json['agentSwipeId'], 1);
     });
 

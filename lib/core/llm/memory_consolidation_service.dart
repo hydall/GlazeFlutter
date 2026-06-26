@@ -57,7 +57,7 @@ class MemoryConsolidationService {
       if (group.length < 3) continue; // Skip tiny groups
 
       final entryIds = group.map((e) => e.id).toList();
-      final consolidationId = 'consol_${sessionId}_${now}_${created}';
+      final consolidationId = 'consol_${sessionId}_${now}_$created';
 
       try {
         final result = await _callConsolidationLlm(
@@ -125,7 +125,7 @@ class MemoryConsolidationService {
       final tier1 = await _repo.getBySessionId(sessionId, tier: 1);
       final okTier1 = tier1.where((c) => c.status == 'ok').toList();
       if (okTier1.length >= 3) {
-        final arcId = 'arc_${sessionId}_${now}';
+        final arcId = 'arc_${sessionId}_$now';
         try {
           final arcResult = await _callArcLlm(okTier1, settings: settings);
           if (arcResult != null) {
@@ -187,7 +187,7 @@ $content''';
     required MemoryBookSettings settings,
   }) async {
     final content = tier1Summaries
-        .map((c) => '--- ${c.title} ---\n${c.summary}')
+        .map((c) => '--- $c.title ---\n${c.summary}')
         .join('\n\n');
 
     final prompt = '''Summarize these scene summaries into an arc summary. Return ONLY a JSON object:
@@ -225,7 +225,7 @@ $content''';
     final completer = Completer<String>();
     final transport = pickChatTransport(protocol);
 
-    transport.stream(
+    unawaited(transport.stream(
       request: ChatTransportRequest(
         endpoint: endpoint,
         apiKey: apiKey,
@@ -245,7 +245,7 @@ $content''';
       onError: (error) {
         if (!completer.isCompleted) completer.completeError(error);
       },
-    );
+    ));
 
     final raw = await completer.future
         .timeout(Duration(milliseconds: settings.consolidationTimeoutMs));

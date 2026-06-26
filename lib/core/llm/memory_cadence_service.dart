@@ -1,6 +1,5 @@
 import '../db/repositories/memory_cadence_repo.dart';
 import '../models/memory_book.dart';
-import '../state/memory_settings_provider.dart';
 
 /// Cadence gating service (Phase G4).
 ///

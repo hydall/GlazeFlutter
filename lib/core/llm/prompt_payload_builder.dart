@@ -16,8 +16,6 @@ import '../state/db_provider.dart';
 import '../state/global_regex_provider.dart';
 import '../state/lorebook_provider.dart';
 import '../state/memory_settings_provider.dart';
-import '../db/repositories/memory_consolidation_repo.dart';
-import '../db/repositories/memory_entity_repo.dart';
 import 'embedding_types.dart';
 import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';

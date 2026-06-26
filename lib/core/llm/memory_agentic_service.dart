@@ -10,10 +10,6 @@ import 'memory_agentic_policy.dart';
 import 'memory_agentic_tools.dart';
 import 'memory_selector.dart';
 import 'sidecar_llm_client.dart';
-import 'transport/chat_transport_request.dart';
-import 'transport/llm_protocol.dart';
-import 'transport/transport_factory.dart';
-import '../../features/settings/api_list_provider.dart';
 
 /// Agentic memory search service (Phase 10).
 ///
@@ -27,10 +23,9 @@ import '../../features/settings/api_list_provider.dart';
 /// The write-loop (trackers + memory drafts) lives in
 /// [MemoryAgenticWriteService] — separated per CODE_STYLE (one class = one job).
 class MemoryAgenticService {
-  final Ref _ref;
   final SidecarLlmClient _llm;
 
-  MemoryAgenticService(this._ref) : _llm = SidecarLlmClient(_ref);
+  MemoryAgenticService(Ref ref) : _llm = SidecarLlmClient(ref);
 
   /// Run the agentic memory loop. Returns selected entries + diagnostics.
   Future<MemoryAgenticResult> runAgentic({

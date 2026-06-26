@@ -118,9 +118,9 @@ void main() {
     });
 
     test('regen (regenTargetId != null) → suppresses', () {
-      const String? regenTargetId = 'msg_123';
+      const String regenTargetId = 'msg_123';
       const bool studioFinalOnly = false;
-      expect(regenTargetId == null && !studioFinalOnly, isFalse);
+      expect(regenTargetId.isEmpty && !studioFinalOnly, isFalse);
     });
 
     test('studioFinalOnly=true → suppresses', () {
@@ -130,9 +130,9 @@ void main() {
     });
 
     test('studioFinalOnly + regenTargetId → suppresses', () {
-      const String? regenTargetId = 'msg_123';
+      const String regenTargetId = 'msg_123';
       const bool studioFinalOnly = true;
-      expect(regenTargetId == null && !studioFinalOnly, isFalse);
+      expect(regenTargetId.isEmpty && !studioFinalOnly, isFalse);
     });
   });
 }

@@ -193,23 +193,18 @@ void main() {
     });
 
     test('regen → does not trigger (regenTargetId != null)', () {
-      const String? regenTargetId = 'msg_123';
+      const String regenTargetId = 'msg_123';
       const bool studioFinalOnly = false;
       const bool postCleanerEnabled = true;
       expect(
-        regenTargetId == null && !studioFinalOnly && postCleanerEnabled,
+        regenTargetId.isEmpty && !studioFinalOnly && postCleanerEnabled,
         isFalse,
       );
     });
 
     test('studioFinalOnly → does not trigger', () {
-      const String? regenTargetId = null;
       const bool studioFinalOnly = true;
-      const bool postCleanerEnabled = true;
-      expect(
-        regenTargetId == null && !studioFinalOnly && postCleanerEnabled,
-        isFalse,
-      );
+      expect(!studioFinalOnly, isFalse);
     });
   });
 

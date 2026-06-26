@@ -90,8 +90,8 @@ class MemorySidecarRerankerService {
   /// log) instead of the bare [_client]. Null in tests / legacy wiring.
   MemorySidecarRerankerService(
     this._client, {
-    MemorySidecarCallWithLog? callWithLog,
-  }) : _callWithLog = callWithLog;
+    this._callWithLog,
+  });
 
   Future<MemorySidecarResult> rerank(
     MemorySidecarRequest request, {

@@ -1,6 +1,3 @@
-import 'dart:async';
-
-import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/llm/memory_sidecar_http_client.dart';
@@ -23,8 +20,8 @@ void main() {
           '{"selectedEntryIds": ["m1"], "selectedReasons": {"m1": "relevant"}, "rejectedReasons": {}}';
 
       final service = MemorySidecarRerankerService(
-        (_, __) async => json,
-        callWithLog: (_, __) async => const MemorySidecarCallOutcome(
+        (_, _) async => json,
+        callWithLog: (_, _) async => const MemorySidecarCallOutcome(
           text: json,
           status: AgentOperationStatus.ok,
           attempts: [
@@ -60,8 +57,8 @@ void main() {
       final fallback = const MemorySelection();
 
       final service = MemorySidecarRerankerService(
-        (_, __) async => throw Exception('should not call bare client'),
-        callWithLog: (_, __) async => const MemorySidecarCallOutcome(
+        (_, _) async => throw Exception('should not call bare client'),
+        callWithLog: (_, _) async => const MemorySidecarCallOutcome(
           status: AgentOperationStatus.httpError,
           attempts: [
             AgentOperationAttempt(
@@ -114,8 +111,8 @@ void main() {
       final fallback = const MemorySelection();
 
       final service = MemorySidecarRerankerService(
-        (_, __) async => '{}',
-        callWithLog: (_, __) async => const MemorySidecarCallOutcome(
+        (_, _) async => '{}',
+        callWithLog: (_, _) async => const MemorySidecarCallOutcome(
           status: AgentOperationStatus.timeout,
           attempts: [
             AgentOperationAttempt(

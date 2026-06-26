@@ -7,7 +7,7 @@ import 'package:glaze_flutter/core/models/memory_book.dart';
 void main() {
   group('MemorySidecarRerankerService integration (Track 1)', () {
     test('disabled when sidecarEnabled is false', () async {
-      final service = MemorySidecarRerankerService((_, __) async => '{}');
+      final service = MemorySidecarRerankerService((_, _) async => '{}');
       final fallback = const MemorySelection();
       final result = await service.rerank(MemorySidecarRequest(
         settings: const MemoryBookSettings(sidecarEnabled: false),
@@ -32,7 +32,7 @@ void main() {
       const json = '''
 {"selectedEntryIds": ["m1"], "selectedReasons": {"m1": "directly relevant"}, "rejectedReasons": {"m2": "not relevant"}}
 ''';
-      final service = MemorySidecarRerankerService((_, __) async => json);
+      final service = MemorySidecarRerankerService((_, _) async => json);
       final result = await service.rerank(MemorySidecarRequest(
         settings: const MemoryBookSettings(
           sidecarEnabled: true,
@@ -50,7 +50,7 @@ void main() {
     test('falls back on invalid JSON', () async {
       final fallback = const MemorySelection();
       final service =
-          MemorySidecarRerankerService((_, __) async => 'not json');
+          MemorySidecarRerankerService((_, _) async => 'not json');
       final result = await service.rerank(MemorySidecarRequest(
         settings: const MemoryBookSettings(
           sidecarEnabled: true,
@@ -66,8 +66,8 @@ void main() {
 
     test('falls back on timeout', () async {
       final fallback = const MemorySelection();
-      final service = MemorySidecarRerankerService((_, __) async {
-        await Future.delayed(const Duration(milliseconds: 200));
+      final service = MemorySidecarRerankerService((_, _) async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
         return '{}';
       });
       final result = await service.rerank(MemorySidecarRequest(
@@ -85,7 +85,7 @@ void main() {
 
     test('empty selection when sidecar selects no valid entries', () async {
       const json = '{"selectedEntryIds": [], "selectedReasons": {}, "rejectedReasons": {}}';
-      final service = MemorySidecarRerankerService((_, __) async => json);
+      final service = MemorySidecarRerankerService((_, _) async => json);
       final result = await service.rerank(MemorySidecarRequest(
         settings: const MemoryBookSettings(
           sidecarEnabled: true,
