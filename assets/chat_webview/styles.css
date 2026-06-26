@@ -750,6 +750,15 @@
   text-align: center;
 }
 
+/* Nested swipes: blue agent-switcher (tertiary accent). */
+.agent-switcher {
+  border-color: rgba(120, 180, 255, 0.25);
+  color: rgb(120, 180, 255);
+}
+.agent-switcher .msg-switcher-btn svg {
+  fill: rgb(120, 180, 255);
+}
+
 .msg-regenerate {
   display: inline-flex;
   align-items: center;

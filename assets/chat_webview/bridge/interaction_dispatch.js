@@ -192,6 +192,18 @@ export class InteractionDispatch {
           bridge._sendToFlutter('onSwipe', [JSON.stringify({ id, direction: 'right' })])
         );
       },
+      'agent-swipe-left': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'prev', () =>
+          bridge._sendToFlutter('onAgentSwipe', [JSON.stringify({ id, direction: 'left' })])
+        );
+      },
+      'agent-swipe-right': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'next', () =>
+          bridge._sendToFlutter('onAgentSwipe', [JSON.stringify({ id, direction: 'right' })])
+        );
+      },
       'greeting-prev': (e, el) => {
         const id = el.dataset.messageId;
         bridge._swipeHandler.animateVariantSwap(id, 'prev', () =>
