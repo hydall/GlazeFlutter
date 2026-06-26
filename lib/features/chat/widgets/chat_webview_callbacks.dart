@@ -51,6 +51,10 @@ class ChatWebViewCallbacks {
     messageActions.onSwipe?.call(id, direction);
   }
 
+  void onAgentSwipe(String id, String direction) {
+    messageActions.onAgentSwipe?.call(id, direction);
+  }
+
   void onChangeGreeting(String id, int direction) {
     messageActions.onChangeGreeting?.call(id, direction);
   }

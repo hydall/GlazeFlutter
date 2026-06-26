@@ -218,6 +218,7 @@ class ChatBridgeController {
   void Function(String id, bool isUser, bool isSystem, String content)?
   onMessageContext;
   void Function(String id, String direction)? onSwipe;
+  void Function(String id, String direction)? onAgentSwipe;
   void Function(String id, int direction)? onChangeGreeting;
   void Function(String id, String mode)? onRegenerate;
   void Function(String action, String text)? onSelectionAction;
@@ -372,6 +373,11 @@ class ChatBridgeController {
           );
         case 'onSwipe':
           onSwipe?.call(
+            data['id'] as String? ?? '',
+            data['direction'] as String? ?? 'left',
+          );
+        case 'onAgentSwipe':
+          onAgentSwipe?.call(
             data['id'] as String? ?? '',
             data['direction'] as String? ?? 'left',
           );

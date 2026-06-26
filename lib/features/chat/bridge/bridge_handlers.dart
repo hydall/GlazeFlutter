@@ -60,6 +60,7 @@ const Map<String, HandlerSpec> bridgeHandlers = {
   // Message actions
   'onMessageContext': HandlerSpec(HandlerKind.jsonObject),
   'onSwipe': HandlerSpec(HandlerKind.jsonObject),
+  'onAgentSwipe': HandlerSpec(HandlerKind.jsonObject),
   'onRegenerate': HandlerSpec(HandlerKind.idStringPair),
   'onChangeGreeting': HandlerSpec(HandlerKind.idIntPair),
   'onSelectionAction': HandlerSpec(HandlerKind.jsonObject),
