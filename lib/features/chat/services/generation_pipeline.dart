@@ -736,7 +736,9 @@ class GenerationPipeline {
       // immediately without requiring the user to re-enter the chat.
       // applyCleanedText writes to DB + invalidates chatHistoryProvider,
       // but ChatNotifier holds its own ChatState copy that must be pushed.
-      if (ref.mounted && abortHandler.isCurrentGen(genId)) {
+      // Note: we do NOT check isCurrentGen here — the cleaner may run
+      // after a regen, and the UI must always reflect the cleaned swipe.
+      if (ref.mounted) {
         final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {
           ChatSessionService.updateCache(refreshed);

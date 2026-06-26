@@ -197,6 +197,25 @@ class MemoryStudioService {
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
+      // Check if any intermediate agents failed. If so, do NOT run the
+      // final agent — the user must regenerate the failed agents first,
+      // then explicitly send to the final model.
+      final hasErrors = briefs.any((b) => b.status == 'error');
+      if (hasErrors) {
+        _ref.read(studioRuntimeStateProvider.notifier).state =
+            const StudioRuntimeState.idle();
+        final errorAgents = briefs
+            .where((b) => b.status == 'error')
+            .map((b) => b.agentName)
+            .join(', ');
+        return StudioPipelineResult(
+          status: 'agent_errors',
+          response: '',
+          stageBriefs: briefs,
+          error: 'Studio agents failed: $errorAgents',
+        );
+      }
+
       _ref.read(studioRuntimeStateProvider.notifier).state = StudioRuntimeState(
         sessionId: sessionId,
         agentId: finalAgent.id,

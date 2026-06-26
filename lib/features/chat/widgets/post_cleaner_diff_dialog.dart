@@ -50,11 +50,20 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
   AgentSwipe? _original;
   AgentSwipe? _cleaned;
   DiffResult _diff = const DiffResult.empty();
+  final ScrollController _leftController = ScrollController();
+  final ScrollController _rightController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadMessage();
+  }
+
+  @override
+  void dispose() {
+    _leftController.dispose();
+    _rightController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadMessage() async {
@@ -189,6 +198,7 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
               label: 'Original',
               accent: cs.onSurfaceVariant,
               lines: _diff.leftLines,
+              controller: _leftController,
             ),
           ),
           const VerticalDivider(width: 1),
@@ -198,6 +208,7 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
               label: 'Cleaned',
               accent: cs.primary,
               lines: _diff.rightLines,
+              controller: _rightController,
             ),
           ),
         ],
@@ -210,6 +221,7 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
     required String label,
     required Color accent,
     required List<DiffLine> lines,
+    required ScrollController controller,
   }) {
     return Container(
       padding: const EdgeInsets.all(8),
@@ -235,7 +247,9 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
           ),
           Expanded(
             child: Scrollbar(
+              controller: controller,
               child: SingleChildScrollView(
+                controller: controller,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: lines.map((line) => _buildDiffLine(context, line)).toList(),
