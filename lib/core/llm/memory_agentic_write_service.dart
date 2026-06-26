@@ -41,6 +41,7 @@ class MemoryAgenticWriteService {
     required String recentHistoryText,
     required List<Tracker> currentTrackers,
     CancelToken? cancelToken,
+    bool Function()? isStillCurrent,
   }) async {
     if (!settings.agenticWriteEnabled) {
       return const MemoryWriteLoopResult(status: 'disabled');
@@ -65,7 +66,7 @@ class MemoryAgenticWriteService {
         cancelToken: token,
       );
 
-      if (token.isCancelled) {
+      if (token.isCancelled || isStillCurrent?.call() == false) {
         return MemoryWriteLoopResult(
           status: 'aborted',
           attempts: llmOutcome.attempts,
@@ -98,14 +99,23 @@ class MemoryAgenticWriteService {
         requireExplicitDiffApproval: false,
       ));
 
+      if (token.isCancelled || isStillCurrent?.call() == false) {
+        return MemoryWriteLoopResult(
+          status: 'aborted',
+          attempts: llmOutcome.attempts,
+          totalElapsedMs: llmOutcome.totalElapsedMs,
+        );
+      }
+
       final trackerResult = await _executeTrackerWrites(
         policy: policy,
         sessionId: sessionId,
         requests: response.trackerRequests,
         provenance: 'memory_agent',
+        shouldAbort: () => token.isCancelled || isStillCurrent?.call() == false,
       );
 
-      if (token.isCancelled) {
+      if (token.isCancelled || isStillCurrent?.call() == false) {
         return MemoryWriteLoopResult(
           status: 'aborted',
           trackerResult: trackerResult,
@@ -118,6 +128,7 @@ class MemoryAgenticWriteService {
         policy: policy,
         sessionId: sessionId,
         requests: response.memoryRequests,
+        shouldAbort: () => token.isCancelled || isStillCurrent?.call() == false,
       );
 
       return MemoryWriteLoopResult(
@@ -247,6 +258,7 @@ Rules:
     required String sessionId,
     required List<TrackerWriteRequest> requests,
     required String provenance,
+    required bool Function() shouldAbort,
   }) async {
     if (requests.isEmpty) return const TrackerWriteResult();
 
@@ -256,6 +268,7 @@ Rules:
     final errors = <String>[];
 
     for (final req in requests) {
+      if (shouldAbort()) break;
       final decision = policy.canUse(MemoryAgenticTool.writeTracker);
       if (!decision.allowed) {
         denied++;
@@ -288,6 +301,7 @@ Rules:
     required MemoryAgenticPolicy policy,
     required String sessionId,
     required List<MemoryWriteRequest> requests,
+    required bool Function() shouldAbort,
   }) async {
     if (requests.isEmpty) return const MemoryWriteResult();
 
@@ -298,6 +312,7 @@ Rules:
 
     final drafts = <MemoryDraft>[];
     for (final req in requests) {
+      if (shouldAbort()) break;
       final decision = policy.canUse(MemoryAgenticTool.writeMemory);
       if (!decision.allowed) {
         denied++;
@@ -316,7 +331,7 @@ Rules:
       written++;
     }
 
-    if (drafts.isNotEmpty) {
+    if (drafts.isNotEmpty && !shouldAbort()) {
       try {
         await repo.appendDrafts(sessionId, drafts);
       } catch (e) {

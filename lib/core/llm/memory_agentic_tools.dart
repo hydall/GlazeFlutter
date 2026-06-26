@@ -205,12 +205,32 @@ class MemoryAgenticToolHandler {
         .toList();
     if (active.isEmpty) return const MemorySearchResult();
 
+    final queryTerms = _queryTerms(query);
+    final queryScores = <String, double>{};
+    final queryMatches = <String, List<String>>{};
+    if (queryTerms.isNotEmpty) {
+      for (final entry in active) {
+        final matches = _queryMatches(entry, queryTerms);
+        if (matches.isEmpty) continue;
+        queryScores[entry.id] =
+            (vectorScores[entry.id] ?? 0) + matches.length.toDouble();
+        queryMatches[entry.id] = matches;
+      }
+    }
+
+    final effectiveVectorScores = queryScores.isEmpty
+        ? vectorScores
+        : {...vectorScores, ...queryScores};
+    final effectiveKeywordMatches = queryMatches.isEmpty
+        ? keywordMatchedTerms
+        : {...keywordMatchedTerms, ...queryMatches};
+
     // Run deterministic selector to get scored candidates
     final selection = MemorySelector.select(
       MemorySelectionInput(
         entries: active,
-        vectorScores: vectorScores,
-        keywordMatchedTerms: keywordMatchedTerms,
+        vectorScores: effectiveVectorScores,
+        keywordMatchedTerms: effectiveKeywordMatches,
         visibleMessageIds: visibleMessageIds,
         maxInjectedEntries: capped,
         sourceWindowExclusion: true,
@@ -233,6 +253,24 @@ class MemoryAgenticToolHandler {
         .toList();
 
     return MemorySearchResult(hits: hits);
+  }
+
+  static Set<String> _queryTerms(String query) {
+    return query
+        .toLowerCase()
+        .split(RegExp(r'[^\p{L}\p{N}_]+', unicode: true))
+        .where((term) => term.length >= 3)
+        .toSet();
+  }
+
+  static List<String> _queryMatches(MemoryEntry entry, Set<String> terms) {
+    final haystack = [
+      entry.title,
+      entry.content,
+      entry.arc,
+      ...entry.keys,
+    ].join(' ').toLowerCase();
+    return terms.where(haystack.contains).toList(growable: false);
   }
 }
 

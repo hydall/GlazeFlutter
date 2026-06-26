@@ -262,10 +262,28 @@ class ChatMessageService {
   static List<AgentSwipe>? _agentSwipesFromMeta(Map<String, dynamic>? meta) {
     final raw = meta?['agentSwipes'];
     if (raw is! List) return null;
-    return raw
+    final swipes = raw
         .whereType<Map<dynamic, dynamic>>()
         .map((m) => AgentSwipe.fromJson(Map<String, dynamic>.from(m)))
         .toList();
+    // Lazy migration: older 'cleaned' swipes were saved with empty
+    // studioOutputs (before appendAgentSwipe started inheriting them from
+    // the parent 'final'). Backfill so that switching to a cleaned blue
+    // swipe keeps the Studio regen button visible.
+    for (var i = 0; i < swipes.length; i++) {
+      if (swipes[i].kind == 'cleaned' &&
+          swipes[i].studioOutputs.isEmpty &&
+          swipes[i].parentSwipeId != null &&
+          swipes[i].parentSwipeId! < swipes.length) {
+        final parent = swipes[swipes[i].parentSwipeId!];
+        if (parent.studioOutputs.isNotEmpty) {
+          swipes[i] = swipes[i].copyWith(
+            studioOutputs: parent.studioOutputs,
+          );
+        }
+      }
+    }
+    return swipes;
   }
 
   /// Set the active blue sub-swipe (agentSwipeId) for a message without

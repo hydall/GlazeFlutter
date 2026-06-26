@@ -539,6 +539,7 @@ class GenerationPipeline {
         settings: book.settings,
         recentHistoryText: recentHistory,
         currentTrackers: trackers,
+        isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
       );
 
       debugPrint(
