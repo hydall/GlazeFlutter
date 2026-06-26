@@ -189,15 +189,110 @@ class ChatMessageService {
     final meta = swipeId < msg.swipesMeta.length
         ? msg.swipesMeta[swipeId]
         : null;
+
+    // Nested swipes: persist current agentSwipes into the outgoing green
+    // swipe's meta, then load (or seed) agentSwipes for the incoming swipe.
+    final swipesMeta = List<Map<String, dynamic>>.from(msg.swipesMeta);
+    // Ensure swipesMeta is long enough.
+    while (swipesMeta.length < msg.swipes.length) {
+      swipesMeta.add(<String, dynamic>{});
+    }
+    // Save outgoing agentSwipes.
+    if (msg.agentSwipes.isNotEmpty && msg.swipeId < swipesMeta.length) {
+      swipesMeta[msg.swipeId] = {
+        ...swipesMeta[msg.swipeId],
+        'agentSwipes': msg.agentSwipes.map((e) => e.toJson()).toList(),
+        'agentSwipeId': msg.agentSwipeId,
+      };
+    }
+    // Load incoming agentSwipes.
+    List<AgentSwipe> nextAgentSwipes;
+    int nextAgentSwipeId;
+    final storedAgentSwipes = _agentSwipesFromMeta(meta);
+    if (storedAgentSwipes != null && storedAgentSwipes.isNotEmpty) {
+      nextAgentSwipes = storedAgentSwipes;
+      nextAgentSwipeId = (meta?['agentSwipeId'] as int?) ?? 0;
+    } else {
+      // Seed a single 'final' from the green swipe content.
+      nextAgentSwipes = [
+        AgentSwipe(
+          content: msg.swipes[swipeId],
+          kind: 'final',
+          reasoning: meta?['reasoning'] as String?,
+          genTime: meta?['genTime'] as String?,
+          tokens: meta?['tokens'] as int?,
+          studioOutputs: _studioOutputsFromMeta(meta),
+        ),
+      ];
+      nextAgentSwipeId = 0;
+    }
+
+    // The active content is the active blue swipe (if any), else the green.
+    final activeContent = nextAgentSwipes.isNotEmpty
+        ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].content
+        : msg.swipes[swipeId];
+
     final updated = msg.copyWith(
       swipeId: swipeId,
-      content: msg.swipes[swipeId],
-      reasoning: meta?['reasoning'] as String?,
-      genTime: meta?['genTime'] as String?,
-      tokens: meta?['tokens'] as int?,
+      content: activeContent,
+      reasoning: nextAgentSwipes.isNotEmpty
+          ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].reasoning
+          : meta?['reasoning'] as String?,
+      genTime: nextAgentSwipes.isNotEmpty
+          ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].genTime
+          : meta?['genTime'] as String?,
+      tokens: nextAgentSwipes.isNotEmpty
+          ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].tokens
+          : meta?['tokens'] as int?,
       triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
       triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
-      studioOutputs: _studioOutputsFromMeta(meta),
+      studioOutputs: nextAgentSwipes.isNotEmpty
+          ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].studioOutputs
+          : _studioOutputsFromMeta(meta),
+      swipesMeta: swipesMeta,
+      agentSwipes: nextAgentSwipes,
+      agentSwipeId: nextAgentSwipeId,
+    );
+    final newMessages = List<ChatMessage>.from(session.messages);
+    newMessages[messageIndex] = updated;
+    return _persist(session, newMessages);
+  }
+
+  /// Parse agentSwipes stored in [swipesMeta] meta. Returns null if absent.
+  static List<AgentSwipe>? _agentSwipesFromMeta(Map<String, dynamic>? meta) {
+    final raw = meta?['agentSwipes'];
+    if (raw is! List) return null;
+    return raw
+        .whereType<Map<dynamic, dynamic>>()
+        .map((m) => AgentSwipe.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  /// Set the active blue sub-swipe (agentSwipeId) for a message without
+  /// changing the green swipe. The message content/reasoning/tokens are
+  /// restored from the selected AgentSwipe.
+  ChatSession setAgentSwipe(
+    ChatSession session,
+    int messageIndex,
+    int agentSwipeId,
+  ) {
+    if (messageIndex < 0 || messageIndex >= session.messages.length) {
+      return session;
+    }
+    final msg = session.messages[messageIndex];
+    if (msg.agentSwipes.isEmpty ||
+        agentSwipeId < 0 ||
+        agentSwipeId >= msg.agentSwipes.length) {
+      return session;
+    }
+    final swipe = msg.agentSwipes[agentSwipeId];
+    final updated = msg.copyWith(
+      agentSwipeId: agentSwipeId,
+      content: swipe.content,
+      reasoning: swipe.reasoning,
+      genTime: swipe.genTime,
+      tokens: swipe.tokens,
+      studioOutputs: swipe.studioOutputs,
     );
     final newMessages = List<ChatMessage>.from(session.messages);
     newMessages[messageIndex] = updated;
@@ -301,20 +396,63 @@ class ChatMessageService {
       return const ChangeSwipeResult.noop();
     }
 
-    final meta = newIndex < msg.swipesMeta.length
-        ? msg.swipesMeta[newIndex]
-        : null;
-    final updated = msg.copyWith(
-      swipeId: newIndex,
-      content: msg.swipes[newIndex],
-      isError: false,
+    // Delegate to setSwipe for the heavy lifting (agentSwipes save/load,
+    // content/reasoning/meta restoration). Then patch swipeDirection +
+    // isError for the animation/clear semantics changeSwipe provides.
+    final swapped = setSwipe(session, messageIndex, newIndex);
+    final swappedMsg = swapped.messages[messageIndex];
+    final patched = swappedMsg.copyWith(
       swipeDirection: animDir,
-      reasoning: meta?['reasoning'] as String?,
-      genTime: meta?['genTime'] as String?,
-      tokens: meta?['tokens'] as int?,
-      triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
-      triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
-      studioOutputs: _studioOutputsFromMeta(meta),
+      isError: false,
+    );
+    final patchedMessages = List<ChatMessage>.from(swapped.messages)
+      ..[messageIndex] = patched;
+    return ChangeSwipeResult.updated(_persist(session, patchedMessages));
+  }
+
+  /// Change the active blue sub-swipe (agentSwipeId) by [dir].
+  ///
+  /// Mirrors the green-swipe navigation but operates on `agentSwipes[]`.
+  /// Right-edge on the last message → [ChangeSwipeResult.needsRegen] so the
+  /// caller can kick off a full regeneration (new green swipe).
+  ChangeSwipeResult changeAgentSwipe(
+    ChatSession session,
+    int messageIndex,
+    int dir, {
+    bool fromSwipe = false,
+    bool isLastMessage = false,
+  }) {
+    if (messageIndex < 0 || messageIndex >= session.messages.length) {
+      return const ChangeSwipeResult.noop();
+    }
+    final msg = session.messages[messageIndex];
+    if (msg.agentSwipes.length <= 1) return const ChangeSwipeResult.noop();
+
+    final animDir = fromSwipe
+        ? (dir > 0 ? 'slide-next' : 'slide-prev')
+        : 'fade';
+
+    final newIndex = msg.agentSwipeId + dir;
+
+    // Right-edge on the last message → full regen (new green swipe).
+    if (dir > 0 &&
+        newIndex >= msg.agentSwipes.length &&
+        isLastMessage) {
+      return const ChangeSwipeResult.needsRegen();
+    }
+    if (newIndex < 0 || newIndex >= msg.agentSwipes.length) {
+      return const ChangeSwipeResult.noop();
+    }
+
+    final swipe = msg.agentSwipes[newIndex];
+    final updated = msg.copyWith(
+      agentSwipeId: newIndex,
+      content: swipe.content,
+      reasoning: swipe.reasoning,
+      genTime: swipe.genTime,
+      tokens: swipe.tokens,
+      studioOutputs: swipe.studioOutputs,
+      swipeDirection: animDir,
     );
     final newMessages = List<ChatMessage>.from(session.messages)
       ..[messageIndex] = updated;
