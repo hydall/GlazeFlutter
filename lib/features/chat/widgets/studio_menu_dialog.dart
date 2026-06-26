@@ -57,6 +57,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   bool _agenticWriteEnabled = false;
   bool _postCleanerEnabled = false;
   String _routingMode = 'verbatim';
+  String _sidecarModel = '';
+  int _sidecarTimeoutMs = 60000;
   bool _loading = true;
   bool _building = false;
   final Set<String> _regeneratingAgentIds = {};
@@ -96,6 +98,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _builderPromptTemplate = config?.builderPromptTemplate ?? '';
           _agenticWriteEnabled = book?.settings.agenticWriteEnabled ?? false;
           _postCleanerEnabled = book?.settings.postCleanerEnabled ?? false;
+          _sidecarModel = book?.settings.sidecarModel ?? '';
+          _sidecarTimeoutMs = book?.settings.sidecarTimeoutMs ?? 60000;
           _routingMode = config?.routingMode ?? 'verbatim';
           _loading = false;
         });
@@ -607,29 +611,42 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   Widget _buildAgentList() {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: _buildContextInfoCard(),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Text(
-                '${_config!.agents.length} agents',
-                style: TextStyle(
-                  color: context.cs.onSurfaceVariant,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+        Flexible(
+          fit: FlexFit.loose,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: _buildContextInfoCard(),
                 ),
-              ),
-              const Spacer(),
-              FilledButton.tonalIcon(
-                onPressed: _building ? null : _buildStudio,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Rebuild'),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${_config!.agents.length} agents',
+                        style: TextStyle(
+                          color: context.cs.onSurfaceVariant,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      FilledButton.tonalIcon(
+                        onPressed: _building ? null : _buildStudio,
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Rebuild'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         Expanded(
@@ -810,7 +827,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   }
 
   Widget _buildAgenticAdvancedSection({required bool includeRoutingMode}) {
-    return ExpansionTile(
+    // Wrap in a transparent Material so ListTile ink splashes render correctly
+    // even when this section is placed inside a DecoratedBox (Container with
+    // background color) — otherwise the intermediate background hides them.
+    return Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
       tilePadding: EdgeInsets.zero,
       title: Row(
         children: [
@@ -863,6 +885,21 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             if (mounted) setState(() => _postCleanerEnabled = v);
           },
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: _buildSidecarModelSelector(),
+        ),
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Agent timeout'),
+          subtitle: Text(
+            '${(_sidecarTimeoutMs / 1000).toStringAsFixed(0)}s — how long to '
+            'wait for the sidecar agent before giving up.',
+          ),
+          trailing: const Icon(Icons.edit_outlined, size: 18),
+          onTap: _showSidecarTimeoutDialog,
+        ),
         if (includeRoutingMode)
           ListTile(
             dense: true,
@@ -892,6 +929,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             ),
           ),
       ],
+      ),
     );
   }
 
@@ -905,6 +943,139 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     final book = await repo.ensureForSession(widget.sessionId);
     final updated = mutator(book.settings);
     await repo.updateSettings(widget.sessionId, updated);
+  }
+
+  /// Dropdown model selector for the agentic sidecar (write-loop +
+  /// POST-cleaner). The sidecar reuses the chat Run API config's endpoint/key
+  /// (sidecarSource='current'), so we fetch that provider's model list. An
+  /// empty selection falls back to the chat model — recommended for a cheaper
+  /// /faster agent model while the writer keeps the premium model.
+  Widget _buildSidecarModelSelector() {
+    final config = _contextInfo.runApiConfig;
+    if (config == null) {
+      return const Text(
+        'No chat API config available for the agent.',
+        style: TextStyle(fontSize: 12),
+      );
+    }
+    final fetched = _modelsByApiConfigId[config.id] ?? const <String>[];
+    final models = <String>{
+      ...fetched,
+      if (_sidecarModel.isNotEmpty && !fetched.contains(_sidecarModel))
+        _sidecarModel,
+    }.toList()
+      ..sort();
+    final isFetching = _fetchingModelConfigIds.contains(config.id);
+    // '' represents "use chat model" (sidecarModel empty).
+    final selected = _sidecarModel.isEmpty ? '' : _sidecarModel;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue: models.contains(selected) || selected.isEmpty
+                ? selected
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Agent model (sidecar)',
+              helperText: 'Empty = use chat model. A cheaper/faster model is '
+                  'recommended for trackers + cleaner.',
+              helperMaxLines: 2,
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: [
+              const DropdownMenuItem<String>(
+                value: '',
+                child: Text('(use chat model)'),
+              ),
+              ...models.map(
+                (m) => DropdownMenuItem<String>(
+                  value: m,
+                  child: Text(m, overflow: TextOverflow.ellipsis),
+                ),
+              ),
+            ],
+            onChanged: (m) async {
+              await _saveMemoryBookSetting(
+                (s) => s.copyWith(sidecarModel: m ?? ''),
+              );
+              if (mounted) setState(() => _sidecarModel = m ?? '');
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: IconButton.filledTonal(
+            tooltip: 'Fetch models',
+            onPressed: isFetching ? null : () => _fetchProviderModels(config),
+            icon: isFetching
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh, size: 18),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showSidecarTimeoutDialog() async {
+    final controller = TextEditingController(
+      text: (_sidecarTimeoutMs / 1000).toStringAsFixed(0),
+    );
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Agent timeout'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Seconds to wait for the sidecar agent before giving up. '
+              'Slower/larger models need more time (30–90s is typical).',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                suffixText: 'seconds',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final seconds = int.tryParse(controller.text.trim());
+              if (seconds == null || seconds <= 0) {
+                Navigator.of(ctx).pop();
+                return;
+              }
+              Navigator.of(ctx).pop(seconds * 1000);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await _saveMemoryBookSetting((s) => s.copyWith(sidecarTimeoutMs: result));
+    if (mounted) setState(() => _sidecarTimeoutMs = result);
   }
 
   Future<void> _saveRoutingMode(String mode) async {

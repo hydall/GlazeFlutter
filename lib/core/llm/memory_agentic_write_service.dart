@@ -68,8 +68,18 @@ class MemoryAgenticWriteService {
         return const MemoryWriteLoopResult(status: 'aborted');
       }
       if (response == null) {
+        debugPrint(
+          '[AgenticWrite] LLM returned null/unparseable response '
+          '(model=${config.model})',
+        );
         return const MemoryWriteLoopResult(status: 'ok');
       }
+
+      debugPrint(
+        '[AgenticWrite] LLM parsed trackers=${response.trackerRequests.length} '
+        'memories=${response.memoryRequests.length} '
+        '(model=${config.model})',
+      );
 
       final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
         enabled: true,

@@ -105,36 +105,26 @@ class MemoryStudioService {
   void finishCurrentAgent() {
     final completer = _finishCurrentAgent;
     if (completer == null || completer.isCompleted) {
-      _log('finish current agent ignored: no active agent');
       return;
     }
-    _log('finish current agent requested');
     completer.complete();
   }
 
   Future<StudioConfig?> getEnabledConfig(String sessionId) async {
-    _log('load config session=$sessionId');
     final config = await _ref
         .read(studioConfigRepoProvider)
         .getBySessionId(sessionId);
     if (config == null) {
-      _log('config missing session=$sessionId');
       return null;
     }
     if (!config.enabled) {
-      _log('config disabled session=$sessionId agents=${config.agents.length}');
       return null;
     }
     final enabledAgents = config.agents.where((a) => a.enabled).toList()
       ..sort((a, b) => a.order.compareTo(b.order));
     if (enabledAgents.isEmpty) {
-      _log('config has no enabled agents session=$sessionId');
       return null;
     }
-    _log(
-      'config enabled session=$sessionId agents=${enabledAgents.length} '
-      'runApi=${config.runApiConfigId.isEmpty ? '<active>' : config.runApiConfigId}',
-    );
     return config.copyWith(agents: enabledAgents);
   }
 
@@ -157,19 +147,13 @@ class MemoryStudioService {
       final agents = config.agents.where((a) => a.enabled).toList()
         ..sort((a, b) => a.order.compareTo(b.order));
       if (agents.isEmpty) {
-        _log('pipeline disabled: no enabled agents session=$sessionId');
         return const StudioPipelineResult(status: 'disabled', response: '');
       }
 
-      _log(
-        'pipeline start session=$sessionId agents=${agents.length} '
-        'messages=${promptResult.messages.length}',
-      );
       _ref.read(studioStreamingOutputsProvider(sessionId).notifier).state =
           const [];
 
       if (token.isCancelled) {
-        _log('pipeline aborted before agents session=$sessionId');
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
@@ -210,7 +194,6 @@ class MemoryStudioService {
                 ),
             ]);
       if (token.isCancelled) {
-        _log('pipeline aborted after intermediate agents session=$sessionId');
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
@@ -235,15 +218,9 @@ class MemoryStudioService {
         onFinalResponseUpdate: onFinalResponseUpdate,
       );
       if (token.isCancelled) {
-        _log('pipeline aborted after final agent session=$sessionId');
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
-      _log(
-        'pipeline complete session=$sessionId finalAgent="${finalAgent.name}" '
-        'chars=${agentResult.text.length} reasoning=${agentResult.reasoning.length} '
-        'briefs=${briefs.length}',
-      );
       return StudioPipelineResult(
         status: 'ok',
         response: agentResult.text,
@@ -260,7 +237,6 @@ class MemoryStudioService {
       );
     } catch (e) {
       if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
-        _log('pipeline aborted by cancel session=$sessionId');
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
       _log('pipeline error session=$sessionId error=$e');
@@ -439,10 +415,6 @@ class MemoryStudioService {
         brief: brief,
         status: 'ok',
       );
-      _log(
-        'brief deterministic session=$sessionId agent="${agent.name}" '
-        'index=$index chars=${brief.length}',
-      );
       return StudioStageBrief(
         agentId: agent.id,
         agentName: agent.name,
@@ -480,10 +452,6 @@ class MemoryStudioService {
         agent: agent,
         brief: sanitizedText,
         status: 'ok',
-      );
-      _log(
-        'brief stored session=$sessionId agent="${agent.name}" '
-        'index=$index chars=${sanitizedText.length}',
       );
       return StudioStageBrief(
         agentId: agent.id,
@@ -565,10 +533,6 @@ class MemoryStudioService {
         refreshPolicy: policy,
         cacheHit: true,
       );
-      _log(
-        'brief cache hit session=$sessionId agent="${agent.name}" '
-        'policy=$policy index=$index',
-      );
       return brief;
     }
 
@@ -589,10 +553,6 @@ class MemoryStudioService {
         brief: brief.brief,
         policy: policy,
         createdTurnIndex: turnIndex,
-      );
-      _log(
-        'brief cache store session=$sessionId agent="${agent.name}" '
-        'policy=$policy index=$index',
       );
     }
     return brief.copyWithCacheMetadata(
@@ -688,10 +648,6 @@ class MemoryStudioService {
       if (completer.isCompleted) return;
       final text = output.toString().trim();
       final reasoningText = isFinalResponse ? reasoning.toString().trim() : '';
-      _log(
-        'agent finish accumulated session=$sessionId name="${agent.name}" '
-        'reason=$reason chars=${text.length} reasoning=${reasoningText.length}',
-      );
       completer.complete(
         _StudioAgentRunResult(text: text, reasoning: reasoningText),
       );
@@ -712,19 +668,6 @@ class MemoryStudioService {
         }
       });
     }
-
-    final inputChars = requestMessages.fold<int>(
-      0,
-      (sum, m) => sum + (m['content']?.toString().length ?? 0),
-    );
-    _log(
-      'agent start session=$sessionId name="${agent.name}" '
-      'final=$isFinalResponse source=${agent.modelSource} '
-      'protocol=${resolved.protocol} model=${resolved.model} '
-      'messages=${requestMessages.length} inputChars=$inputChars '
-      'stream=$shouldStream maxTokens=${agent.maxTokens} temp=${agent.temperature} '
-      'timeoutMs=$timeoutMs persistedTimeoutMs=${agent.timeoutMs}',
-    );
 
     agentCancelToken = CancelToken();
     unawaited(
@@ -775,7 +718,6 @@ class MemoryStudioService {
           }
         },
         onComplete: (text, finalReasoning, {rawResponseJson}) {
-          final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
           idleTimer?.cancel();
           if (shouldStream && output.isEmpty && text.isNotEmpty) {
             output.write(text);
@@ -800,11 +742,6 @@ class MemoryStudioService {
               onIntermediateUpdate?.call(text.trimLeft());
             }
           }
-          _log(
-            'agent complete session=$sessionId name="${agent.name}" '
-            'elapsedMs=$elapsed chars=${text.trim().length} '
-            'rawJson=${rawResponseJson?.length ?? 0}',
-          );
           if (!completer.isCompleted) {
             final accumulated = output.toString().trim();
             final reasoningText = isFinalResponse
@@ -1033,10 +970,6 @@ class MemoryStudioService {
     final limit = config.maxFinalHistoryMessages;
     if (limit <= 0 || history.length <= limit) return history;
     final trimmed = history.sublist(history.length - limit);
-    _log(
-      'final history trimmed from ${history.length} to ${trimmed.length} '
-      '(limit=$limit)',
-    );
     return trimmed;
   }
 
@@ -1292,7 +1225,7 @@ Rules:
     final fallback = _safeControllerFallback(agent);
     _log(
       'brief leaked scene prose; replacing agent="${agent.name}" '
-      'chars=${trimmed.length}',
+      'chars=${trimmed.length} first200=${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}',
     );
     return fallback;
   }

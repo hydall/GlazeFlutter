@@ -61,7 +61,7 @@ abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
     @Default('') String sidecarModel,
     @Default('') String sidecarEndpoint,
     @Default('') String sidecarApiKey,
-    @Default(4000) int sidecarTimeoutMs,
+    @Default(60000) int sidecarTimeoutMs,
     @Default(true) bool queryIncludeAssistant,
     @Default(6) int queryRecentTurns,
     @Default(1500) int queryMaxChars,

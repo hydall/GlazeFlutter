@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
@@ -57,6 +58,17 @@ class SidecarLlmClient {
   }) async {
     final isCustom = settings.sidecarSource == 'custom';
     if (isCustom) {
+      if (settings.sidecarEndpoint.isEmpty || settings.sidecarModel.isEmpty) {
+        debugPrint(
+          '[Sidecar] custom config incomplete — endpoint='
+          "'${settings.sidecarEndpoint}' model='${settings.sidecarModel}'",
+        );
+        throw Exception('Sidecar custom config incomplete for $errorLabel');
+      }
+      debugPrint(
+        '[Sidecar] resolved custom for $errorLabel '
+        'model=${settings.sidecarModel}',
+      );
       return SidecarApiConfig(
         endpoint: settings.sidecarEndpoint,
         apiKey: settings.sidecarApiKey,
@@ -68,14 +80,19 @@ class SidecarLlmClient {
     await _ref.read(apiListProvider.future);
     final chatConfig = _ref.read(activeApiConfigProvider);
     if (chatConfig == null) {
+      debugPrint('[Sidecar] no active chat API config for $errorLabel');
       throw Exception('No chat API config available for $errorLabel');
     }
     final model = settings.sidecarModel.isNotEmpty
         ? settings.sidecarModel
-        : (chatConfig.model ?? '');
+        : chatConfig.model;
+    debugPrint(
+      '[Sidecar] resolved chat-fallback for $errorLabel '
+      'model=$model endpoint=${chatConfig.endpoint}',
+    );
     return SidecarApiConfig(
-      endpoint: chatConfig.endpoint ?? '',
-      apiKey: chatConfig.apiKey ?? '',
+      endpoint: chatConfig.endpoint,
+      apiKey: chatConfig.apiKey,
       model: model,
       protocol: chatConfig.protocol,
     );
@@ -100,26 +117,28 @@ class SidecarLlmClient {
     final completer = Completer<String>();
     final transport = pickChatTransport(config.protocol);
 
-    transport.stream(
-      request: ChatTransportRequest(
-        endpoint: config.endpoint,
-        apiKey: config.apiKey,
-        model: config.model,
-        messages: [
-          {'role': 'user', 'content': prompt},
-        ],
-        maxTokens: maxTokens,
-        temperature: temperature,
-        topP: 1.0,
-        stream: false,
+    unawaited(
+      transport.stream(
+        request: ChatTransportRequest(
+          endpoint: config.endpoint,
+          apiKey: config.apiKey,
+          model: config.model,
+          messages: [
+            {'role': 'user', 'content': prompt},
+          ],
+          maxTokens: maxTokens,
+          temperature: temperature,
+          topP: 1.0,
+          stream: false,
+        ),
+        cancelToken: cancelToken,
+        onComplete: (text, _, {rawResponseJson}) {
+          if (!completer.isCompleted) completer.complete(text);
+        },
+        onError: (error) {
+          if (!completer.isCompleted) completer.completeError(error);
+        },
       ),
-      cancelToken: cancelToken,
-      onComplete: (text, _, {rawResponseJson}) {
-        if (!completer.isCompleted) completer.complete(text);
-      },
-      onError: (error) {
-        if (!completer.isCompleted) completer.completeError(error);
-      },
     );
 
     return completer.future.timeout(Duration(milliseconds: timeoutMs));

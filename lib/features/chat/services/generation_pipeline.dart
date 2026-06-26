@@ -511,15 +511,31 @@ class GenerationPipeline {
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
+      debugPrint(
+        '[AgenticWrite] starting write-loop session=$sessionId '
+        'model=${book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel} '
+        'timeoutMs=${book.settings.sidecarTimeoutMs} '
+        'existingTrackers=${trackers.length} '
+        'historyChars=${recentHistory.length}',
+      );
+
       final agenticService = ref.read(memoryAgenticWriteServiceProvider);
-      await agenticService.runWriteLoop(
+      final result = await agenticService.runWriteLoop(
         sessionId: sessionId,
         settings: book.settings,
         recentHistoryText: recentHistory,
         currentTrackers: trackers,
       );
+
+      debugPrint(
+        '[AgenticWrite] result session=$sessionId status=${result.status} '
+        'trackersWritten=${result.trackerResult?.written ?? 0} '
+        'trackersDenied=${result.trackerResult?.denied ?? 0} '
+        'memoriesWritten=${result.memoryResult?.written ?? 0} '
+        'error=${result.error ?? "none"}',
+      );
     } catch (e) {
-      debugPrint('[GenerationPipeline] agentic write-loop failed: $e');
+      debugPrint('[AgenticWrite] failed session=$sessionId error=$e');
     }
   }
 
@@ -568,9 +584,17 @@ class GenerationPipeline {
             .getBySessionId(sessionId);
         broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
       } catch (e) {
-        debugPrint('[GenerationPipeline] post-cleaner broadcast load failed: $e');
+        debugPrint('[PostCleaner] broadcast load failed session=$sessionId error=$e');
       }
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
+      debugPrint(
+        '[PostCleaner] starting session=$sessionId '
+        'model=${book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel} '
+        'timeoutMs=${book.settings.sidecarTimeoutMs} '
+        'textChars=${lastAssistant.content.length} '
+        'broadcastBlocks=${broadcastBlocks.length}',
+      );
 
       final cleanerService = ref.read(postCleanerServiceProvider);
       final result = await cleanerService.runCleaner(
@@ -581,6 +605,14 @@ class GenerationPipeline {
       );
 
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
+      debugPrint(
+        '[PostCleaner] result session=$sessionId wasCleaned=${result.wasCleaned} '
+        'origChars=${lastAssistant.content.length} '
+        'cleanedChars=${result.cleanedText.length} '
+        'error=${result.error ?? "none"}',
+      );
+
       if (!result.wasCleaned) return;
 
       await cleanerService.applyCleanedText(
@@ -590,7 +622,7 @@ class GenerationPipeline {
         originalText: lastAssistant.content,
       );
     } catch (e) {
-      debugPrint('[GenerationPipeline] post-cleaner failed: $e');
+      debugPrint('[PostCleaner] failed session=$sessionId error=$e');
     }
   }
 }
