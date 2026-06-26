@@ -33,6 +33,7 @@ import '../../presets/preset_list_screen.dart';
 import '../../regex/regex_sheet.dart';
 import '../../settings/api_settings_screen.dart';
 import 'authors_note_sheet.dart';
+import 'agentic_operations_log_dialog.dart';
 import 'drawer_panel_scaffold.dart';
 import 'lorebook_coverage_sheet.dart';
 import 'magic_drawer_models.dart';
@@ -130,6 +131,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       id: 'studio',
       label: 'menu_studio'.tr(),
       icon: Icons.movie_filter_outlined,
+    ),
+    MagicDrawerItemDef(
+      id: 'agent-ops',
+      label: 'Agentic Ops',
+      icon: Icons.smart_toy_outlined,
     ),
   ];
 
@@ -510,6 +516,10 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         widget.onClose?.call();
         if (mounted) await _showStudioMenu();
         return;
+      case 'agent-ops':
+        widget.onClose?.call();
+        if (mounted) await _showAgentOpsLog();
+        return;
     }
   }
 
@@ -523,6 +533,14 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         charId: widget.charId,
         sessionId: session.id,
       ),
+    );
+  }
+
+  Future<void> _showAgentOpsLog() async {
+    final session = ref.read(chatProvider(widget.charId)).value?.session;
+    await AgenticOperationsLogDialog.show(
+      context,
+      sessionId: session?.id,
     );
   }
 

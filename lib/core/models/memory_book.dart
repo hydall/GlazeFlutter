@@ -111,7 +111,7 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default('') String sidecarModel,
     @Default('') String sidecarEndpoint,
     @Default('') String sidecarApiKey,
-    @Default(4000) int sidecarTimeoutMs,
+    @Default(60000) int sidecarTimeoutMs,
     @Default(true) bool queryIncludeAssistant,
     @Default(6) int queryRecentTurns,
     @Default(1500) int queryMaxChars,
@@ -123,6 +123,19 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default('') String consolidationEndpoint,
     @Default('') String consolidationApiKey,
     @Default(4000) int consolidationTimeoutMs,
+    /// Enables the agentic write-loop: after a turn is finalized, the memory
+    /// agent may write trackers and memory drafts via sidecar JSON. Off by
+    /// default — the agent runs read-only (searchMemory only) unless this is
+    /// explicitly enabled. See docs/PLAN_AGENTIC_STUDIO.md Stage 1.
+    @Default(false) bool agenticWriteEnabled,
+    /// Enables the POST-cleaner: after generation, a sidecar LLM call
+    /// rewrites the final assistant message to remove clichés and repetition.
+    /// The original text is preserved as a swipe; the cleaned version replaces
+    /// the active text. Falls back to original on error. See
+    /// docs/PLAN_AGENTIC_STUDIO.md Stage 4.
+    @Default(false) bool postCleanerEnabled,
+    @Default(0.3) double postCleanerTemperature,
+    @Default(0) int postCleanerMaxTokens,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>

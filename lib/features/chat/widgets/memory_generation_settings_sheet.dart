@@ -1438,6 +1438,7 @@ String _migrateInjectionTarget(String raw) {
 String _normalizeMemoryMode(String raw) {
   if (raw == 'deep') return 'deep';
   if (raw == 'legacy') return 'legacy';
+  if (raw == 'agentic') return 'agentic';
   return raw == 'balanced' ? 'balanced' : 'fast';
 }
 

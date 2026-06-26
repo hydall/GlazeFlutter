@@ -122,6 +122,181 @@ class ChatRepo implements SyncChatStore {
     )..where((t) => t.sessionId.equals(sessionId))).go();
   }
 
+  /// Atomically updates a single message's content and appends a new swipe.
+  ///
+  /// Used by the POST-cleaner (Stage 4) to replace the assistant text while
+  /// preserving the original as a swipe. Wraps the read-modify-write in a
+  /// transaction so concurrent writes cannot interleave (database.md Rule 3).
+  ///
+  /// [messageId] — the message to update.
+  /// [newContent] — the cleaned text that becomes the active content.
+  /// [previousContent] — the original text, appended as the last swipe.
+  /// Returns `true` if the message was found and updated.
+  Future<bool> appendSwipeToMessage({
+    required String sessionId,
+    required String messageId,
+    required String newContent,
+    required String previousContent,
+  }) async {
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.chatSessions)
+            ..where((t) => t.sessionId.equals(sessionId)))
+          .getSingleOrNull();
+      if (row == null) return false;
+
+      final messages = (jsonDecode(row.messagesJson) as List<dynamic>)
+          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      var found = false;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].id == messageId) {
+          final msg = messages[i];
+          final swipes = List<String>.from(msg.swipes);
+          // Preserve original as previous swipe, add cleaned as new swipe.
+          if (swipes.isNotEmpty) {
+            swipes[swipes.length - 1] = previousContent;
+          }
+          swipes.add(newContent);
+          messages[i] = msg.copyWith(
+            content: newContent,
+            swipes: swipes,
+            swipeId: swipes.length - 1,
+          );
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) return false;
+
+      await (_db.update(_db.chatSessions)
+            ..where((t) => t.sessionId.equals(sessionId)))
+          .write(
+        ChatSessionsCompanion(
+          messagesJson:
+              Value(jsonEncode(messages.map((e) => e.toJson()).toList())),
+        ),
+      );
+      return true;
+    });
+  }
+
+  /// Atomically appends an agent sub-swipe (blue icon) to a message's
+  /// `agentSwipes[]` without touching the legacy `swipes[]` (green icons).
+  ///
+  /// Used by:
+  /// - POST-cleaner → `kind: 'cleaned'`
+  /// - Final-agent regen → `kind: 'final'`
+  ///
+  /// If `agentSwipes` is empty and `kind == 'cleaned'`, a synthetic
+  /// `'final'` swipe is backfilled from the current message content so the
+  /// cleaner output always has a parent (handles old messages that predate
+  /// nested swipes — lazy migration).
+  ///
+  /// Updates `content` and `agentSwipeId` to point at the new swipe.
+  /// Wraps the read-modify-write in a transaction (database.md Rule 3).
+  Future<bool> appendAgentSwipe({
+    required String sessionId,
+    required String messageId,
+    required String content,
+    required String kind,
+    String? reasoning,
+    String? genTime,
+    int? tokens,
+    List<Map<String, dynamic>> studioOutputs = const [],
+  }) async {
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.chatSessions)
+            ..where((t) => t.sessionId.equals(sessionId)))
+          .getSingleOrNull();
+      if (row == null) return false;
+
+      final messages = (jsonDecode(row.messagesJson) as List<dynamic>)
+          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      var found = false;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].id == messageId) {
+          final msg = messages[i];
+          final agentSwipes = List<AgentSwipe>.from(msg.agentSwipes);
+
+          // Lazy migration: if agentSwipes is empty and we're adding a
+          // 'cleaned' swipe, backfill a 'final' from the current content.
+          if (agentSwipes.isEmpty && kind == 'cleaned') {
+            agentSwipes.add(AgentSwipe(
+              content: msg.content,
+              kind: 'final',
+              reasoning: msg.reasoning,
+              genTime: msg.genTime,
+              tokens: msg.tokens,
+              studioOutputs: msg.studioOutputs,
+            ));
+          }
+
+          final parentSwipeId = kind == 'cleaned' && agentSwipes.isNotEmpty
+              ? agentSwipes.length - 1
+              : null;
+
+          agentSwipes.add(AgentSwipe(
+            content: content,
+            kind: kind,
+            reasoning: reasoning,
+            genTime: genTime,
+            tokens: tokens,
+            studioOutputs: studioOutputs,
+            parentSwipeId: parentSwipeId,
+          ));
+
+          messages[i] = msg.copyWith(
+            content: content,
+            agentSwipes: agentSwipes,
+            agentSwipeId: agentSwipes.length - 1,
+            swipesMeta: _syncAgentSwipesToMeta(msg.swipesMeta, msg.swipeId, agentSwipes, agentSwipes.length - 1),
+          );
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) return false;
+
+      await (_db.update(_db.chatSessions)
+            ..where((t) => t.sessionId.equals(sessionId)))
+          .write(
+        ChatSessionsCompanion(
+          messagesJson:
+              Value(jsonEncode(messages.map((e) => e.toJson()).toList())),
+        ),
+      );
+      return true;
+    });
+  }
+
+  /// Sync [agentSwipes] + [agentSwipeId] into `swipesMeta[swipeId]` so that
+  /// green-swipe round-trips preserve agent swipes even without an explicit
+  /// `setSwipe` navigation-away. This eliminates the dual-storage mismatch
+  /// where `appendAgentSwipe` wrote only the top-level field.
+  static List<Map<String, dynamic>> _syncAgentSwipesToMeta(
+    List<Map<String, dynamic>> swipesMeta,
+    int swipeId,
+    List<AgentSwipe> agentSwipes,
+    int agentSwipeId,
+  ) {
+    if (swipeId < 0) return swipesMeta;
+    final meta = List<Map<String, dynamic>>.from(swipesMeta);
+    while (meta.length <= swipeId) {
+      meta.add(<String, dynamic>{});
+    }
+    meta[swipeId] = {
+      ...meta[swipeId],
+      'agentSwipes': agentSwipes.map((e) => e.toJson()).toList(),
+      'agentSwipeId': agentSwipeId,
+    };
+    return meta;
+  }
+
   /// Deletes all sessions belonging to [characterId], along with all per-session
   /// dependent data (memory books, summaries). Returns the deleted session IDs
   /// for sync-deletion tracking.
@@ -133,6 +308,9 @@ class ChatRepo implements SyncChatStore {
 
     if (ids.isNotEmpty) {
       await (_db.delete(_db.memoryBookRows)
+            ..where((t) => t.sessionId.isIn(ids)))
+          .go();
+      await (_db.delete(_db.trackerRows)
             ..where((t) => t.sessionId.isIn(ids)))
           .go();
       await (_db.delete(_db.chatSummaries)

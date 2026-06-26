@@ -39,6 +39,8 @@ final studioRuntimeStateProvider = StateProvider<StudioRuntimeState>(
 );
 
 const _mandatoryBlockIds = {'char_card', 'char_personality', 'user_persona'};
+const _studioAgentStartDelay = Duration(seconds: 2);
+const _studioMetaPolicyAgentName = 'Meta-Weaver / Lumia Policy';
 
 class StudioRuntimeState {
   final String? sessionId;
@@ -103,36 +105,26 @@ class MemoryStudioService {
   void finishCurrentAgent() {
     final completer = _finishCurrentAgent;
     if (completer == null || completer.isCompleted) {
-      _log('finish current agent ignored: no active agent');
       return;
     }
-    _log('finish current agent requested');
     completer.complete();
   }
 
   Future<StudioConfig?> getEnabledConfig(String sessionId) async {
-    _log('load config session=$sessionId');
     final config = await _ref
         .read(studioConfigRepoProvider)
         .getBySessionId(sessionId);
     if (config == null) {
-      _log('config missing session=$sessionId');
       return null;
     }
     if (!config.enabled) {
-      _log('config disabled session=$sessionId agents=${config.agents.length}');
       return null;
     }
     final enabledAgents = config.agents.where((a) => a.enabled).toList()
       ..sort((a, b) => a.order.compareTo(b.order));
     if (enabledAgents.isEmpty) {
-      _log('config has no enabled agents session=$sessionId');
       return null;
     }
-    _log(
-      'config enabled session=$sessionId agents=${enabledAgents.length} '
-      'runApi=${config.runApiConfigId.isEmpty ? '<active>' : config.runApiConfigId}',
-    );
     return config.copyWith(agents: enabledAgents);
   }
 
@@ -155,19 +147,13 @@ class MemoryStudioService {
       final agents = config.agents.where((a) => a.enabled).toList()
         ..sort((a, b) => a.order.compareTo(b.order));
       if (agents.isEmpty) {
-        _log('pipeline disabled: no enabled agents session=$sessionId');
         return const StudioPipelineResult(status: 'disabled', response: '');
       }
 
-      _log(
-        'pipeline start session=$sessionId agents=${agents.length} '
-        'messages=${promptResult.messages.length}',
-      );
       _ref.read(studioStreamingOutputsProvider(sessionId).notifier).state =
           const [];
 
       if (token.isCancelled) {
-        _log('pipeline aborted before agents session=$sessionId');
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
@@ -194,7 +180,7 @@ class MemoryStudioService {
           ? <StudioStageBrief>[]
           : await Future.wait([
               for (var i = 0; i < intermediateAgents.length; i++)
-                _runIntermediateAgentWithCache(
+                _runStaggeredIntermediateAgent(
                   index: i,
                   agent: intermediateAgents[i],
                   promptResult: promptResult,
@@ -208,8 +194,26 @@ class MemoryStudioService {
                 ),
             ]);
       if (token.isCancelled) {
-        _log('pipeline aborted after intermediate agents session=$sessionId');
         return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+
+      // Check if any intermediate agents failed. If so, do NOT run the
+      // final agent — the user must regenerate the failed agents first,
+      // then explicitly send to the final model.
+      final hasErrors = briefs.any((b) => b.status == 'error');
+      if (hasErrors) {
+        _ref.read(studioRuntimeStateProvider.notifier).state =
+            const StudioRuntimeState.idle();
+        final errorAgents = briefs
+            .where((b) => b.status == 'error')
+            .map((b) => b.agentName)
+            .join(', ');
+        return StudioPipelineResult(
+          status: 'agent_errors',
+          response: '',
+          stageBriefs: briefs,
+          error: 'Studio agents failed: $errorAgents',
+        );
       }
 
       _ref.read(studioRuntimeStateProvider.notifier).state = StudioRuntimeState(
@@ -233,15 +237,9 @@ class MemoryStudioService {
         onFinalResponseUpdate: onFinalResponseUpdate,
       );
       if (token.isCancelled) {
-        _log('pipeline aborted after final agent session=$sessionId');
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
-      _log(
-        'pipeline complete session=$sessionId finalAgent="${finalAgent.name}" '
-        'chars=${agentResult.text.length} reasoning=${agentResult.reasoning.length} '
-        'briefs=${briefs.length}',
-      );
       return StudioPipelineResult(
         status: 'ok',
         response: agentResult.text,
@@ -258,7 +256,6 @@ class MemoryStudioService {
       );
     } catch (e) {
       if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
-        _log('pipeline aborted by cancel session=$sessionId');
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
       _log('pipeline error session=$sessionId error=$e');
@@ -268,6 +265,41 @@ class MemoryStudioService {
       _ref.read(studioRuntimeStateProvider.notifier).state =
           const StudioRuntimeState.idle();
     }
+  }
+
+  Future<StudioStageBrief> _runStaggeredIntermediateAgent({
+    required int index,
+    required StudioAgent agent,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required StudioConfig config,
+    required String sessionId,
+    required CancelToken cancelToken,
+    required String sceneKey,
+    required int turnIndex,
+  }) async {
+    if (index > 0) {
+      await Future<void>.delayed(_studioAgentStartDelay * index);
+      if (cancelToken.isCancelled) {
+        throw DioException.requestCancelled(
+          requestOptions: RequestOptions(),
+          reason: 'Studio pipeline cancelled before agent start',
+        );
+      }
+    }
+    return _runIntermediateAgentWithCache(
+      index: index,
+      agent: agent,
+      promptResult: promptResult,
+      promptPayload: promptPayload,
+      apiConfig: apiConfig,
+      config: config,
+      sessionId: sessionId,
+      cancelToken: cancelToken,
+      sceneKey: sceneKey,
+      turnIndex: turnIndex,
+    );
   }
 
   Future<StudioPipelineResult> runFinalAgentOnly({
@@ -338,6 +370,9 @@ class MemoryStudioService {
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
       return StudioPipelineResult(status: 'error', response: '', error: '$e');
+    } finally {
+      _ref.read(studioRuntimeStateProvider.notifier).state =
+          const StudioRuntimeState.idle();
     }
   }
 
@@ -394,6 +429,21 @@ class MemoryStudioService {
       brief: 'Running...',
       status: 'running',
     );
+    if (_isMetaPolicyAgent(agent)) {
+      final brief = _metaPolicyBrief(agent);
+      _updateStreamingBrief(
+        sessionId: sessionId,
+        agent: agent,
+        brief: brief,
+        status: 'ok',
+      );
+      return StudioStageBrief(
+        agentId: agent.id,
+        agentName: agent.name,
+        brief: brief,
+        disposition: MemoryStudioOutputDisposition.ephemeral,
+      );
+    }
     try {
       final result = await _runAgent(
         agent: agent,
@@ -415,20 +465,20 @@ class MemoryStudioService {
           );
         },
       );
+      final sanitizedText = _sanitizeIntermediateAgentOutput(
+        agent,
+        result.text,
+      );
       _updateStreamingBrief(
         sessionId: sessionId,
         agent: agent,
-        brief: result.text,
+        brief: sanitizedText,
         status: 'ok',
-      );
-      _log(
-        'brief stored session=$sessionId agent="${agent.name}" '
-        'index=$index chars=${result.text.length}',
       );
       return StudioStageBrief(
         agentId: agent.id,
         agentName: agent.name,
-        brief: result.text,
+        brief: sanitizedText,
         disposition: MemoryStudioOutputDisposition.ephemeral,
       );
     } catch (e) {
@@ -483,10 +533,14 @@ class MemoryStudioService {
       turnIndex: turnIndex,
     );
     if (cached != null) {
+      final sanitizedCachedBrief = _sanitizeIntermediateAgentOutput(
+        agent,
+        cached.brief,
+      );
       final brief = StudioStageBrief(
         agentId: agent.id,
         agentName: agent.name,
-        brief: cached.brief,
+        brief: sanitizedCachedBrief,
         disposition: MemoryStudioOutputDisposition.ephemeral,
         status: 'cached',
         refreshPolicy: policy,
@@ -496,14 +550,10 @@ class MemoryStudioService {
       _updateStreamingBrief(
         sessionId: sessionId,
         agent: agent,
-        brief: cached.brief,
+        brief: sanitizedCachedBrief,
         status: 'cached',
         refreshPolicy: policy,
         cacheHit: true,
-      );
-      _log(
-        'brief cache hit session=$sessionId agent="${agent.name}" '
-        'policy=$policy index=$index',
       );
       return brief;
     }
@@ -525,10 +575,6 @@ class MemoryStudioService {
         brief: brief.brief,
         policy: policy,
         createdTurnIndex: turnIndex,
-      );
-      _log(
-        'brief cache store session=$sessionId agent="${agent.name}" '
-        'policy=$policy index=$index',
       );
     }
     return brief.copyWithCacheMetadata(
@@ -624,10 +670,6 @@ class MemoryStudioService {
       if (completer.isCompleted) return;
       final text = output.toString().trim();
       final reasoningText = isFinalResponse ? reasoning.toString().trim() : '';
-      _log(
-        'agent finish accumulated session=$sessionId name="${agent.name}" '
-        'reason=$reason chars=${text.length} reasoning=${reasoningText.length}',
-      );
       completer.complete(
         _StudioAgentRunResult(text: text, reasoning: reasoningText),
       );
@@ -648,19 +690,6 @@ class MemoryStudioService {
         }
       });
     }
-
-    final inputChars = requestMessages.fold<int>(
-      0,
-      (sum, m) => sum + (m['content']?.toString().length ?? 0),
-    );
-    _log(
-      'agent start session=$sessionId name="${agent.name}" '
-      'final=$isFinalResponse source=${agent.modelSource} '
-      'protocol=${resolved.protocol} model=${resolved.model} '
-      'messages=${requestMessages.length} inputChars=$inputChars '
-      'stream=$shouldStream maxTokens=${agent.maxTokens} temp=${agent.temperature} '
-      'timeoutMs=$timeoutMs persistedTimeoutMs=${agent.timeoutMs}',
-    );
 
     agentCancelToken = CancelToken();
     unawaited(
@@ -711,7 +740,6 @@ class MemoryStudioService {
           }
         },
         onComplete: (text, finalReasoning, {rawResponseJson}) {
-          final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
           idleTimer?.cancel();
           if (shouldStream && output.isEmpty && text.isNotEmpty) {
             output.write(text);
@@ -736,11 +764,6 @@ class MemoryStudioService {
               onIntermediateUpdate?.call(text.trimLeft());
             }
           }
-          _log(
-            'agent complete session=$sessionId name="${agent.name}" '
-            'elapsedMs=$elapsed chars=${text.trim().length} '
-            'rawJson=${rawResponseJson?.length ?? 0}',
-          );
           if (!completer.isCompleted) {
             final accumulated = output.toString().trim();
             final reasoningText = isFinalResponse
@@ -878,6 +901,22 @@ class MemoryStudioService {
               context: context,
             ).trim(),
           );
+          if (!isFinalResponse) {
+            control
+              ..writeln()
+              ..writeln(_intermediateRuntimeEnvelope(agent));
+          }
+          if (isFinalResponse) {
+            control
+              ..writeln()
+              ..writeln(_finalBriefUsageNote());
+            final styleContract = _finalHardStyleContract(config);
+            if (styleContract.isNotEmpty) {
+              control
+                ..writeln()
+                ..writeln(styleContract);
+            }
+          }
           messages.add({
             'role': _normalizeRole(
               block.role.isNotEmpty ? block.role : agent.role,
@@ -887,8 +926,13 @@ class MemoryStudioService {
           break;
         case 'previous_agents':
           if (!isFinalResponse) break;
+          final sanitized = priorBriefs
+              .where((b) => b.brief.trim().isNotEmpty)
+              .map((b) => _sanitizePriorBriefForFinal(b, config))
+              .toList();
+          final deduped = _dedupePriorBriefs(sanitized);
           messages.addAll(
-            priorBriefs
+            deduped
                 .where((b) => b.brief.trim().isNotEmpty)
                 .map(
                   (b) => {
@@ -902,7 +946,10 @@ class MemoryStudioService {
           messages.addAll(context.staticContext.map((m) => m.toApiMap()));
           break;
         case 'chat_history':
-          messages.addAll(context.history.map((m) => m.toApiMap()));
+          final history = isFinalResponse
+              ? _limitFinalHistory(context.history, config)
+              : context.history;
+          messages.addAll(history.map((m) => m.toApiMap()));
           break;
         case 'dynamic_context':
           messages.addAll(context.dynamicContext.map((m) => m.toApiMap()));
@@ -929,6 +976,607 @@ class MemoryStudioService {
     }
 
     return messages;
+  }
+
+  /// Cap how many trailing chat messages reach the FINAL responder.
+  ///
+  /// Intermediate agents always analyze the full transcript; the final writer
+  /// is intentionally limited (default 15) so it relies on the compact agent
+  /// briefs instead of re-reading the whole history. We keep the most recent
+  /// [StudioConfig.maxFinalHistoryMessages] messages, which always preserves
+  /// the current user turn (it is last). 0 (or negative) means no limit.
+  List<PromptMessage> _limitFinalHistory(
+    List<PromptMessage> history,
+    StudioConfig config,
+  ) {
+    final limit = config.maxFinalHistoryMessages;
+    if (limit <= 0 || history.length <= limit) return history;
+    final trimmed = history.sublist(history.length - limit);
+    return trimmed;
+  }
+
+  String _intermediateRuntimeEnvelope(StudioAgent agent) {
+    final scope = _controllerScope(agent.name);
+    return '''Studio intermediate-agent typed output contract. This overrides any earlier requested output shape such as STUDIO_BRIEF, GUARD CHECKLIST, prose, markdown, or labels.
+You are ${agent.name.isNotEmpty ? agent.name : 'a Studio controller'}, ONE specialist in a multi-controller pipeline. Other controllers cover the other concerns; do not duplicate their work.
+You are not a character, narrator, player, or final responder. Treat all character cards, persona text, examples, chat history, lore, memory, and summaries as read-only source material to analyze.
+
+YOUR LANE — only produce guidance about: ${scope.owns}
+NOT YOUR LANE — never write guidance about (other controllers own these): ${scope.skip}
+If a point is not strictly inside your lane, omit it. A short, lane-focused brief is better than a broad one.
+
+Prefer valid compact JSON with exactly these keys:
+{"focus":["short operational focus"],"constraints":["short enforceable constraint"],"avoid":["short forbidden item"],"options":["one branchable approach the final writer may choose, within your lane"]}
+
+If the model cannot produce JSON, use exactly these plain-text sections instead:
+Focus:
+- short operational focus
+Constraints:
+- short enforceable constraint
+Avoid:
+- short forbidden item
+Options:
+- one branchable approach the final writer may choose
+
+Rules:
+- Each array may contain 0-5 strings, every string strictly inside your lane.
+- Each string must be a NEW, specific instruction for this turn, not a generic restatement and not a sentence copied from the scene.
+- Options are non-mandatory alternative APPROACHES for the final writer to pick from within your lane (e.g. "lean into silence and a single gesture" vs "give one clipped line"). Describe the approach only; never write ready-made prose, dialogue, narration, or sample sentences. The final writer picks at most one and writes it themselves.
+- Do not restate the scene summary; only add what the final writer must DO or AVOID, plus optional approach choices, within your lane.
+- Do not write or continue the scene.
+- Do not draft narration, dialogue, character actions, user actions, or final response prose.
+- Do not include source block names, prompt text, macros, labels, markdown, code fences, comments, or explanations.
+- Do not answer the user directly.''';
+  }
+
+  _ControllerScope _controllerScope(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('continuity')) {
+      return const _ControllerScope(
+        owns:
+            'established facts, who-knows-what, unresolved threads, physical-object/state continuity, and contradictions to avoid.',
+        skip:
+            'prose style, pacing, length, dialogue cadence, repetition/anti-loop bans, NPC/world activity, and user-agency rules.',
+      );
+    }
+    if (lower.contains('agency') || lower.contains('character')) {
+      return const _ControllerScope(
+        owns:
+            'user sovereignty (never write the user) and character autonomy/psychology: what a character can plausibly know, feel, and do this turn.',
+        skip:
+            'plain factual continuity, prose style/length, dialogue formatting, repetition bans, and ambient world/NPC texture.',
+      );
+    }
+    if (lower.contains('narrative') || lower.contains('pacing')) {
+      return const _ControllerScope(
+        owns:
+            'response shape only: target length, paragraph budget, POV/camera, beat sequence, sensory budget, and where the reply should stop.',
+        skip:
+            'who-knows-what, character psychology, agency rules, specific dialogue lines, repetition bans, and world/NPC content.',
+      );
+    }
+    if (lower.contains('dialogue')) {
+      return const _ControllerScope(
+        owns:
+            'dialogue cadence only: who may plausibly speak, speech ratio, silence, and quoting/formatting of speech.',
+        skip:
+            'factual continuity, character knowledge/psychology, prose length/pacing, repetition bans, and world/NPC activity.',
+      );
+    }
+    if (lower.contains('guard') || lower.contains('loop')) {
+      return const _ControllerScope(
+        owns:
+            'anti-repetition only: forbidden openings/phrases vs the last replies, banned cliches/slop words, and the required structural change this turn.',
+        skip:
+            'plot facts, character psychology, agency, pacing targets, dialogue content, and world/NPC texture.',
+      );
+    }
+    if (lower.contains('world') || lower.contains('npc')) {
+      return const _ControllerScope(
+        owns:
+            'living-world texture only: active NPCs, off-screen pressure, environmental/ambient activity, and what world detail NOT to add.',
+        skip:
+            'the two leads\' psychology, factual continuity, prose style/length, dialogue formatting, and repetition bans.',
+      );
+    }
+    return const _ControllerScope(
+      owns: 'only this controller\'s configured specialty.',
+      skip: 'concerns that belong to the other Studio controllers.',
+    );
+  }
+
+  /// Remove cross-controller duplicate bullet points before sending briefs to
+  /// the final responder. The first controller to mention a point keeps it;
+  /// later controllers drop the duplicate so the final prompt does not repeat
+  /// the same instruction many times (which over-weights it and produces
+  /// repetitive replies). Meta briefs are passed through unchanged.
+  List<StudioStageBrief> _dedupePriorBriefs(List<StudioStageBrief> briefs) {
+    final seen = <String>{};
+    final result = <StudioStageBrief>[];
+    for (final brief in briefs) {
+      if (_isMetaBriefName(brief.agentName)) {
+        result.add(brief);
+        continue;
+      }
+      final deduped = _dedupeBriefBody(brief.brief, seen);
+      result.add(
+        StudioStageBrief(
+          agentId: brief.agentId,
+          agentName: brief.agentName,
+          brief: deduped,
+          disposition: brief.disposition,
+          status: brief.status,
+          error: brief.error,
+          refreshPolicy: brief.refreshPolicy,
+          cacheKey: brief.cacheKey,
+          cacheHit: brief.cacheHit,
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// Walk the Focus/Constraints/Avoid sections of one brief, dropping any
+  /// bullet whose normalized form was already emitted by an earlier brief.
+  /// Empty sections are removed. [seen] accumulates across briefs.
+  String _dedupeBriefBody(String brief, Set<String> seen) {
+    final lines = brief.split('\n');
+    final out = <String>[];
+    var currentHeading = '';
+    final pendingHeadingItems = <String>[];
+
+    void flushHeading() {
+      if (currentHeading.isEmpty) return;
+      if (pendingHeadingItems.isNotEmpty) {
+        out.add(currentHeading);
+        out.addAll(pendingHeadingItems);
+      }
+      currentHeading = '';
+      pendingHeadingItems.clear();
+    }
+
+    for (final rawLine in lines) {
+      final line = rawLine.trimRight();
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final heading = _studioBriefHeading(trimmed);
+      if (heading != null) {
+        flushHeading();
+        currentHeading = line;
+        continue;
+      }
+      final item = _cleanBriefItem(trimmed);
+      if (item == null) {
+        // Non-bullet line outside a known section; keep verbatim once.
+        final key = 'raw:${_dedupeKey(trimmed)}';
+        if (seen.add(key)) {
+          if (currentHeading.isNotEmpty) {
+            pendingHeadingItems.add(line);
+          } else {
+            out.add(line);
+          }
+        }
+        continue;
+      }
+      final key = _dedupeKey(item);
+      if (!seen.add(key)) continue;
+      pendingHeadingItems.add('- $item');
+    }
+    flushHeading();
+    return out.join('\n').trim();
+  }
+
+  String _dedupeKey(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9а-яё ]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  bool _isMetaPolicyAgent(StudioAgent agent) {
+    final text = '${agent.id}\n${agent.name}\n${agent.sourceBlockNames}'
+        .toLowerCase();
+    return text.contains('meta-weaver') ||
+        text.contains('lumia') ||
+        text.contains('ghost in the machine');
+  }
+
+  String _metaPolicyBrief(StudioAgent agent) {
+    final buffer = StringBuffer()
+      ..writeln('Meta policy:')
+      ..writeln('- Silent during normal in-character roleplay.')
+      ..writeln('- Never write scene prose, dialogue, actions, or narration.')
+      ..writeln('- Do not draft or continue the assistant reply.')
+      ..writeln(
+        '- Apply only as hidden policy for continuity, tone, and OOC routing.',
+      )
+      ..writeln(
+        '- If the user explicitly addresses OOC/Lumia/meta, answer as an OOC interface; otherwise stay invisible.',
+      );
+    return buffer.toString().trim();
+  }
+
+  StudioStageBrief _sanitizePriorBriefForFinal(
+    StudioStageBrief brief,
+    StudioConfig config,
+  ) {
+    if (!_isMetaBriefName(brief.agentName)) {
+      final agent = _agentForBrief(brief, config);
+      return StudioStageBrief(
+        agentId: brief.agentId,
+        agentName: brief.agentName,
+        brief: _sanitizeIntermediateAgentOutput(agent, brief.brief),
+        disposition: brief.disposition,
+        status: brief.status,
+        error: brief.error,
+        refreshPolicy: brief.refreshPolicy,
+        cacheKey: brief.cacheKey,
+        cacheHit: brief.cacheHit,
+      );
+    }
+    return StudioStageBrief(
+      agentId: brief.agentId,
+      agentName: brief.agentName,
+      brief: _sanitizeMetaBrief(brief.brief),
+      disposition: brief.disposition,
+      status: brief.status,
+      error: brief.error,
+      refreshPolicy: brief.refreshPolicy,
+      cacheKey: brief.cacheKey,
+      cacheHit: brief.cacheHit,
+    );
+  }
+
+  StudioAgent _agentForBrief(StudioStageBrief brief, StudioConfig config) {
+    return config.agents.firstWhere(
+      (agent) => agent.id == brief.agentId || agent.name == brief.agentName,
+      orElse: () => StudioAgent(id: brief.agentId, name: brief.agentName),
+    );
+  }
+
+  String _sanitizeIntermediateAgentOutput(StudioAgent agent, String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return trimmed;
+    if (_isMetaBriefName(agent.name)) return _sanitizeMetaBrief(trimmed);
+    final typed = _typedStudioBrief(agent, trimmed);
+    if (typed != null) return typed;
+    final sectioned = _sectionStudioBrief(trimmed);
+    if (sectioned != null) return sectioned;
+
+    final fallback = _safeControllerFallback(agent);
+    _log(
+      'brief leaked scene prose; replacing agent="${agent.name}" '
+      'chars=${trimmed.length} first200=${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}',
+    );
+    return fallback;
+  }
+
+  String? _typedStudioBrief(StudioAgent agent, String text) {
+    final raw = _extractJsonObject(text);
+    if (raw == null) return null;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } catch (_) {
+      return null;
+    }
+    if (decoded is! Map) return null;
+    final focus = _safeJsonStringList(decoded['focus']);
+    final constraints = _safeJsonStringList(decoded['constraints']);
+    final avoid = _safeJsonStringList(decoded['avoid']);
+    final options = _safeJsonStringList(decoded['options']);
+    final all = [...focus, ...constraints, ...avoid, ...options];
+    if (all.isEmpty) {
+      _log(
+        'brief typed-JSON all items rejected agent="${agent.name}" '
+        'focus=${(decoded['focus'] as List?)?.length ?? 0} '
+        'constraints=${(decoded['constraints'] as List?)?.length ?? 0} '
+        'avoid=${(decoded['avoid'] as List?)?.length ?? 0} '
+        'options=${(decoded['options'] as List?)?.length ?? 0}',
+      );
+      return null;
+    }
+
+    return _buildStudioBrief(
+      focus: focus,
+      constraints: constraints,
+      avoid: avoid,
+      options: options,
+    );
+  }
+
+  String? _sectionStudioBrief(String text) {
+    if (_looksLikeSceneProse(text)) return null;
+    final focus = <String>[];
+    final constraints = <String>[];
+    final avoid = <String>[];
+    final options = <String>[];
+    var section = '';
+
+    for (final rawLine in text.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+      final heading = _studioBriefHeading(line);
+      if (heading != null) {
+        section = heading;
+        continue;
+      }
+      if (section.isEmpty) continue;
+      final cleaned = _cleanBriefItem(line);
+      if (cleaned == null) continue;
+      final target = switch (section) {
+        'focus' => focus,
+        'avoid' => avoid,
+        'options' => options,
+        _ => constraints,
+      };
+      if (target.any(
+        (existing) => existing.toLowerCase() == cleaned.toLowerCase(),
+      )) {
+        continue;
+      }
+      target.add(cleaned);
+      if (target.length >= 6) section = '';
+    }
+
+    if ([...focus, ...constraints, ...avoid, ...options].isEmpty) return null;
+    return _buildStudioBrief(
+      focus: focus,
+      constraints: constraints,
+      avoid: avoid,
+      options: options,
+    );
+  }
+
+  String? _studioBriefHeading(String line) {
+    final normalized = line
+        .toLowerCase()
+        .replaceAll(RegExp(r'^#+\s*'), '')
+        .replaceAll(RegExp(r'[:：]+$'), '')
+        .trim();
+    if (normalized == 'focus' || normalized == 'фокус') return 'focus';
+    if (normalized == 'constraints' ||
+        normalized == 'constraint' ||
+        normalized == 'guard checklist' ||
+        normalized == 'checklist' ||
+        normalized == 'rules' ||
+        normalized == 'ограничения' ||
+        normalized == 'правила') {
+      return 'constraints';
+    }
+    if (normalized == 'avoid' ||
+        normalized == 'forbidden' ||
+        normalized == 'forbidden this turn' ||
+        normalized == 'do not' ||
+        normalized == 'избегать' ||
+        normalized == 'запреты') {
+      return 'avoid';
+    }
+    if (normalized == 'options' ||
+        normalized == 'option' ||
+        normalized == 'approaches' ||
+        normalized == 'choices' ||
+        normalized == 'варианты' ||
+        normalized == 'подходы' ||
+        normalized == 'на выбор') {
+      return 'options';
+    }
+    return null;
+  }
+
+  String _buildStudioBrief({
+    required List<String> focus,
+    required List<String> constraints,
+    required List<String> avoid,
+    List<String> options = const [],
+  }) {
+    final buffer = StringBuffer();
+    void writeSection(String title, List<String> items) {
+      if (items.isEmpty) return;
+      buffer.writeln(title);
+      for (final item in items) {
+        buffer.writeln('- $item');
+      }
+    }
+
+    writeSection('Focus:', focus);
+    writeSection('Constraints:', constraints);
+    writeSection('Avoid:', avoid);
+    writeSection('Options:', options);
+    return buffer.toString().trim();
+  }
+
+  String? _extractJsonObject(String text) {
+    var trimmed = text.trim();
+    final fenced = RegExp(
+      r'^```(?:json)?\s*([\s\S]*?)\s*```$',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (fenced != null) trimmed = fenced.group(1)?.trim() ?? trimmed;
+    final start = trimmed.indexOf('{');
+    final end = trimmed.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    return trimmed.substring(start, end + 1);
+  }
+
+  List<String> _safeJsonStringList(Object? value) {
+    if (value is String) return _safeJsonStringList([value]);
+    if (value is! List) return const [];
+    final result = <String>[];
+    for (final item in value) {
+      if (item is! String) continue;
+      final cleaned = _cleanBriefItem(item);
+      if (cleaned == null) continue;
+      if (result.any(
+        (existing) => existing.toLowerCase() == cleaned.toLowerCase(),
+      )) {
+        continue;
+      }
+      result.add(cleaned);
+      if (result.length >= 6) break;
+    }
+    return result;
+  }
+
+  String? _cleanBriefItem(String item) {
+    final cleaned = item
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'^[-*•\d.\s]+'), '')
+        .trim();
+    if (cleaned.isEmpty || cleaned.length > 350) return null;
+    if (cleaned.contains('{{') || cleaned.contains('}}')) return null;
+    if (cleaned.contains('<think>') || cleaned.contains('</think>')) {
+      return null;
+    }
+    if (RegExp(
+      r'\b(source blocks?|promptShard|controller instruction|system prompt)\b',
+      caseSensitive: false,
+    ).hasMatch(cleaned)) {
+      return null;
+    }
+    if (_looksLikeSceneProse(cleaned)) return null;
+    return cleaned;
+  }
+
+  bool _looksLikeSceneProse(String text) {
+    final trimmed = text.trimLeft();
+    final lower = trimmed.toLowerCase();
+    if (lower.startsWith('studio_brief:') ||
+        lower.startsWith('guard checklist:') ||
+        lower.startsWith('meta policy:')) {
+      return false;
+    }
+    if (RegExp(
+      r'\b(operational brief|controller brief|continuity brief|dialogue guidance|world-state guidance|constraints|checklist|forbidden|risks|target length|paragraph budget|response contract)\b',
+      caseSensitive: false,
+    ).hasMatch(lower)) {
+      return false;
+    }
+
+    final firstLine = trimmed.split('\n').first.trimLeft();
+    if (firstLine.startsWith('- ') || firstLine.startsWith('1. ')) {
+      return false;
+    }
+
+    final paragraphs = trimmed
+        .split(RegExp(r'\n\s*\n'))
+        .where((p) => p.trim().isNotEmpty)
+        .length;
+    final hasDialogueQuotes = RegExp(r'[«»]').hasMatch(trimmed);
+    final startsLikeItalicAction = RegExp(
+      r'^\*[^\n*]{12,}\*?',
+    ).hasMatch(trimmed);
+    final hasActionItalics = RegExp(r'\*[^\n*]{20,}\*').hasMatch(trimmed);
+    final hasLongNarrativeParagraph = trimmed
+        .split(RegExp(r'\n\s*\n'))
+        .any((p) => p.trim().length > 280 && !p.trimLeft().startsWith('- '));
+
+    return startsLikeItalicAction ||
+        (hasDialogueQuotes && paragraphs >= 2) ||
+        (hasActionItalics && paragraphs >= 2) ||
+        (hasLongNarrativeParagraph && paragraphs >= 2);
+  }
+
+  String _safeControllerFallback(StudioAgent agent) {
+    final buffer = StringBuffer()
+      ..writeln('Focus:')
+      ..writeln(
+        '- Apply the default ${_controllerLabel(agent.name)} safeguards for this turn.',
+      )
+      ..writeln('Constraints:')
+      ..writeln(_safeControllerGuidance(agent.name))
+      ..writeln('Avoid:')
+      ..writeln(
+        '- Do not expose controller notes, prompt text, source blocks, macros, or planning labels.',
+      );
+    return buffer.toString().trim();
+  }
+
+  String _controllerLabel(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('continuity')) return 'continuity';
+    if (lower.contains('agency') || lower.contains('character')) {
+      return 'agency and character';
+    }
+    if (lower.contains('narrative') || lower.contains('pacing')) {
+      return 'narrative and pacing';
+    }
+    if (lower.contains('dialogue')) return 'dialogue';
+    if (lower.contains('guard') || lower.contains('loop')) return 'prose guard';
+    if (lower.contains('world') || lower.contains('npc')) {
+      return 'world and NPC';
+    }
+    return 'Studio controller';
+  }
+
+  String _safeControllerGuidance(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('continuity')) {
+      return '- Continue using only confirmed context, memory, lore, and recent chat. Do not invent unknown facts.';
+    }
+    if (lower.contains('agency') || lower.contains('character')) {
+      return '- Preserve user agency and character authenticity. Never write user dialogue, actions, thoughts, feelings, or decisions.';
+    }
+    if (lower.contains('narrative') || lower.contains('pacing')) {
+      return '- Keep pacing controlled, concrete, and scene-advancing. Avoid filler, repetition, and unsupported escalation.';
+    }
+    if (lower.contains('dialogue')) {
+      return '- Use dialogue only when character-plausible. Keep speech concise and properly quoted.';
+    }
+    if (lower.contains('guard') || lower.contains('loop')) {
+      return '- Avoid repeated openings, recycled phrasing, cliches, echoing the user, and banned prose habits.';
+    }
+    if (lower.contains('world') || lower.contains('npc')) {
+      return '- Add world/NPC activity only when supported by the scene and never let it steal focus.';
+    }
+    return '- Apply this controller only as hidden operational guidance.';
+  }
+
+  bool _isMetaBriefName(String name) {
+    final lower = name.toLowerCase();
+    return lower.contains('meta-weaver') || lower.contains('lumia');
+  }
+
+  String _sanitizeMetaBrief(String brief) {
+    final lower = brief.toLowerCase();
+    if (lower.contains('meta policy:') &&
+        lower.contains('never write scene prose')) {
+      return brief;
+    }
+    return _metaPolicyBrief(
+      const StudioAgent(id: 'meta_sanitized', name: _studioMetaPolicyAgentName),
+    );
+  }
+
+  String _finalBriefUsageNote() {
+    return 'How to use the Studio controller briefs above: the controllers have ALREADY analyzed the scene, tracked continuity, and decided what should happen next. Do NOT re-analyze the scene, re-derive character motivations, or plan the beat structure in your reasoning — that work is done. Your only job is to WRITE the prose that implements their direction.\n\nTreat Focus and Constraints as binding direction and Avoid as hard prohibitions. Any "Options:" items are non-binding alternative approaches — choose at most one per brief (or none) that best fits the moment, then write it in your own words. Do not list, mention, or copy the options or any brief text in your reply; weave the chosen direction into natural in-scene prose.\n\nKeep your reasoning SHORT — a few sentences at most confirming which option you picked and any immediate sensory/structural choices. Do NOT draft full prose in reasoning, do NOT re-check constraints line-by-line, do NOT restate the briefs. Write the final prose directly.';
+  }
+
+  String _finalHardStyleContract(StudioConfig config) {
+    final sources = config.agents
+        .map(
+          (agent) =>
+              '${agent.name}\n${agent.sourceBlockNames}\n${agent.promptShard}',
+        )
+        .join('\n\n');
+    final rules = <String>[];
+    if (RegExp(
+      r'—|длинн.{0,24}тире|long.{0,24}dash|em dash',
+      caseSensitive: false,
+    ).hasMatch(sources)) {
+      rules.add('- Do not use em dashes / long dashes: avoid "—".');
+    }
+    if (RegExp(
+      r'кавыч|quote|quotation|direct speech|прям.{0,24}реч',
+      caseSensitive: false,
+    ).hasMatch(sources)) {
+      rules.add(
+        '- Wrap direct spoken dialogue in quotation marks; do not use bare dialogue lines.',
+      );
+    }
+    if (rules.isEmpty) return '';
+    return 'Hard final formatting constraints from Studio controllers:\n${rules.join('\n')}';
   }
 
   List<Map<String, dynamic>> _stripPromptLevelReasoning(
@@ -1650,4 +2298,11 @@ class _CachedStudioBrief {
     required this.policy,
     required this.createdTurnIndex,
   });
+}
+
+class _ControllerScope {
+  final String owns;
+  final String skip;
+
+  const _ControllerScope({required this.owns, required this.skip});
 }

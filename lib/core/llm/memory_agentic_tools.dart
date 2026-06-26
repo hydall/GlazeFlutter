@@ -2,10 +2,11 @@ import '../models/memory_book.dart';
 import 'memory_agentic_policy.dart';
 import 'memory_selector.dart';
 
-/// Tool definition for `searchMemory` — the only read-only agentic tool in Phase 10.
+/// Tool definitions for the agentic memory system.
 ///
-/// The tool lets an LLM request bounded memory retrieval from Memory Book.
-/// The app enforces caps, source-window exclusion, and permissions.
+/// Read-only tools (`searchMemory`) are always available when agentic mode is
+/// on. Write tools (`writeMemory`, `updateTracker`) are only exposed when the
+/// policy allows writes — see [MemoryAgenticPolicy.settings.writeToolsEnabled].
 class MemoryAgenticToolDefinition {
   /// OpenAI-format tool definition for `searchMemory`.
   static Map<String, dynamic> searchMemory() {
@@ -40,13 +41,95 @@ class MemoryAgenticToolDefinition {
   /// All available read-only tool definitions.
   static List<Map<String, dynamic>> readOnlyTools() => [searchMemory()];
 
-  /// All available tool definitions including write tools (when enabled).
-  /// Phase 10 only exposes read-only tools.
+  /// Tool definition for `updateTracker` — writes a lightweight key-value
+  /// tracker (e.g. 'mood: happy', 'inventory: chip in pocket').
+  static Map<String, dynamic> updateTracker() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'updateTracker',
+        'description':
+            'Write or update a tracker — a lightweight key-value state '
+            'variable that persists across turns. Use for facts that should '
+            'survive context truncation: relationship status, inventory, '
+            'location, ongoing promises, emotional state.',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'name': {
+              'type': 'string',
+              'description':
+                  'Tracker name (e.g. "mood", "location", "relationship_status")',
+            },
+            'value': {
+              'type': 'string',
+              'description':
+                  'Tracker value (e.g. "happy", "tavern", "allies")',
+            },
+            'scope': {
+              'type': 'string',
+              'description':
+                  'Tracker scope: "chat" (session-scoped, default), "character", "global"',
+              'default': 'chat',
+            },
+          },
+          'required': ['name', 'value'],
+        },
+      },
+    };
+  }
+
+  /// Tool definition for `writeMemory` — creates a pending memory draft.
+  /// Drafts require human approval before becoming active memory entries.
+  static Map<String, dynamic> writeMemory() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'writeMemory',
+        'description':
+            'Create a pending memory draft from a significant event or fact. '
+            'The draft will be reviewed by the user before becoming an active '
+            'memory entry. Use for important events, promises, revelations, '
+            'relationship changes — NOT for transient state (use updateTracker for that).',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'title': {
+              'type': 'string',
+              'description':
+                  'Short title for the memory (e.g. "Lucy reveals the chip")',
+            },
+            'content': {
+              'type': 'string',
+              'description':
+                  'Full memory content — what happened, who was involved, why it matters',
+            },
+            'keys': {
+              'type': 'array',
+              'items': {'type': 'string'},
+              'description':
+                  'Search keys for retrieval (e.g. ["Lucy", "chip", "secret"])',
+            },
+          },
+          'required': ['title', 'content'],
+        },
+      },
+    };
+  }
+
+  /// All available write tool definitions.
+  static List<Map<String, dynamic>> writeTools() =>
+      [updateTracker(), writeMemory()];
+
+  /// All available tool definitions for the given policy.
+  /// Read-only tools are always included when agentic mode is enabled.
+  /// Write tools are only included when the policy allows writes.
   static List<Map<String, dynamic>> forPolicy(MemoryAgenticPolicy policy) {
     if (!policy.settings.enabled) return const [];
-    if (policy.settings.readOnly) return readOnlyTools();
-    // Write tools would be added here in a future phase
-    return readOnlyTools();
+    if (policy.settings.readOnly || !policy.settings.writeToolsEnabled) {
+      return readOnlyTools();
+    }
+    return [...readOnlyTools(), ...writeTools()];
   }
 }
 
@@ -151,4 +234,99 @@ class MemoryAgenticToolHandler {
 
     return MemorySearchResult(hits: hits);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Write tool result types (Stage 1 — agentic write-loop)
+// ---------------------------------------------------------------------------
+
+/// A single tracker write requested by the agent.
+class TrackerWriteRequest {
+  final String name;
+  final String value;
+  final String scope;
+
+  const TrackerWriteRequest({
+    required this.name,
+    required this.value,
+    this.scope = 'chat',
+  });
+
+  factory TrackerWriteRequest.fromJson(Map<String, dynamic> json) {
+    return TrackerWriteRequest(
+      name: (json['name'] as String?) ?? '',
+      value: (json['value'] as String?) ?? '',
+      scope: (json['scope'] as String?) ?? 'chat',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'value': value,
+        'scope': scope,
+      };
+}
+
+/// A single memory draft write requested by the agent.
+class MemoryWriteRequest {
+  final String title;
+  final String content;
+  final List<String> keys;
+
+  const MemoryWriteRequest({
+    required this.title,
+    required this.content,
+    this.keys = const [],
+  });
+
+  factory MemoryWriteRequest.fromJson(Map<String, dynamic> json) {
+    final rawKeys = json['keys'];
+    return MemoryWriteRequest(
+      title: (json['title'] as String?) ?? '',
+      content: (json['content'] as String?) ?? '',
+      keys: rawKeys is List
+          ? rawKeys.map((e) => e.toString()).toList()
+          : <String>[],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'content': content,
+        'keys': keys,
+      };
+}
+
+/// Result of executing a batch of tracker writes.
+class TrackerWriteResult {
+  final int written;
+  final int denied;
+  final List<String> errors;
+  final List<TrackerWriteRequest> requests;
+
+  const TrackerWriteResult({
+    this.written = 0,
+    this.denied = 0,
+    this.errors = const [],
+    this.requests = const [],
+  });
+
+  bool get isEmpty => written == 0 && denied == 0;
+}
+
+/// Result of executing a batch of memory draft writes.
+class MemoryWriteResult {
+  final int written;
+  final int denied;
+  final List<String> errors;
+  final List<MemoryWriteRequest> requests;
+
+  const MemoryWriteResult({
+    this.written = 0,
+    this.denied = 0,
+    this.errors = const [],
+    this.requests = const [],
+  });
+
+  bool get isEmpty => written == 0 && denied == 0;
 }

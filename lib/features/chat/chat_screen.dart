@@ -52,6 +52,7 @@ import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_activity_card.dart';
+import 'widgets/post_cleaner_status_card.dart';
 import 'widgets/quick_replies_panel.dart';
 import 'widgets/chat_webview_widget.dart';
 import 'widgets/ext_block_dialogs.dart';
@@ -1108,6 +1109,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                             .read(memorySidecarPrewarmCacheProvider)
                             .invalidateSession(widget.state.session?.id ?? '');
                       },
+                      onAgentSwipe: (id, direction) {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == id,
+                        );
+                        if (idx < 0) return;
+                        final dir = direction == 'right' ? 1 : -1;
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .changeAgentSwipe(idx, dir, fromSwipe: true);
+                      },
                       onChangeGreeting: (id, dir) {
                         final idx = widget.state.messages.indexWhere(
                           (m) => m.id == id,
@@ -1353,6 +1364,17 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       .finishCurrentStudioAgent(),
                 ),
               ),
+            // POST-cleaner live status card. Shown after generation finishes
+            // while the cleaner is running. Stacks below the studio card and
+            // memory card (which occupy the same top slot but are never
+            // visible simultaneously — studio runs during generation, cleaner
+            // runs after).
+            Positioned(
+              left: 12,
+              right: 12,
+              top: messageListTop + memoryTopReserve,
+              child: const PostCleanerStatusCard(),
+            ),
             // Top gradient for fade effect under the header
             Positioned(
               top: 0,

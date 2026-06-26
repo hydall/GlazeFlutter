@@ -257,6 +257,9 @@ class CharacterRepo implements SyncCharacterStore {
       await (_db.delete(_db.memoryBookRows)
             ..where((t) => t.sessionId.isIn(sessionIds)))
           .go();
+      await (_db.delete(_db.trackerRows)
+            ..where((t) => t.sessionId.isIn(sessionIds)))
+          .go();
       await (_db.delete(_db.chatSummaries)
             ..where((t) => t.sessionId.isIn(sessionIds)))
           .go();

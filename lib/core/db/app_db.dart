@@ -28,6 +28,7 @@ part 'app_db.g.dart';
     MemoryCadenceRows,
     MemoryConsolidationRows,
     StudioConfigRows,
+    TrackerRows,
     ExtensionPresets,
     InfoBlocks,
   ],
@@ -38,7 +39,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 43;
+  int get schemaVersion => 47;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -512,6 +513,61 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(
             studioConfigRows,
             studioConfigRows.builderPromptTemplate,
+          );
+        }
+      }
+      if (from < 44) {
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('max_final_history_messages')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.maxFinalHistoryMessages,
+          );
+        }
+      }
+      if (from < 45) {
+        // Agentic memory trackers: lightweight key-value state written by the
+        // memory agent (e.g. 'Lucy: chip in pocket', 'relationship: +1').
+        // Guarded like every prior table migration to survive partial upgrades
+        // from early feature builds.
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('tracker_rows')) {
+          await m.createTable(trackerRows);
+        }
+      }
+      if (from < 46) {
+        // Stage 3: routing mode for preset orchestrator — 'verbatim' (default,
+        // blocks go to agents дословно) vs 'compiled' (legacy LLM digest).
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('routing_mode')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.routingMode,
+          );
+        }
+      }
+      if (from < 47) {
+        // Broadcast blocks: verbatim content of cross-cutting rules (output
+        // language + prose-quality guards) captured at Studio build time so the
+        // POST-cleaner can apply the user's own rules instead of a hardcoded
+        // English-only cliché list. Guarded to survive partial upgrades.
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('broadcast_blocks_json')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.broadcastBlocksJson,
           );
         }
       }

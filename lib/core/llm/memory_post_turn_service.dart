@@ -2,8 +2,6 @@ import 'dart:async';
 
 import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/memory_salience_repo.dart';
-import '../db/repositories/memory_consolidation_repo.dart';
-import '../models/memory_book.dart';
 import '../state/memory_settings_provider.dart';
 import 'memory_cadence_service.dart';
 import 'memory_graph_builder.dart';
@@ -23,7 +21,6 @@ import 'memory_salience_scorer.dart';
 class MemoryPostTurnService {
   final MemoryBookRepo _bookRepo;
   final MemorySalienceRepo _salienceRepo;
-  final MemoryConsolidationRepo _consolidationRepo;
   final MemoryCadenceService _cadenceService;
   final MemoryGraphBuilder _graphBuilder;
   final MemoryGlobalSettings Function() _readGlobalSettings;
@@ -31,7 +28,6 @@ class MemoryPostTurnService {
   MemoryPostTurnService(
     this._bookRepo,
     this._salienceRepo,
-    this._consolidationRepo,
     this._cadenceService,
     this._graphBuilder,
     this._readGlobalSettings,

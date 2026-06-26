@@ -86,6 +86,8 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         consolidationEndpoint: global.consolidationEndpoint,
         consolidationApiKey: global.consolidationApiKey,
         consolidationTimeoutMs: global.consolidationTimeoutMs,
+        postCleanerTemperature: global.postCleanerTemperature,
+        postCleanerMaxTokens: global.postCleanerMaxTokens,
       ),
     );
     await put(book);
@@ -125,6 +127,29 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         updatedAt: Value(currentTimestampSeconds()),
       ),
     );
+  }
+
+  /// Atomically appends [drafts] to the pending drafts of the memory book
+  /// for [sessionId]. Wraps the read-modify-write in a transaction so
+  /// concurrent writes cannot interleave (database.md Rule 3).
+  ///
+  /// Used by the agentic write-loop (Stage 1) to append agent-generated
+  /// drafts without racing with other memory book writes.
+  Future<void> appendDrafts(String sessionId, List<MemoryDraft> drafts) async {
+    if (drafts.isEmpty) return;
+    await transaction(() async {
+      final existing = await getBySessionId(sessionId);
+      final book = existing ??
+          MemoryBook(
+            id: 'memorybook_$sessionId',
+            sessionId: sessionId,
+          );
+      await put(
+        book.copyWith(
+          pendingDrafts: [...book.pendingDrafts, ...drafts],
+        ),
+      );
+    });
   }
 
   Future<void> copyForSessionBranch({

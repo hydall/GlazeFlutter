@@ -1,0 +1,290 @@
+# PLAN: Agentic Studio — наш «OpenCode для RP», а не клон Marinara
+
+Статус: **DRAFT / RFC**. Это проектный документ для обсуждения (в т.ч. с Hydall). Код по нему ещё не написан.
+
+Цель документа — зафиксировать: что такое «агентность» на самом деле, что у нас УЖЕ построено, чем мы отличаемся от Marinara, и какой минимальный первый шаг превращает существующие меморибуки + Studio в настоящий агентный движок без превращения UI в «панель самолёта».
+
+---
+
+## 1. Что такое «агент» на самом деле (развеиваем миф)
+
+Фраза «вызывает тулсы, когда необходимо» звучит как магия с оркестратором. На деле это один цикл:
+
+```
+дать модели: задачу + список инструментов (JSON-схемы функций)
+loop:
+  ответ = модель(диалог)
+  если ответ — это вызов тула:
+      результат = выполнить_тул(ответ)         // реально читает/пишет/меняет мир
+      диалог += результат                       // факт возвращается В модель
+  иначе:
+      выйти (это финальный текст)
+```
+
+Ключевые свойства, которых НЕТ у нынешнего Studio:
+
+1. **Тул возвращает факт обратно в модель.** `searchMemory` вернул реальные записи → модель теперь их знает.
+2. **Тул меняет мир.** `writeMemory` реально создаёт запись в БД.
+3. **Модель сама решает**, какой тул и когда — никакой внешний оркестратор не маршрутизирует.
+
+Нынешний Studio — это «совет директоров»: 7 контроллеров пишут заметки на полях, а финалка всё равно пишет сцену с нуля и может советы проигнорировать. Это НЕ агентность. Это advisory-слой. (Это нормально как фича, но называть это «нашим опенкодом» нельзя.)
+
+---
+
+## 2. Что у нас УЖЕ построено (и почему меморибуки — НЕ работа в стол)
+
+Разведка кодовой базы показала: скелет агентной системы уже заложен. Не хватает только write-петли.
+
+| Компонент | Файл | Статус |
+|---|---|---|
+| Permission-гейт инструментов (default-deny, approval-флоу) | `lib/core/llm/memory_agentic_policy.dart` | **ГОТОВ полностью** (enum `inspectContext/proposeMemory/proposeTracker/writeMemory/writeTracker`, `canUse()`) |
+| Tool-handler + OpenAI tool-схема | `lib/core/llm/memory_agentic_tools.dart` | `searchMemory` **работает**; есть комментарий `// Write tools would be added here in a future phase` |
+| Агентный LLM-вызов (модель решает что искать → локальный поиск → инъекция) | `lib/core/llm/memory_agentic_service.dart` | **РАБОТАЕТ**, но `readOnly: true` захардкожен |
+| LLM → структурная запись в БД | `lib/core/llm/memory_consolidation_service.dart` | Пишет `memory_consolidation_rows`; **не подключён к авто-триггеру** |
+| Инвалидация кэша для tracker/proposedMemory артефактов | `lib/core/llm/memory_provenance.dart` | Артефакты `tracker`/`proposedMemory` уже определены |
+| Хранилище памяти + retrieval (keyword/vector/catalog/entity/salience) | `memory_injection_service.dart`, `memory_selector.dart`, `memory_book_repo.dart` и др. | **ГОТОВ и надёжен** |
+| Человеко-гейт создания записей (draft → approve → entry + embedding) | `memory_book_controller.dart` | **ГОТОВ** |
+
+**Вывод:** меморибуки — это готовое хранилище и retrieval, к которому осталось пристроить write-петлю. Это и есть мост между «меморибуками» и «агентами». Работа НЕ в стол: она и есть фундамент агентного движка.
+
+---
+
+## 3. Чем мы отличаемся от Marinara (чтобы не было копипасты)
+
+Изучен исходник Marinara-Engine (`Pasta-Devs/Marinara-Engine`).
+
+| | **Marinara** | **Наш путь (Agentic Studio)** |
+|---|---|---|
+| Кол-во агентов | 20+ узких (world-state, quest, combat, sprite, music, CYOA…) | **1 (или очень мало)** мощных, философия OpenCode «мало кнопок» |
+| Что мутируют | UI-состояние игры: спрайты, бой, квесты, фон, музыка | **Невидимую память/трекеры** — никакого игрового UI |
+| Фокус | Визуальная новелла + игровой движок | **Долговременная связность RP** (память переживает обрезку контекста) |
+| Сложность для юзера | Много агентов на выбор | **Невидимо по умолчанию**, тоггл для power-юзеров |
+| Tool-loop | Реальный (function-calling + state mutation) | Реальный, но поверх НАШИХ меморибуков |
+
+Мы не копируем «приборную панель» Marinara. Мы строим **«невидимого библиотекаря-агента»**, который держит память живой. Это органичное продолжение меморибуков, а не игровой движок.
+
+---
+
+## 4. Честно про токены и стоимость (важно для разговора с Hydall)
+
+**Цепочка агентов НЕ экономит токены. По токенам она ВСЕГДА дороже.**
+
+- Без Studio: 1 вызов (контекст + история → ответ).
+- Agentic Studio: N агентов (каждый читает контекст) + финал + post-чистильщик = N+2 вызова.
+
+Лимит U/A чанков урезает контекст *финалки*, но агенты всё равно читают историю.
+
+**Реальная ценность (то, что надо «продавать»):**
+
+1. **Дешёвые специалисты + дорогой писатель.** Агентов (трекеры, поиск памяти, чистка клише) гоняем на дешёвой/быстрой модели; топ-модель тратим только на финальную прозу. N дешёвых + 1 дорогой может быть дешевле, чем 1 дорогой с раздутым контекстом. Это и есть «условная экономия».
+2. **Память переживает обрезку контекста.** Агент записал факт в трекер → факт живёт в БД, даже когда сообщение выпало из окна. Борьба с забыванием в длинных RP.
+3. **Post-правка качества.** Чистильщик получает ГОТОВЫЙ текст и переписывает его (убирает клише), а не просит финалку «не делать так» и надеется.
+
+Анти-тезис, который Hydall может бросить: «зачем платить за 9 вызовов?» — ответ: «не платим, если 8 из них на дешёвой модели; платим качеством памяти и прозы, а не экономией токенов». Любой, кто продаёт это как «экономию токенов», врёт.
+
+---
+
+## 5. Фазы (последовательность агент → основной → чистильщик)
+
+```
+PRE  (до основного ответа):
+  - memory-агент: searchMemory → (опц.) writeMemory / updateTracker
+  - результат: факты/трекеры готовы к инъекции
+MAIN (основной ответ):
+  - финалка пишет прозу, опираясь на трекеры + найденную память (не на сырую историю)
+POST (после ответа):
+  - guardian/чистильщик: получает ГОТОВЫЙ текст, переписывает (анти-клише, анти-повтор)
+```
+
+Это совпадает с фазовой моделью Marinara (`pre_generation / parallel / post_processing`), но наполнение — наше (память, не игровой стейт).
+
+Принципиально: PRE-агент и POST-чистильщик — **исполнители** (тул вернул факт / тул переписал текст), а не советники. Нынешние Studio-контроллеры (Continuity/Agency/…) остаются как **advisory-слой** для тех, кто хочет «совет директоров», но это отдельный, необязательный режим.
+
+---
+
+## 6. Минимальный первый шаг (MVP) — оживить то, что построено
+
+НЕ строим 7 новых агентов. Оживляем существующий `memory_agentic_service` с 2-3 тулами:
+
+1. `searchMemory(query)` — **уже работает**.
+2. `writeMemory(text, keys)` — enum есть; подключить handler к `MemoryBookRepo` через существующий approval-гейт (`memory_book_controller.approveDraft`-путь).
+3. `updateTracker(name, value)` — лёгкое невидимое key-value состояние («Люси: чип в кармане», «отношения: +1»). Новое мини-хранилище ИЛИ переиспользовать chat-variable scope (см. database.md, атомарные repo-методы).
+
+Эффект: финалка получает не «7 советов», а **факты** (трекеры + релевантная память). Это и есть «свой опенкод» в миниатюре: один агент, мало тулов, реальные изменения.
+
+### Что НЕ делаем в MVP
+- Не строим визуальный игровой стейт (это Marinara).
+- Не делаем 20 агентов.
+- Не включаем write-тулы по умолчанию (policy уже default-deny; нужен явный тоггл).
+
+---
+
+## 7. UX: «невидимо по умолчанию + тоггл для power-юзеров»
+
+- **По умолчанию:** агент работает молча, трекеры невидимы, ноль настроек. Философия «you run it and it just works» + «мало кнопок».
+- **Power-toggle:** в Studio-меню переключатель «Agentic memory (advanced)», который открывает: список трекеров, approval-режим write-тулов, выбор модели для агента (дешёвая), выбор фаз.
+- Это прямой ответ на страх «панель самолёта»: сложность спрятана за один тоггл, дефолт — пусто.
+
+---
+
+## 8. Соответствие инвариантам проекта (что нужно соблюсти)
+
+- **Write-тулы НЕ обходят permission-гейт.** Каждый write идёт через `MemoryAgenticPolicy.canUse(...)` (default-deny). Аналог правила JS-bridge `_requireCapability` (INV-JS*).
+- **Атомарные repo-методы.** Запись трекеров/памяти — только через dedicated repo-методы в транзакции (см. `docs/rules/database.md`: chat/character scopes, read-modify-write). Никаких ad-hoc read→mutate→put.
+- **Save before state cleanup** при финализации (generation.md).
+- **Schema migration** при добавлении tracker-таблицы (текущая версия БД: 44).
+- **Гонки/abort:** агентные вызовы должны отменяться по тому же CancelToken, что и основная генерация (race-conditions.md).
+- **SSOT для агентного вывода:** трекеры — производное состояние; источник правды по записям памяти остаётся `memory_book_rows`.
+
+---
+
+## 9. Решения (закрытые вопросы)
+
+Все открытые вопросы закрыты владельцем проекта:
+
+1. **Trigger → каждый ход, КРОМЕ свайпа/регенерации.** PRE/POST-агенты привязаны к **зафиксированному ходу**, а не к факту генерации. Свайп — это ещё не принятый ход; повторный запуск write-петли на свайпах запрещён (иначе дубли/мусор в памяти). Триггер = «ход принят/финализирован».
+2. **Trackers storage → новая таблица `tracker_rows`.** Не загаживаем chat-variable scope. Отдельно, версионируемо, со своими атомарными repo-методами.
+3. **Post-чистильщик → переписывает МОЛЧА + показ результата в request preview.** Никакого diff/swipe UI на старте. Готовый текст идёт в чат; «что сделал чистильщик» видно в том же preview, где сейчас виден промпт.
+4. **Модель агента → per-agent (как сейчас).** Каждый агент (включая memory-агента и чистильщика) выбирает свою модель через существующий `modelSource`/`model`/`modelOverride` + общий `runApiConfigId`. Memory-агента сажаем на дешёвую модель.
+5. **Studio-advisory vs Agentic → Agentic поглощает Studio.** Студия как отдельный режим/кнопка исчезает. Но её **движок декомпозиции пресета** (`studio_decomposition_service`) НЕ выбрасывается — он становится **оркестратором маршрутизации пресета** (см. §11).
+
+### §11. Оркестратор пресета — «раскидать, а не сбросить всё»
+
+Ключевое требование владельца: **«Если пресет 16к токенов — зачем сбрасывать его весь в каждого агента?»**
+
+Сейчас (`memory_studio_service.dart:909-1020`) пресет доходит до агентов наполовину сломанным:
+- структуру запроса задаёт хардкод `studio_request_preset.dart`, а НЕ пользовательский пресет;
+- инструкции пресета **переписываются** LLM-компилятором в `promptShard` (искажение «души» пресета);
+- порядок/тогглы/роли блоков пользователя игнорируются на chat-time.
+
+**Целевая модель (утверждена):**
+
+1. **LLM-классификатор маршрутизирует ОДИН РАЗ (build-time).** Читает блоки пресета и решает «блок → агент(ы)». Результат («карта маршрутизации») **сохраняется** (как `promptShard` сейчас). На chat-time **никаких LLM-вызовов для раскидки** — берём сохранённую карту.
+2. **Агент получает ДОСЛОВНЫЙ текст своих блоков.** Классификатор решает только «кому что», но **НЕ переписывает** текст. Пресет = источник истины. Бонус: в request preview видно точно, что видит каждый агент. (Переваривание компилятором — отменяется; противоречит «пресет = источник истины» и «показать в preview».)
+3. **Каждый агент видит только свой срез пресета**, не весь. 16к делится между агентами, а не множится (×N). Это и есть «раскидать, а не сбросить всё».
+
+### §12. Конфликтующие/дублирующиеся блоки пресета
+
+Правило разрешения конфликтов (агент НЕ решает конфликт сам — он не знает намерения пользователя):
+
+- **Дубли (одна тема, не противоречат):** оба блока идут одному агенту; литеральный дедуп уже есть в `memory_studio_service`. Теряем чуть токенов, смысл цел.
+- **Конфликт (противоречат):** разрешается **по приоритету = порядку блоков в пресете** (как в ST/Glaze: блок ниже перебивает блок выше). Маршрутизатор сохраняет порядок; агенту даётся инструкция «при конфликте следуй последнему блоку».
+- **Кросс-агентные конфликты:** предотвращены лейнами (уже сделано) — агенты в разных зонах физически не пересекаются инструкциями.
+- **Источник истины — пользователь, не LLM.** Хочешь убрать конфликт — отключаешь блок (`enabled: false`, уже есть). Маршрутизатор никогда не «умно сливает» противоречие.
+
+---
+
+## 10. Резюме
+
+- «Агент» = модель в цикле с тулами, которые меняют мир и возвращают факты. Не оркестратор.
+- У нас УЖЕ построены: policy, tool-handler, агентный вызов, retrieval, хранилище. Не хватает write-петли. Меморибуки — фундамент, не работа в стол.
+- Отличие от Marinara: один невидимый memory-агент, а не 20 игровых. Память, а не игровой UI.
+- Токенной экономии нет; ценность — дешёвые специалисты + живая память + post-правка.
+- MVP: оживить `memory_agentic_service` с `searchMemory` + `writeMemory` + `updateTracker`. Невидимо по умолчанию, тоггл для power-юзеров.
+
+---
+
+## 11. Подробный план реализации
+
+**Стратегия веток (решение владельца):** Hydall делегировал бэкенд автору этой ветки. Поэтому **всё делается на текущей ветке `feat/studio-hard-controllers`, отдельными коммитами по этапам**, и в конце объединяется в **один PR** против `hydall/GlazeFlutter:master`. Отдельные PR на каждый этап НЕ создаём. Каждый этап остаётся самодостаточным коммитом (свои тесты + `flutter analyze` чист) — чтобы историю было легко читать и при необходимости откатить отдельный этап. Этапы упорядочены по зависимостям: каждый последующий опирается на предыдущий.
+
+### Этап 0 — Фундамент данных: `tracker_rows` (DB) ✅ DONE
+
+**Цель:** новое хранилище трекеров с атомарными repo-методами.
+
+**Реализовано** (commit `e688358`):
+- `lib/core/db/tables.dart`: таблица `TrackerRows` — композитный PK `{sessionId, name}`, колонки `value`/`scope`/`provenance`/`updatedAt`, индексы по `sessionId` и `{sessionId, scope}`.
+- `lib/core/db/app_db.dart`: schema **v44 → v45**, guarded-миграция (`sqlite_master` проверка).
+- `lib/core/db/repositories/tracker_repo.dart`: атомарные методы `upsert`/`upsertValue` (insertOnConflictUpdate по natural key), `get`, `getBySessionId`, `getBySessionAndScope`, `delete`, `clearForSession`, `replaceForSession` (в транзакции), `watchBySessionId`.
+- `lib/core/models/tracker.dart`: freezed-модель `Tracker`.
+- `lib/core/state/db_provider.dart`: `trackerRepoProvider` зарегистрирован.
+- Каскады: `trackerRows` добавлен в `chatRepo.deleteByCharacterId` и `characterRepo.delete` (правило database.md).
+- `docs/rules/database.md`: обновлён до v45.
+- Тесты: `test/tracker_repo_test.dart` — 15 тестов (upsert/overwrite/read/scope-isolation/cross-session/delete/clear/replace/watch), все зелёные.
+
+**DoD:** ✅ миграция применяется, repo-тесты зелёные, `flutter analyze` чист.
+
+### Этап 1 — Оживить write-петлю памяти (ядро агентности) ✅ DONE
+
+**Цель:** `memory_agentic_service` умеет писать, а не только искать.
+
+**Реализовано** (commit `d202d42`):
+- `lib/core/models/memory_book.dart`: `MemoryBookSettings.agenticWriteEnabled` (default `false`) — gate для write-loop.
+- `lib/core/llm/memory_agentic_tools.dart`: `updateTracker()` + `writeMemory()` tool definitions (OpenAI format); `writeTools()` / `forPolicy()` возвращают write tools когда policy разрешает; `TrackerWriteRequest`/`MemoryWriteRequest`/`TrackerWriteResult`/`MemoryWriteResult` типы.
+- `lib/core/llm/memory_agentic_service.dart`: `runWriteLoop()` — post-turn sidecar JSON loop. LLM видит историю + трекеры → возвращает `{trackers:[...], memories:[...]}` → `_executeTrackerWrites()` пишет через `TrackerRepo.upsertValue` → `_executeMemoryWrites()` добавляет `MemoryDraft` (source=`agentic`, status=`pending_generation`) в `MemoryBook.pendingDrafts`. CancelToken проверяется после каждого await (race-conditions.md Rule 1). Policy gate (default-deny) на каждый write.
+- Тесты: `test/memory_agentic_write_test.dart` — 23 теста (tool definitions, policy gate, request parsing, TrackerRepo write integration, MemoryWriteLoopResult).
+
+**DoD:** ✅ агент реально пишет трекер/драфт памяти под gate; тесты зелёные.
+
+### Этап 2 — Триггер «ход зафиксирован» (PRE/POST), без свайпов ✅ DONE
+
+**Цель:** агенты запускаются на принятом ходу, не на свайпе/регене.
+
+**Реализовано** (commit `4696e10`):
+- `lib/features/chat/services/generation_pipeline.dart`: trigger `_runAgenticWriteLoop` после `_autoCreateMemoryDrafts`, **только на normal path** (`regenTargetId == null && !studioFinalOnly`). Реген-ветка возвращает раньше — свайпы/регены/studioFinalOnly никогда не достигают trigger. Fire-and-forget (`unawaited`).
+- `_runAgenticWriteLoop`: читает MemoryBook (gate `agenticWriteEnabled`), трекеры из TrackerRepo, историю → `MemoryAgenticService.runWriteLoop`. Staleness guard (`abortHandler.isCurrentGen(genId)`) после каждого await.
+- `extractRecentHistoryText`: top-level `@visibleForTesting` pure function — последние N сообщений как `"Role: content"`, пропускает error/typing/empty.
+- Тесты: `test/generation_pipeline_write_loop_test.dart` — 13 тестов (extractRecentHistoryText 9 случаев + trigger suppression guard 4 случая).
+
+**DoD:** ✅ запись памяти не задваивается на свайпах; ровно один запуск на принятый ход. 70/70 тестов зелёные.
+
+### Этап 3 — Оркестратор пресета: маршрутизация вместо переваривания ✅ DONE
+
+**Цель:** реализовать §11/§12 — LLM раскидывает блоки один раз, агенты получают дословные срезы.
+
+**Реализовано** (commit `90d4b47`):
+- `lib/core/models/studio_config.dart`: `routingMode` (default `'verbatim'`, alt `'compiled'`).
+- `lib/core/llm/studio_decomposition_service.dart`: `_synthesizeRoutedShard()` — вербатим-конкатенация блоков `[Block: <name>]\n<content>` + conflict footer «follow the LAST block». `decompose()` и `regenerateAgentInstruction()` принимают `routingMode`; при `'verbatim'` LLM-вызов пропускается.
+- `lib/features/chat/widgets/studio_menu_dialog.dart`: передаёт `routingMode` из конфига.
+- DB schema v45→v46: `studio_config_rows.routing_mode`, guarded migration.
+- Тесты: `test/studio_verbatim_routing_test.dart` — 15 тестов (routingMode defaults, shard format, keyword routing, agent isolation, hash determinism).
+
+**DoD:** ✅ пресет 16к делится между агентами; на chat-time нет LLM-раскидки; preview показывает срезы. 85/85 тестов зелёные.
+
+### Этап 4 — POST-чистильщик (молча + preview) ✅ DONE
+
+**Цель:** агент переписывает готовый финальный текст, тихо.
+
+**Реализовано** (commit `1d6ae83`):
+- `lib/core/models/memory_book.dart`: `postCleanerEnabled` (default `false`).
+- `lib/core/llm/post_cleaner_service.dart`: `PostCleanerService.runCleaner()` — sidecar LLM-вызов с anti-cliché промптом. Safety guards: length-ratio (0.3x-3.0x), empty/refusal fallback, timeout/error/abort → оригинал. `applyCleanedText()` — обновляет сообщение в БД, оригинал сохраняется как swipe.
+- `lib/features/chat/services/generation_pipeline.dart`: `_runPostCleaner` trigger после write-loop, normal path only. Fire-and-forget. Staleness guard.
+- Тесты: `test/post_cleaner_test.dart` — 25 тестов (result states, config gate, length-ratio guard, trigger suppression, fallback behavior).
+
+**DoD:** ✅ финал переписывается тихо; падение чистильщика не рушит ход. 110/110 тестов зелёные.
+
+### Этап 5 — UX: «невидимо по умолчанию + тоггл», поглощение Студии ✅ DONE
+
+**Цель:** свести всё под один power-toggle; убрать отдельный режим Студии.
+
+**Реализовано** (commit в этом push):
+- `lib/features/chat/widgets/studio_menu_dialog.dart`: `ExpansionTile` "Agentic memory (advanced)" с тремя настройками:
+  - `SwitchListTile` "Write-loop (trackers + memory drafts)" → `MemoryBookSettings.agenticWriteEnabled`
+  - `SwitchListTile` "POST-cleaner (anti-cliché rewrite)" → `MemoryBookSettings.postCleanerEnabled`
+  - `DropdownButton` "Preset routing mode" (Verbatim/Compiled) → `StudioConfig.routingMode`
+- `_loadConfig`: загружает MemoryBook settings при открытии диалога.
+- `_saveMemoryBookSetting`: сохраняет через `memoryBookRepo.updateSettings`.
+- `_saveRoutingMode`: сохраняет через `studioConfigRepo.upsert`.
+- Дефолт: все agentic features OFF (невидимо по умолчанию). Power-панель за `ExpansionTile` (свёрнута по умолчанию).
+- Тесты: `test/stage5_agentic_toggle_test.dart` — 8 тестов (defaults off, feature independence, copyWith preservation, default UX invisible).
+
+**DoD:** ✅ дефолтный UX без новых кнопок; power-панель за одним тогглом; старые конфиги не теряются. 118/118 тестов зелёные.
+
+### Сводная таблица зависимостей
+
+| Этап | Зависит от | Главный риск | Где правила |
+|---|---|---|---|
+| 0 — `tracker_rows` | — | миграция БД | database.md |
+| 1 — write-петля | 0 | обход policy-гейта | INV-JS*, database.md |
+| 2 — триггер | 1 | двойной запуск на свайпах | generation.md, race-conditions.md |
+| 3 — оркестратор пресета | — (можно параллельно 1-2) | потеря «души» пресета при переваривании | — |
+| 4 — POST-чистильщик | 2 | потеря хода при падении агента | generation.md, race-conditions.md |
+| 5 — UX/поглощение | 1-4 | миграция старых StudioConfig | — |
+
+### Глобальные инварианты (соблюдать на каждом этапе)
+- Любой write — только через атомарные repo-методы в транзакции.
+- Любой write-тул — только через `MemoryAgenticPolicy.canUse` (default-deny).
+- Любой агентный LLM-вызов отменяем по общему CancelToken основной генерации.
+- Save before cleanup при финализации.
+- Каждый этап: `dart run build_runner build` (если менялись freezed/drift), `flutter analyze` чист, тесты зелёные.
+- Все этапы — на ветке `feat/studio-hard-controllers`, отдельными коммитами; в конце **один** PR против `hydall/GlazeFlutter:master`.

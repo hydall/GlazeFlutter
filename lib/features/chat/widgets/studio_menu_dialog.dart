@@ -5,6 +5,7 @@ import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/studio_request_preset.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
+import '../../../core/models/memory_book.dart';
 import '../../../core/models/preset.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/state/active_selection_provider.dart';
@@ -47,10 +48,22 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   String? _selectedFinalStudioPresetId;
   String? _selectedBuildApiConfigId;
   String? _selectedRunApiConfigId;
+  String? _bulkAgentApiConfigId;
+  String _bulkAgentModelOverride = '';
+  String _bulkAgentTemperature = '';
+  String _bulkAgentMaxTokens = '';
   List<StudioPresetOverride> _studioPresetOverrides = const [];
   String _builderPromptTemplate = '';
+  bool _agenticWriteEnabled = false;
+  bool _postCleanerEnabled = false;
+  String _routingMode = 'verbatim';
+  String _sidecarModel = '';
+  int _sidecarTimeoutMs = 60000;
+  double _postCleanerTemperature = 0.3;
+  int _postCleanerMaxTokens = 0;
   bool _loading = true;
   bool _building = false;
+  final Set<String> _regeneratingAgentIds = {};
   final Map<String, List<String>> _modelsByApiConfigId = {};
   final Set<String> _fetchingModelConfigIds = {};
   String? _error;
@@ -68,6 +81,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           .getBySessionId(widget.sessionId);
       final profiles = await ref.read(studioConfigRepoProvider).getProfiles();
       final contextInfo = await _loadContextInfo(config: config);
+      // Load MemoryBook settings for agentic features.
+      final book = await ref
+          .read(memoryBookRepoProvider)
+          .getBySessionId(widget.sessionId);
       if (mounted) {
         setState(() {
           _config = config;
@@ -78,8 +95,16 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _selectedFinalStudioPresetId = contextInfo.finalStudioPresetId;
           _selectedBuildApiConfigId = contextInfo.buildApiConfig?.id;
           _selectedRunApiConfigId = contextInfo.runApiConfig?.id;
+          _seedBulkAgentControls(config, contextInfo);
           _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
           _builderPromptTemplate = config?.builderPromptTemplate ?? '';
+          _agenticWriteEnabled = book?.settings.agenticWriteEnabled ?? false;
+          _postCleanerEnabled = book?.settings.postCleanerEnabled ?? false;
+          _sidecarModel = book?.settings.sidecarModel ?? '';
+          _sidecarTimeoutMs = book?.settings.sidecarTimeoutMs ?? 60000;
+          _postCleanerTemperature = book?.settings.postCleanerTemperature ?? 0.3;
+          _postCleanerMaxTokens = book?.settings.postCleanerMaxTokens ?? 0;
+          _routingMode = config?.routingMode ?? 'verbatim';
           _loading = false;
         });
       }
@@ -118,11 +143,23 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         sessionId: widget.sessionId,
         apiConfig: buildApiConfig,
         builderPromptTemplate: _builderPromptTemplate,
+        routingMode: _config?.routingMode ?? 'verbatim',
       );
 
       if (agents.isEmpty) {
         throw Exception('Decomposition returned no agents');
       }
+
+      // Capture cross-cutting "broadcast" blocks (output language + prose
+      // guards) verbatim so the POST-cleaner can apply the user's own rules.
+      final broadcastBlocks = decompositionService
+          .collectBroadcastBlocks(preset)
+          .map((b) {
+            final name = b.name.isNotEmpty ? b.name : b.id;
+            return '[Block: $name]\n${b.content.trim()}';
+          })
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
 
       final now = currentTimestampSeconds();
       final profileId = _config?.profileId.isNotEmpty == true
@@ -147,6 +184,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         buildApiConfigId: buildApiConfig.id,
         runApiConfigId: contextInfo.runApiConfig?.id ?? '',
         builderPromptTemplate: _builderPromptTemplate,
+        broadcastBlocks: broadcastBlocks,
         createdAt: now,
         updatedAt: now,
       );
@@ -160,6 +198,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _profiles = profiles;
           _selectedProfileId = profileId;
           _contextInfo = contextInfo;
+          _seedBulkAgentControls(newConfig, contextInfo);
           _building = false;
         });
       }
@@ -169,6 +208,64 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _error = e.toString();
           _building = false;
         });
+      }
+    }
+  }
+
+  Future<void> _regenerateAgentInstruction(StudioAgent agent) async {
+    if (_config == null || _regeneratingAgentIds.contains(agent.id)) return;
+    setState(() {
+      _regeneratingAgentIds.add(agent.id);
+      _error = null;
+    });
+
+    try {
+      final contextInfo = await _loadContextInfo(config: _config);
+      final preset = contextInfo.preset;
+      final buildApiConfig = contextInfo.buildApiConfig;
+      if (preset == null) {
+        throw Exception(
+          'No preset available. Create or select a preset first.',
+        );
+      }
+      if (buildApiConfig == null) {
+        throw Exception('No model selected for Studio build.');
+      }
+
+      final decompositionService = ref.read(studioDecompositionServiceProvider);
+      final updatedAgent = await decompositionService
+          .regenerateAgentInstruction(
+            preset: preset,
+            agent: agent,
+            apiConfig: buildApiConfig,
+            builderPromptTemplate: _builderPromptTemplate,
+            routingMode: _config?.routingMode ?? 'verbatim',
+          );
+
+      if (!mounted || _config == null) return;
+      final agents = _config!.agents.map((a) {
+        return a.id == agent.id ? updatedAgent.copyWith(order: a.order) : a;
+      }).toList();
+      final updatedConfig = _config!.copyWith(
+        agents: agents,
+        sourcePresetHash: StudioDecompositionService.computePresetHash(
+          preset.blocks.where((b) => b.enabled).toList(),
+        ),
+        buildApiConfigId: buildApiConfig.id,
+        builderPromptTemplate: _builderPromptTemplate,
+        updatedAt: currentTimestampSeconds(),
+      );
+      await ref.read(studioConfigRepoProvider).upsert(updatedConfig);
+      if (!mounted) return;
+      setState(() {
+        _config = updatedConfig;
+        _contextInfo = contextInfo;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _regeneratingAgentIds.remove(agent.id));
       }
     }
   }
@@ -257,7 +354,50 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       _selectedProfileId = profileId;
       _contextInfo = contextInfo;
       _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
+      _seedBulkAgentControls(config, contextInfo);
     });
+  }
+
+  void _seedBulkAgentControls(
+    StudioConfig? config,
+    _StudioContextInfo contextInfo,
+  ) {
+    final agents = config?.agents ?? const <StudioAgent>[];
+    _bulkAgentApiConfigId =
+        _commonAgentApiConfigId(agents) ??
+        contextInfo.runApiConfig?.id ??
+        contextInfo.apiConfigs.firstOrNull?.id;
+    _bulkAgentModelOverride = _commonAgentModelOverride(agents) ?? '';
+    _bulkAgentTemperature = _commonAgentTemperature(agents) ?? '';
+    _bulkAgentMaxTokens = _commonAgentMaxTokens(agents) ?? '';
+  }
+
+  String? _commonAgentApiConfigId(List<StudioAgent> agents) {
+    final customIds = agents
+        .where(
+          (agent) => agent.modelSource == 'custom' && agent.model.isNotEmpty,
+        )
+        .map((agent) => agent.model)
+        .toSet();
+    return customIds.length == 1 ? customIds.first : null;
+  }
+
+  String? _commonAgentModelOverride(List<StudioAgent> agents) {
+    if (agents.isEmpty) return null;
+    final values = agents.map((agent) => agent.modelOverride).toSet();
+    return values.length == 1 ? values.first : null;
+  }
+
+  String? _commonAgentTemperature(List<StudioAgent> agents) {
+    if (agents.isEmpty) return null;
+    final values = agents.map((agent) => agent.temperature).toSet();
+    return values.length == 1 ? values.first.toString() : null;
+  }
+
+  String? _commonAgentMaxTokens(List<StudioAgent> agents) {
+    if (agents.isEmpty) return null;
+    final values = agents.map((agent) => agent.maxTokens).toSet();
+    return values.length == 1 ? values.first.toString() : null;
   }
 
   String _apiLabel(ApiConfig? config) {
@@ -291,13 +431,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 650,
-          maxHeight: size.height - 48,
-        ),
+        constraints: BoxConstraints(maxWidth: 650, maxHeight: size.height - 48),
         child: SizedBox(
           width: size.width < 650 ? size.width - 32 : 650,
-          height: size.height < 648 ? size.height - 48 : 600,
+          height: size.height < 820 ? size.height - 48 : 760,
           child: Stack(
             children: [
               Column(
@@ -432,6 +569,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildContextInfoCard(),
+              const SizedBox(height: 12),
+              // Agentic memory works independently of Studio decomposition,
+              // so expose its toggles here before Studio is built. The preset
+              // routing mode lives in StudioConfig, so it's omitted until a
+              // config exists (shown in the agent list card instead).
+              _buildStandaloneAgenticCard(),
               const SizedBox(height: 24),
               Icon(
                 Icons.movie_filter_outlined,
@@ -472,29 +615,42 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   Widget _buildAgentList() {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: _buildContextInfoCard(),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Text(
-                '${_config!.agents.length} agents',
-                style: TextStyle(
-                  color: context.cs.onSurfaceVariant,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+        Flexible(
+          fit: FlexFit.loose,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: _buildContextInfoCard(),
                 ),
-              ),
-              const Spacer(),
-              FilledButton.tonalIcon(
-                onPressed: _building ? null : _buildStudio,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Rebuild'),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${_config!.agents.length} agents',
+                        style: TextStyle(
+                          color: context.cs.onSurfaceVariant,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      FilledButton.tonalIcon(
+                        onPressed: _building ? null : _buildStudio,
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Rebuild'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         Expanded(
@@ -562,17 +718,510 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             },
           ),
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: _showBuilderPromptDialog,
-              icon: const Icon(Icons.article_outlined, size: 18),
-              label: const Text('Builder prompt'),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _showBuilderPromptDialog,
+                icon: const Icon(Icons.article_outlined, size: 18),
+                label: const Text('Builder prompt'),
+              ),
+              if (_config != null && _config!.agents.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _showBulkAgentSettingsDialog,
+                  icon: const Icon(Icons.groups_2_outlined, size: 18),
+                  label: const Text('Bulk agents'),
+                ),
+              ],
+            ],
+          ),
+          if (_config != null) ...[
+            const SizedBox(height: 8),
+            _finalHistoryLimitField(),
+            const SizedBox(height: 8),
+            _buildAgenticAdvancedSection(includeRoutingMode: true),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _finalHistoryLimitField() {
+    final value = _config!.maxFinalHistoryMessages;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Final history limit',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: context.cs.onSurface,
+                ),
+              ),
+              Text(
+                'Last U/A messages sent to the final agent. '
+                'Agents always see full history. 0 = unlimited.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 84,
+          child: TextFormField(
+            key: ValueKey('final_history_limit_$value'),
+            initialValue: value.toString(),
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 10,
+              ),
+            ),
+            onFieldSubmitted: _saveFinalHistoryLimit,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveFinalHistoryLimit(String raw) async {
+    if (_config == null) return;
+    final parsed = int.tryParse(raw.trim());
+    if (parsed == null) return;
+    final clamped = parsed.clamp(0, 999);
+    if (clamped == _config!.maxFinalHistoryMessages) return;
+    final updated = _config!.copyWith(
+      maxFinalHistoryMessages: clamped,
+      updatedAt: currentTimestampSeconds(),
+    );
+    await ref.read(studioConfigRepoProvider).upsert(updated);
+    if (mounted) setState(() => _config = updated);
+  }
+
+  /// Standalone card shown in the empty state (before Studio is built), so
+  /// agentic memory can be toggled without building Studio first. Mirrors the
+  /// styling of [_buildContextInfoCard] for visual consistency.
+  Widget _buildStandaloneAgenticCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: context.cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      child: _buildAgenticAdvancedSection(includeRoutingMode: false),
+    );
+  }
+
+  Widget _buildAgenticAdvancedSection({required bool includeRoutingMode}) {
+    // Wrap in a transparent Material so ListTile ink splashes render correctly
+    // even when this section is placed inside a DecoratedBox (Container with
+    // background color) — otherwise the intermediate background hides them.
+    return Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: Row(
+        children: [
+          Icon(Icons.psychology_outlined, size: 20, color: context.cs.primary),
+          const SizedBox(width: 8),
+          Text(
+            'Agentic memory (advanced)',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: context.cs.onSurface,
             ),
           ),
         ],
       ),
+      subtitle: const Text(
+        'Memory agent writes trackers + drafts. POST-cleaner rewrites clichés.',
+        style: TextStyle(fontSize: 11),
+      ),
+      children: [
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Write-loop (trackers + memory drafts)'),
+          subtitle: const Text(
+            'After each accepted turn, the memory agent writes '
+            'lightweight trackers and pending memory drafts.',
+          ),
+          value: _agenticWriteEnabled,
+          onChanged: (v) async {
+            await _saveMemoryBookSetting(
+              (s) => s.copyWith(agenticWriteEnabled: v),
+            );
+            if (mounted) setState(() => _agenticWriteEnabled = v);
+          },
+        ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('POST-cleaner (anti-cliché rewrite)'),
+          subtitle: const Text(
+            'After generation, silently rewrites the response to remove '
+            'clichés and repetition. Original preserved as a swipe.',
+          ),
+          value: _postCleanerEnabled,
+          onChanged: (v) async {
+            await _saveMemoryBookSetting(
+              (s) => s.copyWith(postCleanerEnabled: v),
+            );
+            if (mounted) setState(() => _postCleanerEnabled = v);
+          },
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: _buildSidecarModelSelector(),
+        ),
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Agent timeout'),
+          subtitle: Text(
+            '${(_sidecarTimeoutMs / 1000).toStringAsFixed(0)}s — how long to '
+            'wait for the sidecar agent before giving up.',
+          ),
+          trailing: const Icon(Icons.edit_outlined, size: 18),
+          onTap: _showSidecarTimeoutDialog,
+        ),
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Cleaner temperature'),
+          subtitle: Text(
+            '$_postCleanerTemperature — lower = more faithful rewrite, '
+            'higher = more creative.',
+          ),
+          trailing: const Icon(Icons.edit_outlined, size: 18),
+          onTap: _showCleanerTemperatureDialog,
+        ),
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Cleaner max tokens'),
+          subtitle: Text(
+            _postCleanerMaxTokens == 0
+                ? 'Auto (half of original length).'
+                : '$_postCleanerMaxTokens tokens.',
+          ),
+          trailing: const Icon(Icons.edit_outlined, size: 18),
+          onTap: _showCleanerMaxTokensDialog,
+        ),
+        if (includeRoutingMode)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Preset routing mode'),
+            subtitle: const Text(
+              'Verbatim = blocks go to agents as-is (no LLM). '
+              'Compiled = LLM digests blocks into instructions.',
+            ),
+            trailing: DropdownButton<String>(
+              value: _routingMode,
+              items: const [
+                DropdownMenuItem(
+                  value: 'verbatim',
+                  child: Text('Verbatim'),
+                ),
+                DropdownMenuItem(
+                  value: 'compiled',
+                  child: Text('Compiled'),
+                ),
+              ],
+              onChanged: (v) async {
+                if (v == null || v == _routingMode) return;
+                await _saveRoutingMode(v);
+                if (mounted) setState(() => _routingMode = v);
+              },
+            ),
+          ),
+      ],
+      ),
     );
+  }
+
+  Future<void> _saveMemoryBookSetting(
+    MemoryBookSettings Function(MemoryBookSettings) mutator,
+  ) async {
+    final repo = ref.read(memoryBookRepoProvider);
+    // Use ensureForSession (not getBySessionId): on the empty Studio screen the
+    // MemoryBook row may not exist yet. updateSettings is a bare UPDATE and
+    // silently no-ops on a missing row, so the toggle would not persist.
+    final book = await repo.ensureForSession(widget.sessionId);
+    final updated = mutator(book.settings);
+    await repo.updateSettings(widget.sessionId, updated);
+  }
+
+  /// Dropdown model selector for the agentic sidecar (write-loop +
+  /// POST-cleaner). The sidecar reuses the chat Run API config's endpoint/key
+  /// (sidecarSource='current'), so we fetch that provider's model list. An
+  /// empty selection falls back to the chat model — recommended for a cheaper
+  /// /faster agent model while the writer keeps the premium model.
+  Widget _buildSidecarModelSelector() {
+    final config = _contextInfo.runApiConfig;
+    if (config == null) {
+      return const Text(
+        'No chat API config available for the agent.',
+        style: TextStyle(fontSize: 12),
+      );
+    }
+    final fetched = _modelsByApiConfigId[config.id] ?? const <String>[];
+    final models = <String>{
+      ...fetched,
+      if (_sidecarModel.isNotEmpty && !fetched.contains(_sidecarModel))
+        _sidecarModel,
+    }.toList()
+      ..sort();
+    final isFetching = _fetchingModelConfigIds.contains(config.id);
+    // '' represents "use chat model" (sidecarModel empty).
+    final selected = _sidecarModel.isEmpty ? '' : _sidecarModel;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue: models.contains(selected) || selected.isEmpty
+                ? selected
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Agent model (sidecar)',
+              helperText: 'Empty = use chat model. A cheaper/faster model is '
+                  'recommended for trackers + cleaner.',
+              helperMaxLines: 2,
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: [
+              const DropdownMenuItem<String>(
+                value: '',
+                child: Text('(use chat model)'),
+              ),
+              ...models.map(
+                (m) => DropdownMenuItem<String>(
+                  value: m,
+                  child: Text(m, overflow: TextOverflow.ellipsis),
+                ),
+              ),
+            ],
+            onChanged: (m) async {
+              await _saveMemoryBookSetting(
+                (s) => s.copyWith(sidecarModel: m ?? ''),
+              );
+              if (mounted) setState(() => _sidecarModel = m ?? '');
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: IconButton.filledTonal(
+            tooltip: 'Fetch models',
+            onPressed: isFetching ? null : () => _fetchProviderModels(config),
+            icon: isFetching
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh, size: 18),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showSidecarTimeoutDialog() async {
+    final controller = TextEditingController(
+      text: (_sidecarTimeoutMs / 1000).toStringAsFixed(0),
+    );
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Agent timeout'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Seconds to wait for the sidecar agent before giving up. '
+              'Slower/larger models need more time (30–90s is typical).',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                suffixText: 'seconds',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final seconds = int.tryParse(controller.text.trim());
+              if (seconds == null || seconds <= 0) {
+                Navigator.of(ctx).pop();
+                return;
+              }
+              Navigator.of(ctx).pop(seconds * 1000);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await _saveMemoryBookSetting((s) => s.copyWith(sidecarTimeoutMs: result));
+    if (mounted) setState(() => _sidecarTimeoutMs = result);
+  }
+
+  Future<void> _showCleanerTemperatureDialog() async {
+    final controller = TextEditingController(
+      text: _postCleanerTemperature.toStringAsFixed(2),
+    );
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cleaner temperature'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Controls how creative the POST-cleaner rewrite is.\n'
+              '0.0 = almost identical to original\n'
+              '0.3 = default, light cleanup\n'
+              '0.7 = more aggressive rewrite',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final v = double.tryParse(controller.text.trim());
+              if (v == null || v < 0 || v > 2) {
+                Navigator.of(ctx).pop();
+                return;
+              }
+              Navigator.of(ctx).pop(v);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await _saveMemoryBookSetting(
+      (s) => s.copyWith(postCleanerTemperature: result),
+    );
+    if (mounted) setState(() => _postCleanerTemperature = result);
+  }
+
+  Future<void> _showCleanerMaxTokensDialog() async {
+    final controller = TextEditingController(
+      text: _postCleanerMaxTokens == 0 ? '' : '$_postCleanerMaxTokens',
+    );
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cleaner max tokens'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Maximum tokens for the cleaner rewrite.\n'
+              '0 = auto (half the original text length).\n'
+              'If the cleaner truncates responses, increase this.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                hintText: '0 (auto)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final v = int.tryParse(controller.text.trim());
+              Navigator.of(ctx).pop(v ?? 0);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await _saveMemoryBookSetting(
+      (s) => s.copyWith(postCleanerMaxTokens: result),
+    );
+    if (mounted) setState(() => _postCleanerMaxTokens = result);
+  }
+
+  Future<void> _saveRoutingMode(String mode) async {
+    if (_config == null) return;
+    final updated = _config!.copyWith(
+      routingMode: mode,
+      updatedAt: currentTimestampSeconds(),
+    );
+    await ref.read(studioConfigRepoProvider).upsert(updated);
+    if (mounted) setState(() => _config = updated);
   }
 
   Future<void> _showBuilderPromptDialog() async {
@@ -1268,6 +1917,233 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
+  Future<void> _showBulkAgentSettingsDialog() async {
+    var apiConfigId = _bulkAgentApiConfigId;
+    var modelOverride = _bulkAgentModelOverride;
+    var temperature = _bulkAgentTemperature;
+    var maxTokens = _bulkAgentMaxTokens;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, dialogSetState) {
+            final selectedConfig = _contextInfo.apiConfigs
+                .where((config) => config.id == apiConfigId)
+                .firstOrNull;
+            return AlertDialog(
+              title: const Text('Bulk agent settings'),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Configure shared values, then press Apply to all. Individual agents can still be edited separately afterwards.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _bulkAgentApiSelector(
+                      value: apiConfigId,
+                      onChanged: (id) => dialogSetState(() => apiConfigId = id),
+                    ),
+                    const SizedBox(height: 8),
+                    _bulkAgentProviderModelSelector(
+                      config: selectedConfig,
+                      modelOverride: modelOverride,
+                      onChanged: (model) {
+                        dialogSetState(() {
+                          modelOverride = model == selectedConfig?.model
+                              ? ''
+                              : model ?? '';
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: temperature,
+                            decoration: const InputDecoration(
+                              labelText: 'All temp',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            onChanged: (value) => temperature = value,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: maxTokens,
+                            decoration: const InputDecoration(
+                              labelText: 'All max tokens',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (value) => maxTokens = value,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  onPressed: () {
+                    _bulkAgentApiConfigId = apiConfigId;
+                    _bulkAgentModelOverride = modelOverride;
+                    _bulkAgentTemperature = temperature;
+                    _bulkAgentMaxTokens = maxTokens;
+                    _applyBulkAgentSettings();
+                    Navigator.of(dialogContext).pop();
+                  },
+                  icon: const Icon(Icons.done_all, size: 18),
+                  label: const Text('Apply to all'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _bulkAgentApiSelector({
+    required String? value,
+    required void Function(String?) onChanged,
+  }) {
+    final effectiveValue =
+        _contextInfo.apiConfigs.any((config) => config.id == value)
+        ? value
+        : null;
+    return DropdownButtonFormField<String>(
+      initialValue: effectiveValue,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'All agents model config',
+        border: OutlineInputBorder(),
+        isDense: true,
+      ),
+      items: _contextInfo.apiConfigs
+          .map(
+            (config) => DropdownMenuItem(
+              value: config.id,
+              child: Text(_apiLabel(config), overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(),
+      onChanged: (id) {
+        final config = _contextInfo.apiConfigs
+            .where((item) => item.id == id)
+            .firstOrNull;
+        if (config == null) return;
+        onChanged(config.id);
+      },
+    );
+  }
+
+  Widget _bulkAgentProviderModelSelector({
+    required ApiConfig? config,
+    required String modelOverride,
+    required void Function(String?) onChanged,
+  }) {
+    if (config == null) return const SizedBox.shrink();
+    final fetched = _modelsByApiConfigId[config.id] ?? const <String>[];
+    final models = <String>[
+      if (config.model.isNotEmpty) config.model,
+      ...fetched,
+      if (modelOverride.isNotEmpty) modelOverride,
+    ].where((model) => model.trim().isNotEmpty).toSet().toList()..sort();
+    final selectedModel = modelOverride.isNotEmpty
+        ? modelOverride
+        : config.model.isNotEmpty
+        ? config.model
+        : null;
+    final isFetching = _fetchingModelConfigIds.contains(config.id);
+
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue:
+                selectedModel != null && models.contains(selectedModel)
+                ? selectedModel
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'All provider model',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: models
+                .map(
+                  (model) => DropdownMenuItem(
+                    value: model,
+                    child: Text(model, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            hint: Text(config.model.isNotEmpty ? config.model : 'Fetch models'),
+            onChanged: onChanged,
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filledTonal(
+          tooltip: 'Fetch models',
+          onPressed: isFetching ? null : () => _fetchProviderModels(config),
+          icon: isFetching
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh, size: 18),
+        ),
+      ],
+    );
+  }
+
+  void _applyBulkAgentSettings() {
+    final config = _contextInfo.apiConfigs
+        .where((item) => item.id == _bulkAgentApiConfigId)
+        .firstOrNull;
+    final temperature = double.tryParse(_bulkAgentTemperature);
+    final maxTokens = int.tryParse(_bulkAgentMaxTokens);
+    _updateAllAgents((agent) {
+      var next = agent;
+      if (config != null) {
+        next = next.copyWith(
+          modelSource: 'custom',
+          model: config.id,
+          modelOverride: _bulkAgentModelOverride,
+          endpoint: config.endpoint,
+        );
+      }
+      if (temperature != null) {
+        next = next.copyWith(temperature: temperature);
+      }
+      if (maxTokens != null) {
+        next = next.copyWith(maxTokens: maxTokens);
+      }
+      return next;
+    });
+  }
+
   Widget _customApiSelector(StudioAgent agent) {
     return DropdownButtonFormField<String>(
       initialValue: _contextInfo.apiConfigs.any((c) => c.id == agent.model)
@@ -1480,21 +2356,42 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 
   Widget _buildAgentDetails(StudioAgent agent) {
     final isFinal = _config?.agents.lastOrNull?.id == agent.id;
+    final regenerating = _regeneratingAgentIds.contains(agent.id);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Prompt shard:',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: context.cs.onSurfaceVariant,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Prompt shard:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: context.cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: regenerating
+                    ? null
+                    : () => _regenerateAgentInstruction(agent),
+                icon: regenerating
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_fix_high, size: 16),
+                label: Text(regenerating ? 'Regenerating...' : 'Regenerate'),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           TextFormField(
+            key: ValueKey('${agent.id}_${agent.promptShard.hashCode}'),
             initialValue: agent.promptShard,
             maxLines: 6,
             decoration: const InputDecoration(
@@ -1640,6 +2537,16 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     final agents = _config!.agents.map((a) {
       return a.id == updated.id ? updated : a;
     }).toList();
+    _saveAgents(agents);
+  }
+
+  void _updateAllAgents(StudioAgent Function(StudioAgent agent) update) {
+    if (_config == null) return;
+    _saveAgents(_config!.agents.map(update).toList());
+  }
+
+  void _saveAgents(List<StudioAgent> agents) {
+    if (_config == null) return;
     final newConfig = _config!.copyWith(
       agents: agents,
       updatedAt: currentTimestampSeconds(),

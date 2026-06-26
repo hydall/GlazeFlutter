@@ -138,6 +138,9 @@ class StudioConfigRepo implements SyncStudioConfigStore {
             buildApiConfigId: Value(config.buildApiConfigId),
             runApiConfigId: Value(config.runApiConfigId),
             builderPromptTemplate: Value(config.builderPromptTemplate),
+            maxFinalHistoryMessages: Value(config.maxFinalHistoryMessages),
+            routingMode: Value(config.routingMode),
+            broadcastBlocksJson: Value(jsonEncode(config.broadcastBlocks)),
             selectedBlockIdsJson: Value(jsonEncode(config.selectedBlockIds)),
             selectedBlockIdsInitialized: Value(
               config.selectedBlockIdsInitialized,
@@ -190,6 +193,14 @@ class StudioConfigRepo implements SyncStudioConfigStore {
     } catch (_) {
       selectedBlockIds = const [];
     }
+    List<String> broadcastBlocks;
+    try {
+      broadcastBlocks = (jsonDecode(row.broadcastBlocksJson) as List<dynamic>)
+          .whereType<String>()
+          .toList(growable: false);
+    } catch (_) {
+      broadcastBlocks = const [];
+    }
     List<StudioPresetOverride> studioPresetOverrides;
     try {
       final list = jsonDecode(row.studioPresetOverridesJson) as List<dynamic>;
@@ -215,6 +226,9 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       buildApiConfigId: row.buildApiConfigId,
       runApiConfigId: row.runApiConfigId,
       builderPromptTemplate: row.builderPromptTemplate,
+      maxFinalHistoryMessages: row.maxFinalHistoryMessages,
+      routingMode: row.routingMode,
+      broadcastBlocks: broadcastBlocks,
       selectedBlockIds: selectedBlockIds,
       selectedBlockIdsInitialized: row.selectedBlockIdsInitialized,
       createdAt: row.createdAt,

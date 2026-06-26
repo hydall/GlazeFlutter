@@ -12,6 +12,7 @@ import '../db/repositories/memory_catalog_repo.dart';
 import '../db/repositories/memory_salience_repo.dart';
 import '../db/repositories/memory_entity_repo.dart';
 import '../models/chat_message.dart';
+import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/memory_graph.dart';
 import '../state/db_provider.dart';
@@ -24,11 +25,8 @@ import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
 import 'memory_embedding_service.dart';
 import 'memory_excerpt_selector.dart';
-import 'memory_entity_extractor.dart';
 import 'memory_formatting.dart';
-import 'memory_graph_builder.dart';
 import 'memory_needs_classifier_service.dart';
-import 'memory_salience_scorer.dart';
 import 'memory_selector.dart';
 import 'memory_sidecar_prewarm_cache.dart';
 import 'memory_sidecar_reranker_service.dart';
@@ -95,18 +93,13 @@ class MemoryInjectionService {
     this._catalogRepo,
     this._embeddingService,
     this._readGlobalSettings, {
-    MemorySalienceRepo? salienceRepo,
-    MemoryEntityRepo? entityRepo,
-    MemoryNeedsClassifierService? classifierService,
-    MemorySidecarRerankerService? sidecarService,
-    MemorySidecarPrewarmCache? prewarmCache,
-    MemoryAgenticService? agenticService,
-  })  : _salienceRepo = salienceRepo,
-        _entityRepo = entityRepo,
-        _classifierService = classifierService,
-        _sidecarService = sidecarService,
-        _prewarmCache = prewarmCache,
-        _agenticService = agenticService;
+    this._salienceRepo,
+    this._entityRepo,
+    this._classifierService,
+    this._sidecarService,
+    this._prewarmCache,
+    this._agenticService,
+  });
 
   /// Build injection candidates + diagnostics. Returns the raw selection
   /// (with source-window exclusion applied) plus all scored candidates
@@ -159,6 +152,10 @@ class MemoryInjectionService {
       double? classifierConfidence,
       String? sidecarStatus,
       int? sidecarLatencyMs,
+      List<AgentOperationAttempt> sidecarAttempts = const [],
+      String? agenticStatus,
+      List<AgentOperationAttempt> agenticAttempts = const [],
+      int? agenticLatencyMs,
       bool prewarmHit = false,
     }) {
       sw.stop();
@@ -182,6 +179,10 @@ class MemoryInjectionService {
                 classifierConfidence: classifierConfidence,
                 sidecarStatus: sidecarStatus,
                 sidecarLatencyMs: sidecarLatencyMs,
+                sidecarAttempts: sidecarAttempts,
+                agenticStatus: agenticStatus,
+                agenticAttempts: agenticAttempts,
+                agenticLatencyMs: agenticLatencyMs,
                 prewarmHit: prewarmHit,
               ),
       );
@@ -210,7 +211,7 @@ class MemoryInjectionService {
 
     final salienceByEntryId = <String, MemorySalience>{};
     if (_salienceRepo != null && book.settings.memoryMode != 'fast') {
-      final salienceRows = await _salienceRepo!.getBySessionId(sessionId);
+      final salienceRows = await _salienceRepo.getBySessionId(sessionId);
       for (final s in salienceRows) {
         salienceByEntryId[s.memoryEntryId] = s;
       }
@@ -220,7 +221,7 @@ class MemoryInjectionService {
     var entityOverlapByEntryId = const <String, int>{};
     if (_entityRepo != null && book.settings.memoryMode != 'fast') {
       final scanText = _selectorScanText(book.settings, history, currentText);
-      final entities = await _entityRepo!.getBySessionId(sessionId);
+      final entities = await _entityRepo.getBySessionId(sessionId);
       if (entities.isNotEmpty) {
         final lowerQuery = scanText.toLowerCase();
         for (final entity in entities) {
@@ -321,7 +322,7 @@ class MemoryInjectionService {
           .where((s) => !s.excludedBySourceWindow && s.score > 0)
           .map((s) => s.entry.title)
           .toList();
-      classifierResult = await _classifierService!.classify(
+      classifierResult = await _classifierService.classify(
         MemoryClassifierRequest(
           settings: book.settings,
           currentText: currentText,
@@ -363,7 +364,7 @@ class MemoryInjectionService {
 
       // If no prewarm hit, run sidecar on-demand
       if (!prewarmHit) {
-        sidecarResult = await _sidecarService!.rerank(
+        sidecarResult = await _sidecarService.rerank(
           MemorySidecarRequest(
             settings: book.settings,
             candidates: selection.allScores
@@ -383,7 +384,7 @@ class MemoryInjectionService {
 
         // Store for next-turn prewarm
         if (_prewarmCache != null && sidecarResult.status == 'ok') {
-          _prewarmCache!.put(MemorySidecarPrewarmEntry(
+          _prewarmCache.put(MemorySidecarPrewarmEntry(
             key: MemorySidecarPrewarmKey(
               sessionId: sessionId,
               branchId: sessionId,
@@ -403,7 +404,7 @@ class MemoryInjectionService {
     // Agentic mode: searchMemory tool (Phase 10)
     if (book.settings.memoryMode == 'agentic' &&
         _agenticService != null) {
-      agenticResult = await _agenticService!.runAgentic(
+      agenticResult = await _agenticService.runAgentic(
         settings: book.settings,
         entries: activeEntries,
         currentText: currentText,
@@ -421,10 +422,15 @@ class MemoryInjectionService {
       finalSelection,
       budget: budget,
       settings: book.settings,
-      classifierStatus: classifierResult?.status,
-      classifierNeedsMemory: classifierResult?.output?.needsMemory,
-      classifierConfidence: classifierResult?.output?.confidence,
+      classifierStatus: classifierResult.status,
+      classifierNeedsMemory: classifierResult.output?.needsMemory,
+      classifierConfidence: classifierResult.output?.confidence,
       sidecarStatus: sidecarResult?.status,
+      sidecarLatencyMs: sidecarResult?.totalElapsedMs,
+      sidecarAttempts: sidecarResult?.attempts ?? const [],
+      agenticStatus: agenticResult?.status,
+      agenticAttempts: agenticResult?.attempts ?? const [],
+      agenticLatencyMs: agenticResult?.totalElapsedMs,
       prewarmHit: prewarmHit,
     );
   }

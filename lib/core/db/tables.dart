@@ -277,6 +277,33 @@ class MemoryConsolidationRows extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('TrackerRow')
+@TableIndex(name: 'idx_trackers_session', columns: {#sessionId})
+@TableIndex(
+  name: 'idx_trackers_session_scope',
+  columns: {#sessionId, #scope},
+)
+class TrackerRows extends Table {
+  @override
+  String get tableName => 'tracker_rows';
+
+  TextColumn get sessionId => text()();
+  TextColumn get name => text()();
+  TextColumn get value => text().withDefault(const Constant(''))();
+  // Reserved for future cross-scope trackers (chat/character/global). For the
+  // agentic MVP, trackers are session-scoped ('chat' default).
+  TextColumn get scope => text().withDefault(const Constant('chat'))();
+  // Provenance: which agent/turn wrote this tracker (e.g.
+  // 'memory_agent:msg_10'). For debugging and cache invalidation.
+  TextColumn get provenance => text().withDefault(const Constant(''))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  // Composite PK: one value per (session, tracker name). upsert via
+  // insertOnConflictUpdate targets this natural key.
+  @override
+  Set<Column> get primaryKey => {sessionId, name};
+}
+
 @DataClassName('StudioConfigRow')
 @TableIndex(name: 'idx_studio_config_session', columns: {#sessionId})
 class StudioConfigRows extends Table {
@@ -301,6 +328,12 @@ class StudioConfigRows extends Table {
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get builderPromptTemplate =>
       text().withDefault(const Constant(''))();
+  IntColumn get maxFinalHistoryMessages =>
+      integer().withDefault(const Constant(15))();
+  TextColumn get routingMode =>
+      text().withDefault(const Constant('verbatim'))();
+  TextColumn get broadcastBlocksJson =>
+      text().withDefault(const Constant('[]'))();
   TextColumn get selectedBlockIdsJson =>
       text().withDefault(const Constant('[]'))();
   BoolColumn get selectedBlockIdsInitialized =>

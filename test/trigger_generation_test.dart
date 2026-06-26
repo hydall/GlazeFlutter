@@ -44,7 +44,10 @@ class _MockChatNotifier extends ChatNotifier {
   }
 
   @override
-  Future<void> regenerateLastAssistant({String? guidanceText}) async {
+  Future<void> regenerateLastAssistant({
+    String? guidanceText,
+    bool studioFinalOnly = false,
+  }) async {
     calls.add('regenerate');
   }
 }

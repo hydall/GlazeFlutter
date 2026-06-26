@@ -10,6 +10,7 @@ import '../../core/utils/time_helpers.dart';
 import 'chat_provider.dart' show streamingStateProvider;
 import 'chat_session_service.dart';
 import 'chat_state.dart';
+import '../../core/llm/memory_studio_service.dart';
 
 class AbortHandler {
   final Ref _ref;
@@ -87,6 +88,10 @@ class AbortHandler {
     _imgGenCancelToken?.cancel();
     _imgGenCancelToken = null;
     clearStreaming();
+    // Reset studio runtime state so the "Studio 8/8" plaque disappears
+    // immediately on abort (not waiting for the pipeline's finally block).
+    _ref.read(studioRuntimeStateProvider.notifier).state =
+        const StudioRuntimeState.idle();
 
     final current = _getState().value;
     if (current != null && current.isGenerating) {

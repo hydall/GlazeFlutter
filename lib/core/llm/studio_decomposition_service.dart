@@ -10,19 +10,184 @@ import '../models/api_config.dart';
 import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../utils/time_helpers.dart';
+import 'macro_engine.dart';
+import 'studio_block_router.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
 import '../state/memory_settings_provider.dart';
 import '../../features/settings/api_list_provider.dart';
 
+class _ControllerSpec {
+  final String id;
+  final String name;
+  final String purpose;
+  final String outputContract;
+  final String fallbackPrompt;
+  final String refreshPolicy;
+  final List<String> invalidationSignals;
+  final double temperature;
+  final int maxTokens;
+  final int timeoutMs;
+  final bool isFinal;
+
+  const _ControllerSpec({
+    required this.id,
+    required this.name,
+    required this.purpose,
+    required this.outputContract,
+    required this.fallbackPrompt,
+    required this.refreshPolicy,
+    required this.invalidationSignals,
+    required this.temperature,
+    required this.maxTokens,
+    required this.timeoutMs,
+    this.isFinal = false,
+  });
+}
+
+const _controllerSpecs = <_ControllerSpec>[
+  _ControllerSpec(
+    id: 'continuity',
+    name: 'Continuity Controller',
+    purpose:
+        'Track source-of-truth facts, recent chat state, unresolved threads, who knows what, and contradictions to avoid.',
+    outputContract:
+        'At chat time, output a compact continuity brief only: facts, constraints, risks, and next-turn continuity notes. No scene prose.',
+    fallbackPrompt:
+        'Review character, persona, scenario, memory, summary, lore, and recent chat. Produce a compact continuity brief with established facts, who knows what, active constraints, unresolved threads, and contradictions to avoid. Do not write scene prose or dialogue.',
+    refreshPolicy: 'turn',
+    invalidationSignals: ['last_user_message_changed', 'memory_changed'],
+    temperature: 0.3,
+    maxTokens: 1600,
+    timeoutMs: 60000,
+  ),
+  _ControllerSpec(
+    id: 'agency',
+    name: 'Agency & Character Controller',
+    purpose:
+        'Enforce user sovereignty, character autonomy, character psychology, subjective knowledge, and believable behavior.',
+    outputContract:
+        'At chat time, output actionable constraints for user agency and character behavior. No scene prose, no drafted actions, no dialogue. You may add an optional "Options" list of 1-3 branchable character-behavior approaches the final writer can pick from (describe the approach only, e.g. "let the character deflect" vs "let a crack of honesty show"); never write ready-made lines or actions.',
+    fallbackPrompt:
+        'Enforce user autonomy and character authenticity. Never write the user\'s dialogue, actions, thoughts, feelings, intentions, or decisions. Characters act only from established knowledge, psychology, history, physical limits, and current pressure. Produce constraints only, not prose.',
+    refreshPolicy: 'scene',
+    invalidationSignals: ['active_cast_changed', 'relationship_state_changed'],
+    temperature: 0.3,
+    maxTokens: 1400,
+    timeoutMs: 60000,
+  ),
+  _ControllerSpec(
+    id: 'narrative',
+    name: 'Narrative / Pacing / Style Controller',
+    purpose:
+        'Convert narrative mode, style, length, POV, pacing, sensory budget, tone, and genre rules into a controllable response contract. Set response length adaptively to scene tempo: the default target is 6-8 paragraphs; shorten in fast, dynamic, action, or rapid back-and-forth dialogue scenes so the user can react sooner; lengthen toward and beyond the default in slow, descriptive, introspective, or transitional scenes.',
+    outputContract:
+        'At chat time, output a brief with target length, paragraph budget, POV/camera, style mode, sensory budget, beat structure, dialogue/action balance, opening constraint, and stopping point. No scene prose. Choose the paragraph budget by reading the current scene tempo: default 6-8 paragraphs; fewer (around 2-4) in fast/dynamic/action/quick-dialogue beats to hand the turn back to the user; more (8+) in slow, atmospheric, or descriptive beats. Always state both the chosen number and why this tempo warrants it in one short note. You may add an optional "Options" list of 1-3 branchable structural/style approaches the final writer can pick from (describe the approach only, e.g. "open on a physical action" vs "open on a single line of dialogue"); never write ready-made prose.',
+    fallbackPrompt:
+        'Extract narrative mode, pacing, style, length, POV, tone, genre, and sensory budget into a concise response contract. Set length adaptively to scene tempo: default target 6-8 paragraphs; shorten to about 2-4 in fast, dynamic, action, or rapid-dialogue scenes so the user can react; lengthen to 8+ in slow, descriptive, or introspective scenes. Include dialogue/action balance and where the response should stop. Do not draft the reply.',
+    refreshPolicy: 'scene',
+    invalidationSignals: ['scene_changed', 'tone_changed', 'pacing_changed'],
+    temperature: 0.3,
+    maxTokens: 1600,
+    timeoutMs: 60000,
+  ),
+  _ControllerSpec(
+    id: 'dialogue',
+    name: 'Dialogue Controller',
+    purpose:
+        'Control dialogue cadence, speech texture, monologue segmentation, interaction balance, and when silence is appropriate.',
+    outputContract:
+        'At chat time, output dialogue guidance only: who may plausibly speak, desired dialogue ratio, speech constraints, and silence constraints. No drafted lines. You may add an optional "Options" list of 1-3 branchable dialogue approaches the final writer can pick from (describe the approach only, e.g. "answer with silence and a gesture" vs "give one clipped deflecting line"); never write the actual dialogue.',
+    fallbackPrompt:
+        'Guide dialogue cadence and interaction. Prefer purposeful speech when characters can plausibly speak; segment monologues naturally; preserve character voice and subtext. Do not draft dialogue.',
+    refreshPolicy: 'turn',
+    invalidationSignals: [
+      'last_user_message_changed',
+      'active_speaker_changed',
+    ],
+    temperature: 0.3,
+    maxTokens: 1200,
+    timeoutMs: 60000,
+  ),
+  _ControllerSpec(
+    id: 'guard',
+    name: 'Anti-Loop & Prose Guard',
+    purpose:
+        'Enforce anti-loop, anti-echo, banlists, anti-cliche, anti-slop, no-tells, and stable prose quality rules.',
+    outputContract:
+        'At chat time, output a compact guard checklist and forbidden items for this turn. No rewritten scene prose.',
+    fallbackPrompt:
+        'Check the last user message and recent assistant replies for repetition risks. Enforce anti-echo, anti-loop, banlists, forbidden cliches, and prose quality constraints. Produce a guard brief only.',
+    refreshPolicy: 'turn',
+    invalidationSignals: [
+      'last_3_replies_changed',
+      'last_user_message_changed',
+    ],
+    temperature: 0.2,
+    maxTokens: 1400,
+    timeoutMs: 60000,
+  ),
+  _ControllerSpec(
+    id: 'world',
+    name: 'World / NPC Controller',
+    purpose:
+        'Control living-world texture, NPC ecology, offscreen pressure, public-space activity, and background consequences without stealing focus.',
+    outputContract:
+        'At chat time, output world/NPC guidance only: active NPCs, off-focus thread, environmental pressure, and what not to add. No prose. You may add an optional "Options" list of 1-3 branchable world-texture approaches the final writer can pick from (describe the approach only, e.g. "let an offscreen sound intrude" vs "keep the world still and pressureless"); never write ready-made prose.',
+    fallbackPrompt:
+        'Guide living-world and NPC activity. NPCs should act only when the scene supports it and should affect the scene without stealing focus. Produce practical world-state guidance only.',
+    refreshPolicy: 'scene',
+    invalidationSignals: [
+      'scene_changed',
+      'location_changed',
+      'active_cast_changed',
+    ],
+    temperature: 0.3,
+    maxTokens: 1200,
+    timeoutMs: 60000,
+  ),
+  _ControllerSpec(
+    id: 'meta',
+    name: 'Meta-Weaver / Lumia Policy',
+    purpose:
+        'Preserve Lumia/meta-weaver/OOC behavior as silent policy and OOC interface rules, not as a scene-writing agent.',
+    outputContract:
+        'At chat time, output only meta-policy constraints if needed. Never write in-scene prose. Lumia remains silent during normal RP unless explicitly addressed OOC.',
+    fallbackPrompt:
+        'Apply configured meta-weaver or OOC persona rules silently during normal RP when such a persona exists. Do not expose hidden reasoning or write meta-persona scene prose. If no meta/OOC persona is configured, this controller should remain inert and may be disabled by the user.',
+    refreshPolicy: 'static',
+    invalidationSignals: ['preset_changed'],
+    temperature: 0.2,
+    maxTokens: 1200,
+    timeoutMs: 60000,
+  ),
+  _ControllerSpec(
+    id: 'final',
+    name: 'Main Responder',
+    purpose:
+        'Write the final visible RP response using the full prompt and the prior controller briefs.',
+    outputContract:
+        'At chat time, output only the final visible RP response. Obey all controller briefs and final formatting/content constraints.',
+    fallbackPrompt:
+        'Write the final RP response using the assembled chat prompt, character/scenario/persona instructions, memory, and prior Studio controller briefs. Obey user agency, character truth, dialogue, pacing, style, formatting, and guard constraints. Output only the final visible reply.',
+    refreshPolicy: 'turn',
+    invalidationSignals: ['last_user_message_changed'],
+    temperature: 0.8,
+    maxTokens: 8000,
+    timeoutMs: 90000,
+    isFinal: true,
+  ),
+];
+
 /// LLM-powered preset decomposition service for Studio Mode.
 ///
-/// Takes all enabled preset blocks and asks an LLM to decompose them into
-/// agent tasks. Each agent gets:
-/// - A name (e.g. "Memory Curator", "Director", "Main Responder")
-/// - A role (system/user)
-/// - A prompt shard (instructions extracted from the preset)
+/// Takes enabled preset blocks, assigns them to stable hard-controller slots,
+/// then asks an LLM to synthesize each visible controller instruction. Each
+/// agent gets:
+/// - A stable controller name (e.g. "Continuity Controller")
+/// - A role
+/// - A prompt shard (instructions accumulated from assigned preset blocks)
 /// - A pipeline order
 /// - The source block names it was derived from
 ///
@@ -33,18 +198,44 @@ class StudioDecompositionService {
 
   StudioDecompositionService(this._ref);
 
-  /// Decompose a preset into agent tasks.
+  /// Decompose a preset into build-time Studio controller agents.
   /// Returns a list of [StudioAgent]s ordered by pipeline execution order.
   Future<List<StudioAgent>> decompose({
     required Preset preset,
     required String sessionId,
     ApiConfig? apiConfig,
     String builderPromptTemplate = '',
+    String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
-    final enabledBlocks = preset.blocks.where((b) => b.enabled).toList();
+    final allEnabled = preset.blocks.where((b) => b.enabled).toList();
+    if (allEnabled.isEmpty) return const [];
+
+    // Expand setvar/getvar macros in block order BEFORE routing. This
+    // resolves the variable pipeline (setvar→store→getvar) so rule values
+    // reach their destination blocks. setvar-only blocks (e.g. LENGTH) have
+    // their rule values surfaced as content. The CoT dispatcher — which
+    // previously read all variables via getvar — can then be safely dropped
+    // without losing rules. See docs/PLAN_AGENTIC_STUDIO.md §11.
+    final expandedBlocks = expandBlocksForRouting(allEnabled);
+
+    // CoT / reasoning / thinking blocks are NOT routed to any agent: the
+    // multi-agent pipeline IS the externalized chain-of-thought, so a per-turn
+    // <think> directive inside an agent is redundant and conflicts with the
+    // "produce a brief, not prose / no hidden reasoning" contract. Drop them
+    // after macro expansion. See docs/PLAN_AGENTIC_STUDIO.md §11.
+    final reasoningBlocks = expandedBlocks.where(isReasoningBlock).toList();
+    final enabledBlocks = expandedBlocks
+        .where((b) => !isReasoningBlock(b))
+        .toList();
+    if (reasoningBlocks.isNotEmpty) {
+      _log(
+        'dropped ${reasoningBlocks.length} reasoning/CoT block(s) from routing: '
+        '${reasoningBlocks.map((b) => b.name.isNotEmpty ? b.name : b.id).join(', ')}',
+      );
+    }
     if (enabledBlocks.isEmpty) return const [];
-    final preservedMetaBlocks = _preservedMetaBlocks(enabledBlocks);
+
     final totalChars = enabledBlocks.fold<int>(
       0,
       (sum, b) => sum + b.content.length,
@@ -52,94 +243,753 @@ class StudioDecompositionService {
     _log(
       'build start session=$sessionId preset="${preset.name}" '
       'blocks=${enabledBlocks.length} chars=$totalChars '
-      'preservedMeta=${preservedMetaBlocks.length} '
       'model=${apiConfig?.model ?? '<active>'}',
     );
 
-    // Build the blocks summary for the LLM
-    final blocksSummary = enabledBlocks
+    // §11: LLM router classifies block -> agent ONCE at build-time. Falls back
+    // to deterministic keyword bucketing if the LLM is unavailable/refuses, so
+    // Studio always builds. Skipped only when there is no build model.
+    final routingMapResult = await _routeBlocks(
+      blocks: enabledBlocks,
+      apiConfig: apiConfig,
+      cancelToken: cancelToken,
+    );
+    _log(
+      'routing: ${routingMapResult.fromLlm ? 'LLM' : 'keyword-fallback'} '
+      '(${routingMapResult.blockToBucket.length}/${enabledBlocks.length} mapped)',
+    );
+
+    final now = currentTimestampSeconds();
+    final assignments = _assignBlocks(enabledBlocks, routingMapResult);
+    final agents = <StudioAgent>[];
+    for (final spec in _controllerSpecs) {
+      final blocks = assignments[spec.id] ?? const <PresetBlock>[];
+      agents.add(
+        await _buildAgentForSpec(
+          spec: spec,
+          blocks: blocks,
+          sessionId: sessionId,
+          index: agents.length,
+          now: now,
+          apiConfig: apiConfig,
+          builderPromptTemplate: builderPromptTemplate,
+          routingMode: routingMode,
+          cancelToken: cancelToken,
+        ),
+      );
+    }
+
+    final result = _normalizeStudioAgents(agents);
+    _log('build complete session=$sessionId agents=${result.length}');
+    return result;
+  }
+
+  /// Collects "broadcast" blocks: cross-cutting rules that must reach more than
+  /// one stage. Output language and prose-quality guards (anti-loop / anti-echo
+  /// / anti-cliché / anti-slop / banlists) are not properties of a single agent
+  /// — they govern the final visible reply AND the POST-cleaner rewrite. They
+  /// are still routed to their primary agent (e.g. the guard agent) via
+  /// [_assignBlocks]; this method additionally surfaces their verbatim content
+  /// so the caller can (a) duplicate them into the Main Responder and (b)
+  /// persist them for the POST-cleaner. See docs/PLAN_AGENTIC_STUDIO.md §11.
+  ///
+  /// Returns blocks in preset order (priority = position, §12). Reasoning/CoT
+  /// blocks are excluded.
+  List<PresetBlock> collectBroadcastBlocks(Preset preset) {
+    final allEnabled = preset.blocks.where((b) => b.enabled).toList();
+    final expanded = expandBlocksForRouting(allEnabled);
+    return expanded
+        .where((b) => !isReasoningBlock(b) && isBroadcastBlock(b))
+        .toList();
+  }
+
+  /// Expands `{{setvar}}`/`{{getvar}}`/`{{trim}}` macros across all blocks in
+  /// preset order, threading the variable store forward (matching
+  /// `prompt_builder.dart` block-order semantics).
+  ///
+  /// This resolves the setvar→getvar pipeline at BUILD time so that rule
+  /// values reach their destination blocks even when the CoT dispatcher
+  /// (which previously read all variables via getvar) is dropped as a
+  /// reasoning block. Other macros (`{{char}}`, `{{user}}`, …) are left
+  /// untouched for chat-time expansion.
+  ///
+  /// **setvar-only blocks** (pure `{{setvar::…}}` — content is empty after
+  /// expansion but variables were set) are surfaced: their rule-like variable
+  /// values (`*_rules`, `*_target`, or multi-line/long text) become the
+  /// block's content, so the rules reach an agent instead of vanishing.
+  /// Technical flags (`*_mode`, `*_min`, `*_max` — short single-word/number
+  /// values) are discarded.
+  ///
+  /// Returns a new list of [PresetBlock]s with expanded content, in the same
+  /// order. Blocks whose expanded content is still empty (no setvar, no
+  /// getvar, no text) are dropped.
+  @visibleForTesting
+  static List<PresetBlock> expandBlocksForRouting(List<PresetBlock> blocks) {
+    var sessionVars = <String, String>{};
+    var globalVars = <String, String>{};
+    final result = <PresetBlock>[];
+
+    for (final block in blocks) {
+      final beforeVars = Map<String, String>.from(sessionVars);
+
+      final expanded = expandVariableMacros(
+        block.content,
+        sessionVars: sessionVars,
+        globalVars: globalVars,
+      );
+      sessionVars = expanded.sessionVars;
+      globalVars = expanded.globalVars;
+
+      var content = expanded.text.trim();
+
+      // setvar-only block: surface rule-like variable values as content.
+      if (content.isEmpty) {
+        final newEntries = expanded.sessionVars.entries.where((e) {
+          final beforeVal = beforeVars[e.key];
+          if (beforeVal != null &&
+              beforeVal == e.value &&
+              !_wasSetByThisBlock(e.key, block.content)) {
+            return false;
+          }
+          return _isRuleVariable(e.key, e.value);
+        });
+        final surfaced = newEntries
+            .map((e) => e.value.trim())
+            .where((v) => v.isNotEmpty)
+            .join('\n\n');
+        content = surfaced;
+      }
+
+      if (content.isEmpty) continue;
+      result.add(block.copyWith(content: content));
+    }
+    return result;
+  }
+
+  /// True if [blockContent] contains a `{{setvar::name::…}}` for [name].
+  /// Used to confirm a variable was set by THIS block (not just inherited).
+  static bool _wasSetByThisBlock(String name, String blockContent) {
+    final tag = '{{setvar::$name::';
+    return blockContent.contains(tag);
+  }
+
+  /// True if a variable name + value look like a rule payload (vs a technical
+  /// flag). Rule-like names end with `_rules`, `_rule`, or `_target`. Values
+  /// that are multi-line or long (50+ chars) are also treated as rules.
+  static bool _isRuleVariable(String name, String value) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('_rules') ||
+        lower.endsWith('_rule') ||
+        lower.endsWith('_target')) {
+      return true;
+    }
+    if (value.contains('\n') || value.length > 50) return true;
+    return false;
+  }
+
+  /// Regenerate the build-time prompt shard for one visible Studio agent.
+  /// This rebuilds Studio setup, not chat-time agent output.
+  Future<StudioAgent> regenerateAgentInstruction({
+    required Preset preset,
+    required StudioAgent agent,
+    ApiConfig? apiConfig,
+    String builderPromptTemplate = '',
+    String routingMode = 'verbatim',
+    CancelToken? cancelToken,
+  }) async {
+    final allEnabled = preset.blocks
+        .where((b) => b.enabled)
+        .toList();
+    final expandedBlocks = expandBlocksForRouting(allEnabled)
+        .where((b) => !isReasoningBlock(b))
+        .toList();
+    final spec = _specForAgent(agent);
+    // Single-agent regen reuses deterministic bucketing (no LLM router call);
+    // the build-time LLM map only matters for a full decompose().
+    final assignments = _assignBlocks(expandedBlocks, BlockRoutingMap.empty);
+    final blocks = assignments[spec.id] ?? const <PresetBlock>[];
+    final promptShard = await _synthesizePromptShard(
+      spec: spec,
+      blocks: blocks,
+      apiConfig: apiConfig,
+      builderPromptTemplate: builderPromptTemplate,
+      routingMode: routingMode,
+      cancelToken: cancelToken,
+    );
+    return _normalizeStudioAgent(
+      agent.copyWith(
+        name: spec.name,
+        role: 'system',
+        promptShard: promptShard,
+        sourceBlockNames: _sourceBlockNames(blocks),
+        refreshPolicy: spec.refreshPolicy,
+        invalidationSignals: spec.invalidationSignals,
+      ),
+      isFinal: spec.isFinal,
+    );
+  }
+
+  Future<StudioAgent> _buildAgentForSpec({
+    required _ControllerSpec spec,
+    required List<PresetBlock> blocks,
+    required String sessionId,
+    required int index,
+    required int now,
+    ApiConfig? apiConfig,
+    String builderPromptTemplate = '',
+    String routingMode = 'verbatim',
+    CancelToken? cancelToken,
+  }) async {
+    final promptShard = await _synthesizePromptShard(
+      spec: spec,
+      blocks: blocks,
+      apiConfig: apiConfig,
+      builderPromptTemplate: builderPromptTemplate,
+      routingMode: routingMode,
+      cancelToken: cancelToken,
+    );
+    return StudioAgent(
+      id: 'agent_${sessionId}_${spec.id}_$now',
+      name: spec.name,
+      role: 'system',
+      promptShard: promptShard,
+      order: index,
+      enabled: true,
+      modelSource: 'current',
+      temperature: spec.temperature,
+      maxTokens: spec.maxTokens,
+      timeoutMs: spec.timeoutMs,
+      sourceBlockNames: _sourceBlockNames(blocks),
+      refreshPolicy: spec.refreshPolicy,
+      invalidationSignals: spec.invalidationSignals,
+    );
+  }
+
+  Future<String> _synthesizePromptShard({
+    required _ControllerSpec spec,
+    required List<PresetBlock> blocks,
+    ApiConfig? apiConfig,
+    String builderPromptTemplate = '',
+    String routingMode = 'verbatim',
+    CancelToken? cancelToken,
+  }) async {
+    if (blocks.isEmpty) return spec.fallbackPrompt;
+
+    // Stage 3: verbatim routing — concatenate blocks directly, no LLM call.
+    // The preset is the source of truth; the agent sees its assigned blocks
+    // дословно. See docs/PLAN_AGENTIC_STUDIO.md §11.
+    if (routingMode == 'verbatim') {
+      return _synthesizeRoutedShard(spec: spec, blocks: blocks);
+    }
+
+    // Legacy: LLM-compiled shard (переваривание).
+    final prompt = _buildControllerPrompt(
+      spec: spec,
+      blocks: blocks,
+      builderPromptTemplate: builderPromptTemplate,
+    );
+    try {
+      final raw = await _callLlm(
+        prompt,
+        apiConfig: apiConfig,
+        cancelToken: cancelToken,
+      );
+      final text = raw?.trim() ?? '';
+      final cleaned = _stripMarkdownFence(text);
+      if (cleaned.isNotEmpty && !_isBuilderRefusal(cleaned)) return cleaned;
+      if (cleaned.isNotEmpty) {
+        _log('controller build refusal name="${spec.name}"; using fallback');
+      }
+    } on TimeoutException {
+      _log('controller build timeout name="${spec.name}"; using fallback');
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) rethrow;
+      _log('controller build error name="${spec.name}" error=$e');
+    }
+    return '${spec.fallbackPrompt}\n\nSource blocks: ${_sourceBlockNames(blocks)}';
+  }
+
+  /// Stage 3: Verbatim routing — produces the promptShard by concatenating
+  /// assigned preset blocks дословно, without any LLM compilation.
+  ///
+  /// Each block is emitted with a header `[Block: <name>]` followed by its
+  /// content. Blocks are in preset order (priority = position in preset, §12).
+  /// A conflict-resolution footer is appended: "при конфликте следуй последнему
+  /// блоку".
+  ///
+  /// This makes the preset the direct source of truth for the agent — no
+  /// intermediary LLM distorts the user's instructions. See
+  /// docs/PLAN_AGENTIC_STUDIO.md §11.
+  String _synthesizeRoutedShard({
+    required _ControllerSpec spec,
+    required List<PresetBlock> blocks,
+  }) {
+    final parts = <String>[];
+    for (final block in blocks) {
+      final name = block.name.isNotEmpty ? block.name : block.id;
+      final content = block.content.trim();
+      if (content.isEmpty) continue;
+      parts.add('[Block: $name]\n$content');
+    }
+    if (parts.isEmpty) return spec.fallbackPrompt;
+
+    final body = parts.join('\n\n---\n\n');
+    // Conflict resolution footer (§12): when two blocks contradict, the one
+    // later in the preset wins (higher priority = closer to the end).
+    const conflictFooter =
+        '\n\n---\n\n[Conflict resolution: if two blocks above contradict each '
+        'other, follow the one that appears LAST.]';
+
+    return '$body$conflictFooter';
+  }
+
+  String _buildControllerPrompt({
+    required _ControllerSpec spec,
+    required List<PresetBlock> blocks,
+    String builderPromptTemplate = '',
+  }) {
+    final custom = _isLegacyDecompositionTemplate(builderPromptTemplate)
+        ? ''
+        : builderPromptTemplate.trim();
+    final blocksSummary = _blocksSummary(blocks);
+    if (custom.isNotEmpty) {
+      return '''$custom
+
+Build only this Studio controller instruction:
+Controller: ${spec.name}
+Purpose: ${spec.purpose}
+Output contract: ${spec.outputContract}
+
+Assigned preset blocks:
+$blocksSummary''';
+    }
+    return '''You are a build-time Studio compiler. You are not roleplaying and you are not preparing the next chat reply.
+
+Build a reusable instruction prompt for one later Studio agent from the assigned roleplay preset blocks.
+
+Create the build-time promptShard for ONE visible Studio agent/controller.
+Controller: ${spec.name}
+Purpose: ${spec.purpose}
+
+Rules:
+- Output only the final instruction text for this controller, no JSON and no markdown wrapper.
+- This promptShard will be saved in the database and reused later; write stable operating instructions, not current-scene content.
+- The later agent will prepare guidance for the roleplay game. It must not act as a character, narrator, player, or final responder unless this is the Main Responder controller.
+- Preserve enforceable rules from assigned blocks, but compress duplicates.
+- Do not include hidden chain-of-thought directives, <think> tags, or instructions to reveal reasoning.
+- If assigned blocks contain Lumia/meta-weaver/OOC behavior, convert it to silent final-model policy or OOC interface rules; do not make this controller write Lumia scene prose.
+- Intermediate controllers must produce operational briefs only, never in-scene prose or dialogue.
+- ${spec.outputContract}
+
+Assigned preset blocks:
+$blocksSummary''';
+  }
+
+  bool _isLegacyDecompositionTemplate(String template) {
+    final text = template.toLowerCase();
+    return text.contains('respond with only a json array') ||
+        text.contains('create 3-6 agents') ||
+        text.contains(
+          'decompose the following rp preset blocks into a multi-agent pipeline',
+        );
+  }
+
+  String _blocksSummary(List<PresetBlock> blocks) {
+    return blocks
         .asMap()
         .entries
         .map((entry) {
           final i = entry.key;
           final b = entry.value;
-          final limit = _isPreservedMetaBlock(b) ? 6000 : 2500;
-          final content = b.content.length > limit
-              ? '${b.content.substring(0, limit)}...'
-              : b.content;
+          final content = _truncate(b.content, _blockLimitFor(b));
           return 'Block $i: name="${b.name}" role="${b.role}" insertion="${b.insertionMode}"${b.depth != null ? ' depth=${b.depth}' : ''}\n$content';
         })
         .join('\n\n---\n\n');
+  }
 
-    final prompt = buildDecompositionPrompt(
-      blocksSummary: blocksSummary,
-      builderPromptTemplate: builderPromptTemplate,
+  String _stripMarkdownFence(String text) {
+    final fenced = RegExp(
+      r'^```(?:\w+)?\s*([\s\S]*?)\s*```$',
+      caseSensitive: false,
+    ).firstMatch(text.trim());
+    return (fenced?.group(1) ?? text).trim();
+  }
+
+  bool _isBuilderRefusal(String text) {
+    final lower = text.toLowerCase();
+    return lower.startsWith("i can't build") ||
+        lower.startsWith('i cannot build') ||
+        lower.startsWith("i won't build") ||
+        lower.startsWith('i will not build') ||
+        lower.contains("i can't build this controller") ||
+        lower.contains('i cannot build this controller');
+  }
+
+  int _blockLimitFor(PresetBlock block) {
+    final bucket = _bucketForBlock(block);
+    if (bucket == 'meta') return 6000;
+    if (bucket == 'final') return 3500;
+    return 2500;
+  }
+
+  String _truncate(String text, int limit) {
+    if (text.length <= limit) return text;
+    return '${text.substring(0, limit)}...';
+  }
+
+  _ControllerSpec _specForAgent(StudioAgent agent) {
+    final text = '${agent.id}\n${agent.name}'.toLowerCase();
+    return _controllerSpecs.firstWhere(
+      (spec) =>
+          text.contains(spec.id) || text.contains(spec.name.toLowerCase()),
+      orElse: () => agent.order >= _controllerSpecs.length - 1
+          ? _controllerSpecs.last
+          : _controllerSpecs[agent.order.clamp(0, _controllerSpecs.length - 1)],
     );
+  }
 
-    final String? raw;
-    try {
-      raw = await _callLlm(
-        prompt,
-        apiConfig: apiConfig,
-        cancelToken: cancelToken,
-      );
-    } on TimeoutException {
-      _log('build timeout session=$sessionId; using fallback agents');
-      return _fallbackAgents(enabledBlocks, preservedMetaBlocks, sessionId);
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) return const [];
-      rethrow;
-    }
-    if (raw == null) {
-      _log('build returned null session=$sessionId; using fallback agents');
-      return _fallbackAgents(enabledBlocks, preservedMetaBlocks, sessionId);
-    }
-    _log('build raw complete session=$sessionId chars=${raw.length}');
+  /// Assigns blocks to controller buckets. Prefers the LLM [routing] map when
+  /// it provides a valid bucket for a block; otherwise falls back per-block to
+  /// the deterministic keyword bucketing. This keeps Studio building even if
+  /// the classifier was unavailable or only partially mapped the blocks.
+  ///
+  /// A block the LLM marked [kRouterDropBucketId] (a genuine reasoning/CoT
+  /// template) is excluded entirely. As a safety net the deterministic
+  /// [isReasoningBlock] check (run earlier in [decompose]) already removed
+  /// obvious CoT blocks; this honors the LLM's per-block drop decision too.
+  ///
+  /// "Broadcast" blocks (output language + prose-quality guards) are placed in
+  /// their primary bucket AND duplicated into the final responder bucket, since
+  /// those rules must also govern the final visible reply. They are not
+  /// duplicated if they were already routed to `final`.
+  Map<String, List<PresetBlock>> _assignBlocks(
+    List<PresetBlock> blocks,
+    BlockRoutingMap routing,
+  ) {
+    final validIds = _controllerSpecs.map((s) => s.id).toSet();
+    final map = {for (final spec in _controllerSpecs) spec.id: <PresetBlock>[]};
+    for (final block in blocks) {
+      // Honor an explicit LLM drop decision (reasoning/CoT template).
+      if (routing.isDropped(block.id)) continue;
 
-    final decoded = _decodeAgentList(raw);
-    if (decoded == null) {
-      _log('build invalid JSON session=$sessionId; using fallback agents');
-      return _fallbackAgents(enabledBlocks, preservedMetaBlocks, sessionId);
-    }
+      final routed = routing.bucketFor(block.id);
+      final bucket = (routed != null && validIds.contains(routed))
+          ? routed
+          : _bucketForBlock(block);
+      map[bucket]!.add(block);
 
-    final now = currentTimestampSeconds();
-    final agents = <StudioAgent>[];
-    for (var i = 0; i < decoded.length; i++) {
-      final rawItem = decoded[i];
-      if (rawItem is! Map) continue;
-      final item = Map<String, dynamic>.from(rawItem);
-      agents.add(
-        StudioAgent(
-          id: 'agent_${sessionId}_${i}_$now',
-          name: _stringField(item['name'], fallback: 'Agent $i'),
-          role: _stringField(item['role'], fallback: 'system'),
-          promptShard: _stringField(item['promptShard']),
-          order: _intField(item['order'], fallback: i),
-          enabled: true,
-          sourceBlockNames: _stringField(item['sourceBlockNames']),
-          modelSource: 'current',
-          temperature: i == decoded.length - 1 ? 0.8 : 0.3,
-          maxTokens: 8000,
-          timeoutMs: i == decoded.length - 1 ? 90000 : 60000,
-          refreshPolicy: i == decoded.length - 1
-              ? 'turn'
-              : _refreshPolicyField(item['refreshPolicy']),
-          invalidationSignals: _stringListField(item['invalidationSignals']),
-        ),
-      );
+      // Broadcast: also ensure cross-cutting rules reach the final responder.
+      if (bucket != 'final' && isBroadcastBlock(block)) {
+        map['final']!.add(block);
+      }
     }
+    return map;
+  }
 
-    if (agents.isEmpty) {
-      _log('build decoded no agents session=$sessionId; using fallback agents');
-      return _fallbackAgents(enabledBlocks, preservedMetaBlocks, sessionId);
-    }
+  /// True if a block carries a cross-cutting rule that must be broadcast to the
+  /// final responder and the POST-cleaner in addition to its primary agent:
+  /// output language/format rules and prose-quality guards (anti-loop /
+  /// anti-echo / anti-cliché / anti-slop / banlists). Public for testing.
+  @visibleForTesting
+  static bool isBroadcastBlock(PresetBlock block) {
+    if (isReasoningBlock(block)) return false;
+    final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();
+    const needles = [
+      // Output language / format rules.
+      'language',
+      'русск',
+      'russian',
+      'output_language',
+      // Response length / paragraph budget (cross-cutting: governs final
+      // reply AND POST-cleaner rewrite length).
+      'length:',
+      'length_rules',
+      'length_target',
+      'длинный ответ',
+      'короткий ответ',
+      'средний ответ',
+      // Prose-quality guards.
+      'anti-loop',
+      'anti loop',
+      'anti-echo',
+      'anti echo',
+      'anti-cliche',
+      'anti-clich',
+      'анти-клише',
+      'анти-луп',
+      'анти-эхо',
+      'anti-slop',
+      'slop',
+      'ban rus',
+      'banlist',
+      'forbidden words',
+    ];
+    return _containsAnyStatic(text, needles);
+  }
 
-    agents.sort((a, b) => a.order.compareTo(b.order));
-    final result = _normalizeStudioAgents(
-      _applyPreservedMetaBlocks(agents, preservedMetaBlocks, sessionId, now),
+  static bool _containsAnyStatic(String text, List<String> needles) {
+    return needles.any(text.contains);
+  }
+
+  /// Runs the LLM block router over [blocks]. Maps the private controller specs
+  /// to public [RouterBucket]s and delegates to [StudioBlockRouter]. Returns an
+  /// empty (non-LLM) map on any failure so callers fall back to keywords.
+  Future<BlockRoutingMap> _routeBlocks({
+    required List<PresetBlock> blocks,
+    ApiConfig? apiConfig,
+    CancelToken? cancelToken,
+  }) async {
+    final buckets = [
+      for (final spec in _controllerSpecs)
+        RouterBucket(id: spec.id, name: spec.name, purpose: spec.purpose),
+    ];
+    final router = StudioBlockRouter(_callLlm);
+    return router.route(
+      blocks: blocks,
+      buckets: buckets,
+      apiConfig: apiConfig,
+      cancelToken: cancelToken,
     );
-    _log('build complete session=$sessionId agents=${result.length}');
-    return result;
+  }
+
+  /// True if a block is a chain-of-thought / reasoning / thinking template.
+  /// Such blocks describe HOW to reason internally; the multi-agent pipeline
+  /// already externalizes reasoning, so they are dropped before routing rather
+  /// than assigned to an agent. Public for testing.
+  ///
+  /// This is the deterministic fallback used when the LLM router is unavailable.
+  /// It is intentionally conservative: a block that merely *mentions* a
+  /// `<think>` block (e.g. a language rule "everything after the closing think
+  /// tag must be Russian", or a meta block describing OOC behavior) is NOT
+  /// reasoning. Such false positives previously caused language/lore blocks to
+  /// be dropped silently. When in doubt, keep the block (return false) so the
+  /// router/keyword bucketing can still place it.
+  @visibleForTesting
+  static bool isReasoningBlock(PresetBlock block) {
+    final name = block.name.toLowerCase();
+    final id = block.id.toLowerCase();
+
+    // Strong name/id signals (cheap, high-precision).
+    const nameNeedles = [
+      'cot',
+      'chain of thought',
+      'chain-of-thought',
+      'reasoning',
+      'think template',
+      'thinking',
+      '<think>',
+    ];
+    for (final needle in nameNeedles) {
+      if (name.contains(needle) || id.contains(needle)) return true;
+    }
+
+    return _contentIsReasoningTemplate(block.content);
+  }
+
+  /// Content-based reasoning detection. Distinguishes a block that IS a
+  /// reasoning/CoT template from one that merely references `<think>`.
+  ///
+  /// Two positive signals:
+  /// 1. The block is *dominated* by think-tag content — most of the block lives
+  ///    inside the reasoning tags (a real CoT scaffold).
+  /// 2. The block actively *directs the model to produce* a think block (an
+  ///    action verb tied to the tag, e.g. `use`, `plan internally`, `before
+  ///    replying`). A passive description (the think block "stays English") is
+  ///    excluded.
+  static bool _contentIsReasoningTemplate(String content) {
+    if (content.isEmpty) return false;
+    final lower = content.toLowerCase();
+    if (!lower.contains('<think>')) return false;
+
+    // Signal 1: think tags dominate the block.
+    final insideThink = RegExp(
+      r'<think>([\s\S]*?)</think>',
+      caseSensitive: false,
+    );
+    var insideChars = 0;
+    for (final m in insideThink.allMatches(content)) {
+      insideChars += (m.group(1) ?? '').length;
+    }
+    final ratio = insideChars / content.length;
+    if (ratio >= _reasoningDominanceRatio) return true;
+
+    // Signal 2: an explicit directive to emit a <think> reasoning block. These
+    // patterns require an action verb tied to the tag, so passive mentions
+    // ("after </think>", "the <think> block remains English") do not match.
+    const directivePatterns = [
+      r'use\s+<think>',
+      r'<think>[^<]*</think>\s*(?:for|to)\b',
+      r'(?:plan|think|reason)\s+(?:internally|step[- ]by[- ]step)[^.]*<think>',
+      r'(?:before|prior to)\s+(?:replying|responding|answering)[^.]*<think>',
+      r'wrap\s+(?:your\s+)?(?:reasoning|planning|thinking)\s+in\s+<think>',
+    ];
+    for (final p in directivePatterns) {
+      if (RegExp(p, caseSensitive: false).hasMatch(lower)) return true;
+    }
+    return false;
+  }
+
+  /// Fraction of a block that must live inside `<think>...</think>` for the
+  /// block to count as a reasoning template via signal 1.
+  static const double _reasoningDominanceRatio = 0.4;
+
+  String _bucketForBlock(PresetBlock block) {
+    final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();
+    final id = block.id.toLowerCase();
+
+    if (_containsAny(text, const [
+      'lumia',
+      'ghost in the machine',
+      'meta-weaver',
+      'ooc interface',
+      'weaver',
+      'diagnostic',
+    ])) {
+      return 'meta';
+    }
+    if (_containsAny(text, const [
+      'never write for',
+      'user autonomy',
+      'human controls user',
+      'do not write {{user}}',
+      'sovereignty',
+    ])) {
+      return 'agency';
+    }
+    if (_containsAny(text, const [
+      'character autonomy',
+      'character foundation',
+      'behavioral realism',
+      'anti-deitism',
+      'character voice',
+      'emotional response realism',
+      'psychology',
+      'personality drives',
+    ])) {
+      return 'agency';
+    }
+    if (_containsAny(text, const [
+      'anti-loop',
+      'anti loop',
+      'anti-echo',
+      'anti echo',
+      'anti-cliche',
+      'anti-clich',
+      'anti-slop',
+      'ban rus',
+      'forbidden words',
+      'no tells',
+      'repetition repair',
+      'hard slop ban',
+    ])) {
+      return 'guard';
+    }
+    if (_containsAny(text, const [
+      'dialogue',
+      'monologue',
+      'speech',
+      'voice utility',
+      'interaction',
+      'pure-dialogue',
+      'let dialogue breathe',
+    ])) {
+      return 'dialogue';
+    }
+    if (_containsAny(text, const [
+      'npc',
+      'living world',
+      'world canvas',
+      'ambient',
+      'public spaces',
+      'offscreen',
+      'background activity',
+    ])) {
+      return 'world';
+    }
+    if (_containsAny(text, const [
+      'story mode',
+      'narrative',
+      'pacing',
+      'length',
+      'paragraph',
+      'word',
+      'sensory',
+      'pov',
+      'third person',
+      'style',
+      'poetic',
+      'flowing prose',
+      'writer style',
+      'ao3',
+      'tone',
+      'genre',
+      'romantic',
+      'fluff',
+      'slow-burn',
+      'difficulty',
+      'momentum',
+      'temporal',
+      'focus lock',
+    ])) {
+      return 'narrative';
+    }
+    if (_containsAny(text, const [
+          'scenario',
+          'persona',
+          'description',
+          'personality',
+          'memory',
+          'summary',
+          'lorebook',
+          'ground truth',
+          'continuity',
+          'who knows what',
+          'facts',
+        ]) ||
+        const {
+          'char_card',
+          'char_personality',
+          'user_persona',
+          'scenario',
+          'example_dialogue',
+          'summary',
+          'memory',
+        }.contains(id)) {
+      return 'continuity';
+    }
+    if (_containsAny(text, const [
+      'language',
+      'format',
+      'html',
+      'colored',
+      'relationship metrics',
+      'comics',
+      'nsfw',
+      'mature',
+      'explicit',
+      'professional context',
+      'test_mode',
+      'internal_test',
+      'content protocol',
+    ])) {
+      return 'final';
+    }
+    return 'final';
+  }
+
+  bool _containsAny(String text, List<String> needles) {
+    return needles.any(text.contains);
+  }
+
+  String _sourceBlockNames(List<PresetBlock> blocks) {
+    final names = <String>[];
+    for (final block in blocks) {
+      final name = block.name.trim();
+      if (name.isEmpty) continue;
+      if (names.any((n) => n.toLowerCase() == name.toLowerCase())) continue;
+      names.add(name);
+    }
+    return names.join(', ');
   }
 
   String buildDecompositionPrompt({
@@ -156,292 +1006,25 @@ class StudioDecompositionService {
   }
 
   static const defaultBuilderPromptTemplate =
-      '''You are a prompt engineering expert. Decompose the following RP preset blocks into a multi-agent pipeline.
+      '''You are a build-time Studio compiler. You are not roleplaying and you are not writing the next chat reply.
 
-Each agent will receive ONLY its assigned instructions plus compact memory context — never the full preset. The final agent produces the actual RP response.
+Build ONE reusable Studio controller instruction from assigned roleplay preset blocks.
 
-Enabled preset blocks:
-{{blocksSummary}}
+Output only the final promptShard text for the requested controller. Do not output JSON, markdown fences, explanations, or the RP reply.
 
-Create 3-6 agents. Respond with ONLY a JSON array (no markdown, no explanation):
-[
-  {
-    "name": "Agent Name",
-    "role": "system",
-    "promptShard": "The instructions this agent should follow, extracted/compressed from the relevant preset blocks",
-    "order": 0,
-    "refreshPolicy": "turn",
-    "invalidationSignals": ["scene_changed"],
-    "sourceBlockNames": "block names this agent derives from"
-  }
-]
+Controller rules:
+- The promptShard will be saved in the database and reused later; write stable operating instructions, not current-scene content.
+- The later agent prepares guidance for the roleplay game. It must not act as a character, narrator, player, or final responder unless it is the final responder controller.
+- Compress duplicate instructions into one clear operating contract.
+- Preserve enforceable rules from the assigned blocks.
+- Convert style, pacing, dialogue, world, agency, guard, or meta rules into instructions for the later chat-time controller.
+- Intermediate controllers must produce operational briefs only, never in-scene prose or dialogue.
+- Do not include hidden chain-of-thought directives, <think> tags, or instructions to reveal reasoning.
+- If assigned blocks contain Lumia/meta-weaver/OOC behavior, preserve it as silent meta-policy/OOC interface rules. Do not make the controller write Lumia scene prose.
+- The final responder controller is the only controller allowed to produce the final visible RP response at chat time.
 
-Rules:
-- Agent with order 0 = memory/continuity curator (gets memory context)
-- Last agent (highest order) = main responder (produces the RP response)
-- Middle agents = directors, scenario writers, style enforcers
-- Each agent's promptShard should be self-contained (2-5 sentences)
-- Distribute preset blocks across agents — don't put everything on one agent
-- System blocks (char_card, scenario, etc.) go to the main responder
-- Jailbreak/content permission blocks go to the main responder
-- CoT/quality control blocks (anti-loop, anti-echo, sensory) go to a director agent
-- Prefer splitting fixed quality policy from recent-history checks:
-  - fixed banlists, forbidden words, formatting rules, and stable prose standards should be their own static agent when substantial.
-  - anti-loop, anti-echo, last-3-replies, recent-history, and user-message-sensitive checks should be turn agents.
-- From CoT blocks, extract only enforceable quality/context policy. Never preserve hidden chain-of-thought instructions, <think> tags, or "plan internally then output after </think>" text.
-- Genre/tone blocks go to a director or scenario agent
-- Formatting blocks (HTML, comics, images) go to the main responder
-- Variable blocks (setvar) go to the main responder
-- Intermediate agents are fed into the final agent as context. They must produce compact operational briefs, not draft prose.
-- Intermediate agents may include brief do/don't examples derived from the preset, but must never continue the current scene, write in-scene dialogue/actions, or produce the final RP response.
-- Preserve named meta-agents, invisible directors, ghosts, companions, OOC interfaces, and operational checklists as explicit agent instructions. Do not collapse them to a one-line mention.
-- If a block defines a named entity such as Lumia/Ghost in the Machine, one agent promptShard must retain its name, nature, silent-operation rules, OOC interface, and non-exposure rules.
-- For every intermediate agent, assign refreshPolicy conservatively:
-  - "static" = reusable until preset/profile/card/settings change; use for banlists, fixed formatting policy, stable style rules.
-  - "scene" = reusable while location, active cast, scene goal, conflict, relationship state, and tone remain stable; use for scene-level directors.
-  - "turn" = must rerun every user turn; use for continuity, recent history, anti-loop, user-message-sensitive checks, and the final responder.
-- Do not mark an agent "turn" just because one source block also contains stable rules; split stable rules into static when possible.
-- If uncertain, choose "turn". Include short invalidationSignals such as "preset_changed", "scene_changed", "active_cast_changed", "tone_changed", "last_3_replies_changed".''';
-
-  List<dynamic>? _decodeAgentList(String raw) {
-    final candidates = <String>{raw.trim(), ..._jsonPayloadCandidates(raw)};
-
-    for (final candidate in candidates) {
-      if (candidate.isEmpty) continue;
-      try {
-        final decoded = jsonDecode(candidate);
-        if (decoded is List) return decoded;
-        if (decoded is Map && decoded['agents'] is List) {
-          return decoded['agents'] as List<dynamic>;
-        }
-      } on FormatException {
-        // Try the next candidate. Some providers wrap JSON in prose/markdown.
-      }
-    }
-    return null;
-  }
-
-  Iterable<String> _jsonPayloadCandidates(String raw) sync* {
-    final trimmed = raw.trim();
-    final fenced = RegExp(
-      r'```(?:json)?\s*([\s\S]*?)\s*```',
-      caseSensitive: false,
-    ).firstMatch(trimmed);
-    if (fenced != null) yield fenced.group(1)!.trim();
-
-    final arrayStart = trimmed.indexOf('[');
-    final arrayEnd = trimmed.lastIndexOf(']');
-    if (arrayStart >= 0 && arrayEnd > arrayStart) {
-      yield trimmed.substring(arrayStart, arrayEnd + 1).trim();
-    }
-
-    final objectStart = trimmed.indexOf('{');
-    final objectEnd = trimmed.lastIndexOf('}');
-    if (objectStart >= 0 && objectEnd > objectStart) {
-      yield trimmed.substring(objectStart, objectEnd + 1).trim();
-    }
-  }
-
-  String _stringField(dynamic value, {String fallback = ''}) {
-    if (value is String) return value.trim();
-    if (value is Iterable) {
-      return value
-          .map((v) => v.toString().trim())
-          .where((v) => v.isNotEmpty)
-          .join(', ');
-    }
-    if (value == null) return fallback;
-    final text = value.toString().trim();
-    return text.isEmpty ? fallback : text;
-  }
-
-  int _intField(dynamic value, {required int fallback}) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value) ?? fallback;
-    return fallback;
-  }
-
-  String _refreshPolicyField(dynamic value) {
-    final text = _stringField(value).toLowerCase();
-    return switch (text) {
-      'static' || 'scene' || 'turn' => text,
-      _ => 'turn',
-    };
-  }
-
-  List<String> _stringListField(dynamic value) {
-    if (value is Iterable) {
-      return value
-          .map((v) => v.toString().trim())
-          .where((v) => v.isNotEmpty)
-          .toList(growable: false);
-    }
-    final text = _stringField(value);
-    if (text.isEmpty) return const [];
-    return text
-        .split(',')
-        .map((v) => v.trim())
-        .where((v) => v.isNotEmpty)
-        .toList(growable: false);
-  }
-
-  List<StudioAgent> _fallbackAgents(
-    List<PresetBlock> enabledBlocks,
-    List<({String name, String role, String content})> preservedMetaBlocks,
-    String sessionId,
-  ) {
-    final now = currentTimestampSeconds();
-    final systemBlocks = enabledBlocks
-        .where((b) => b.role.toLowerCase() == 'system')
-        .map((b) => b.name)
-        .where((name) => name.trim().isNotEmpty)
-        .join(', ');
-    final otherBlocks = enabledBlocks
-        .where((b) => b.role.toLowerCase() != 'system')
-        .map((b) => b.name)
-        .where((name) => name.trim().isNotEmpty)
-        .join(', ');
-    final agents = <StudioAgent>[
-      StudioAgent(
-        id: 'agent_${sessionId}_fallback_memory_$now',
-        name: 'Memory Curator',
-        role: 'system',
-        promptShard:
-            'Review memory context and recent chat. Produce a concise continuity brief with facts, unresolved threads, emotional state, and constraints relevant to the next reply.',
-        order: 0,
-        enabled: true,
-        modelSource: 'current',
-        temperature: 0.3,
-        maxTokens: 8000,
-        timeoutMs: 60000,
-        sourceBlockNames: otherBlocks,
-        refreshPolicy: 'turn',
-        invalidationSignals: const ['last_user_message_changed'],
-      ),
-      StudioAgent(
-        id: 'agent_${sessionId}_fallback_director_$now',
-        name: 'Scene Director',
-        role: 'system',
-        promptShard:
-            'Extract and enforce tone, genre, pacing, formatting, safety-permission, anti-loop, and quality-control instructions from the preset. Produce only actionable guidance for the final responder.',
-        order: 1,
-        enabled: true,
-        modelSource: 'current',
-        temperature: 0.3,
-        maxTokens: 8000,
-        timeoutMs: 60000,
-        sourceBlockNames: enabledBlocks.map((b) => b.name).join(', '),
-        refreshPolicy: 'scene',
-        invalidationSignals: const ['scene_changed', 'tone_changed'],
-      ),
-      StudioAgent(
-        id: 'agent_${sessionId}_fallback_responder_$now',
-        name: 'Main Responder',
-        role: 'system',
-        promptShard:
-            'Write the final RP response using the full assembled chat prompt, character/scenario instructions, memory brief, and prior Studio agent briefs. Preserve character voice, formatting requirements, and narrative constraints.',
-        order: 2,
-        enabled: true,
-        modelSource: 'current',
-        temperature: 0.8,
-        maxTokens: 8000,
-        timeoutMs: 90000,
-        sourceBlockNames: systemBlocks,
-        refreshPolicy: 'turn',
-      ),
-    ];
-
-    return _normalizeStudioAgents(
-      _applyPreservedMetaBlocks(agents, preservedMetaBlocks, sessionId, now),
-    );
-  }
-
-  List<({String name, String role, String content})> _preservedMetaBlocks(
-    List<PresetBlock> blocks,
-  ) {
-    return blocks
-        .where(_isPreservedMetaBlock)
-        .map(
-          (b) => (
-            name: b.name.trim().isNotEmpty ? b.name.trim() : 'Meta Policy',
-            role: b.role,
-            content: b.content.trim(),
-          ),
-        )
-        .where((b) => b.content.isNotEmpty)
-        .toList(growable: false);
-  }
-
-  bool _isPreservedMetaBlock(PresetBlock block) {
-    final haystack = '${block.name}\n${block.content}'.toLowerCase();
-    const markers = [
-      'lumia',
-      'ghost in the machine',
-      'meta-weaver',
-      'silent operation',
-      'ooc interface',
-      'invisible meta',
-    ];
-    return markers.any((marker) => haystack.contains(marker));
-  }
-
-  List<StudioAgent> _applyPreservedMetaBlocks(
-    List<StudioAgent> agents,
-    List<({String name, String role, String content})> preservedBlocks,
-    String sessionId,
-    int now,
-  ) {
-    if (preservedBlocks.isEmpty) return agents;
-    final updated = agents.toList(growable: true);
-
-    for (var i = 0; i < preservedBlocks.length; i++) {
-      final block = preservedBlocks[i];
-      final marker = _identityMarker(block.name, block.content);
-      final preservedText =
-          'Preserved named meta-policy block: ${block.name}\n${block.content}';
-      final targetIndex = updated.indexWhere((a) {
-        final text = '${a.name}\n${a.promptShard}'.toLowerCase();
-        return text.contains(marker);
-      });
-
-      if (targetIndex >= 0) {
-        final target = updated[targetIndex];
-        if (!target.promptShard.toLowerCase().contains(
-          block.content.toLowerCase(),
-        )) {
-          updated[targetIndex] = target.copyWith(
-            promptShard: '${target.promptShard.trim()}\n\n$preservedText',
-            sourceBlockNames: _appendSourceName(
-              target.sourceBlockNames,
-              block.name,
-            ),
-          );
-        }
-        continue;
-      }
-
-      final insertIndex = updated.isEmpty ? 0 : updated.length - 1;
-      updated.insert(
-        insertIndex,
-        StudioAgent(
-          id: 'agent_${sessionId}_preserved_${i}_$now',
-          name: block.name,
-          role: block.role.isNotEmpty ? block.role : 'system',
-          promptShard: preservedText,
-          enabled: true,
-          modelSource: 'current',
-          temperature: 0.3,
-          maxTokens: 8000,
-          sourceBlockNames: block.name,
-        ),
-      );
-    }
-
-    return [
-      for (var i = 0; i < updated.length; i++) updated[i].copyWith(order: i),
-    ];
-  }
+Assigned preset blocks:
+{{blocksSummary}}''';
 
   List<StudioAgent> _normalizeStudioAgents(List<StudioAgent> agents) {
     if (agents.isEmpty) return agents;
@@ -511,23 +1094,6 @@ Rules:
 
   static const _finalResponderGuard =
       'Do not output or request hidden reasoning blocks; generate only the final visible reply.';
-
-  String _identityMarker(String name, String content) {
-    final text = '$name\n$content'.toLowerCase();
-    if (text.contains('lumia')) return 'lumia';
-    if (text.contains('ghost in the machine')) return 'ghost in the machine';
-    if (text.contains('meta-weaver')) return 'meta-weaver';
-    return name
-        .toLowerCase()
-        .split(RegExp(r'\s+'))
-        .firstWhere((w) => w.length > 3, orElse: () => name.toLowerCase());
-  }
-
-  String _appendSourceName(String existing, String name) {
-    if (existing.toLowerCase().contains(name.toLowerCase())) return existing;
-    if (existing.trim().isEmpty) return name;
-    return '$existing, $name';
-  }
 
   /// Compute a hash of enabled blocks to detect preset changes.
   static String computePresetHash(List<PresetBlock> blocks) {

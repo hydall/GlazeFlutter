@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
+import '../../../core/models/agent_operation_record.dart';
 import '../../../core/llm/memory_draft_planner.dart';
+import '../../../core/llm/memory_agentic_service.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/services/generation_notification_service.dart';
 import '../../../core/state/db_provider.dart';
@@ -15,6 +20,8 @@ import '../abort_handler.dart';
 import '../chat_generation_service.dart';
 import '../chat_session_service.dart';
 import '../chat_state.dart';
+import '../state/agent_operations_log_provider.dart';
+import '../state/post_cleaner_state_provider.dart';
 import '../utils/message_preview.dart';
 
 /// Result of [GenerationPipeline.run] when the regen target's id did not
@@ -151,6 +158,17 @@ class GenerationPipeline {
           if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
             return null;
           }
+
+          // POST-cleaner on regen: run after successful regen (both full
+          // and studioFinalOnly). The cleaner rewrites the regenerated
+          // assistant message, preserving the original as a 'final' swipe.
+          unawaited(
+            _runPostCleaner(
+              sessionId: result.session!.id,
+              messages: result.session!.messages,
+              genId: genId,
+            ),
+          );
         }
         return regenOutcome;
       }
@@ -200,6 +218,34 @@ class GenerationPipeline {
       }
 
       await _autoCreateMemoryDrafts(result.session);
+
+      // Stage 2: Agentic write-loop — only on accepted (non-regen) turns.
+      // Suppressed on swipe/regen/studioFinalOnly to avoid duplicate or
+      // contradictory writes (the user may swipe again). The regen branch
+      // above (regenOutcome != null) returns early before reaching here, so
+      // this code only runs on the normal send-message path.
+      if (regenTargetId == null &&
+          !studioFinalOnly &&
+          result.session != null) {
+        unawaited(
+          _runAgenticWriteLoop(
+            sessionId: result.session!.id,
+            messages: result.session!.messages,
+            genId: genId,
+          ),
+        );
+
+        // Stage 4: POST-cleaner — silently rewrite the final assistant
+        // message to remove clichés/repetition. Fire-and-forget; falls back
+        // to original text on error. Original preserved as a swipe.
+        unawaited(
+          _runPostCleaner(
+            sessionId: result.session!.id,
+            messages: result.session!.messages,
+            genId: genId,
+          ),
+        );
+      }
 
       return GenerationOutcome(
         state: getState().value ?? result,
@@ -448,4 +494,321 @@ class GenerationPipeline {
       debugPrint('[GenerationPipeline] auto-create memory drafts failed: $e');
     }
   }
+
+  /// Stage 2: Agentic write-loop trigger.
+  ///
+  /// Fire-and-forget — does not block generation or user interaction.
+  /// Only called on the normal (non-regen) path, after the assistant message
+  /// is persisted to DB. Reads MemoryBook settings to check
+  /// `agenticWriteEnabled`, fetches current trackers, extracts recent history
+  /// text, and delegates to [MemoryAgenticService.runWriteLoop].
+  ///
+  /// Staleness guard: checks `abortHandler.isCurrentGen(genId)` before
+  /// executing writes (after the LLM call returns). The write-loop itself
+  /// creates its own CancelToken and checks it after each await.
+  Future<void> _runAgenticWriteLoop({
+    required String sessionId,
+    required List<ChatMessage> messages,
+    required int genId,
+  }) async {
+    if (!ref.mounted) return;
+
+    try {
+      final bookRepo = ref.read(memoryBookRepoProvider);
+      final book = await bookRepo.getBySessionId(sessionId);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (book == null || !book.settings.agenticWriteEnabled) return;
+
+      final trackerRepo = ref.read(trackerRepoProvider);
+      final trackers = await trackerRepo.getBySessionId(sessionId);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
+      final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
+
+      debugPrint(
+        '[AgenticWrite] starting write-loop session=$sessionId '
+        'model=${book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel} '
+        'timeoutMs=${book.settings.sidecarTimeoutMs} '
+        'existingTrackers=${trackers.length} '
+        'historyChars=${recentHistory.length}',
+      );
+
+      final agenticService = ref.read(memoryAgenticWriteServiceProvider);
+      final result = await agenticService.runWriteLoop(
+        sessionId: sessionId,
+        settings: book.settings,
+        recentHistoryText: recentHistory,
+        currentTrackers: trackers,
+      );
+
+      debugPrint(
+        '[AgenticWrite] result session=$sessionId status=${result.status} '
+        'trackersWritten=${result.trackerResult?.written ?? 0} '
+        'trackersDenied=${result.trackerResult?.denied ?? 0} '
+        'memoriesWritten=${result.memoryResult?.written ?? 0} '
+        'error=${result.error ?? "none"}',
+      );
+
+      // Record the agentic write-loop in the operations log so the user
+      // can inspect retries (e.g. 502 → 200) from the Agentic Ops UI.
+      if (result.status != 'disabled' && result.attempts.isNotEmpty) {
+        final status = _agenticWriteStatusToOp(result.status);
+        final totalWritten = result.totalWritten;
+        ref.read(agentOperationsLogProvider.notifier).state = ref
+            .read(agentOperationsLogProvider)
+            .append(
+              AgentOperationRecord(
+                id:
+                    'agentic-write-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+                kind: AgentOperationKind.agenticWrite,
+                status: status,
+                sessionId: sessionId,
+                messageId: messages.isNotEmpty ? messages.last.id : null,
+                attempts: result.attempts,
+                totalElapsedMs: result.totalElapsedMs,
+                model: book.settings.sidecarModel.isEmpty
+                    ? null
+                    : book.settings.sidecarModel,
+                summary: status == AgentOperationStatus.ok
+                    ? (totalWritten > 0
+                        ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
+                        : 'no changes')
+                    : result.status,
+                startedAtMs: result.attempts.first.startedAtMs,
+                finishedAtMs: result.attempts.last.startedAtMs +
+                    result.attempts.last.elapsedMs,
+                canRegenerate: status.isFailure,
+              ),
+            );
+      }
+    } catch (e) {
+      debugPrint('[AgenticWrite] failed session=$sessionId error=$e');
+    }
+  }
+
+  /// Stage 4: POST-cleaner trigger.
+  ///
+  /// Fire-and-forget — silently rewrites the last assistant message to
+  /// remove clichés/repetition. Only runs on the normal (non-regen) path.
+  /// Reads MemoryBook settings to check `postCleanerEnabled`. Falls back to
+  /// original text on any error. The original is preserved as a swipe.
+  ///
+  /// Staleness guard: checks `abortHandler.isCurrentGen(genId)` before
+  /// applying the cleaned text.
+  Future<void> _runPostCleaner({
+    required String sessionId,
+    required List<ChatMessage> messages,
+    required int genId,
+  }) async {
+    if (!ref.mounted) return;
+
+    try {
+      final bookRepo = ref.read(memoryBookRepoProvider);
+      final book = await bookRepo.getBySessionId(sessionId);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (book == null || !book.settings.postCleanerEnabled) return;
+
+      // Find the last assistant message.
+      ChatMessage? lastAssistant;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role == 'assistant' &&
+            !messages[i].isError &&
+            !messages[i].isTyping &&
+            messages[i].content.trim().isNotEmpty) {
+          lastAssistant = messages[i];
+          break;
+        }
+      }
+      if (lastAssistant == null) return;
+
+      // Load broadcast blocks (output language + prose guards) captured at
+      // Studio build time so the cleaner applies the user's own rules instead
+      // of a hardcoded English-only cliché list. Absent (no Studio) = defaults.
+      List<String> broadcastBlocks = const [];
+      try {
+        final studioConfig = await ref
+            .read(studioConfigRepoProvider)
+            .getBySessionId(sessionId);
+        broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
+      } catch (e) {
+        debugPrint('[PostCleaner] broadcast load failed session=$sessionId error=$e');
+      }
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
+      debugPrint(
+        '[PostCleaner] starting session=$sessionId '
+        'model=${book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel} '
+        'timeoutMs=${book.settings.sidecarTimeoutMs} '
+        'textChars=${lastAssistant.content.length} '
+        'broadcastBlocks=${broadcastBlocks.length}',
+      );
+
+      ref.read(postCleanerStateProvider.notifier).state = PostCleanerState.running(
+        sessionId: sessionId,
+        messageId: lastAssistant.id,
+        originalChars: lastAssistant.content.length,
+      );
+
+      final cleanerService = ref.read(postCleanerServiceProvider);
+      final result = await cleanerService.runCleaner(
+        sessionId: sessionId,
+        settings: book.settings,
+        assistantText: lastAssistant.content,
+        broadcastBlocks: broadcastBlocks,
+      );
+
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
+        ref.read(postCleanerStateProvider.notifier).state =
+            const PostCleanerState.idle();
+        return;
+      }
+
+      debugPrint(
+        '[PostCleaner] result session=$sessionId wasCleaned=${result.wasCleaned} '
+        'origChars=${lastAssistant.content.length} '
+        'cleanedChars=${result.cleanedText.length} '
+        'error=${result.error ?? "none"} '
+        'attempts=${result.attempts.length}',
+      );
+
+      ref.read(postCleanerStateProvider.notifier).state = result.wasCleaned
+          ? PostCleanerState.done(
+              sessionId: sessionId,
+              messageId: lastAssistant.id,
+              originalChars: lastAssistant.content.length,
+              cleanedChars: result.cleanedText.length,
+            )
+          : (result.status == 'ok' || result.status == 'disabled')
+              ? const PostCleanerState.idle()
+              : PostCleanerState.error(
+                  sessionId: sessionId,
+                  messageId: lastAssistant.id,
+                );
+
+      // Record the operation in the agentic operations log so the user can
+      // inspect retries (502 → 200, etc.) from the dedicated UI.
+      ref.read(agentOperationsLogProvider.notifier).state = ref
+          .read(agentOperationsLogProvider)
+          .append(
+            AgentOperationRecord(
+              id:
+                  'cleaner-${lastAssistant.id}-${DateTime.now().microsecondsSinceEpoch}',
+              kind: AgentOperationKind.postCleaner,
+              status: _cleanerStatusToOp(result.status),
+              sessionId: sessionId,
+              messageId: lastAssistant.id,
+              attempts: result.attempts,
+              totalElapsedMs: result.totalElapsedMs,
+              model: book.settings.sidecarModel.isEmpty
+                  ? null
+                  : book.settings.sidecarModel,
+              summary: result.wasCleaned
+                  ? 'cleaned (${result.cleanedText.length} chars)'
+                  : result.status == 'ok'
+                  ? 'no change'
+                  : result.status,
+              startedAtMs: result.attempts.isNotEmpty
+                  ? result.attempts.first.startedAtMs
+                  : DateTime.now().millisecondsSinceEpoch,
+              finishedAtMs: result.attempts.isNotEmpty
+                  ? result.attempts.last.startedAtMs +
+                        result.attempts.last.elapsedMs
+                  : DateTime.now().millisecondsSinceEpoch,
+              canRegenerate:
+                  result.status == 'timeout' ||
+                  result.status == 'error' ||
+                  result.status == 'skipped',
+            ),
+          );
+
+      if (!result.wasCleaned) return;
+
+      await cleanerService.applyCleanedText(
+        sessionId: sessionId,
+        messageId: lastAssistant.id,
+        cleanedText: result.cleanedText,
+        originalText: lastAssistant.content,
+      );
+
+      // Refresh ChatNotifier state so the UI picks up the new swipe
+      // immediately without requiring the user to re-enter the chat.
+      // applyCleanedText writes to DB + invalidates chatHistoryProvider,
+      // but ChatNotifier holds its own ChatState copy that must be pushed.
+      // Note: we do NOT check isCurrentGen here — the cleaner may run
+      // after a regen, and the UI must always reflect the cleaned swipe.
+      if (ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          ChatSessionService.updateCache(refreshed);
+          final current = getState().value;
+          if (current != null) {
+            setState(
+              AsyncData(
+                current.copyWith(
+                  session: refreshed,
+                  isGenerating: false,
+                ),
+              ),
+            );
+          }
+          ref.invalidate(chatHistoryProvider);
+        }
+      }
+    } catch (e) {
+      debugPrint('[PostCleaner] failed session=$sessionId error=$e');
+      if (ref.mounted) {
+        ref.read(postCleanerStateProvider.notifier).state =
+            const PostCleanerState.idle();
+      }
+    }
+  }
+}
+
+/// Extracts recent conversation as plain text for the agentic write-loop
+/// prompt. Format: "Role: content" per line, last [maxMessages] messages.
+/// Skips error, typing, and empty-content messages.
+@visibleForTesting
+String extractRecentHistoryText(
+  List<ChatMessage> messages, {
+  int maxMessages = 10,
+}) {
+  final start = messages.length > maxMessages
+      ? messages.length - maxMessages
+      : 0;
+  final recent = messages.sublist(start);
+  final lines = <String>[];
+  for (final msg in recent) {
+    if (msg.isError || msg.isTyping) continue;
+    final role = msg.role == 'assistant' ? 'Assistant' : 'User';
+    final content = msg.content.trim();
+    if (content.isEmpty) continue;
+    lines.add('$role: $content');
+  }
+  return lines.join('\n\n');
+}
+
+/// Maps a [PostCleanerResult] status string to the operations-log enum.
+AgentOperationStatus _cleanerStatusToOp(String status) {
+  return switch (status) {
+    'ok' => AgentOperationStatus.ok,
+    'skipped' => AgentOperationStatus.invalidOutput,
+    'disabled' => AgentOperationStatus.disabled,
+    'aborted' => AgentOperationStatus.aborted,
+    'timeout' => AgentOperationStatus.timeout,
+    'error' => AgentOperationStatus.error,
+    _ => AgentOperationStatus.error,
+  };
+}
+
+/// Maps a [MemoryWriteLoopResult] status string to the operations-log enum.
+AgentOperationStatus _agenticWriteStatusToOp(String status) {
+  return switch (status) {
+    'ok' => AgentOperationStatus.ok,
+    'disabled' => AgentOperationStatus.disabled,
+    'aborted' => AgentOperationStatus.aborted,
+    'timeout' => AgentOperationStatus.timeout,
+    'error' => AgentOperationStatus.httpError,
+    'invalid_output' => AgentOperationStatus.invalidOutput,
+    _ => AgentOperationStatus.error,
+  };
 }

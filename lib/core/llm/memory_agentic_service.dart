@@ -4,17 +4,14 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import 'memory_agentic_policy.dart';
 import 'memory_agentic_tools.dart';
 import 'memory_selector.dart';
-import 'transport/chat_transport_request.dart';
-import 'transport/llm_protocol.dart';
-import 'transport/transport_factory.dart';
-import '../state/memory_settings_provider.dart';
-import '../../features/settings/api_list_provider.dart';
+import 'sidecar_llm_client.dart';
 
-/// Agentic memory service (Phase 10).
+/// Agentic memory search service (Phase 10).
 ///
 /// When `memoryMode == 'agentic'`, this service runs a bounded retrieval
 /// loop before generation:
@@ -23,14 +20,12 @@ import '../../features/settings/api_list_provider.dart';
 /// 3. The app executes bounded retrieval (app-enforced caps, exclusion).
 /// 4. Results are injected into the final generation prompt.
 ///
-/// This is the sidecar-style approach (non-streaming JSON) for MVP.
-/// Native streaming tool calls can be added later via [ChatTransportRequest.tools].
-///
-/// Timeouts and fallback to deterministic selection are enforced.
+/// The write-loop (trackers + memory drafts) lives in
+/// [MemoryAgenticWriteService] — separated per CODE_STYLE (one class = one job).
 class MemoryAgenticService {
-  final Ref _ref;
+  final SidecarLlmClient _llm;
 
-  MemoryAgenticService(this._ref);
+  MemoryAgenticService(Ref ref) : _llm = SidecarLlmClient(ref);
 
   /// Run the agentic memory loop. Returns selected entries + diagnostics.
   Future<MemoryAgenticResult> runAgentic({
@@ -61,8 +56,7 @@ class MemoryAgenticService {
     }
 
     try {
-      // Step 1: Ask the LLM what it wants to search for
-      final searchQuery = await _askLlmForSearchQuery(
+      final llmOutcome = await _askLlmForSearchQuery(
         settings: settings,
         currentText: currentText,
         candidateTitles: fallbackSelection.allScores
@@ -72,15 +66,17 @@ class MemoryAgenticService {
         cancelToken: token,
       );
 
+      final searchQuery = llmOutcome.searchQuery;
       if (searchQuery == null || searchQuery.isEmpty) {
         return MemoryAgenticResult(
           status: 'ok',
           selection: fallbackSelection,
           searchQuery: searchQuery,
+          attempts: llmOutcome.attempts,
+          totalElapsedMs: llmOutcome.totalElapsedMs,
         );
       }
 
-      // Step 2: Execute bounded retrieval
       final handler = MemoryAgenticToolHandler(policy);
       final result = handler.searchMemory(
         entries: entries,
@@ -97,14 +93,15 @@ class MemoryAgenticService {
           selection: fallbackSelection,
           searchQuery: searchQuery,
           searchResult: result,
+          attempts: llmOutcome.attempts,
+          totalElapsedMs: llmOutcome.totalElapsedMs,
         );
       }
 
-      // Step 3: Build selection from agentic results
       final hitIds = result.hits.map((h) => h.entryId).toSet();
-      final selectedEntries = entries.where((e) => hitIds.contains(e.id)).toList();
+      final selectedEntries =
+          entries.where((e) => hitIds.contains(e.id)).toList();
 
-      // Re-run selector on just the agentic-selected entries
       final agenticScores = <String, double>{};
       for (var i = 0; i < selectedEntries.length; i++) {
         agenticScores[selectedEntries[i].id] =
@@ -130,6 +127,8 @@ class MemoryAgenticService {
         selection: selection,
         searchQuery: searchQuery,
         searchResult: result,
+        attempts: llmOutcome.attempts,
+        totalElapsedMs: llmOutcome.totalElapsedMs,
       );
     } on TimeoutException {
       return MemoryAgenticResult(
@@ -152,40 +151,13 @@ class MemoryAgenticService {
     }
   }
 
-  Future<String?> _askLlmForSearchQuery({
+  Future<_SearchLlmOutcome> _askLlmForSearchQuery({
     required MemoryBookSettings settings,
     required String currentText,
     required List<String> candidateTitles,
     required CancelToken cancelToken,
   }) async {
-    final isCustom = settings.sidecarSource == 'custom';
-    String endpoint;
-    String apiKey;
-    String model;
-    String protocol;
-
-    if (isCustom) {
-      endpoint = settings.sidecarEndpoint;
-      apiKey = settings.sidecarApiKey;
-      model = settings.sidecarModel;
-      protocol = LlmProtocol.openai;
-    } else {
-      await _ref.read(apiListProvider.future);
-      final chatConfig = _ref.read(activeApiConfigProvider);
-      if (chatConfig == null) {
-        throw Exception('No chat API config available for agentic mode');
-      }
-      endpoint = chatConfig.endpoint ?? '';
-      apiKey = chatConfig.apiKey ?? '';
-      model = settings.sidecarModel.isNotEmpty
-          ? settings.sidecarModel
-          : (chatConfig.model ?? '');
-      protocol = chatConfig.protocol;
-    }
-
-    if (endpoint.isEmpty || model.isEmpty) {
-      throw Exception('Agentic API not configured');
-    }
+    final config = await _llm.resolveConfig(settings, errorLabel: 'agentic mode');
 
     final candidatesBlock = candidateTitles.isEmpty
         ? '(no candidates from deterministic retrieval)'
@@ -207,41 +179,48 @@ If the deterministic candidates are sufficient or no old context is needed, resp
 
 Respond with ONLY the JSON object, no markdown or explanation.''';
 
-    final completer = Completer<String>();
-    final transport = pickChatTransport(protocol);
-
-    transport.stream(
-      request: ChatTransportRequest(
-        endpoint: endpoint,
-        apiKey: apiKey,
-        model: model,
-        messages: [
-          {'role': 'user', 'content': prompt},
-        ],
-        maxTokens: 200,
-        temperature: 0.1,
-        topP: 1.0,
-        stream: false,
-      ),
+    final outcome = await _llm.callOnceWithLog(
+      config: config,
+      prompt: prompt,
+      maxTokens: 200,
+      temperature: 0.1,
+      timeoutMs: settings.sidecarTimeoutMs,
       cancelToken: cancelToken,
-      onComplete: (text, _, {rawResponseJson}) {
-        if (!completer.isCompleted) completer.complete(text);
-      },
-      onError: (error) {
-        if (!completer.isCompleted) completer.completeError(error);
-      },
     );
-
-    final raw = await completer.future.timeout(
-      Duration(milliseconds: settings.sidecarTimeoutMs),
-    );
-
-    final decoded = jsonDecode(raw);
-    if (decoded is Map<String, dynamic>) {
-      return decoded['searchQuery'] as String?;
+    if (!outcome.isOk || outcome.text == null) {
+      return _SearchLlmOutcome(
+        searchQuery: null,
+        attempts: outcome.attempts,
+        totalElapsedMs: outcome.totalElapsedMs,
+      );
     }
-    return null;
+    String? searchQuery;
+    try {
+      final decoded = jsonDecode(outcome.text!);
+      if (decoded is Map<String, dynamic>) {
+        searchQuery = decoded['searchQuery'] as String?;
+      }
+    } catch (_) {
+      searchQuery = null;
+    }
+    return _SearchLlmOutcome(
+      searchQuery: searchQuery,
+      attempts: outcome.attempts,
+      totalElapsedMs: outcome.totalElapsedMs,
+    );
   }
+}
+
+class _SearchLlmOutcome {
+  final String? searchQuery;
+  final List<AgentOperationAttempt> attempts;
+  final int totalElapsedMs;
+
+  const _SearchLlmOutcome({
+    this.searchQuery,
+    this.attempts = const [],
+    this.totalElapsedMs = 0,
+  });
 }
 
 class MemoryAgenticResult {
@@ -250,6 +229,8 @@ class MemoryAgenticResult {
   final String? searchQuery;
   final MemorySearchResult? searchResult;
   final String? error;
+  final List<AgentOperationAttempt> attempts;
+  final int totalElapsedMs;
 
   const MemoryAgenticResult({
     required this.status,
@@ -257,6 +238,8 @@ class MemoryAgenticResult {
     this.searchQuery,
     this.searchResult,
     this.error,
+    this.attempts = const [],
+    this.totalElapsedMs = 0,
   });
 
   bool get usedModel => status == 'ok' && (searchQuery?.isNotEmpty ?? false);

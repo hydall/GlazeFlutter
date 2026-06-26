@@ -467,6 +467,70 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   );
 }
 
+/// Result of a variable-only macro expansion pass.
+class VariableMacroResult {
+  final String text;
+  final Map<String, String> sessionVars;
+  final Map<String, String> globalVars;
+
+  const VariableMacroResult({
+    required this.text,
+    required this.sessionVars,
+    required this.globalVars,
+  });
+}
+
+/// Expands ONLY `{{setvar}}`, `{{setglobalvar}}`, `{{getvar}}`,
+/// `{{getglobalvar}}`, and `{{trim}}` macros, leaving all other `{{...}}`
+/// tags untouched for later chat-time expansion.
+///
+/// This is used at Studio build time to resolve the setvar→getvar variable
+/// pipeline (which is order-dependent and cross-block) so that rule values
+/// reach their destination blocks even when the CoT dispatcher block is
+/// dropped. Other macros (`{{char}}`, `{{user}}`, `{{random::}}`, etc.) are
+/// turn-specific or context-specific and must remain as literals until chat
+/// time.
+///
+/// [sessionVars] / [globalVars] are the accumulated variable store from
+/// previously-processed blocks (forward accumulation, matching
+/// `prompt_builder.dart` block-order semantics). The returned maps include
+/// any new variables set by this block.
+VariableMacroResult expandVariableMacros(
+  String text, {
+  Map<String, String> sessionVars = const {},
+  Map<String, String> globalVars = const {},
+}) {
+  var result = text;
+  final sVars = Map<String, String>.from(sessionVars);
+  final gVars = Map<String, String>.from(globalVars);
+
+  result = _replaceSetVar(result, 'setvar', sVars, () {});
+  result = _replaceSetVar(result, 'setglobalvar', gVars, () {});
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{getvar::([\s\S]*?)\}\}', caseSensitive: false),
+    (m) => sVars[m.group(1)!.trim()] ?? '',
+  );
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{getglobalvar::([\s\S]*?)\}\}', caseSensitive: false),
+    (m) => gVars[m.group(1)!.trim()] ?? '',
+  );
+
+  if (result.contains('{{trim}}')) {
+    result = result.replaceAllMapped(
+      RegExp(r'\{\{trim\}\}', caseSensitive: false),
+      (_) => '',
+    );
+    result = result.trim();
+  }
+
+  return VariableMacroResult(
+    text: result,
+    sessionVars: sVars,
+    globalVars: gVars,
+  );
+}
+
 String _pad2(int n) => n.toString().padLeft(2, '0');
 
 const _monthNames = [

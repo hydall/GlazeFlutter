@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
-import '../../../core/llm/memory_graph_builder.dart';
 import '../../../shared/theme/app_colors.dart';
 
 class MemoryGraphPanel extends ConsumerStatefulWidget {

@@ -15,10 +15,12 @@ import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/models/agent_operation_record.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
+import '../state/agent_operations_log_provider.dart';
 import '../state/cached_token_breakdown.dart';
 import '../state/memory_activity_provider.dart';
 import 'saved_message_writer.dart';
@@ -244,6 +246,44 @@ class StreamGenerationService {
             visibleStartIndex: vsi,
           );
         }
+        if (studioResult.status == 'agent_errors') {
+          // Intermediate agents failed — save their outputs (with error
+          // status) so the user can regenerate failed agents, then
+          // explicitly send to the final model. Do NOT write an error
+          // message; the studio outputs panel shows the failures.
+          _log(
+            'studio agent_errors char=$_charId session=${session.id} '
+            'error=${studioResult.error}',
+          );
+          final elapsed =
+              DateTime.now().difference(startGenTime).inMilliseconds;
+          final finalState = _writer.writeAssistant(
+            text: '',
+            reasoning: null,
+            currentSession: saveSession ?? session,
+            isAborted: _isAborted,
+            pendingSessionVars: pendingSessionVars,
+            genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
+            tokens: 0,
+            rawResponse: '',
+            previousSwipes: previousSwipes,
+            previousSwipeId: previousSwipeId,
+            previousReasoning: previousReasoning,
+            previousGenTime: previousGenTime,
+            previousTokens: previousTokens,
+            previousSwipesMeta: previousSwipesMeta,
+            guidanceText: guidanceText,
+            memoryCoverage: coverage,
+            isAllReasoning: false,
+            triggeredLorebooks: triggeredLorebooks,
+            triggeredMemories: triggeredMemories,
+            studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
+            regenTargetId: regenTargetId,
+            studioFinalOnly: studioFinalOnly,
+            visibleStartIndex: vsi,
+          );
+          return finalState;
+        }
         if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
           final message =
               studioResult.error ?? 'Studio failed: ${studioResult.status}';
@@ -296,6 +336,7 @@ class StreamGenerationService {
           triggeredMemories: triggeredMemories,
           studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
           regenTargetId: regenTargetId,
+          studioFinalOnly: studioFinalOnly,
           visibleStartIndex: vsi,
         );
         if (memoryDiagnostics is Map<String, dynamic> &&
@@ -311,6 +352,11 @@ class StreamGenerationService {
             messageId: messageId,
             diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
             updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+          );
+          _recordSidecarOperation(
+            finalState.session!.id,
+            messageId,
+            memoryDiagnostics,
           );
         } else {
           _ref.read(lastMemoryActivityProvider(_charId).notifier).state = null;
@@ -441,6 +487,7 @@ class StreamGenerationService {
             triggeredLorebooks: triggeredLorebooks,
             triggeredMemories: triggeredMemories,
             regenTargetId: regenTargetId,
+            studioFinalOnly: studioFinalOnly,
             visibleStartIndex: vsi,
           );
           if (memoryDiagnostics is Map<String, dynamic> &&
@@ -456,6 +503,11 @@ class StreamGenerationService {
               messageId: messageId,
               diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
               updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+            );
+            _recordSidecarOperation(
+              finalState!.session!.id,
+              messageId,
+              memoryDiagnostics,
             );
           } else {
             _ref.read(lastMemoryActivityProvider(_charId).notifier).state =
@@ -603,5 +655,112 @@ class StreamGenerationService {
 
   static void _log(String message) {
     debugPrint('[StudioGen] $message');
+  }
+
+  /// Records a memory sidecar reranker operation in the agentic operations log
+  /// when the diagnostics carry a `sidecarAttempts` array (deep mode only).
+  void _recordSidecarOperation(
+    String sessionId,
+    String? messageId,
+    Map<String, dynamic> diagnostics,
+  ) {
+    // Memory sidecar (reranker) operation.
+    final sidecarStatus = diagnostics['sidecarStatus'] as String?;
+    if (sidecarStatus != null && sidecarStatus != 'disabled') {
+      final rawAttempts = diagnostics['sidecarAttempts'];
+      if (rawAttempts is List) {
+        final attempts = rawAttempts
+            .whereType<Map<dynamic, dynamic>>()
+            .map((e) => AgentOperationAttempt.fromJson(
+                  Map<String, dynamic>.from(e),
+                ))
+            .toList();
+        if (attempts.isNotEmpty) {
+          final status = _sidecarStatusToOp(sidecarStatus);
+          _appendOperation(
+            AgentOperationRecord(
+              id:
+                  'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+              kind: AgentOperationKind.memorySidecar,
+              status: status,
+              sessionId: sessionId,
+              messageId: messageId,
+              attempts: attempts,
+              totalElapsedMs: attempts.fold(
+                0,
+                (sum, a) => sum + a.elapsedMs,
+              ),
+              summary: status == AgentOperationStatus.ok
+                  ? 'reranked ${diagnostics['selectedCount'] ?? 0} entries'
+                  : sidecarStatus,
+              startedAtMs: attempts.first.startedAtMs,
+              finishedAtMs:
+                  attempts.last.startedAtMs + attempts.last.elapsedMs,
+              canRegenerate: status.isFailure,
+            ),
+          );
+        }
+      }
+    }
+
+    // Agentic search (searchMemory tool) operation.
+    final agenticStatus = diagnostics['agenticStatus'] as String?;
+    if (agenticStatus != null &&
+        agenticStatus != 'disabled' &&
+        agenticStatus != 'aborted') {
+      final rawAttempts = diagnostics['agenticAttempts'];
+      if (rawAttempts is List) {
+        final attempts = rawAttempts
+            .whereType<Map<dynamic, dynamic>>()
+            .map((e) => AgentOperationAttempt.fromJson(
+                  Map<String, dynamic>.from(e),
+                ))
+            .toList();
+        if (attempts.isNotEmpty) {
+          final status = _sidecarStatusToOp(agenticStatus);
+          _appendOperation(
+            AgentOperationRecord(
+              id:
+                  'agentic-search-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+              kind: AgentOperationKind.agenticSearch,
+              status: status,
+              sessionId: sessionId,
+              messageId: messageId,
+              attempts: attempts,
+              totalElapsedMs: attempts.fold(
+                0,
+                (sum, a) => sum + a.elapsedMs,
+              ),
+              summary: status == AgentOperationStatus.ok
+                  ? 'agentic search'
+                  : agenticStatus,
+              startedAtMs: attempts.first.startedAtMs,
+              finishedAtMs:
+                  attempts.last.startedAtMs + attempts.last.elapsedMs,
+              canRegenerate: status.isFailure,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  void _appendOperation(AgentOperationRecord record) {
+    _ref.read(agentOperationsLogProvider.notifier).state = _ref
+        .read(agentOperationsLogProvider)
+        .append(record);
+  }
+
+  static AgentOperationStatus _sidecarStatusToOp(String status) {
+    return switch (status) {
+      'ok' => AgentOperationStatus.ok,
+      'disabled' => AgentOperationStatus.disabled,
+      'aborted' => AgentOperationStatus.aborted,
+      'timeout' => AgentOperationStatus.timeout,
+      'http_error' => AgentOperationStatus.httpError,
+      'invalid_output' => AgentOperationStatus.invalidOutput,
+      'error' => AgentOperationStatus.error,
+      _ => AgentOperationStatus.error,
+    };
   }
 }

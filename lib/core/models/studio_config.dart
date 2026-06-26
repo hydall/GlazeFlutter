@@ -27,6 +27,27 @@ abstract class StudioConfig with _$StudioConfig {
     @Default('') String buildApiConfigId,
     @Default('') String runApiConfigId,
     @Default('') String builderPromptTemplate,
+
+    /// Maximum number of trailing user/assistant chat messages forwarded to the
+    /// FINAL Studio agent. Intermediate agents always see full history; the
+    /// final writer is intentionally limited so it leans on the agent briefs
+    /// instead of re-reading the whole transcript. 0 = no limit.
+    @Default(15) int maxFinalHistoryMessages,
+    /// How preset blocks are turned into agent instructions during
+    /// decomposition. `'verbatim'` (default) = blocks are concatenated
+    /// verbatim into the promptShard, no LLM call — the preset is the source
+    /// of truth. `'compiled'` = LLM synthesizes a compiled instruction from
+    /// the blocks (legacy behavior). See docs/PLAN_AGENTIC_STUDIO.md §11.
+    @Default('verbatim') String routingMode,
+
+    /// Verbatim content of "broadcast" preset blocks — cross-cutting rules
+    /// (output language + prose-quality guards: anti-loop/echo/cliché/slop,
+    /// banlists) that must govern not only their primary agent but also the
+    /// POST-cleaner rewrite. Captured at build time so the POST-cleaner can
+    /// apply the user's own rules verbatim without re-running any LLM. Each
+    /// entry is one block's `[Block: name]\n<content>` text. See
+    /// docs/PLAN_AGENTIC_STUDIO.md §11.
+    @Default([]) List<String> broadcastBlocks,
     @Default([]) List<String> selectedBlockIds,
     @Default(false) bool selectedBlockIdsInitialized,
     @Default(0) int createdAt,

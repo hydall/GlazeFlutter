@@ -17,6 +17,7 @@ import '../db/repositories/memory_salience_repo.dart';
 import '../db/repositories/memory_cadence_repo.dart';
 import '../db/repositories/memory_consolidation_repo.dart';
 import '../db/repositories/studio_config_repo.dart';
+import '../db/repositories/tracker_repo.dart';
 import '../db/repositories/extension_presets_repository.dart';
 import '../db/repositories/info_blocks_repository.dart';
 import '../models/memory_book.dart';
@@ -117,6 +118,10 @@ final memoryConsolidationRepoProvider = Provider<MemoryConsolidationRepo>((
 
 final studioConfigRepoProvider = Provider<StudioConfigRepo>((ref) {
   return StudioConfigRepo(ref.watch(appDbProvider));
+});
+
+final trackerRepoProvider = Provider<TrackerRepo>((ref) {
+  return TrackerRepo(ref.watch(appDbProvider));
 });
 
 final memoryBookProvider = FutureProvider.family<MemoryBook?, String>((

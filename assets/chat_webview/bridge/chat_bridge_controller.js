@@ -396,6 +396,8 @@ export class Bridge {
 
     if (msg.swipeIndex !== undefined) section.dataset.swipeId = String(msg.swipeIndex);
     if (msg.swipeTotal !== undefined) section.dataset.swipeTotal = String(msg.swipeTotal);
+    if (msg.agentSwipeIndex !== undefined) section.dataset.agentSwipeId = String(msg.agentSwipeIndex);
+    if (msg.agentSwipeTotal !== undefined) section.dataset.agentSwipeTotal = String(msg.agentSwipeTotal);
     if (msg.greetingTotal !== undefined) section.dataset.greetingTotal = String(msg.greetingTotal);
 
     // Restore data-is-last on char sections after generation ends.
@@ -434,12 +436,18 @@ export class Bridge {
     const isGenerating = msg.isGenerating !== undefined ? !!msg.isGenerating : !!this.isGenerating;
     const swipeIndex = msg.swipeIndex !== undefined ? msg.swipeIndex : parseInt(section.dataset.swipeId || '0', 10);
     const swipeTotal = msg.swipeTotal !== undefined ? msg.swipeTotal : parseInt(section.dataset.swipeTotal || '0', 10);
+    const agentSwipeIndex = msg.agentSwipeIndex !== undefined ? msg.agentSwipeIndex : parseInt(section.dataset.agentSwipeId || '0', 10);
+    const agentSwipeTotal = msg.agentSwipeTotal !== undefined ? msg.agentSwipeTotal : parseInt(section.dataset.agentSwipeTotal || '0', 10);
+    const agentSwipeFinalCount = msg.agentSwipeFinalCount !== undefined ? msg.agentSwipeFinalCount : 0;
     const greetingIndex = msg.greetingIndex !== undefined ? msg.greetingIndex : 0;
     const greetingTotal = msg.greetingTotal !== undefined ? msg.greetingTotal : parseInt(section.dataset.greetingTotal || '0', 10);
     const messageIndex = parseInt(section.dataset.messageIndex || '-1', 10);
     const hasSwipes = isChar && swipeTotal > 1;
+    const hasAgentSwipes = isChar && agentSwipeFinalCount > 1;
     const hasGreetings = isChar && messageIndex === 0 && greetingTotal > 1;
     const showRegen = ((!isChar && isLast) || isError) && !isGenerating && !isEditing;
+    const studioOutputs = msg.studioOutputs !== undefined ? msg.studioOutputs : null;
+    const showStudioFinalRegen = isChar && isLast && !isGenerating && !isEditing && studioOutputs && studioOutputs.length;
 
     center.innerHTML = '';
 
@@ -447,6 +455,11 @@ export class Bridge {
       center.appendChild(this.renderer._createSwitcher(section.dataset.messageId, swipeIndex || 0, swipeTotal, 'swipe'));
     } else if (hasGreetings) {
       center.appendChild(this.renderer._createSwitcher(section.dataset.messageId, greetingIndex || 0, greetingTotal, 'greeting'));
+    }
+
+    // Nested swipes: blue sub-swipe switcher.
+    if (hasAgentSwipes) {
+      center.appendChild(this.renderer._createSwitcher(section.dataset.messageId, agentSwipeIndex || 0, agentSwipeTotal, 'agent-swipe'));
     }
 
     if (isChar && isLast && !isGenerating && !isEditing) {
@@ -469,20 +482,36 @@ export class Bridge {
       center.appendChild(stop);
     }
 
-    if (showRegen) {
+    if (showRegen || showStudioFinalRegen) {
       const regen = document.createElement('div');
       regen.className = 'msg-regenerate';
-      if (hasSwipes || hasGreetings) regen.classList.add('icon-only');
+      if (hasSwipes || hasGreetings || hasAgentSwipes || showStudioFinalRegen) regen.classList.add('icon-only');
       regen.dataset.action = 'regenerate';
       regen.dataset.messageId = section.dataset.messageId;
       regen.dataset.mode = 'magic';
+      regen.title = showStudioFinalRegen ? 'Regenerate full Studio pipeline' : 'Regenerate';
       regen.innerHTML = ICON.regen;
-      if (!hasSwipes && !hasGreetings) {
+      if (!hasSwipes && !hasGreetings && !hasAgentSwipes && !showStudioFinalRegen) {
         const span = document.createElement('span');
         span.textContent = 'Regenerate';
         regen.appendChild(span);
       }
       center.appendChild(regen);
+
+      if (showStudioFinalRegen) {
+        const finalRegen = document.createElement('div');
+        finalRegen.className = 'msg-regenerate studio-final-only';
+        finalRegen.dataset.action = 'regenerate';
+        finalRegen.dataset.messageId = section.dataset.messageId;
+        finalRegen.dataset.mode = 'studio-final';
+        finalRegen.title = 'Regenerate final Studio agent only (reuses agent briefs)';
+        finalRegen.innerHTML = ICON.regen;
+        const label = document.createElement('span');
+        label.className = 'studio-final-only-label';
+        label.textContent = 'Final';
+        finalRegen.appendChild(label);
+        center.appendChild(finalRegen);
+      }
     }
   }
 

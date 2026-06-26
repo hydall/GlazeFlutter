@@ -7,7 +7,7 @@ import 'package:glaze_flutter/core/models/memory_book.dart';
 void main() {
   group('MemoryNeedsClassifierService integration (Track 1)', () {
     test('disabled when classifierEnabled is false', () async {
-      final service = MemoryNeedsClassifierService((_, __) async => '{}');
+      final service = MemoryNeedsClassifierService((_, _) async => '{}');
       final result = await service.classify(MemoryClassifierRequest(
         settings: const MemoryBookSettings(classifierEnabled: false),
         currentText: 'remember the bridge?',
@@ -19,7 +19,7 @@ void main() {
       const json = '''
 {"needsMemory": true, "reliableCandidateFound": true, "confidence": 0.85, "queryExpansion": ["bridge", "promise"], "reasons": ["user references old event"]}
 ''';
-      final service = MemoryNeedsClassifierService((_, __) async => json);
+      final service = MemoryNeedsClassifierService((_, _) async => json);
       final result = await service.classify(MemoryClassifierRequest(
         settings: const MemoryBookSettings(classifierEnabled: true),
         currentText: 'remember the bridge?',
@@ -34,7 +34,7 @@ void main() {
 
     test('returns invalid_output for non-JSON response', () async {
       final service =
-          MemoryNeedsClassifierService((_, __) async => 'not json');
+          MemoryNeedsClassifierService((_, _) async => 'not json');
       final result = await service.classify(MemoryClassifierRequest(
         settings: const MemoryBookSettings(
           classifierEnabled: true,
@@ -46,8 +46,8 @@ void main() {
     });
 
     test('returns timeout on slow response', () async {
-      final service = MemoryNeedsClassifierService((_, __) async {
-        await Future.delayed(const Duration(milliseconds: 200));
+      final service = MemoryNeedsClassifierService((_, _) async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
         return '{}';
       });
       final result = await service.classify(MemoryClassifierRequest(
