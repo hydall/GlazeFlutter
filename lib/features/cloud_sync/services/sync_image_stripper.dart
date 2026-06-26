@@ -33,10 +33,31 @@ Map<String, dynamic> stripImagesFromSession(Map<String, dynamic> json) {
         return s;
       }).toList();
     }
+
+    // Nested swipes: strip image tags from agentSwipes content too.
+    List<dynamic>? cleanedAgentSwipes;
+    final agentSwipes = m['agentSwipes'];
+    if (agentSwipes is List && agentSwipes.isNotEmpty) {
+      cleanedAgentSwipes = agentSwipes.map((s) {
+        if (s is Map<String, dynamic>) {
+          final content = s['content'];
+          if (content is String && content.length >= 10) {
+            final c = stripImageContent(content);
+            if (!identical(c, content)) {
+              modified = true;
+              return {...s, 'content': c};
+            }
+          }
+        }
+        return s;
+      }).toList();
+    }
+
     if (!modified) return m;
     final result = <String, dynamic>{...m};
     if (cleanedContent != null) result['content'] = cleanedContent;
     if (cleanedSwipes != null) result['swipes'] = cleanedSwipes;
+    if (cleanedAgentSwipes != null) result['agentSwipes'] = cleanedAgentSwipes;
     return result;
   }).toList();
   return {...json, 'messages': stripped};

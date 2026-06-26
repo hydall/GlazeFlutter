@@ -98,6 +98,11 @@ Map<String, dynamic> normalizeJsMessage(
         : <String, dynamic>{},
     'time':
         msg['time'] is String ? msg['time'] as String : null,
+    // Nested swipes: preserve agentSwipes if the source is a newer
+    // GlazeFlutter backup. Old/ST backups won't have these keys → defaults.
+    if (msg['agentSwipes'] is List)
+      'agentSwipes': msg['agentSwipes'],
+    if (msg['agentSwipeId'] is int) 'agentSwipeId': msg['agentSwipeId'],
   };
 }
 
