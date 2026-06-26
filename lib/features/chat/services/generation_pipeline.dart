@@ -19,6 +19,7 @@ import '../../cloud_sync/sync_provider.dart' show notifySyncMessageGenerated;
 import '../../chat_history/chat_history_provider.dart';
 import '../abort_handler.dart';
 import '../chat_generation_service.dart';
+import '../chat_provider.dart' show streamingStateProvider;
 import '../chat_session_service.dart';
 import '../chat_state.dart';
 import '../state/agent_operations_log_provider.dart';
@@ -727,6 +728,18 @@ class GenerationPipeline {
         recentMessages: recentMessages,
         studioOutputs: lastAssistant.studioOutputs,
         auditIssues: auditIssues,
+        onCleanedChunk: (text) {
+          if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+          // Stream the cleaner's rewrite into the last assistant message in
+          // the WebView. targetMessageId makes _listenStreaming update the
+          // existing bubble's content in place (like regen) instead of
+          // creating a new virtual streaming message. The original text is
+          // preserved in the DB until applyCleanedText finalizes — at that
+          // point a 'cleaned' sub-swipe is appended and the original becomes
+          // a 'final' sub-swipe (lazy migration in ChatRepo.appendAgentSwipe).
+          ref.read(streamingStateProvider(charId).notifier).state =
+              StreamingState(text: text, targetMessageId: lastAssistant!.id);
+        },
       );
 
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
@@ -793,7 +806,16 @@ class GenerationPipeline {
             ),
           );
 
-      if (!result.wasCleaned) return;
+      if (!result.wasCleaned) {
+        // Cleaned text equals original (no change). Reset the streaming state
+        // we may have populated during the stream so the bubble doesn't stay
+        // flagged isTyping.
+        if (ref.mounted) {
+          ref.read(streamingStateProvider(charId).notifier).state =
+              const StreamingState();
+        }
+        return;
+      }
 
       await cleanerService.applyCleanedText(
         sessionId: sessionId,
@@ -801,6 +823,15 @@ class GenerationPipeline {
         cleanedText: result.cleanedText,
         originalText: lastAssistant.content,
       );
+
+      // Reset the streaming state so the WebView stops treating the bubble
+      // as isTyping. The chatHistoryProvider invalidate below pushes the
+      // finalized message (with the 'cleaned' sub-swipe and agentSwipeId
+      // switched) to the WebView.
+      if (ref.mounted) {
+        ref.read(streamingStateProvider(charId).notifier).state =
+            const StreamingState();
+      }
 
       // Refresh ChatNotifier state so the UI picks up the new swipe
       // immediately without requiring the user to re-enter the chat.
@@ -829,6 +860,9 @@ class GenerationPipeline {
     } catch (e) {
       debugPrint('[PostCleaner] failed session=$sessionId error=$e');
       if (ref.mounted) {
+        // Reset any partial stream so the bubble doesn't stay isTyping.
+        ref.read(streamingStateProvider(charId).notifier).state =
+            const StreamingState();
         ref.read(postCleanerStateProvider.notifier).state =
             const PostCleanerState.idle();
       }

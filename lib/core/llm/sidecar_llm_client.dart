@@ -219,6 +219,48 @@ class SidecarLlmClient {
     );
   }
 
+  /// Streaming variant of [callOnceWithLog]. Makes a streaming LLM call
+  /// (`stream: true`) and invokes [onChunk] with the accumulated text on
+  /// every delta. Returns the same [SidecarCallOutcome] (final text = last
+  /// accumulation).
+  ///
+  /// On retry, the accumulator resets and [onChunk] is called with the new
+  /// attempt's accumulated text (starting from `''`). Callers that render the
+  /// chunks into a chat bubble should reset their view on the first chunk of
+  /// each new attempt — a simple way is to overwrite with the incoming
+  /// accumulated text (which starts at `''` on a fresh attempt).
+  ///
+  /// Used by the POST-cleaner to stream its rewrite into the chat bubble
+  /// instead of replacing the text in one shot. Reranker / agentic-write /
+  /// auditor keep using [callOnceWithLog] (non-streaming) because they need
+  /// the full structured response before acting.
+  Future<SidecarCallOutcome> callStreamWithLog({
+    required SidecarApiConfig config,
+    required String prompt,
+    required int maxTokens,
+    required double temperature,
+    required int timeoutMs,
+    CancelToken? cancelToken,
+    void Function(String accumulatedText)? onChunk,
+  }) async {
+    if (config.endpoint.isEmpty || config.model.isEmpty) {
+      throw Exception('Sidecar API not configured');
+    }
+    final runner = const SidecarRetryRunner();
+    return runner.run(
+      cancelToken: cancelToken,
+      attempt: (i) => _callStream(
+        config: config,
+        prompt: prompt,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        timeoutMs: timeoutMs,
+        cancelToken: cancelToken,
+        onChunk: onChunk,
+      ),
+    );
+  }
+
   /// Builds a descriptive exception from a non-ok [SidecarCallOutcome] so the
   /// caller's `catch` block can fall back to the original text with a useful
   /// error message.
@@ -273,6 +315,74 @@ class SidecarLlmClient {
         },
         onError: (error) {
           if (!completer.isCompleted) completer.completeError(error);
+        },
+      ),
+    );
+
+    return completer.future.timeout(Duration(milliseconds: timeoutMs));
+  }
+
+  /// Streaming variant of [_callOnce]. Calls `transport.stream` with
+  /// `stream: true` and forwards accumulated text to [onChunk] on every
+  /// delta. Completes with the final accumulated text.
+  Future<String> _callStream({
+    required SidecarApiConfig config,
+    required String prompt,
+    required int maxTokens,
+    required double temperature,
+    required int timeoutMs,
+    CancelToken? cancelToken,
+    void Function(String accumulatedText)? onChunk,
+  }) async {
+    final completer = Completer<String>();
+    final transport = pickChatTransport(config.protocol);
+    final accumulated = StringBuffer();
+
+    unawaited(
+      transport.stream(
+        request: ChatTransportRequest(
+          endpoint: config.endpoint,
+          apiKey: config.apiKey,
+          model: config.model,
+          messages: [
+            {'role': 'user', 'content': prompt},
+          ],
+          maxTokens: maxTokens,
+          temperature: temperature,
+          topP: 1.0,
+          stream: true,
+        ),
+        cancelToken: cancelToken,
+        onUpdate: (delta, _) {
+          if (delta.isEmpty) return;
+          accumulated.write(delta);
+          final text = accumulated.toString();
+          if (onChunk != null && !completer.isCompleted) {
+            try {
+              onChunk(text);
+            } catch (_) {
+              // Callback errors must not abort the stream.
+            }
+          }
+        },
+        onComplete: (text, _, {rawResponseJson}) {
+          // Prefer the transport's aggregated text (it may have post-processing
+          // like trimming or final newline normalization). Fall back to our
+          // own accumulation if the transport returned empty.
+          final finalText = text.isNotEmpty ? text : accumulated.toString();
+          if (!completer.isCompleted) {
+            if (onChunk != null && finalText != accumulated.toString()) {
+              try {
+                onChunk(finalText);
+              } catch (_) {}
+            }
+            completer.complete(finalText);
+          }
+        },
+        onError: (error) {
+          if (!completer.isCompleted) {
+            completer.completeError(error);
+          }
         },
       ),
     );

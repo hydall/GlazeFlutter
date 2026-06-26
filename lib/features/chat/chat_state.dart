@@ -82,10 +82,20 @@ class StreamingState {
   final List<Map<String, dynamic>> studioOutputs;
   final bool studioOutputsExpanded;
 
+  /// When set, the streaming text replaces the content of the existing
+  /// message with this id in the WebView (instead of creating a new virtual
+  /// `streamingId` message). Used by the POST-cleaner to stream its rewrite
+  /// into the last assistant message, with the original preserved as a
+  /// `'final'` sub-swipe after `applyCleanedText` finalizes.
+  ///
+  /// Null = normal generation path (new virtual streaming message).
+  final String? targetMessageId;
+
   const StreamingState({
     this.text = '',
     this.reasoning,
     this.studioOutputs = const [],
     this.studioOutputsExpanded = false,
+    this.targetMessageId,
   });
 }

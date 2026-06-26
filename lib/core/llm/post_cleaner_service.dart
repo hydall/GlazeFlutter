@@ -57,6 +57,7 @@ class PostCleanerService {
     List<Map<String, dynamic>> studioOutputs = const [],
     List<String>? auditIssues,
     CancelToken? cancelToken,
+    void Function(String accumulatedText)? onCleanedChunk,
   }) async {
     if (!settings.postCleanerEnabled) {
       return PostCleanerResult(status: 'disabled', cleanedText: assistantText);
@@ -87,6 +88,7 @@ class PostCleanerService {
         studioOutputs: studioOutputs,
         auditIssues: auditIssues,
         cancelToken: token,
+        onCleanedChunk: onCleanedChunk,
       );
 
       if (token.isCancelled) {
@@ -179,6 +181,7 @@ class PostCleanerService {
     List<Map<String, dynamic>> studioOutputs = const [],
     List<String>? auditIssues,
     required CancelToken cancelToken,
+    void Function(String accumulatedText)? onCleanedChunk,
   }) async {
     final prompt = buildCleanerPrompt(
       assistantText: assistantText,
@@ -192,6 +195,21 @@ class PostCleanerService {
     final effectiveMaxTokens = settings.postCleanerMaxTokens > 0
         ? settings.postCleanerMaxTokens
         : (assistantText.length ~/ 2).clamp(1000, 16000);
+
+    // When the caller passes an onCleanedChunk callback, stream the rewrite
+    // so the UI can render it progressively instead of replacing the text in
+    // one shot. Otherwise use the non-streaming path (same as before).
+    if (onCleanedChunk != null) {
+      return _llm.callStreamWithLog(
+        config: config,
+        prompt: prompt,
+        maxTokens: effectiveMaxTokens,
+        temperature: settings.postCleanerTemperature,
+        timeoutMs: _llm.resolveCleanerTimeout(settings),
+        cancelToken: cancelToken,
+        onChunk: onCleanedChunk,
+      );
+    }
 
     return _llm.callOnceWithLog(
       config: config,

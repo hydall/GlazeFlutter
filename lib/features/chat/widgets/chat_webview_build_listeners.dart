@@ -153,6 +153,28 @@ class ChatWebViewBuildListeners {
         return;
       }
 
+      // POST-cleaner streaming: rewrite the existing last assistant message
+      // in place. targetMessageId points at the message being cleaned; the
+      // cleaner streams its rewrite into the same bubble, replacing the
+      // original text. After the cleaner finalizes, applyCleanedText appends
+      // a 'cleaned' sub-swipe and the original becomes a 'final' sub-swipe.
+      final targetId = next.targetMessageId;
+      if (targetId != null) {
+        final idx = messages.indexWhere((m) => m.id == targetId);
+        if (idx >= 0) {
+          final original = messages[idx];
+          final updated = original.copyWith(
+            content: next.text,
+            isTyping: true,
+            // Preserve studioOutputs so the Studio regen button stays visible
+            // while the cleaner streams.
+            studioOutputs: original.studioOutputs,
+          );
+          b.updateMessage(updated);
+        }
+        return;
+      }
+
       final msg = ChatMessage(
         id: streamingId,
         role: 'assistant',
