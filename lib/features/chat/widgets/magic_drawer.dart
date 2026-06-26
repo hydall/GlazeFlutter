@@ -135,7 +135,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     ),
     MagicDrawerItemDef(
       id: 'post-building',
-      label: 'Post-Building',
+      label: 'menu_post_building'.tr(),
       icon: Icons.cleaning_services_outlined,
     ),
     MagicDrawerItemDef(

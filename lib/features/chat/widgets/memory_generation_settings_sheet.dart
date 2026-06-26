@@ -111,10 +111,6 @@ class _MemoryGenerationSettingsSheetState
     _queryIncludeAssistant = s.queryIncludeAssistant;
     _queryRecentTurns = s.queryRecentTurns;
     _queryMaxChars = s.queryMaxChars;
-
-    _memoryBudgetCtrl = TextEditingController(
-      text: (_maxInjectedTokens ?? 6000).toString(),
-    );
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -85,7 +86,7 @@ class _PostBuildingMenuDialogState
         children: [
           Icon(Icons.cleaning_services_outlined, color: context.cs.primary),
           const SizedBox(width: 8),
-          const Text('Post-Building'),
+          Text('post_building_title'.tr()),
         ],
       ),
       content: SizedBox(
@@ -99,6 +100,9 @@ class _PostBuildingMenuDialogState
                 pipeline: _pipeline,
                 onSaved: _savePipeline,
                 inheritedTimeoutMs: _pipeline.sidecarTimeoutMs,
+                modelsByApiConfigId: _modelsByApiConfigId,
+                fetchingModelConfigIds: _fetchingModelConfigIds,
+                onFetchModels: _fetchProviderModels,
               ),
               const SizedBox(height: 8),
               _WriteLoopSection(
@@ -110,7 +114,7 @@ class _PostBuildingMenuDialogState
               ),
               const SizedBox(height: 8),
               _PipelineLlmSection(
-                title: 'Memory generation LLM',
+                titleKey: 'post_building_generation_llm',
                 icon: Icons.auto_fix_high_outlined,
                 source: _pipeline.generationSource,
                 model: _pipeline.generationModel,
@@ -159,7 +163,7 @@ class _PostBuildingMenuDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text('common_close'.tr()),
         ),
       ],
     );
@@ -187,7 +191,7 @@ class _PostBuildingMenuDialogState
       setState(() => _modelsByApiConfigId[config.id] = ids);
     } catch (e) {
       if (mounted) {
-        GlazeToast.show(context, 'Fetch models failed: $e');
+        GlazeToast.show(context, 'post_building_fetch_models_failed'.tr(namedArgs: {'arg0': '$e'}));
       }
     } finally {
       if (mounted) setState(() => _fetchingModelConfigIds.remove(config.id));
@@ -200,45 +204,51 @@ typedef PipelineSaver = Future<void> Function(
   PipelineSettings Function(PipelineSettings) mutator,
 );
 
+/// Shared state passed to all sections.
+typedef FetchModels = Future<void> Function(ApiConfig config);
+
 /// POST-cleaner section: enable, continuity, character audit, model/endpoint/
 /// key/source, temperature, max tokens, timeout, history window.
 class _CleanerSection extends StatelessWidget {
   final PipelineSettings pipeline;
   final PipelineSaver onSaved;
   final int inheritedTimeoutMs;
+  final Map<String, List<String>> modelsByApiConfigId;
+  final Set<String> fetchingModelConfigIds;
+  final FetchModels onFetchModels;
 
   const _CleanerSection({
     required this.pipeline,
     required this.onSaved,
     required this.inheritedTimeoutMs,
+    required this.modelsByApiConfigId,
+    required this.fetchingModelConfigIds,
+    required this.onFetchModels,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveSource = pipeline.postCleanerSource == 'inherit'
+        ? pipeline.sidecarSource
+        : pipeline.postCleanerSource;
     return _SectionCard(
       icon: Icons.cleaning_services_outlined,
-      title: 'POST-cleaner (anti-cliche rewrite)',
+      titleKey: 'post_building_cleaner_title',
+      subtitleKey: 'post_building_cleaner_subtitle',
       children: [
         SwitchListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
-          title: const Text('Enable POST-cleaner'),
-          subtitle: const Text(
-            'After generation, silently rewrites the response to remove '
-            'cliches and repetition. Original preserved as a swipe.',
-          ),
+          title: Text('post_building_cleaner_enable'.tr()),
+          subtitle: Text('post_building_cleaner_enable_desc'.tr()),
           value: pipeline.postCleanerEnabled,
           onChanged: (v) => onSaved((p) => p.copyWith(postCleanerEnabled: v)),
         ),
         SwitchListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
-          title: const Text('Continuity check (recent history)'),
-          subtitle: const Text(
-            'Includes recent chat history in the cleaner prompt for local '
-            'continuity checks: who said what, positions, clothing, recent '
-            'actions. No extra LLM call.',
-          ),
+          title: Text('post_building_cleaner_continuity'.tr()),
+          subtitle: Text('post_building_cleaner_continuity_desc'.tr()),
           value: pipeline.postCleanerContinuityEnabled,
           onChanged: (v) => onSaved(
             (p) => p.copyWith(postCleanerContinuityEnabled: v),
@@ -247,12 +257,8 @@ class _CleanerSection extends StatelessWidget {
         SwitchListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
-          title: const Text('Character & world audit (extra sidecar call)'),
-          subtitle: const Text(
-            'Opt-in. A diagnostic sidecar pass checks the response against '
-            'character card, persona, lorebooks, and memory. Returns '
-            'contradictions that the cleaner then fixes.',
-          ),
+          title: Text('post_building_cleaner_audit'.tr()),
+          subtitle: Text('post_building_cleaner_audit_desc'.tr()),
           value: pipeline.postCleanerCharacterCheckEnabled,
           onChanged: (v) => onSaved(
             (p) => p.copyWith(postCleanerCharacterCheckEnabled: v),
@@ -266,7 +272,7 @@ class _CleanerSection extends StatelessWidget {
         ),
         if (pipeline.postCleanerSource == 'custom') ...[
           _PipelineModelSelector(
-            label: 'Cleaner model',
+            labelKey: 'post_building_cleaner_model',
             model: pipeline.postCleanerModel,
             onModelChanged: (v) =>
                 onSaved((p) => p.copyWith(postCleanerModel: v)),
@@ -281,17 +287,32 @@ class _CleanerSection extends StatelessWidget {
             onApiKeyChanged: (v) =>
                 onSaved((p) => p.copyWith(postCleanerApiKey: v)),
           ),
+        ] else if (effectiveSource == 'current') ...[
+          Consumer(
+            builder: (ctx, ref, _) {
+              final activeApi = ref.read(activeApiConfigProvider);
+              return _CurrentApiModelRow(
+                labelKey: 'post_building_cleaner_model',
+                apiConfig: activeApi,
+                modelsByApiConfigId: modelsByApiConfigId,
+                fetchingModelConfigIds: fetchingModelConfigIds,
+                onFetchModels: onFetchModels,
+                selectedModel: pipeline.postCleanerModel,
+                fallbackModelLabel: activeApi?.model ?? '',
+                onModelChanged: (v) =>
+                    onSaved((p) => p.copyWith(postCleanerModel: v)),
+              );
+            },
+          ),
         ],
         _NumberTile(
-          label: 'Cleaner temperature',
+          label: 'post_building_cleaner_temperature'.tr(),
           valueText: pipeline.postCleanerTemperature.toStringAsFixed(2),
-          subtitle:
-              'Lower = more faithful rewrite, higher = more creative. '
-              '0.3 default.',
+          subtitleKey: 'post_building_cleaner_temperature_desc',
           onTap: (ctx) async {
             await _editDouble(
               ctx: ctx,
-              title: 'Cleaner temperature',
+              title: 'post_building_cleaner_temperature'.tr(),
               value: pipeline.postCleanerTemperature,
               min: 0,
               max: 2,
@@ -301,15 +322,16 @@ class _CleanerSection extends StatelessWidget {
           },
         ),
         _NumberTile(
-          label: 'Cleaner max tokens',
+          label: 'post_building_cleaner_max_tokens'.tr(),
           valueText: pipeline.postCleanerMaxTokens == 0
-              ? 'Auto (half original length)'
-              : '${pipeline.postCleanerMaxTokens} tokens',
-          subtitle: '0 = auto (half the original text length).',
+              ? 'post_building_auto_half_length'.tr()
+              : 'post_building_tokens_count'
+                  .tr(namedArgs: {'arg0': '${pipeline.postCleanerMaxTokens}'}),
+          subtitleKey: 'post_building_cleaner_max_tokens_desc',
           onTap: (ctx) async {
             final v = await _editInt(
               ctx: ctx,
-              title: 'Cleaner max tokens',
+              title: 'post_building_cleaner_max_tokens'.tr(),
               value: pipeline.postCleanerMaxTokens,
             );
             if (v != null) {
@@ -318,15 +340,20 @@ class _CleanerSection extends StatelessWidget {
           },
         ),
         _NumberTile(
-          label: 'Cleaner timeout',
+          label: 'post_building_cleaner_timeout'.tr(),
           valueText: pipeline.postCleanerTimeoutMs == 0
-              ? 'Inherit (${(inheritedTimeoutMs / 1000).toStringAsFixed(0)}s)'
-              : '${(pipeline.postCleanerTimeoutMs / 1000).toStringAsFixed(0)}s',
-          subtitle: '0 = inherit from write-loop sidecar timeout.',
+              ? 'post_building_inherit_seconds'.tr(namedArgs: {
+                  'arg0': (inheritedTimeoutMs / 1000).toStringAsFixed(0),
+                })
+              : 'post_building_seconds_count'.tr(namedArgs: {
+                  'arg0': (pipeline.postCleanerTimeoutMs / 1000)
+                      .toStringAsFixed(0),
+                }),
+          subtitleKey: 'post_building_cleaner_timeout_desc',
           onTap: (ctx) async {
             final v = await _editIntSeconds(
               ctx: ctx,
-              title: 'Cleaner timeout',
+              title: 'post_building_cleaner_timeout'.tr(),
               valueSeconds: (pipeline.postCleanerTimeoutMs / 1000).round(),
             );
             if (v != null) {
@@ -335,14 +362,13 @@ class _CleanerSection extends StatelessWidget {
           },
         ),
         _NumberTile(
-          label: 'History messages',
+          label: 'post_building_cleaner_history_messages'.tr(),
           valueText: '${pipeline.postCleanerHistoryMessages}',
-          subtitle:
-              'Number of recent messages included for continuity checks.',
+          subtitleKey: 'post_building_cleaner_history_messages_desc',
           onTap: (ctx) async {
             final v = await _editInt(
               ctx: ctx,
-              title: 'History messages',
+              title: 'post_building_cleaner_history_messages'.tr(),
               value: pipeline.postCleanerHistoryMessages,
               min: 0,
               max: 100,
@@ -355,14 +381,13 @@ class _CleanerSection extends StatelessWidget {
           },
         ),
         _NumberTile(
-          label: 'Max chars per message',
+          label: 'post_building_cleaner_max_chars_per_message'.tr(),
           valueText: '${pipeline.postCleanerMaxCharsPerMessage}',
-          subtitle:
-              'Each history message is trimmed to this many characters.',
+          subtitleKey: 'post_building_cleaner_max_chars_per_message_desc',
           onTap: (ctx) async {
             final v = await _editInt(
               ctx: ctx,
-              title: 'Max chars per message',
+              title: 'post_building_cleaner_max_chars_per_message'.tr(),
               value: pipeline.postCleanerMaxCharsPerMessage,
               min: 100,
               max: 50000,
@@ -385,7 +410,7 @@ class _WriteLoopSection extends StatelessWidget {
   final PipelineSaver onSaved;
   final Map<String, List<String>> modelsByApiConfigId;
   final Set<String> fetchingModelConfigIds;
-  final Future<void> Function(ApiConfig) onFetchModels;
+  final FetchModels onFetchModels;
 
   const _WriteLoopSection({
     required this.pipeline,
@@ -400,34 +425,14 @@ class _WriteLoopSection extends StatelessWidget {
     final c = Consumer(
       builder: (ctx, ref, _) {
         final activeApi = ref.read(activeApiConfigProvider);
-        final config = pipeline.sidecarSource == 'custom' ? null : activeApi;
-        final fetched = config == null
-            ? const <String>[]
-            : modelsByApiConfigId[config.id] ?? const <String>[];
-        final models = <String>{
-          ...fetched,
-          if (pipeline.sidecarModel.isNotEmpty &&
-              !fetched.contains(pipeline.sidecarModel))
-            pipeline.sidecarModel,
-        }.toList()
-          ..sort();
-        final selected = pipeline.sidecarModel.isEmpty
-            ? ''
-            : pipeline.sidecarModel;
-        final isFetching = config == null
-            ? false
-            : fetchingModelConfigIds.contains(config.id);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SwitchListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: const Text('Write-loop (trackers + memory drafts)'),
-              subtitle: const Text(
-                'After each accepted turn, the memory agent writes lightweight '
-                'trackers and pending memory drafts.',
-              ),
+              title: Text('post_building_write_loop'.tr()),
+              subtitle: Text('post_building_write_loop_desc'.tr()),
               value: pipeline.agenticWriteEnabled,
               onChanged: (v) => onSaved(
                 (p) => p.copyWith(agenticWriteEnabled: v),
@@ -436,11 +441,8 @@ class _WriteLoopSection extends StatelessWidget {
             SwitchListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: const Text('Sidecar enabled'),
-              subtitle: const Text(
-                'Enables the sidecar LLM used by the write-loop, reranker, and '
-                'cleaner (when not custom).',
-              ),
+              title: Text('post_building_sidecar_enabled'.tr()),
+              subtitle: Text('post_building_sidecar_enabled_desc'.tr()),
               value: pipeline.sidecarEnabled,
               onChanged: (v) => onSaved((p) => p.copyWith(sidecarEnabled: v)),
             ),
@@ -451,7 +453,7 @@ class _WriteLoopSection extends StatelessWidget {
             ),
             if (pipeline.sidecarSource == 'custom') ...[
               _PipelineModelSelector(
-                label: 'Agent model (sidecar)',
+                labelKey: 'post_building_agent_model',
                 model: pipeline.sidecarModel,
                 onModelChanged: (v) =>
                     onSaved((p) => p.copyWith(sidecarModel: v)),
@@ -466,76 +468,37 @@ class _WriteLoopSection extends StatelessWidget {
                 onApiKeyChanged: (v) =>
                     onSaved((p) => p.copyWith(sidecarApiKey: v)),
               ),
-            ] else if (config != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: models.contains(selected) || selected.isEmpty
-                          ? selected
-                          : null,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Agent model (sidecar)',
-                        helperText: 'Empty = use chat model. A cheaper/faster '
-                            'model is recommended for trackers + cleaner.',
-                        helperMaxLines: 2,
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: '',
-                          child: Text('(use chat model)'),
-                        ),
-                        ...models.map(
-                          (m) => DropdownMenuItem<String>(
-                            value: m,
-                            child: Text(m, overflow: TextOverflow.ellipsis),
-                          ),
-                        ),
-                      ],
-                      onChanged: (m) =>
-                          onSaved((p) => p.copyWith(sidecarModel: m ?? '')),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: IconButton.filledTonal(
-                      tooltip: 'Fetch models',
-                      onPressed: isFetching ? null : () => onFetchModels(config),
-                      icon: isFetching
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.refresh, size: 18),
-                    ),
-                  ),
-                ],
+            ] else if (activeApi != null) ...[
+              _CurrentApiModelRow(
+                labelKey: 'post_building_agent_model',
+                apiConfig: activeApi,
+                modelsByApiConfigId: modelsByApiConfigId,
+                fetchingModelConfigIds: fetchingModelConfigIds,
+                onFetchModels: onFetchModels,
+                selectedModel: pipeline.sidecarModel,
+                fallbackModelLabel: activeApi.model,
+                onModelChanged: (v) =>
+                    onSaved((p) => p.copyWith(sidecarModel: v)),
               ),
             ] else
-              const Padding(
-                padding: EdgeInsets.only(top: 4),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  'No chat API config available for the agent.',
-                  style: TextStyle(fontSize: 12),
+                  'post_building_no_chat_api'.tr(),
+                  style: const TextStyle(fontSize: 12),
                 ),
               ),
             _NumberTile(
-              label: 'Agent timeout',
-              valueText:
-                  '${(pipeline.sidecarTimeoutMs / 1000).toStringAsFixed(0)}s',
-              subtitle:
-                  'How long to wait for the sidecar agent before giving up.',
+              label: 'post_building_agent_timeout'.tr(),
+              valueText: 'post_building_seconds_count'.tr(namedArgs: {
+                'arg0': (pipeline.sidecarTimeoutMs / 1000)
+                    .toStringAsFixed(0),
+              }),
+              subtitleKey: 'post_building_agent_timeout_desc',
               onTap: (ctx) async {
                 final v = await _editIntSeconds(
                   ctx: ctx,
-                  title: 'Agent timeout',
+                  title: 'post_building_agent_timeout'.tr(),
                   valueSeconds: (pipeline.sidecarTimeoutMs / 1000).round(),
                   minSeconds: 1,
                 );
@@ -550,8 +513,8 @@ class _WriteLoopSection extends StatelessWidget {
     );
     return _SectionCard(
       icon: Icons.psychology_outlined,
-      title: 'Agentic memory (advanced)',
-      subtitle: 'Memory agent writes trackers + drafts.',
+      titleKey: 'post_building_agentic_advanced',
+      subtitleKey: 'post_building_agentic_advanced_desc',
       children: [c],
     );
   }
@@ -559,7 +522,7 @@ class _WriteLoopSection extends StatelessWidget {
 
 /// Memory generation LLM section.
 class _PipelineLlmSection extends StatelessWidget {
-  final String title;
+  final String titleKey;
   final IconData icon;
   final String source;
   final String model;
@@ -569,7 +532,7 @@ class _PipelineLlmSection extends StatelessWidget {
   final int? maxTokens;
   final Map<String, List<String>> modelsByApiConfigId;
   final Set<String> fetchingModelConfigIds;
-  final Future<void> Function(ApiConfig) onFetchModels;
+  final FetchModels onFetchModels;
   final Future<void> Function(String) onSourceChanged;
   final Future<void> Function(String) onModelChanged;
   final Future<void> Function(String) onEndpointChanged;
@@ -578,7 +541,7 @@ class _PipelineLlmSection extends StatelessWidget {
   final Future<void> Function(int?) onMaxTokensChanged;
 
   const _PipelineLlmSection({
-    required this.title,
+    required this.titleKey,
     required this.icon,
     required this.source,
     required this.model,
@@ -602,19 +565,6 @@ class _PipelineLlmSection extends StatelessWidget {
     final c = Consumer(
       builder: (ctx, ref, _) {
         final activeApi = ref.read(activeApiConfigProvider);
-        final config = source == 'custom' ? null : activeApi;
-        final fetched = config == null
-            ? const <String>[]
-            : modelsByApiConfigId[config.id] ?? const <String>[];
-        final models = <String>{
-          ...fetched,
-          if (model.isNotEmpty && !fetched.contains(model)) model,
-        }.toList()
-          ..sort();
-        final selected = model.isEmpty ? '' : model;
-        final isFetching = config == null
-            ? false
-            : fetchingModelConfigIds.contains(config.id);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -624,7 +574,7 @@ class _PipelineLlmSection extends StatelessWidget {
             ),
             if (source == 'custom') ...[
               _PipelineModelSelector(
-                label: 'Model',
+                labelKey: 'post_building_model',
                 model: model,
                 onModelChanged: onModelChanged,
               ),
@@ -636,67 +586,28 @@ class _PipelineLlmSection extends StatelessWidget {
                 apiKey: apiKey,
                 onApiKeyChanged: onApiKeyChanged,
               ),
-            ] else if (config != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: models.contains(selected) || selected.isEmpty
-                          ? selected
-                          : null,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Model',
-                        helperText: 'Empty = use chat model (${config.model}).',
-                        helperMaxLines: 2,
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: '',
-                          child: Text('(use chat model)'),
-                        ),
-                        ...models.map(
-                          (m) => DropdownMenuItem<String>(
-                            value: m,
-                            child: Text(m, overflow: TextOverflow.ellipsis),
-                          ),
-                        ),
-                      ],
-                      onChanged: (m) => onModelChanged(m ?? ''),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: IconButton.filledTonal(
-                      tooltip: 'Fetch models',
-                      onPressed: isFetching ? null : () => onFetchModels(config),
-                      icon: isFetching
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.refresh, size: 18),
-                    ),
-                  ),
-                ],
+            ] else if (activeApi != null) ...[
+              _CurrentApiModelRow(
+                labelKey: 'post_building_model',
+                apiConfig: activeApi,
+                modelsByApiConfigId: modelsByApiConfigId,
+                fetchingModelConfigIds: fetchingModelConfigIds,
+                onFetchModels: onFetchModels,
+                selectedModel: model,
+                fallbackModelLabel: activeApi.model,
+                onModelChanged: onModelChanged,
               ),
             ],
             _NumberTile(
-              label: 'Temperature',
+              label: 'post_building_temperature'.tr(),
               valueText: temperature == null
-                  ? 'Default'
+                  ? 'post_building_default'.tr()
                   : temperature!.toStringAsFixed(2),
-              subtitle: 'Optional. Blank = provider default.',
+              subtitleKey: 'post_building_temperature_desc',
               onTap: (ctx) async {
                 final v = await _editNullableDouble(
                   ctx: ctx,
-                  title: 'Temperature',
+                  title: 'post_building_temperature'.tr(),
                   value: temperature,
                   min: 0,
                   max: 2,
@@ -707,15 +618,16 @@ class _PipelineLlmSection extends StatelessWidget {
               },
             ),
             _NumberTile(
-              label: 'Max tokens',
+              label: 'post_building_max_tokens'.tr(),
               valueText: maxTokens == null
-                  ? 'Auto'
-                  : '$maxTokens tokens',
-              subtitle: 'Optional. Blank = provider default.',
+                  ? 'post_building_auto'.tr()
+                  : 'post_building_tokens_count'
+                      .tr(namedArgs: {'arg0': '$maxTokens'}),
+              subtitleKey: 'post_building_max_tokens_desc',
               onTap: (ctx) async {
                 final v = await _editNullableInt(
                   ctx: ctx,
-                  title: 'Max tokens',
+                  title: 'post_building_max_tokens'.tr(),
                   value: maxTokens,
                 );
                 if (v != null) {
@@ -729,7 +641,7 @@ class _PipelineLlmSection extends StatelessWidget {
     );
     return _SectionCard(
       icon: icon,
-      title: title,
+      titleKey: titleKey,
       children: [c],
     );
   }
@@ -741,7 +653,7 @@ class _ClassifierSection extends StatelessWidget {
   final PipelineSaver onSaved;
   final Map<String, List<String>> modelsByApiConfigId;
   final Set<String> fetchingModelConfigIds;
-  final Future<void> Function(ApiConfig) onFetchModels;
+  final FetchModels onFetchModels;
 
   const _ClassifierSection({
     required this.pipeline,
@@ -756,34 +668,14 @@ class _ClassifierSection extends StatelessWidget {
     final c = Consumer(
       builder: (ctx, ref, _) {
         final activeApi = ref.read(activeApiConfigProvider);
-        final config = pipeline.classifierSource == 'custom' ? null : activeApi;
-        final fetched = config == null
-            ? const <String>[]
-            : modelsByApiConfigId[config.id] ?? const <String>[];
-        final models = <String>{
-          ...fetched,
-          if (pipeline.classifierModel.isNotEmpty &&
-              !fetched.contains(pipeline.classifierModel))
-            pipeline.classifierModel,
-        }.toList()
-          ..sort();
-        final selected = pipeline.classifierModel.isEmpty
-            ? ''
-            : pipeline.classifierModel;
-        final isFetching = config == null
-            ? false
-            : fetchingModelConfigIds.contains(config.id);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SwitchListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: const Text('Enable classifier'),
-              subtitle: const Text(
-                'A sidecar LLM that classifies memory importance before '
-                'injection. Off = plain key match only.',
-              ),
+              title: Text('post_building_classifier_enable'.tr()),
+              subtitle: Text('post_building_classifier_enable_desc'.tr()),
               value: pipeline.classifierEnabled,
               onChanged: (v) => onSaved((p) => p.copyWith(classifierEnabled: v)),
             ),
@@ -794,7 +686,7 @@ class _ClassifierSection extends StatelessWidget {
             ),
             if (pipeline.classifierSource == 'custom') ...[
               _PipelineModelSelector(
-                label: 'Classifier model',
+                labelKey: 'post_building_classifier_model',
                 model: pipeline.classifierModel,
                 onModelChanged: (v) =>
                     onSaved((p) => p.copyWith(classifierModel: v)),
@@ -809,66 +701,29 @@ class _ClassifierSection extends StatelessWidget {
                 onApiKeyChanged: (v) =>
                     onSaved((p) => p.copyWith(classifierApiKey: v)),
               ),
-            ] else if (config != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: models.contains(selected) || selected.isEmpty
-                          ? selected
-                          : null,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Classifier model',
-                        helperText: 'Empty = use chat model (${config.model}).',
-                        helperMaxLines: 2,
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: '',
-                          child: Text('(use chat model)'),
-                        ),
-                        ...models.map(
-                          (m) => DropdownMenuItem<String>(
-                            value: m,
-                            child: Text(m, overflow: TextOverflow.ellipsis),
-                          ),
-                        ),
-                      ],
-                      onChanged: (m) =>
-                          onSaved((p) => p.copyWith(classifierModel: m ?? '')),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: IconButton.filledTonal(
-                      tooltip: 'Fetch models',
-                      onPressed: isFetching ? null : () => onFetchModels(config),
-                      icon: isFetching
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.refresh, size: 18),
-                    ),
-                  ),
-                ],
+            ] else if (activeApi != null) ...[
+              _CurrentApiModelRow(
+                labelKey: 'post_building_classifier_model',
+                apiConfig: activeApi,
+                modelsByApiConfigId: modelsByApiConfigId,
+                fetchingModelConfigIds: fetchingModelConfigIds,
+                onFetchModels: onFetchModels,
+                selectedModel: pipeline.classifierModel,
+                fallbackModelLabel: activeApi.model,
+                onModelChanged: (v) =>
+                    onSaved((p) => p.copyWith(classifierModel: v)),
               ),
             ],
             _NumberTile(
-              label: 'Classifier timeout (ms)',
-              valueText: '${pipeline.classifierTimeoutMs}',
-              subtitle: '500–10000ms, step 500.',
+              label: 'post_building_classifier_timeout'.tr(),
+              valueText: 'post_building_ms_count'.tr(namedArgs: {
+                'arg0': '${pipeline.classifierTimeoutMs}',
+              }),
+              subtitleKey: 'post_building_classifier_timeout_desc',
               onTap: (ctx) async {
                 final v = await _editInt(
                   ctx: ctx,
-                  title: 'Classifier timeout (ms)',
+                  title: 'post_building_classifier_timeout'.tr(),
                   value: pipeline.classifierTimeoutMs,
                   min: 500,
                   max: 10000,
@@ -885,7 +740,7 @@ class _ClassifierSection extends StatelessWidget {
     );
     return _SectionCard(
       icon: Icons.category_outlined,
-      title: 'Classifier LLM',
+      titleKey: 'post_building_classifier_llm',
       children: [c],
     );
   }
@@ -897,7 +752,7 @@ class _ConsolidationSection extends StatelessWidget {
   final PipelineSaver onSaved;
   final Map<String, List<String>> modelsByApiConfigId;
   final Set<String> fetchingModelConfigIds;
-  final Future<void> Function(ApiConfig) onFetchModels;
+  final FetchModels onFetchModels;
 
   const _ConsolidationSection({
     required this.pipeline,
@@ -912,46 +767,28 @@ class _ConsolidationSection extends StatelessWidget {
     final c = Consumer(
       builder: (ctx, ref, _) {
         final activeApi = ref.read(activeApiConfigProvider);
-        final config = pipeline.consolidationSource == 'custom' ? null : activeApi;
-        final fetched = config == null
-            ? const <String>[]
-            : modelsByApiConfigId[config.id] ?? const <String>[];
-        final models = <String>{
-          ...fetched,
-          if (pipeline.consolidationModel.isNotEmpty &&
-              !fetched.contains(pipeline.consolidationModel))
-            pipeline.consolidationModel,
-        }.toList()
-          ..sort();
-        final selected = pipeline.consolidationModel.isEmpty
-            ? ''
-            : pipeline.consolidationModel;
-        final isFetching = config == null
-            ? false
-            : fetchingModelConfigIds.contains(config.id);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SwitchListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: const Text('Enable consolidation'),
-              subtitle: const Text(
-                'Periodically merges memory entries past a threshold via a '
-                'sidecar LLM.',
-              ),
+              title: Text('post_building_consolidation_enable'.tr()),
+              subtitle: Text('post_building_consolidation_enable_desc'.tr()),
               value: pipeline.consolidationEnabled,
               onChanged: (v) =>
                   onSaved((p) => p.copyWith(consolidationEnabled: v)),
             ),
             _NumberTile(
-              label: 'Consolidation threshold',
-              valueText: '${pipeline.consolidationThreshold} entries',
-              subtitle: 'Merge when entries exceed this count.',
+              label: 'post_building_consolidation_threshold'.tr(),
+              valueText: 'post_building_entries_count'.tr(namedArgs: {
+                'arg0': '${pipeline.consolidationThreshold}',
+              }),
+              subtitleKey: 'post_building_consolidation_threshold_desc',
               onTap: (ctx) async {
                 final v = await _editInt(
                   ctx: ctx,
-                  title: 'Consolidation threshold',
+                  title: 'post_building_consolidation_threshold'.tr(),
                   value: pipeline.consolidationThreshold,
                   min: 1,
                   max: 100,
@@ -968,7 +805,7 @@ class _ConsolidationSection extends StatelessWidget {
             ),
             if (pipeline.consolidationSource == 'custom') ...[
               _PipelineModelSelector(
-                label: 'Consolidation model',
+                labelKey: 'post_building_consolidation_model',
                 model: pipeline.consolidationModel,
                 onModelChanged: (v) =>
                     onSaved((p) => p.copyWith(consolidationModel: v)),
@@ -983,67 +820,29 @@ class _ConsolidationSection extends StatelessWidget {
                 onApiKeyChanged: (v) =>
                     onSaved((p) => p.copyWith(consolidationApiKey: v)),
               ),
-            ] else if (config != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: models.contains(selected) || selected.isEmpty
-                          ? selected
-                          : null,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Consolidation model',
-                        helperText: 'Empty = use chat model (${config.model}).',
-                        helperMaxLines: 2,
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: '',
-                          child: Text('(use chat model)'),
-                        ),
-                        ...models.map(
-                          (m) => DropdownMenuItem<String>(
-                            value: m,
-                            child: Text(m, overflow: TextOverflow.ellipsis),
-                          ),
-                        ),
-                      ],
-                      onChanged: (m) => onSaved(
-                        (p) => p.copyWith(consolidationModel: m ?? ''),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: IconButton.filledTonal(
-                      tooltip: 'Fetch models',
-                      onPressed: isFetching ? null : () => onFetchModels(config),
-                      icon: isFetching
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.refresh, size: 18),
-                    ),
-                  ),
-                ],
+            ] else if (activeApi != null) ...[
+              _CurrentApiModelRow(
+                labelKey: 'post_building_consolidation_model',
+                apiConfig: activeApi,
+                modelsByApiConfigId: modelsByApiConfigId,
+                fetchingModelConfigIds: fetchingModelConfigIds,
+                onFetchModels: onFetchModels,
+                selectedModel: pipeline.consolidationModel,
+                fallbackModelLabel: activeApi.model,
+                onModelChanged: (v) =>
+                    onSaved((p) => p.copyWith(consolidationModel: v)),
               ),
             ],
             _NumberTile(
-              label: 'Consolidation timeout (ms)',
-              valueText: '${pipeline.consolidationTimeoutMs}',
-              subtitle: 'How long to wait for the consolidation LLM.',
+              label: 'post_building_consolidation_timeout'.tr(),
+              valueText: 'post_building_ms_count'.tr(namedArgs: {
+                'arg0': '${pipeline.consolidationTimeoutMs}',
+              }),
+              subtitleKey: 'post_building_consolidation_timeout_desc',
               onTap: (ctx) async {
                 final v = await _editInt(
                   ctx: ctx,
-                  title: 'Consolidation timeout (ms)',
+                  title: 'post_building_consolidation_timeout'.tr(),
                   value: pipeline.consolidationTimeoutMs,
                   min: 1000,
                   max: 60000,
@@ -1060,7 +859,7 @@ class _ConsolidationSection extends StatelessWidget {
     );
     return _SectionCard(
       icon: Icons.merge_outlined,
-      title: 'Consolidation LLM',
+      titleKey: 'post_building_consolidation_llm',
       children: [c],
     );
   }
@@ -1069,14 +868,14 @@ class _ConsolidationSection extends StatelessWidget {
 /// A bordered card that hosts a section header + children list.
 class _SectionCard extends StatelessWidget {
   final IconData icon;
-  final String title;
-  final String? subtitle;
+  final String titleKey;
+  final String? subtitleKey;
   final List<Widget> children;
 
   const _SectionCard({
     required this.icon,
-    required this.title,
-    this.subtitle,
+    required this.titleKey,
+    this.subtitleKey,
     required this.children,
   });
 
@@ -1103,16 +902,16 @@ class _SectionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
+                      titleKey.tr(),
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: context.cs.onSurface,
                       ),
                     ),
-                    if (subtitle != null)
+                    if (subtitleKey != null)
                       Text(
-                        subtitle!,
+                        subtitleKey!.tr(),
                         style: TextStyle(
                           fontSize: 11,
                           color: context.cs.onSurfaceVariant,
@@ -1147,9 +946,18 @@ class _SourceSegment extends StatelessWidget {
   Widget build(BuildContext context) {
     final segments = <ButtonSegment<String>>[
       if (includeInherit)
-        const ButtonSegment(value: 'inherit', label: Text('Inherit')),
-      const ButtonSegment(value: 'current', label: Text('Current API')),
-      const ButtonSegment(value: 'custom', label: Text('Custom')),
+        ButtonSegment(
+          value: 'inherit',
+          label: Text('post_building_source_inherit'.tr()),
+        ),
+      ButtonSegment(
+        value: 'current',
+        label: Text('post_building_source_current'.tr()),
+      ),
+      ButtonSegment(
+        value: 'custom',
+        label: Text('post_building_source_custom'.tr()),
+      ),
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1165,12 +973,12 @@ class _SourceSegment extends StatelessWidget {
 
 /// Custom-model text field used inside pipeline LLM sections.
 class _PipelineModelSelector extends StatelessWidget {
-  final String label;
+  final String labelKey;
   final String model;
   final Future<void> Function(String) onModelChanged;
 
   const _PipelineModelSelector({
-    required this.label,
+    required this.labelKey,
     required this.model,
     required this.onModelChanged,
   });
@@ -1182,7 +990,7 @@ class _PipelineModelSelector extends StatelessWidget {
       child: TextField(
         controller: TextEditingController(text: model),
         decoration: InputDecoration(
-          labelText: label,
+          labelText: labelKey.tr(),
           border: const OutlineInputBorder(),
           isDense: true,
         ),
@@ -1207,9 +1015,9 @@ class _PipelineEndpointField extends StatelessWidget {
       padding: const EdgeInsets.only(top: 4),
       child: TextField(
         controller: TextEditingController(text: endpoint),
-        decoration: const InputDecoration(
-          labelText: 'Endpoint',
-          border: OutlineInputBorder(),
+        decoration: InputDecoration(
+          labelText: 'post_building_endpoint'.tr(),
+          border: const OutlineInputBorder(),
           isDense: true,
         ),
         onSubmitted: onEndpointChanged,
@@ -1234,12 +1042,117 @@ class _PipelineApiKeyField extends StatelessWidget {
       child: TextField(
         controller: TextEditingController(text: apiKey),
         obscureText: true,
-        decoration: const InputDecoration(
-          labelText: 'API key',
-          border: OutlineInputBorder(),
+        decoration: InputDecoration(
+          labelText: 'post_building_api_key'.tr(),
+          border: const OutlineInputBorder(),
           isDense: true,
         ),
         onSubmitted: onApiKeyChanged,
+      ),
+    );
+  }
+}
+
+/// Shared "current API" model dropdown + refresh button.
+///
+/// Used by every pipeline section (cleaner, sidecar, generation, classifier,
+/// consolidation) when source='current'. Shows models fetched from the
+/// active API config endpoint, plus a refresh button to fetch the list.
+class _CurrentApiModelRow extends StatelessWidget {
+  final String labelKey;
+  final ApiConfig? apiConfig;
+  final Map<String, List<String>> modelsByApiConfigId;
+  final Set<String> fetchingModelConfigIds;
+  final FetchModels onFetchModels;
+  final String selectedModel;
+  final String fallbackModelLabel;
+  final Future<void> Function(String) onModelChanged;
+
+  const _CurrentApiModelRow({
+    required this.labelKey,
+    required this.apiConfig,
+    required this.modelsByApiConfigId,
+    required this.fetchingModelConfigIds,
+    required this.onFetchModels,
+    required this.selectedModel,
+    required this.fallbackModelLabel,
+    required this.onModelChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (apiConfig == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          'post_building_no_chat_api'.tr(),
+          style: const TextStyle(fontSize: 12),
+        ),
+      );
+    }
+    final config = apiConfig!;
+    final fetched = modelsByApiConfigId[config.id] ?? const <String>[];
+    final models = <String>{
+      ...fetched,
+      if (selectedModel.isNotEmpty && !fetched.contains(selectedModel))
+        selectedModel,
+    }.toList()
+      ..sort();
+    final selected = selectedModel.isEmpty ? '' : selectedModel;
+    final isFetching = fetchingModelConfigIds.contains(config.id);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: models.contains(selected) || selected.isEmpty
+                  ? selected
+                  : null,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: labelKey.tr(),
+                helperText: fallbackModelLabel.isNotEmpty
+                    ? 'post_building_empty_chat_model'.tr(namedArgs: {
+                        'arg0': fallbackModelLabel,
+                      })
+                    : 'post_building_empty_chat_model_plain'.tr(),
+                helperMaxLines: 2,
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: [
+                DropdownMenuItem<String>(
+                  value: '',
+                  child: Text('post_building_use_chat_model'.tr()),
+                ),
+                ...models.map(
+                  (m) => DropdownMenuItem<String>(
+                    value: m,
+                    child: Text(m, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ],
+              onChanged: (m) => onModelChanged(m ?? ''),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: IconButton.filledTonal(
+              tooltip: 'post_building_fetch_models'.tr(),
+              onPressed: isFetching ? null : () => onFetchModels(config),
+              icon: isFetching
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 18),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1249,13 +1162,13 @@ class _PipelineApiKeyField extends StatelessWidget {
 class _NumberTile extends StatelessWidget {
   final String label;
   final String valueText;
-  final String subtitle;
+  final String subtitleKey;
   final Future<void> Function(BuildContext) onTap;
 
   const _NumberTile({
     required this.label,
     required this.valueText,
-    required this.subtitle,
+    required this.subtitleKey,
     required this.onTap,
   });
 
@@ -1265,7 +1178,7 @@ class _NumberTile extends StatelessWidget {
       dense: true,
       contentPadding: EdgeInsets.zero,
       title: Text(label),
-      subtitle: Text('$valueText — $subtitle'),
+      subtitle: Text('$valueText — ${subtitleKey.tr()}'),
       trailing: const Icon(Icons.edit_outlined, size: 18),
       onTap: () => onTap(context),
     );
@@ -1290,7 +1203,10 @@ Future<double> _editDouble({
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Range: $min–$max.',
+            'post_building_range'.tr(namedArgs: {
+              'arg0': '$min',
+              'arg1': '$max',
+            }),
             style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -1306,7 +1222,7 @@ Future<double> _editDouble({
       actions: [
         TextButton(
           onPressed: () => Navigator.of(c).pop(),
-          child: const Text('Cancel'),
+          child: Text('common_cancel'.tr()),
         ),
         FilledButton(
           onPressed: () {
@@ -1317,7 +1233,7 @@ Future<double> _editDouble({
             }
             Navigator.of(c).pop(v);
           },
-          child: const Text('Save'),
+          child: Text('common_save'.tr()),
         ),
       ],
     ),
@@ -1345,7 +1261,10 @@ Future<int?> _editInt({
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (step > 1)
-            Text('Step: $step.', style: const TextStyle(fontSize: 12)),
+            Text(
+              'post_building_step'.tr(namedArgs: {'arg0': '$step'}),
+              style: const TextStyle(fontSize: 12),
+            ),
           const SizedBox(height: 12),
           TextField(
             controller: controller,
@@ -1358,7 +1277,7 @@ Future<int?> _editInt({
       actions: [
         TextButton(
           onPressed: () => Navigator.of(c).pop(),
-          child: const Text('Cancel'),
+          child: Text('common_cancel'.tr()),
         ),
         FilledButton(
           onPressed: () {
@@ -1369,7 +1288,7 @@ Future<int?> _editInt({
             }
             Navigator.of(c).pop(v);
           },
-          child: const Text('Save'),
+          child: Text('common_save'.tr()),
         ),
       ],
     ),
@@ -1394,7 +1313,7 @@ Future<int?> _editIntSeconds({
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Seconds to wait. Min: $minSeconds.',
+            'post_building_seconds_min'.tr(namedArgs: {'arg0': '$minSeconds'}),
             style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -1402,9 +1321,9 @@ Future<int?> _editIntSeconds({
             controller: controller,
             autofocus: true,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              suffixText: 'seconds',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              suffixText: 'post_building_seconds_suffix'.tr(),
+              border: const OutlineInputBorder(),
             ),
           ),
         ],
@@ -1412,7 +1331,7 @@ Future<int?> _editIntSeconds({
       actions: [
         TextButton(
           onPressed: () => Navigator.of(c).pop(),
-          child: const Text('Cancel'),
+          child: Text('common_cancel'.tr()),
         ),
         FilledButton(
           onPressed: () {
@@ -1423,7 +1342,7 @@ Future<int?> _editIntSeconds({
             }
             Navigator.of(c).pop(s);
           },
-          child: const Text('Save'),
+          child: Text('common_save'.tr()),
         ),
       ],
     ),
@@ -1450,7 +1369,10 @@ Future<double?> _editNullableDouble({
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Blank = provider default. Range: $min–$max.',
+            'post_building_blank_default_range'.tr(namedArgs: {
+              'arg0': '$min',
+              'arg1': '$max',
+            }),
             style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -1466,11 +1388,11 @@ Future<double?> _editNullableDouble({
       actions: [
         TextButton(
           onPressed: () => Navigator.of(c).pop(null),
-          child: const Text('Clear'),
+          child: Text('common_clear'.tr()),
         ),
         TextButton(
           onPressed: () => Navigator.of(c).pop(),
-          child: const Text('Cancel'),
+          child: Text('common_cancel'.tr()),
         ),
         FilledButton(
           onPressed: () {
@@ -1486,7 +1408,7 @@ Future<double?> _editNullableDouble({
             }
             Navigator.of(c).pop(v);
           },
-          child: const Text('Save'),
+          child: Text('common_save'.tr()),
         ),
       ],
     ),
@@ -1508,9 +1430,9 @@ Future<int?> _editNullableInt({
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Blank = provider default.',
-            style: TextStyle(fontSize: 12),
+          Text(
+            'post_building_blank_default'.tr(),
+            style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -1524,11 +1446,11 @@ Future<int?> _editNullableInt({
       actions: [
         TextButton(
           onPressed: () => Navigator.of(c).pop(null),
-          child: const Text('Clear'),
+          child: Text('common_clear'.tr()),
         ),
         TextButton(
           onPressed: () => Navigator.of(c).pop(),
-          child: const Text('Cancel'),
+          child: Text('common_cancel'.tr()),
         ),
         FilledButton(
           onPressed: () {
@@ -1544,7 +1466,7 @@ Future<int?> _editNullableInt({
             }
             Navigator.of(c).pop(v);
           },
-          child: const Text('Save'),
+          child: Text('common_save'.tr()),
         ),
       ],
     ),

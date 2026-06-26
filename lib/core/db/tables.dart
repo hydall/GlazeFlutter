@@ -339,6 +339,10 @@ class StudioConfigRows extends Table {
   TextColumn get sourcePresetHash => text().withDefault(const Constant(''))();
   TextColumn get buildApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get buildModelOverride =>
+      text().withDefault(const Constant(''))();
+  TextColumn get runModelOverride =>
+      text().withDefault(const Constant(''))();
   TextColumn get builderPromptTemplate =>
       text().withDefault(const Constant(''))();
   IntColumn get maxFinalHistoryMessages =>

@@ -47,6 +47,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   String? _selectedFinalStudioPresetId;
   String? _selectedBuildApiConfigId;
   String? _selectedRunApiConfigId;
+  String _buildModelOverride = '';
+  String _runModelOverride = '';
   String? _bulkAgentApiConfigId;
   String _bulkAgentModelOverride = '';
   String _bulkAgentTemperature = '';
@@ -84,6 +86,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _selectedFinalStudioPresetId = contextInfo.finalStudioPresetId;
           _selectedBuildApiConfigId = contextInfo.buildApiConfig?.id;
           _selectedRunApiConfigId = contextInfo.runApiConfig?.id;
+          _buildModelOverride = config?.buildModelOverride ?? '';
+          _runModelOverride = config?.runModelOverride ?? '';
           _seedBulkAgentControls(config, contextInfo);
           _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
           _builderPromptTemplate = config?.builderPromptTemplate ?? '';
@@ -119,12 +123,15 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       if (buildApiConfig == null) {
         throw Exception('No model selected for Studio build.');
       }
+      final effectiveBuildApi = _buildModelOverride.isNotEmpty
+          ? buildApiConfig.copyWith(model: _buildModelOverride)
+          : buildApiConfig;
 
       final decompositionService = ref.read(studioDecompositionServiceProvider);
       final agents = await decompositionService.decompose(
         preset: preset,
         sessionId: widget.sessionId,
-        apiConfig: buildApiConfig,
+        apiConfig: effectiveBuildApi,
         builderPromptTemplate: _builderPromptTemplate,
         routingMode: _config?.routingMode ?? 'verbatim',
       );
@@ -166,6 +173,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         ),
         buildApiConfigId: buildApiConfig.id,
         runApiConfigId: contextInfo.runApiConfig?.id ?? '',
+        buildModelOverride: _buildModelOverride,
+        runModelOverride: _runModelOverride,
         builderPromptTemplate: _builderPromptTemplate,
         broadcastBlocks: broadcastBlocks,
         createdAt: now,
@@ -214,13 +223,16 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       if (buildApiConfig == null) {
         throw Exception('No model selected for Studio build.');
       }
+      final effectiveBuildApi = _buildModelOverride.isNotEmpty
+          ? buildApiConfig.copyWith(model: _buildModelOverride)
+          : buildApiConfig;
 
       final decompositionService = ref.read(studioDecompositionServiceProvider);
       final updatedAgent = await decompositionService
           .regenerateAgentInstruction(
             preset: preset,
             agent: agent,
-            apiConfig: buildApiConfig,
+            apiConfig: effectiveBuildApi,
             builderPromptTemplate: _builderPromptTemplate,
             routingMode: _config?.routingMode ?? 'verbatim',
           );
@@ -336,6 +348,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       _profiles = profiles;
       _selectedProfileId = profileId;
       _contextInfo = contextInfo;
+      _buildModelOverride = config?.buildModelOverride ?? '';
+      _runModelOverride = config?.runModelOverride ?? '';
       _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
       _seedBulkAgentControls(config, contextInfo);
     });
@@ -397,6 +411,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       final updated = _config!.copyWith(
         buildApiConfigId: contextInfo.buildApiConfig?.id ?? '',
         runApiConfigId: contextInfo.runApiConfig?.id ?? '',
+        buildModelOverride: _buildModelOverride,
+        runModelOverride: _runModelOverride,
         builderPromptTemplate: _builderPromptTemplate,
         agentStudioPresetId: contextInfo.agentStudioPresetId,
         finalStudioPresetId: contextInfo.finalStudioPresetId,
@@ -684,6 +700,19 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               await _refreshContextInfo();
             },
           ),
+          if (_contextInfo.buildApiConfig != null) ...[
+            const SizedBox(height: 8),
+            _buildOrRunModelSelector(
+              apiConfig: _contextInfo.buildApiConfig!,
+              override: _buildModelOverride,
+              label: 'Build provider model',
+              onChanged: (model) async {
+                final next = model ?? '';
+                setState(() => _buildModelOverride = next);
+                await _saveModelOverride(build: next, run: null);
+              },
+            ),
+          ],
           const SizedBox(height: 8),
           _apiSelector(
             label: 'Run model',
@@ -694,11 +723,103 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               await _refreshContextInfo(persistSelection: true);
             },
           ),
+          if (_contextInfo.runApiConfig != null) ...[
+            const SizedBox(height: 8),
+            _buildOrRunModelSelector(
+              apiConfig: _contextInfo.runApiConfig!,
+              override: _runModelOverride,
+              label: 'Run provider model',
+              onChanged: (model) async {
+                final next = model ?? '';
+                setState(() => _runModelOverride = next);
+                await _saveModelOverride(build: null, run: next);
+              },
+            ),
+          ],
           const SizedBox(height: 8),
           _buildStudioAdvancedSection(),
         ],
       ),
     );
+  }
+
+  Widget _buildOrRunModelSelector({
+    required ApiConfig apiConfig,
+    required String override,
+    required String label,
+    required Future<void> Function(String?) onChanged,
+  }) {
+    final fetched = _modelsByApiConfigId[apiConfig.id] ?? const <String>[];
+    final models = <String>{
+      if (apiConfig.model.isNotEmpty) apiConfig.model,
+      ...fetched,
+      if (override.isNotEmpty) override,
+    }.where((m) => m.trim().isNotEmpty).toList()
+      ..sort();
+    final selectedModel = override.isNotEmpty
+        ? override
+        : apiConfig.model.isNotEmpty
+        ? apiConfig.model
+        : null;
+    final isFetching = _fetchingModelConfigIds.contains(apiConfig.id);
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue: selectedModel != null && models.contains(selectedModel)
+                ? selectedModel
+                : null,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: label,
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: models
+                .map(
+                  (model) => DropdownMenuItem(
+                    value: model,
+                    child: Text(model, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            hint: Text(
+              apiConfig.model.isNotEmpty ? apiConfig.model : 'Fetch models',
+            ),
+            onChanged: onChanged,
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filledTonal(
+          tooltip: 'Fetch models',
+          onPressed: isFetching ? null : () => _fetchProviderModels(apiConfig),
+          icon: isFetching
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh, size: 18),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveModelOverride({
+    required String? build,
+    required String? run,
+  }) async {
+    if (_config == null) return;
+    var updated = _config!;
+    if (build != null) {
+      updated = updated.copyWith(buildModelOverride: build);
+    }
+    if (run != null) {
+      updated = updated.copyWith(runModelOverride: run);
+    }
+    updated = updated.copyWith(updatedAt: currentTimestampSeconds());
+    await ref.read(studioConfigRepoProvider).upsert(updated);
+    if (mounted) setState(() => _config = updated);
   }
 
   Widget _buildStudioAdvancedSection() {

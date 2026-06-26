@@ -26,6 +26,8 @@ abstract class StudioConfig with _$StudioConfig {
     @Default('') String sourcePresetHash,
     @Default('') String buildApiConfigId,
     @Default('') String runApiConfigId,
+    @Default('') String buildModelOverride,
+    @Default('') String runModelOverride,
     @Default('') String builderPromptTemplate,
 
     /// Maximum number of trailing user/assistant chat messages forwarded to the

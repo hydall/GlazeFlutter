@@ -41,7 +41,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 48;
+  int get schemaVersion => 49;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -654,6 +654,28 @@ class AppDatabase extends _$AppDatabase {
             '(session_id, settings_json, updated_at) '
             "VALUES (?, ?, CAST(strftime('%s','now') AS INTEGER))",
             [sessionId, jsonEncode(pipelineJson)],
+          );
+        }
+      }
+      if (from < 49) {
+        // Studio Build/Run model overrides: allow the user to pick a specific
+        // model from the API config's fetched model list, independent of the
+        // config's default `model` field. Additive — defaults to '' (use
+        // config.model).
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('build_model_override')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.buildModelOverride,
+          );
+        }
+        if (!colNames.contains('run_model_override')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.runModelOverride,
           );
         }
       }
