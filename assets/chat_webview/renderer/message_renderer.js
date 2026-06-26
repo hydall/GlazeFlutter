@@ -521,7 +521,7 @@ if (messageData.isEditing) classes.push('editing');
 
     const isChar = this._roleKey(m.role) === 'char';
     const hasSwipes = isChar && m.swipeTotal && m.swipeTotal > 1;
-    const hasAgentSwipes = isChar && m.agentSwipeTotal && m.agentSwipeTotal > 1;
+    const hasAgentSwipes = isChar && m.agentSwipeFinalCount && m.agentSwipeFinalCount > 1;
     const hasGreetings = isChar && m.messageIndex === 0 && m.greetingTotal && m.greetingTotal > 1;
     const showRegen = ((!isChar && m.isLast) || m.isError) && !m.isGenerating && !m.isEditing;
     const showStudioFinalRegen = isChar && m.isLast && !m.isGenerating && !m.isEditing && m.studioOutputs && m.studioOutputs.length;

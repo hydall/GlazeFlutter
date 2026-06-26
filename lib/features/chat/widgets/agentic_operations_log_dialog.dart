@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/agent_operation_record.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../state/agent_operations_log_provider.dart';
+import 'post_cleaner_diff_dialog.dart';
 
 enum _LogFilter { all, failed, success }
 
@@ -196,6 +197,12 @@ class _OperationTile extends StatelessWidget {
 
   const _OperationTile({required this.record});
 
+  bool get _canShowDiff =>
+      record.kind == AgentOperationKind.postCleaner &&
+      record.status.isOk &&
+      record.sessionId != null &&
+      record.messageId != null;
+
   @override
   Widget build(BuildContext context) {
     final color = _statusColor(context, record.status);
@@ -222,14 +229,29 @@ class _OperationTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-      trailing: record.canRegenerate
-          ? IconButton(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_canShowDiff)
+            IconButton(
+              onPressed: () => PostCleanerDiffDialog.show(
+                context,
+                sessionId: record.sessionId!,
+                messageId: record.messageId!,
+              ),
+              icon: const Icon(Icons.compare_arrows, size: 18),
+              tooltip: 'View diff',
+              visualDensity: VisualDensity.compact,
+            ),
+          if (record.canRegenerate)
+            IconButton(
               onPressed: () => _showRegenHint(context),
               icon: const Icon(Icons.refresh, size: 18),
               tooltip: 'Regenerate (next turn)',
               visualDensity: VisualDensity.compact,
-            )
-          : null,
+            ),
+        ],
+      ),
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

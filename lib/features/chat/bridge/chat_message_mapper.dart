@@ -135,6 +135,13 @@ class ChatMessageMapper {
       if (m.agentSwipes.isNotEmpty) 'agentSwipeTotal': m.agentSwipes.length,
       if (m.agentSwipes.length > 1)
         'agentSwipeKinds': m.agentSwipes.map((s) => s.kind).toList(),
+      // Number of 'final' agent swipes — the blue switcher is only shown
+      // when there are ≥2 'final' swipes (i.e. a studioFinalOnly regen
+      // happened). A single 'final' + 'cleaned' pair (POST-cleaner) does NOT
+      // show the blue switcher — the cleaner is meant to be invisible.
+      if (m.agentSwipes.where((s) => s.kind == 'final').length > 1)
+        'agentSwipeFinalCount':
+            m.agentSwipes.where((s) => s.kind == 'final').length,
       if (m.genTime != null) 'genTime': m.genTime,
       if (m.tokens != null) 'tokens': m.tokens,
       'isError': m.isError,

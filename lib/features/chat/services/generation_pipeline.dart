@@ -21,6 +21,7 @@ import '../chat_generation_service.dart';
 import '../chat_session_service.dart';
 import '../chat_state.dart';
 import '../state/agent_operations_log_provider.dart';
+import '../state/post_cleaner_state_provider.dart';
 import '../utils/message_preview.dart';
 
 /// Result of [GenerationPipeline.run] when the regen target's id did not
@@ -631,6 +632,12 @@ class GenerationPipeline {
         'broadcastBlocks=${broadcastBlocks.length}',
       );
 
+      ref.read(postCleanerStateProvider.notifier).state = PostCleanerState.running(
+        sessionId: sessionId,
+        messageId: lastAssistant.id,
+        originalChars: lastAssistant.content.length,
+      );
+
       final cleanerService = ref.read(postCleanerServiceProvider);
       final result = await cleanerService.runCleaner(
         sessionId: sessionId,
@@ -639,7 +646,11 @@ class GenerationPipeline {
         broadcastBlocks: broadcastBlocks,
       );
 
-      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
+        ref.read(postCleanerStateProvider.notifier).state =
+            const PostCleanerState.idle();
+        return;
+      }
 
       debugPrint(
         '[PostCleaner] result session=$sessionId wasCleaned=${result.wasCleaned} '
@@ -648,6 +659,20 @@ class GenerationPipeline {
         'error=${result.error ?? "none"} '
         'attempts=${result.attempts.length}',
       );
+
+      ref.read(postCleanerStateProvider.notifier).state = result.wasCleaned
+          ? PostCleanerState.done(
+              sessionId: sessionId,
+              messageId: lastAssistant.id,
+              originalChars: lastAssistant.content.length,
+              cleanedChars: result.cleanedText.length,
+            )
+          : (result.status == 'ok' || result.status == 'disabled')
+              ? const PostCleanerState.idle()
+              : PostCleanerState.error(
+                  sessionId: sessionId,
+                  messageId: lastAssistant.id,
+                );
 
       // Record the operation in the agentic operations log so the user can
       // inspect retries (502 → 200, etc.) from the dedicated UI.
@@ -718,6 +743,10 @@ class GenerationPipeline {
       }
     } catch (e) {
       debugPrint('[PostCleaner] failed session=$sessionId error=$e');
+      if (ref.mounted) {
+        ref.read(postCleanerStateProvider.notifier).state =
+            const PostCleanerState.idle();
+      }
     }
   }
 }
