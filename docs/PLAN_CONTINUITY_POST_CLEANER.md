@@ -1,12 +1,16 @@
 # PLAN: Continuity-Aware POST-Cleaner
 
-Status: **Phase 2 shipped**.
+Status: **SHIPPED** (Phase 1 commit `d47f9d3`, Phase 2 commit `deafdb3`).
+All items below are done unless marked otherwise.
 
-Phase 1 shipped (commit `d47f9d3`): recent chat history + Studio controller
-notes wired into the cleaner prompt with conservative continuity rules.
-
-Phase 2 shipped: PromptPayload pass-through + Character/World Auditor +
-cleaner with audit notes.
+Post-ship changes:
+- Pipeline settings separation (commit `9579d7e`): all cleaner fields moved
+  from `MemoryBookSettings` to `PipelineSettings`. Cleaner config now lives
+  in the Post-Building menu, not Memory Books. See
+  `docs/PLAN_PIPELINE_SEPARATION.md`.
+- Post-cleaner current-API model dropdown + i18n (commit `fdef2d5`).
+- Memory mode ↔ sidecar lock (commit `9e7bb99`): Deep/Agentic modes
+  force-lock the sidecar toggle to prevent silent degradation to Fast.
 
 Goal: evolve the existing POST-cleaner from a style-only rewrite pass into a
 two-stage continuity-aware editor:

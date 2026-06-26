@@ -1717,6 +1717,7 @@
     "post_building_consolidation_threshold_desc": "Merge when entries exceed this count.",
     "post_building_consolidation_timeout": "Consolidation timeout (ms)",
     "post_building_consolidation_timeout_desc": "How long to wait for the consolidation LLM.",
+    "post_building_consolidation_not_functional": "Not yet functional — consolidation service is implemented but not wired into the post-turn pipeline. Settings are preserved for when it ships.",
     "count_chats": {
         "one": "chat",
         "other": "chats"

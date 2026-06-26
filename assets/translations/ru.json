@@ -1734,6 +1734,7 @@
     "post_building_consolidation_threshold_desc": "Слить когда записей больше этого количества.",
     "post_building_consolidation_timeout": "Таймаут консолидации (мс)",
     "post_building_consolidation_timeout_desc": "Сколько ждать LLM консолидации.",
+    "post_building_consolidation_not_functional": "Пока не работает — сервис консолидации реализован, но не подключён к post-turn пайплайну. Настройки сохраняются для будущего включения.",
     "count_chats": {
         "one": "чат",
         "few": "чата",

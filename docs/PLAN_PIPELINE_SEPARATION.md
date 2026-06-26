@@ -1,6 +1,20 @@
 # PLAN: Pipeline Settings Separation from Memory Books
 
-Status: **DRAFT / RFC**. Not started. This is a post-Phase-2 refactoring plan.
+Status: **SHIPPED** (commit `9579d7e`). All items below are done unless
+marked otherwise.
+
+Post-ship additions:
+- DB schema v49: Studio Build/Run model overrides (`buildModelOverride`,
+  `runModelOverride`) added to `studio_config_rows` (commit `fdef2d5`).
+- Memory mode ↔ sidecar lock: Deep/Agentic modes now force-lock the sidecar
+  toggle ON in Post-Building, with a status hint in Memory Books UI
+  (commit `9e7bb99`).
+- Post-cleaner current-API model dropdown + Studio model dropdowns + i18n
+  (commit `fdef2d5`).
+- Consolidation: service + repo + table + UI exist, but
+  `consolidateSession` is **not yet wired** into the post-turn pipeline and
+  summaries are **not yet injected**. UI shows a "not yet functional" banner.
+  See §7 below.
 
 ---
 
@@ -214,3 +228,50 @@ Key files:
 - Existing user settings survive the migration (no data loss).
 - `flutter analyze` passes.
 - All existing tests pass (with updated mocks/fixtures).
+
+---
+
+## 7. Completion Status (post-ship audit)
+
+| Item | Status |
+|------|--------|
+| `PipelineSettings` model + freezed | Done |
+| `pipeline_settings_rows` table + migration (v48) | Done |
+| `PipelineSettingsRepo` + provider | Done |
+| Migrate existing data (extract from `memory_book_rows.settings_json`) | Done |
+| Update all callers to read from `PipelineSettings` (15 lib files) | Done |
+| Update UI (Post-Building, Studio, Memory Books) | Done |
+| Clean up `MemoryBookSettings` (remove pipeline fields) | Done |
+| Clean up `MemoryGlobalSettings` (remove pipeline fields) | Done |
+| `flutter analyze` + `flutter test` | 0 errors, 1334/1334 pass |
+| Studio Build/Run model overrides (schema v49) | Done |
+| Memory mode ↔ sidecar lock (Deep/Agentic) | Done |
+| Post-cleaner current-API model dropdown | Done |
+| i18n for all Post-Building strings (en + ru) | Done |
+
+### Consolidation — not yet functional
+
+The consolidation service (`memory_consolidation_service.dart`), repo
+(`memory_consolidation_repo.dart`), DB table (`memory_consolidation_rows`),
+PipelineSettings fields (`consolidationEnabled/Threshold/Source/Model/Endpoint/
+ApiKey/TimeoutMs`), and UI section (Post-Building menu) all exist and are
+wired into the settings model. However:
+
+- `consolidateSession()` is **never called** — no file invokes it. The
+  provider (`memoryConsolidationServiceProvider`) is defined but unused.
+- Consolidation summaries (tier 1 = scene, tier 2 = arc) are saved to
+  `memory_consolidation_rows` when the service runs, but the service never
+  runs because nothing triggers it.
+- Summaries are **not injected** — `MemoryInjectionService` reads only
+  `book.entries` (status='active'), not `memory_consolidation_rows`.
+
+The UI section in Post-Building shows a "Not yet functional" banner to set
+user expectations. The settings are preserved so the feature can be completed
+in a future task without a DB migration.
+
+**To ship consolidation, two things are needed:**
+1. Call `consolidateSession()` from `MemoryPostTurnService.runPostTurn()`
+   (or `GenerationPipeline`) when `consolidationEnabled` and threshold met.
+2. Inject tier 1/2 summaries into the generation prompt (either as a new
+   `{{consolidation}}` macro or by adding them to `MemoryInjectionService`
+   selection alongside `book.entries`).
