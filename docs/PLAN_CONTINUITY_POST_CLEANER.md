@@ -291,41 +291,139 @@ No `CHARACTER CONSISTENCY NOTES` section is added.
 
 ## 7. Settings & UI
 
-### 7.1 New Settings Fields
+### 7.1 Sidecar Settings Split
 
-Add to `MemoryBookSettings`:
+Currently `MemoryBookSettings` has a single set of sidecar fields
+(`sidecarSource`, `sidecarModel`, `sidecarEndpoint`, `sidecarApiKey`,
+`sidecarTimeoutMs`) shared by the agentic write-loop, agentic mode, and the
+POST-cleaner. This couples the cleaner to the write-loop configuration.
+
+Split into per-feature settings:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `sidecarSource` | String | `'current'` | Write-loop source (unchanged). |
+| `sidecarModel` | String | `''` | Write-loop model (unchanged). |
+| `sidecarEndpoint` | String | `''` | Write-loop endpoint (unchanged). |
+| `sidecarApiKey` | String | `''` | Write-loop API key (unchanged). |
+| `sidecarTimeoutMs` | int | `60000` | Write-loop timeout (unchanged). |
+| `postCleanerSource` | String | `'inherit'` | Cleaner source. `'inherit'` = fall back to `sidecarSource`. |
+| `postCleanerModel` | String | `''` | Cleaner model. Empty = fall back to `sidecarModel`. |
+| `postCleanerEndpoint` | String | `''` | Cleaner endpoint. Empty = fall back to `sidecarEndpoint`. |
+| `postCleanerApiKey` | String | `''` | Cleaner API key. Empty = fall back to `sidecarApiKey`. |
+| `postCleanerTimeoutMs` | int | `0` | Cleaner timeout. `0` = fall back to `sidecarTimeoutMs`. |
+
+Resolution logic in `SidecarLlmClient.resolveConfig` (or a cleaner-specific
+variant): if `postCleanerModel` is non-empty, use it; otherwise use
+`sidecarModel`. Same for endpoint, apiKey, source, timeout. This lets the user
+run the cleaner on a cheaper/faster model while the write-loop stays on a
+different one — or keep them shared by leaving the cleaner fields empty.
+
+### 7.2 Post-Cleaner Behavior Settings
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `postCleanerEnabled` | bool | `false` | Master switch (existing). |
+| `postCleanerTemperature` | double | `0.3` | Cleaner temperature (existing). |
+| `postCleanerMaxTokens` | int | `0` | Max tokens, 0 = auto (existing). |
 | `postCleanerContinuityEnabled` | bool | `true` | Enable recent-history continuity check (Phase 1 behavior). |
 | `postCleanerCharacterCheckEnabled` | bool | `false` | Enable character/world audit pass (Phase 2). Opt-in. |
 | `postCleanerHistoryMessages` | int | `12` | Number of recent messages to include. |
 | `postCleanerMaxCharsPerMessage` | int | `3000` | Max chars per history message. |
 
-### 7.2 UI Location
+### 7.3 UI: Post-Building Menu
 
-In `studio_menu_dialog.dart`, within the existing POST-cleaner section
-(after the "POST-cleaner (anti-cliche rewrite)" switch):
+The POST-cleaner works **without Studio** — it only needs
+`MemoryBookSettings.postCleanerEnabled`. Studio provides optional
+`broadcastBlocks` and `studioOutputs`, but neither is required. The cleaner
+settings therefore do not belong in the Studio menu.
+
+Move all post-cleaner settings out of `studio_menu_dialog.dart` into a new
+**Post-Building** entry in the MagicDrawer:
+
+**MagicDrawer item** (`magic_drawer.dart`):
+
+```dart
+MagicDrawerItemDef(
+  id: 'post-building',
+  label: 'Post-Building',
+  icon: Icons.cleaning_services_outlined,
+),
+```
+
+**Post-Building dialog** (`post_building_menu_dialog.dart`):
 
 ```
-[switch] POST-cleaner (anti-cliché rewrite)          [existing]
-[switch] Continuity check (recent history)            [new]
-[switch] Character & world audit (extra sidecar call) [new]
-[tile]   History messages: 12                        [new]
-[tile]   Max chars per message: 3000                  [new]
-[tile]   Cleaner temperature: 0.30                    [existing]
-[tile]   Cleaner max tokens: Auto                     [existing]
+[switch] POST-cleaner (anti-cliché rewrite)
+[switch] Continuity check (recent history)
+[switch] Character & world audit (extra sidecar call)
+[tile]   Cleaner model: <inherit from write-loop>
+[tile]   Cleaner temperature: 0.30
+[tile]   Cleaner max tokens: Auto
+[tile]   Cleaner timeout: 60s
+[tile]   History messages: 12
+[tile]   Max chars per message: 3000
 ```
 
-The character audit switch is opt-in (`false` by default) because it adds a
-second sidecar call and cost. The continuity check is on by default since it
-only enriches the existing cleaner prompt with no extra LLM call.
+**Studio menu** (`studio_menu_dialog.dart`) keeps only:
+- Write-loop (trackers + memory drafts) switch
+- Sidecar model selector (for write-loop only)
+- Agent timeout (for write-loop only)
+- Preset routing mode (Studio-specific)
+
+### 7.4 Post-Cleaner Works Without Studio
+
+Confirmed: the cleaner's only Studio dependency is `broadcastBlocks`, which
+gracefully defaults to `const []` when no Studio config exists. The cleaner
+also reads `lastAssistant.studioOutputs`, which is empty when generation did
+not use Studio. Neither blocks the cleaner from running.
 
 ---
 
 ## 8. Code Touchpoints
 
-### Phase 2 files
+### Settings split & UI migration
+
+- `lib/core/models/memory_book.dart`
+  - Add `postCleanerSource`, `postCleanerModel`, `postCleanerEndpoint`,
+    `postCleanerApiKey`, `postCleanerTimeoutMs` (sidecar split).
+  - Add `postCleanerContinuityEnabled`, `postCleanerCharacterCheckEnabled`,
+    `postCleanerHistoryMessages`, `postCleanerMaxCharsPerMessage`.
+  - Run `dart run build_runner build` after model changes.
+
+- `lib/core/llm/sidecar_llm_client.dart`
+  - Add `resolveConfigForCleaner` (or extend `resolveConfig` with a
+    `PostCleanerSettings` override) that prefers `postCleanerModel` /
+    `postCleanerEndpoint` / `postCleanerApiKey` / `postCleanerSource` /
+    `postCleanerTimeoutMs` and falls back to the shared `sidecar*` fields
+    when the cleaner-specific fields are empty/zero.
+
+- `lib/core/llm/post_cleaner_service.dart`
+  - Use the cleaner-specific config resolution instead of the shared
+    `resolveConfig`.
+
+- `lib/features/chat/widgets/post_building_menu_dialog.dart` (new)
+  - New dialog hosting all post-cleaner settings: enable switch, continuity
+    switch, audit switch, model selector, temperature, max tokens, timeout,
+    history messages, max chars per message.
+
+- `lib/features/chat/widgets/magic_drawer.dart`
+  - Add `post-building` item to `_allItems`.
+  - Add `case 'post-building'` to `_handleTap`.
+  - Add `_showPostBuildingMenu()` method.
+
+- `lib/features/chat/widgets/studio_menu_dialog.dart`
+  - Remove the POST-cleaner switch, cleaner temperature, cleaner max tokens,
+    and any cleaner-specific UI from the "Agentic memory (advanced)" section.
+  - Keep write-loop switch, sidecar model selector (for write-loop), agent
+    timeout (for write-loop), and preset routing mode.
+
+- `lib/features/chat/services/generation_pipeline.dart`
+  - Use `postCleanerHistoryMessages` instead of hardcoded `12`.
+  - Use `postCleanerMaxCharsPerMessage` instead of hardcoded `3000`.
+  - Conditionally skip continuity when `postCleanerContinuityEnabled = false`.
+
+### Phase 2: Auditor + PromptPayload pass-through
 
 - `lib/features/chat/services/chat_generation_service.dart`
   - Expose `PromptPayload` in the generation result.
@@ -344,16 +442,7 @@ only enriches the existing cleaner prompt with no extra LLM call.
   - Extend `buildCleanerPrompt` with `auditNotes` section.
 
 - `lib/core/llm/prompt_builder.dart`
-  - Expose lorebook content assembly for reuse by the auditor (or replicate
-    the compact assembly in the auditor).
-
-- `lib/core/models/memory_book.dart`
-  - Add `postCleanerContinuityEnabled`, `postCleanerCharacterCheckEnabled`,
-    `postCleanerHistoryMessages`, `postCleanerMaxCharsPerMessage`.
-  - Run `dart run build_runner build` after model changes.
-
-- `lib/features/chat/widgets/studio_menu_dialog.dart`
-  - Add new switches and tiles for the settings above.
+  - Expose lorebook content assembly for reuse by the auditor.
 
 - `test/post_cleaner_test.dart`
   - Tests for `buildAuditPrompt` (context inclusion, JSON instruction).
