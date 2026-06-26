@@ -4,13 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import 'post_cleaner_line_diff.dart';
 
 /// Side-by-side diff viewer for POST-cleaner results.
 ///
 /// Loads the message from the DB by [sessionId]/[messageId], extracts the
 /// `final` and `cleaned` agent swipes, and renders them in two parallel
-/// scrollable columns. Opened from the Agentic Operations Log when the user
-/// taps "View Diff" on a postCleaner operation.
+/// scrollable columns with per-line diff highlighting:
+/// - red background + `−` prefix: line removed (left side) or changed
+/// - green background + `+` prefix: line added (right side) or changed
+/// - no highlight: unchanged lines (shown on both sides)
+///
+/// Opened from the Agentic Operations Log when the user taps "View Diff" on a
+/// postCleaner operation.
 class PostCleanerDiffDialog extends ConsumerStatefulWidget {
   final String sessionId;
   final String messageId;
@@ -43,6 +49,7 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
   String? _error;
   AgentSwipe? _original;
   AgentSwipe? _cleaned;
+  DiffResult _diff = const DiffResult.empty();
 
   @override
   void initState() {
@@ -92,6 +99,9 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         _original = original;
         _cleaned = cleaned;
         _loading = false;
+        if (original != null && cleaned != null) {
+          _diff = computeLineDiff(original.content, cleaned.content);
+        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -120,9 +130,10 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
                   const SizedBox(width: 8),
                   Text('Cleaner Diff', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(width: 8),
-                  if (_original != null && _cleaned != null)
+                  if (_diff.removedLines > 0 || _diff.addedLines > 0)
                     Text(
-                      '${_cleaned!.content.length - _original!.content.length >= 0 ? '+' : ''}${_cleaned!.content.length - _original!.content.length} chars',
+                      '${_diff.removedLines > 0 ? '-' : ''}${_diff.removedLines} red · '
+                      '${_diff.addedLines > 0 ? '+' : ''}${_diff.addedLines} green',
                       style: TextStyle(
                         fontSize: 11,
                         color: cs.onSurfaceVariant,
@@ -172,29 +183,33 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: _buildPanel(
-            context,
-            label: 'Original',
-            content: _original!.content,
-            accent: cs.onSurfaceVariant,
-          )),
+          Expanded(
+            child: _buildDiffPanel(
+              context,
+              label: 'Original',
+              accent: cs.onSurfaceVariant,
+              lines: _diff.leftLines,
+            ),
+          ),
           const VerticalDivider(width: 1),
-          Expanded(child: _buildPanel(
-            context,
-            label: 'Cleaned',
-            content: _cleaned!.content,
-            accent: cs.primary,
-          )),
+          Expanded(
+            child: _buildDiffPanel(
+              context,
+              label: 'Cleaned',
+              accent: cs.primary,
+              lines: _diff.rightLines,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildPanel(
+  Widget _buildDiffPanel(
     BuildContext context, {
     required String label,
-    required String content,
     required Color accent,
+    required List<DiffLine> lines,
   }) {
     return Container(
       padding: const EdgeInsets.all(8),
@@ -215,29 +230,68 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
                     color: accent,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '${content.length} chars',
-                  style: TextStyle(fontSize: 10, color: accent.withValues(alpha: 0.6)),
-                ),
               ],
             ),
           ),
           Expanded(
             child: Scrollbar(
               child: SingleChildScrollView(
-                child: SelectableText(
-                  content,
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    color: context.cs.onSurface,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: lines.map((line) => _buildDiffLine(context, line)).toList(),
                 ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDiffLine(BuildContext context, DiffLine line) {
+    Color bg;
+    Color fg;
+    String prefix;
+    if (line.type == DiffLineType.removed) {
+      bg = Colors.red.withValues(alpha: 0.12);
+      fg = context.cs.error;
+      prefix = '− ';
+    } else if (line.type == DiffLineType.added) {
+      bg = Colors.green.withValues(alpha: 0.12);
+      fg = Colors.green.shade700;
+      prefix = '+ ';
+    } else {
+      bg = Colors.transparent;
+      fg = context.cs.onSurface;
+      prefix = '  ';
+    }
+
+    return Container(
+      width: double.infinity,
+      color: bg,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      child: SelectableText.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: prefix,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: fg.withValues(alpha: 0.5),
+                fontFamily: 'monospace',
+              ),
+            ),
+            TextSpan(
+              text: line.text,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: fg,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
