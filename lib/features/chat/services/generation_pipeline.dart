@@ -625,13 +625,15 @@ class GenerationPipeline {
       if (lastAssistant == null) return;
 
       // Collect bounded recent chat history before the assistant response for
-      // conservative local continuity checks. Last 12 messages, excluding the
-      // response being cleaned itself.
-      const kMaxHistoryMessages = 12;
+      // conservative local continuity checks. Uses configurable history window
+      // from settings. Excludes the response being cleaned itself.
+      final maxHistory = book.settings.postCleanerContinuityEnabled
+          ? book.settings.postCleanerHistoryMessages
+          : 0;
       final recentMessages = <ChatMessage>[];
-      if (lastAssistantIndex > 0) {
+      if (maxHistory > 0 && lastAssistantIndex > 0) {
         final start =
-            (lastAssistantIndex - kMaxHistoryMessages).clamp(0, lastAssistantIndex);
+            (lastAssistantIndex - maxHistory).clamp(0, lastAssistantIndex);
         for (var i = start; i < lastAssistantIndex; i++) {
           final m = messages[i];
           if (m.content.trim().isEmpty || m.isError) continue;
@@ -655,12 +657,14 @@ class GenerationPipeline {
 
       debugPrint(
         '[PostCleaner] starting session=$sessionId '
-        'model=${book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel} '
-        'timeoutMs=${book.settings.sidecarTimeoutMs} '
+        'model=${book.settings.postCleanerModel.isNotEmpty ? book.settings.postCleanerModel : (book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel)} '
+        'timeoutMs=${book.settings.postCleanerTimeoutMs > 0 ? book.settings.postCleanerTimeoutMs : book.settings.sidecarTimeoutMs} '
         'textChars=${lastAssistant.content.length} '
         'broadcastBlocks=${broadcastBlocks.length} '
         'historyMessages=${recentMessages.length} '
-        'studioOutputs=${lastAssistant.studioOutputs.length}',
+        'studioOutputs=${lastAssistant.studioOutputs.length} '
+        'continuity=${book.settings.postCleanerContinuityEnabled} '
+        'charCheck=${book.settings.postCleanerCharacterCheckEnabled}',
       );
 
       ref.read(postCleanerStateProvider.notifier).state = PostCleanerState.running(

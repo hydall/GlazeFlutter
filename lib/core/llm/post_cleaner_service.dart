@@ -69,7 +69,7 @@ class PostCleanerService {
 
     try {
       final config =
-          await _llm.resolveConfig(settings, errorLabel: 'post-cleaner');
+          await _llm.resolveConfigForCleaner(settings, errorLabel: 'post-cleaner');
       if (token.isCancelled) {
         return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
       }
@@ -179,6 +179,7 @@ class PostCleanerService {
       broadcastBlocks: broadcastBlocks,
       recentMessages: recentMessages,
       studioOutputs: studioOutputs,
+      maxCharsPerMessage: settings.postCleanerMaxCharsPerMessage,
     );
 
     final effectiveMaxTokens = settings.postCleanerMaxTokens > 0
@@ -190,7 +191,7 @@ class PostCleanerService {
       prompt: prompt,
       maxTokens: effectiveMaxTokens,
       temperature: settings.postCleanerTemperature,
-      timeoutMs: settings.sidecarTimeoutMs,
+      timeoutMs: _llm.resolveCleanerTimeout(settings),
       cancelToken: cancelToken,
     );
   }
@@ -210,6 +211,7 @@ class PostCleanerService {
     List<String> broadcastBlocks = const [],
     List<ChatMessage> recentMessages = const [],
     List<Map<String, dynamic>> studioOutputs = const [],
+    int maxCharsPerMessage = 3000,
   }) {
     final rules = broadcastBlocks
         .map((b) => b.trim())
@@ -226,7 +228,7 @@ class PostCleanerService {
 
     // Recent chat history — authoritative for local scene state.
     if (recentMessages.isNotEmpty) {
-      final history = _formatRecentMessages(recentMessages);
+      final history = _formatRecentMessages(recentMessages, maxCharsPerMessage);
       if (history.isNotEmpty) {
         buffer
           ..writeln('RECENT CHAT HISTORY:')
@@ -317,19 +319,22 @@ class PostCleanerService {
   }
 
   /// Formats recent chat messages into a compact literal block for the cleaner
-  /// prompt. Each message is trimmed to [_kMaxMessageChars] characters to keep
-  /// the prompt within a reasonable token budget.
-  static const _kMaxMessageChars = 3000;
+  /// prompt. Each message is trimmed to [maxChars] characters to keep the
+  /// prompt within a reasonable token budget.
+  static const _kDefaultMaxMessageChars = 3000;
 
-  static String _formatRecentMessages(List<ChatMessage> messages) {
+  static String _formatRecentMessages(
+    List<ChatMessage> messages, [
+    int maxChars = _kDefaultMaxMessageChars,
+  ]) {
     final buf = StringBuffer();
     for (final m in messages) {
       if (m.content.trim().isEmpty) continue;
       final role = m.role == 'assistant' ? 'assistant' : 'user';
       final idSuffix = m.id.isNotEmpty ? ' #${m.id}' : '';
       var content = m.content;
-      if (content.length > _kMaxMessageChars) {
-        content = '${content.substring(0, _kMaxMessageChars)}…';
+      if (content.length > maxChars) {
+        content = '${content.substring(0, maxChars)}…';
       }
       buf.writeln('[$role$idSuffix]');
       buf.writeln(content);

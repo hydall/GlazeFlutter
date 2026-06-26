@@ -99,6 +99,70 @@ class SidecarLlmClient {
     );
   }
 
+  /// Resolves the API config for the POST-cleaner, preferring
+  /// `postCleaner*` fields and falling back to `sidecar*` when the
+  /// cleaner-specific fields are empty/zero.
+  Future<SidecarApiConfig> resolveConfigForCleaner(
+    MemoryBookSettings settings, {
+    String errorLabel = 'post-cleaner',
+  }) async {
+    final source = settings.postCleanerSource == 'inherit'
+        ? settings.sidecarSource
+        : settings.postCleanerSource;
+    final model = settings.postCleanerModel.isNotEmpty
+        ? settings.postCleanerModel
+        : settings.sidecarModel;
+    final endpoint = settings.postCleanerEndpoint.isNotEmpty
+        ? settings.postCleanerEndpoint
+        : settings.sidecarEndpoint;
+    final apiKey = settings.postCleanerApiKey.isNotEmpty
+        ? settings.postCleanerApiKey
+        : settings.sidecarApiKey;
+
+    if (source == 'custom') {
+      if (endpoint.isEmpty || model.isEmpty) {
+        debugPrint(
+          '[Sidecar] cleaner custom config incomplete — endpoint='
+          "'$endpoint' model='$model'",
+        );
+        throw Exception('Sidecar custom config incomplete for $errorLabel');
+      }
+      debugPrint('[Sidecar] resolved custom for $errorLabel model=$model');
+      return SidecarApiConfig(
+        endpoint: endpoint,
+        apiKey: apiKey,
+        model: model,
+        protocol: LlmProtocol.openai,
+      );
+    }
+
+    await _ref.read(apiListProvider.future);
+    final chatConfig = _ref.read(activeApiConfigProvider);
+    if (chatConfig == null) {
+      debugPrint('[Sidecar] no active chat API config for $errorLabel');
+      throw Exception('No chat API config available for $errorLabel');
+    }
+    final effectiveModel = model.isNotEmpty ? model : chatConfig.model;
+    debugPrint(
+      '[Sidecar] resolved chat-fallback for $errorLabel '
+      'model=$effectiveModel endpoint=${chatConfig.endpoint}',
+    );
+    return SidecarApiConfig(
+      endpoint: chatConfig.endpoint,
+      apiKey: chatConfig.apiKey,
+      model: effectiveModel,
+      protocol: chatConfig.protocol,
+    );
+  }
+
+  /// Resolves the effective timeout for the POST-cleaner, preferring
+  /// `postCleanerTimeoutMs` and falling back to `sidecarTimeoutMs`.
+  int resolveCleanerTimeout(MemoryBookSettings settings) {
+    return settings.postCleanerTimeoutMs > 0
+        ? settings.postCleanerTimeoutMs
+        : settings.sidecarTimeoutMs;
+  }
+
   /// Makes a single non-streaming LLM call and returns the raw text response.
   ///
   /// Retries on 5xx server errors (502/503/500) and timeouts using a 3-attempt

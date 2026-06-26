@@ -132,10 +132,31 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     /// rewrites the final assistant message to remove clichés and repetition.
     /// The original text is preserved as a swipe; the cleaned version replaces
     /// the active text. Falls back to original on error. See
-    /// docs/PLAN_AGENTIC_STUDIO.md Stage 4.
+    /// docs/PLAN_CONTINUITY_POST_CLEANER.md.
     @Default(false) bool postCleanerEnabled,
     @Default(0.3) double postCleanerTemperature,
     @Default(0) int postCleanerMaxTokens,
+    /// Per-feature sidecar split: cleaner-specific source/model/endpoint/key/
+    /// timeout. When empty/zero, falls back to the shared sidecar* fields.
+    /// Source 'inherit' = use sidecarSource.
+    @Default('inherit') String postCleanerSource,
+    @Default('') String postCleanerModel,
+    @Default('') String postCleanerEndpoint,
+    @Default('') String postCleanerApiKey,
+    @Default(0) int postCleanerTimeoutMs,
+    /// Continuity check: include recent chat history in the cleaner prompt for
+    /// conservative local continuity checks. On by default — no extra LLM call,
+    /// just enriches the existing cleaner prompt.
+    @Default(true) bool postCleanerContinuityEnabled,
+    /// Character & world audit: opt-in second sidecar pass that checks the
+    /// response against character card + persona + lorebooks + memory. Returns
+    /// a JSON list of contradictions passed to the cleaner as fix instructions.
+    @Default(false) bool postCleanerCharacterCheckEnabled,
+    /// Number of recent messages to include in the cleaner prompt for
+    /// continuity checks.
+    @Default(12) int postCleanerHistoryMessages,
+    /// Max chars per recent message in the cleaner prompt.
+    @Default(3000) int postCleanerMaxCharsPerMessage,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>
