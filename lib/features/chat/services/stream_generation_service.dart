@@ -296,6 +296,7 @@ class StreamGenerationService {
           triggeredMemories: triggeredMemories,
           studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
           regenTargetId: regenTargetId,
+          studioFinalOnly: studioFinalOnly,
           visibleStartIndex: vsi,
         );
         if (memoryDiagnostics is Map<String, dynamic> &&
@@ -441,6 +442,7 @@ class StreamGenerationService {
             triggeredLorebooks: triggeredLorebooks,
             triggeredMemories: triggeredMemories,
             regenTargetId: regenTargetId,
+            studioFinalOnly: studioFinalOnly,
             visibleStartIndex: vsi,
           );
           if (memoryDiagnostics is Map<String, dynamic> &&

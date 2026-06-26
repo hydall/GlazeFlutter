@@ -198,9 +198,10 @@ class PostCleanerService {
     return buffer.toString();
   }
 
-  /// Applies the cleaned text to the session: updates the last assistant
-  /// message content in DB (atomically via [ChatRepo.appendSwipeToMessage])
-  /// and invalidates the chat history provider.
+  /// Applies the cleaned text to the session: appends a `'cleaned'` agent
+  /// sub-swipe (blue icon) to the last assistant message via
+  /// [ChatRepo.appendAgentSwipe], preserving the original as a `'final'`
+  /// sub-swipe. Does NOT touch the legacy `swipes[]` (green icons).
   Future<void> applyCleanedText({
     required String sessionId,
     required String messageId,
@@ -208,11 +209,11 @@ class PostCleanerService {
     required String originalText,
   }) async {
     final chatRepo = _ref.read(chatRepoProvider);
-    final updated = await chatRepo.appendSwipeToMessage(
+    final updated = await chatRepo.appendAgentSwipe(
       sessionId: sessionId,
       messageId: messageId,
-      newContent: cleanedText,
-      previousContent: originalText,
+      content: cleanedText,
+      kind: 'cleaned',
     );
     if (!updated) return;
 

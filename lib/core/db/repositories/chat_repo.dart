@@ -182,6 +182,97 @@ class ChatRepo implements SyncChatStore {
     });
   }
 
+  /// Atomically appends an agent sub-swipe (blue icon) to a message's
+  /// `agentSwipes[]` without touching the legacy `swipes[]` (green icons).
+  ///
+  /// Used by:
+  /// - POST-cleaner → `kind: 'cleaned'`
+  /// - Final-agent regen → `kind: 'final'`
+  ///
+  /// If `agentSwipes` is empty and `kind == 'cleaned'`, a synthetic
+  /// `'final'` swipe is backfilled from the current message content so the
+  /// cleaner output always has a parent (handles old messages that predate
+  /// nested swipes — lazy migration).
+  ///
+  /// Updates `content` and `agentSwipeId` to point at the new swipe.
+  /// Wraps the read-modify-write in a transaction (database.md Rule 3).
+  Future<bool> appendAgentSwipe({
+    required String sessionId,
+    required String messageId,
+    required String content,
+    required String kind,
+    String? reasoning,
+    String? genTime,
+    int? tokens,
+    List<Map<String, dynamic>> studioOutputs = const [],
+  }) async {
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.chatSessions)
+            ..where((t) => t.sessionId.equals(sessionId)))
+          .getSingleOrNull();
+      if (row == null) return false;
+
+      final messages = (jsonDecode(row.messagesJson) as List<dynamic>)
+          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      var found = false;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].id == messageId) {
+          final msg = messages[i];
+          final agentSwipes = List<AgentSwipe>.from(msg.agentSwipes);
+
+          // Lazy migration: if agentSwipes is empty and we're adding a
+          // 'cleaned' swipe, backfill a 'final' from the current content.
+          if (agentSwipes.isEmpty && kind == 'cleaned') {
+            agentSwipes.add(AgentSwipe(
+              content: msg.content,
+              kind: 'final',
+              reasoning: msg.reasoning,
+              genTime: msg.genTime,
+              tokens: msg.tokens,
+              studioOutputs: msg.studioOutputs,
+            ));
+          }
+
+          final parentSwipeId = kind == 'cleaned' && agentSwipes.isNotEmpty
+              ? agentSwipes.length - 1
+              : null;
+
+          agentSwipes.add(AgentSwipe(
+            content: content,
+            kind: kind,
+            reasoning: reasoning,
+            genTime: genTime,
+            tokens: tokens,
+            studioOutputs: studioOutputs,
+            parentSwipeId: parentSwipeId,
+          ));
+
+          messages[i] = msg.copyWith(
+            content: content,
+            agentSwipes: agentSwipes,
+            agentSwipeId: agentSwipes.length - 1,
+          );
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) return false;
+
+      await (_db.update(_db.chatSessions)
+            ..where((t) => t.sessionId.equals(sessionId)))
+          .write(
+        ChatSessionsCompanion(
+          messagesJson:
+              Value(jsonEncode(messages.map((e) => e.toJson()).toList())),
+        ),
+      );
+      return true;
+    });
+  }
+
   /// Deletes all sessions belonging to [characterId], along with all per-session
   /// dependent data (memory books, summaries). Returns the deleted session IDs
   /// for sync-deletion tracking.
