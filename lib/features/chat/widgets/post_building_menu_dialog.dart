@@ -34,6 +34,7 @@ class PostBuildingMenuDialog extends ConsumerStatefulWidget {
 class _PostBuildingMenuDialogState
     extends ConsumerState<PostBuildingMenuDialog> {
   PipelineSettings _pipeline = const PipelineSettings();
+  String _memoryMode = 'fast';
   bool _loading = true;
 
   final Map<String, List<String>> _modelsByApiConfigId = {};
@@ -49,9 +50,25 @@ class _PostBuildingMenuDialogState
     try {
       final pipeline = await ref
           .read(pipelineSettingsProvider(widget.sessionId).future);
+      final book = await ref
+          .read(memoryBookRepoProvider)
+          .getBySessionId(widget.sessionId);
+      final mode = book?.settings.memoryMode ?? 'fast';
       if (mounted) {
         setState(() {
           _pipeline = pipeline;
+          _memoryMode = mode;
+          // Deep/Agentic memory modes require the sidecar. If the user has
+          // selected one of these modes in Memory Books, force the sidecar
+          // toggle ON here so the pipeline doesn't silently degrade to fast.
+          if ((mode == 'deep' || mode == 'agentic') && !_pipeline.sidecarEnabled) {
+            _pipeline = _pipeline.copyWith(sidecarEnabled: true);
+            ref.read(pipelineSettingsRepoProvider).updateSettings(
+              widget.sessionId,
+              _pipeline,
+            );
+            ref.invalidate(pipelineSettingsProvider(widget.sessionId));
+          }
           _loading = false;
         });
       }
@@ -59,6 +76,9 @@ class _PostBuildingMenuDialogState
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  bool get _sidecarLocked =>
+      _memoryMode == 'deep' || _memoryMode == 'agentic';
 
   Future<void> _savePipeline(
     PipelineSettings Function(PipelineSettings) mutator,
@@ -108,6 +128,8 @@ class _PostBuildingMenuDialogState
               _WriteLoopSection(
                 pipeline: _pipeline,
                 onSaved: _savePipeline,
+                sidecarLocked: _sidecarLocked,
+                memoryMode: _memoryMode,
                 modelsByApiConfigId: _modelsByApiConfigId,
                 fetchingModelConfigIds: _fetchingModelConfigIds,
                 onFetchModels: _fetchProviderModels,
@@ -408,6 +430,8 @@ class _CleanerSection extends StatelessWidget {
 class _WriteLoopSection extends StatelessWidget {
   final PipelineSettings pipeline;
   final PipelineSaver onSaved;
+  final bool sidecarLocked;
+  final String memoryMode;
   final Map<String, List<String>> modelsByApiConfigId;
   final Set<String> fetchingModelConfigIds;
   final FetchModels onFetchModels;
@@ -415,6 +439,8 @@ class _WriteLoopSection extends StatelessWidget {
   const _WriteLoopSection({
     required this.pipeline,
     required this.onSaved,
+    required this.sidecarLocked,
+    required this.memoryMode,
     required this.modelsByApiConfigId,
     required this.fetchingModelConfigIds,
     required this.onFetchModels,
@@ -441,10 +467,30 @@ class _WriteLoopSection extends StatelessWidget {
             SwitchListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: Text('post_building_sidecar_enabled'.tr()),
-              subtitle: Text('post_building_sidecar_enabled_desc'.tr()),
+              title: Row(
+                children: [
+                  Flexible(child: Text('post_building_sidecar_enabled'.tr())),
+                  if (sidecarLocked) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.lock_outline,
+                      size: 14,
+                      color: context.cs.primary,
+                    ),
+                  ],
+                ],
+              ),
+              subtitle: Text(
+                sidecarLocked
+                    ? 'post_building_sidecar_locked'.tr(namedArgs: {
+                        'arg0': 'memory_mode_$memoryMode'.tr(),
+                      })
+                    : 'post_building_sidecar_enabled_desc'.tr(),
+              ),
               value: pipeline.sidecarEnabled,
-              onChanged: (v) => onSaved((p) => p.copyWith(sidecarEnabled: v)),
+              onChanged: sidecarLocked
+                  ? null
+                  : (v) => onSaved((p) => p.copyWith(sidecarEnabled: v)),
             ),
             _SourceSegment(
               source: pipeline.sidecarSource,

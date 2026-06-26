@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/memory_budget.dart';
 import '../../../core/models/memory_book.dart';
+import '../../../core/models/pipeline_settings.dart';
 import '../../../core/services/memory_prompt_presets.dart';
+import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -13,8 +15,13 @@ import 'custom_prompt_manager_sheet.dart';
 
 class MemoryGenerationSettingsSheet extends ConsumerStatefulWidget {
   final MemoryBookSettings settings;
+  final String? sessionId;
 
-  const MemoryGenerationSettingsSheet({super.key, required this.settings});
+  const MemoryGenerationSettingsSheet({
+    super.key,
+    required this.settings,
+    this.sessionId,
+  });
 
   @override
   ConsumerState<MemoryGenerationSettingsSheet> createState() =>
@@ -25,6 +32,8 @@ class _MemoryGenerationSettingsSheetState
     extends ConsumerState<MemoryGenerationSettingsSheet> {
   late bool _enabled;
   late String _memoryMode;
+  PipelineSettings? _pipeline;
+  bool _pipelineLoaded = false;
   late bool _autoCreate;
   late bool _autoGenerate;
   late int _maxInjected;
@@ -111,7 +120,35 @@ class _MemoryGenerationSettingsSheetState
     _queryIncludeAssistant = s.queryIncludeAssistant;
     _queryRecentTurns = s.queryRecentTurns;
     _queryMaxChars = s.queryMaxChars;
+    _loadPipeline();
   }
+
+  Future<void> _loadPipeline() async {
+    final sid = widget.sessionId;
+    if (sid == null || sid.isEmpty) {
+      if (mounted) setState(() => _pipelineLoaded = true);
+      return;
+    }
+    try {
+      final pipeline = await ref.read(
+        pipelineSettingsProvider(sid).future,
+      );
+      if (mounted) {
+        setState(() {
+          _pipeline = pipeline;
+          _pipelineLoaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _pipelineLoaded = true);
+    }
+  }
+
+  bool get _needsSidecar =>
+      _memoryMode == 'deep' || _memoryMode == 'agentic';
+
+  bool get _sidecarReady =>
+      _pipeline != null && _pipeline!.sidecarEnabled;
 
   @override
   void dispose() {
@@ -530,6 +567,36 @@ class _MemoryGenerationSettingsSheetState
               : 'memory_mode_fast_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
+        if (_needsSidecar && _pipelineLoaded) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(
+                _sidecarReady
+                    ? Icons.link_outlined
+                    : Icons.warning_amber_rounded,
+                size: 14,
+                color: _sidecarReady
+                    ? context.cs.primary
+                    : context.cs.error,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  _sidecarReady
+                      ? 'memory_mode_sidecar_configured'.tr()
+                      : 'memory_mode_sidecar_not_configured'.tr(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _sidecarReady
+                        ? context.cs.onSurfaceVariant
+                        : context.cs.error,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
