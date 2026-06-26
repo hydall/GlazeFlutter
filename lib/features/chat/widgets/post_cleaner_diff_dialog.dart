@@ -87,20 +87,57 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         return;
       }
 
-      final swipes = msg.agentSwipes;
+      // Search agentSwipes across ALL green swipes, not just the active one.
+      // msg.agentSwipes reflects only the current swipeId — other green
+      // swipes keep their blue swipes in swipesMeta[swipeId].
       AgentSwipe? original;
       AgentSwipe? cleaned;
-      for (final s in swipes) {
+
+      // First: check the active agentSwipes on the message itself.
+      final activeSwipes = msg.agentSwipes;
+      for (final s in activeSwipes) {
         if (s.kind == 'cleaned') {
           cleaned = s;
           final parentId = s.parentSwipeId;
-          if (parentId != null && parentId < swipes.length) {
-            original = swipes[parentId];
+          if (parentId != null && parentId < activeSwipes.length) {
+            original = activeSwipes[parentId];
           }
         }
       }
-      if (original == null && swipes.isNotEmpty) {
-        original = swipes.where((s) => s.kind == 'final').lastOrNull;
+      if (original == null && cleaned != null && activeSwipes.isNotEmpty) {
+        original = activeSwipes.where((s) => s.kind == 'final').lastOrNull;
+      }
+
+      // Second: if not found in active swipes, search swipesMeta for any
+      // green swipe that has a 'cleaned' agent swipe.
+      if (cleaned == null) {
+        for (var si = 0; si < msg.swipesMeta.length; si++) {
+          final meta = msg.swipesMeta[si];
+          final raw = meta['agentSwipes'];
+          if (raw is! List) continue;
+          final swipes = raw
+              .whereType<Map<dynamic, dynamic>>()
+              .map((m) => AgentSwipe.fromJson(Map<String, dynamic>.from(m)))
+              .toList();
+          for (final s in swipes) {
+            if (s.kind == 'cleaned') {
+              cleaned = s;
+              final parentId = s.parentSwipeId;
+              if (parentId != null && parentId < swipes.length) {
+                original = swipes[parentId];
+              }
+              break;
+            }
+          }
+          if (cleaned != null) break;
+        }
+        if (original == null && cleaned != null) {
+          // Fallback: use the message content as the original.
+          original = AgentSwipe(
+            content: msg.content,
+            kind: 'final',
+          );
+        }
       }
 
       if (!mounted) return;

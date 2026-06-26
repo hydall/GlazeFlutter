@@ -239,13 +239,22 @@ class ChatRepo implements SyncChatStore {
               ? agentSwipes.length - 1
               : null;
 
+          // Inherit studioOutputs from the parent 'final' swipe so that
+          // switching to the 'cleaned' blue swipe keeps the Studio regen
+          // button visible (showStudioFinalRegen depends on studioOutputs).
+          final effectiveStudioOutputs = studioOutputs.isNotEmpty
+              ? studioOutputs
+              : (kind == 'cleaned' && parentSwipeId != null
+                    ? agentSwipes[parentSwipeId].studioOutputs
+                    : const <Map<String, dynamic>>[]);
+
           agentSwipes.add(AgentSwipe(
             content: content,
             kind: kind,
             reasoning: reasoning,
             genTime: genTime,
             tokens: tokens,
-            studioOutputs: studioOutputs,
+            studioOutputs: effectiveStudioOutputs,
             parentSwipeId: parentSwipeId,
           ));
 
