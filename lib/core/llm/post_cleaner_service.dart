@@ -123,11 +123,15 @@ class PostCleanerService {
       broadcastBlocks: broadcastBlocks,
     );
 
+    final effectiveMaxTokens = settings.postCleanerMaxTokens > 0
+        ? settings.postCleanerMaxTokens
+        : (assistantText.length ~/ 2).clamp(1000, 16000);
+
     final raw = await _llm.callOnce(
       config: config,
       prompt: prompt,
-      maxTokens: (assistantText.length ~/ 3).clamp(500, 8000),
-      temperature: 0.3,
+      maxTokens: effectiveMaxTokens,
+      temperature: settings.postCleanerTemperature,
       timeoutMs: settings.sidecarTimeoutMs,
       cancelToken: cancelToken,
     );

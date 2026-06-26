@@ -86,6 +86,8 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         consolidationEndpoint: global.consolidationEndpoint,
         consolidationApiKey: global.consolidationApiKey,
         consolidationTimeoutMs: global.consolidationTimeoutMs,
+        postCleanerTemperature: global.postCleanerTemperature,
+        postCleanerMaxTokens: global.postCleanerMaxTokens,
       ),
     );
     await put(book);

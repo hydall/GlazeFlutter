@@ -621,6 +621,29 @@ class GenerationPipeline {
         cleanedText: result.cleanedText,
         originalText: lastAssistant.content,
       );
+
+      // Refresh ChatNotifier state so the UI picks up the new swipe
+      // immediately without requiring the user to re-enter the chat.
+      // applyCleanedText writes to DB + invalidates chatHistoryProvider,
+      // but ChatNotifier holds its own ChatState copy that must be pushed.
+      if (ref.mounted && abortHandler.isCurrentGen(genId)) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          ChatSessionService.updateCache(refreshed);
+          final current = getState().value;
+          if (current != null) {
+            setState(
+              AsyncData(
+                current.copyWith(
+                  session: refreshed,
+                  isGenerating: false,
+                ),
+              ),
+            );
+          }
+          ref.invalidate(chatHistoryProvider);
+        }
+      }
     } catch (e) {
       debugPrint('[PostCleaner] failed session=$sessionId error=$e');
     }

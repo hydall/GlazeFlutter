@@ -74,6 +74,8 @@ abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
     @Default('') String consolidationApiKey,
     @Default(4000) int consolidationTimeoutMs,
     @Default([]) List<Map<String, dynamic>> customPrompts,
+    @Default(0.3) double postCleanerTemperature,
+    @Default(0) int postCleanerMaxTokens,
   }) = _MemoryGlobalSettings;
 
   factory MemoryGlobalSettings.fromJson(Map<String, dynamic> json) =>

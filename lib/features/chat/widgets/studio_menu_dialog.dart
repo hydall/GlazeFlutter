@@ -59,6 +59,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   String _routingMode = 'verbatim';
   String _sidecarModel = '';
   int _sidecarTimeoutMs = 60000;
+  double _postCleanerTemperature = 0.3;
+  int _postCleanerMaxTokens = 0;
   bool _loading = true;
   bool _building = false;
   final Set<String> _regeneratingAgentIds = {};
@@ -100,6 +102,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _postCleanerEnabled = book?.settings.postCleanerEnabled ?? false;
           _sidecarModel = book?.settings.sidecarModel ?? '';
           _sidecarTimeoutMs = book?.settings.sidecarTimeoutMs ?? 60000;
+          _postCleanerTemperature = book?.settings.postCleanerTemperature ?? 0.3;
+          _postCleanerMaxTokens = book?.settings.postCleanerMaxTokens ?? 0;
           _routingMode = config?.routingMode ?? 'verbatim';
           _loading = false;
         });
@@ -900,6 +904,29 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           trailing: const Icon(Icons.edit_outlined, size: 18),
           onTap: _showSidecarTimeoutDialog,
         ),
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Cleaner temperature'),
+          subtitle: Text(
+            '$_postCleanerTemperature — lower = more faithful rewrite, '
+            'higher = more creative.',
+          ),
+          trailing: const Icon(Icons.edit_outlined, size: 18),
+          onTap: _showCleanerTemperatureDialog,
+        ),
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Cleaner max tokens'),
+          subtitle: Text(
+            _postCleanerMaxTokens == 0
+                ? 'Auto (half of original length).'
+                : '$_postCleanerMaxTokens tokens.',
+          ),
+          trailing: const Icon(Icons.edit_outlined, size: 18),
+          onTap: _showCleanerMaxTokensDialog,
+        ),
         if (includeRoutingMode)
           ListTile(
             dense: true,
@@ -1076,6 +1103,115 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     if (result == null) return;
     await _saveMemoryBookSetting((s) => s.copyWith(sidecarTimeoutMs: result));
     if (mounted) setState(() => _sidecarTimeoutMs = result);
+  }
+
+  Future<void> _showCleanerTemperatureDialog() async {
+    final controller = TextEditingController(
+      text: _postCleanerTemperature.toStringAsFixed(2),
+    );
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cleaner temperature'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Controls how creative the POST-cleaner rewrite is.\n'
+              '0.0 = almost identical to original\n'
+              '0.3 = default, light cleanup\n'
+              '0.7 = more aggressive rewrite',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final v = double.tryParse(controller.text.trim());
+              if (v == null || v < 0 || v > 2) {
+                Navigator.of(ctx).pop();
+                return;
+              }
+              Navigator.of(ctx).pop(v);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await _saveMemoryBookSetting(
+      (s) => s.copyWith(postCleanerTemperature: result),
+    );
+    if (mounted) setState(() => _postCleanerTemperature = result);
+  }
+
+  Future<void> _showCleanerMaxTokensDialog() async {
+    final controller = TextEditingController(
+      text: _postCleanerMaxTokens == 0 ? '' : '$_postCleanerMaxTokens',
+    );
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cleaner max tokens'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Maximum tokens for the cleaner rewrite.\n'
+              '0 = auto (half the original text length).\n'
+              'If the cleaner truncates responses, increase this.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                hintText: '0 (auto)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final v = int.tryParse(controller.text.trim());
+              Navigator.of(ctx).pop(v ?? 0);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await _saveMemoryBookSetting(
+      (s) => s.copyWith(postCleanerMaxTokens: result),
+    );
+    if (mounted) setState(() => _postCleanerMaxTokens = result);
   }
 
   Future<void> _saveRoutingMode(String mode) async {

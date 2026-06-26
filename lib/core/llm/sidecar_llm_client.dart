@@ -100,6 +100,7 @@ class SidecarLlmClient {
 
   /// Makes a single non-streaming LLM call and returns the raw text response.
   ///
+  /// Retries once on 5xx server errors (502/503/500) after a 2s delay.
   /// Throws [TimeoutException] if [timeoutMs] is exceeded.
   /// Throws [DioException] (cancel) if [cancelToken] is cancelled.
   Future<String> callOnce({
@@ -114,6 +115,44 @@ class SidecarLlmClient {
       throw Exception('Sidecar API not configured');
     }
 
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (cancelToken?.isCancelled ?? false) {
+        throw DioException(
+          requestOptions: RequestOptions(path: ''),
+          type: DioExceptionType.cancel,
+        );
+      }
+      try {
+        return await _callOnce(
+          config: config,
+          prompt: prompt,
+          maxTokens: maxTokens,
+          temperature: temperature,
+          timeoutMs: timeoutMs,
+          cancelToken: cancelToken,
+        );
+      } on DioException catch (e) {
+        final code = e.response?.statusCode ?? 0;
+        final is5xx = code >= 500 && code < 600;
+        final isLastAttempt = attempt >= 1;
+        if (!is5xx || isLastAttempt || (cancelToken?.isCancelled ?? false)) {
+          rethrow;
+        }
+        debugPrint('[Sidecar] 5xx ($code) on attempt ${attempt + 1}, retrying in 2s');
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
+    throw Exception('Sidecar retry exhausted');
+  }
+
+  Future<String> _callOnce({
+    required SidecarApiConfig config,
+    required String prompt,
+    required int maxTokens,
+    required double temperature,
+    required int timeoutMs,
+    CancelToken? cancelToken,
+  }) async {
     final completer = Completer<String>();
     final transport = pickChatTransport(config.protocol);
 

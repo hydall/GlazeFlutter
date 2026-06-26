@@ -134,6 +134,8 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     /// the active text. Falls back to original on error. See
     /// docs/PLAN_AGENTIC_STUDIO.md Stage 4.
     @Default(false) bool postCleanerEnabled,
+    @Default(0.3) double postCleanerTemperature,
+    @Default(0) int postCleanerMaxTokens,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>

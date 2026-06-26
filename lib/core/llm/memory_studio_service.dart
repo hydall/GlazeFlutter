@@ -1245,7 +1245,16 @@ Rules:
     final avoid = _safeJsonStringList(decoded['avoid']);
     final options = _safeJsonStringList(decoded['options']);
     final all = [...focus, ...constraints, ...avoid, ...options];
-    if (all.isEmpty) return null;
+    if (all.isEmpty) {
+      _log(
+        'brief typed-JSON all items rejected agent="${agent.name}" '
+        'focus=${(decoded['focus'] as List?)?.length ?? 0} '
+        'constraints=${(decoded['constraints'] as List?)?.length ?? 0} '
+        'avoid=${(decoded['avoid'] as List?)?.length ?? 0} '
+        'options=${(decoded['options'] as List?)?.length ?? 0}',
+      );
+      return null;
+    }
 
     return _buildStudioBrief(
       focus: focus,
@@ -1393,7 +1402,7 @@ Rules:
         .replaceAll(RegExp(r'\s+'), ' ')
         .replaceAll(RegExp(r'^[-*•\d.\s]+'), '')
         .trim();
-    if (cleaned.isEmpty || cleaned.length > 220) return null;
+    if (cleaned.isEmpty || cleaned.length > 350) return null;
     if (cleaned.contains('{{') || cleaned.contains('}}')) return null;
     if (cleaned.contains('<think>') || cleaned.contains('</think>')) {
       return null;
@@ -1442,7 +1451,7 @@ Rules:
         .any((p) => p.trim().length > 280 && !p.trimLeft().startsWith('- '));
 
     return startsLikeItalicAction ||
-        (hasDialogueQuotes && paragraphs >= 1) ||
+        (hasDialogueQuotes && paragraphs >= 2) ||
         (hasActionItalics && paragraphs >= 2) ||
         (hasLongNarrativeParagraph && paragraphs >= 2);
   }
@@ -1519,7 +1528,7 @@ Rules:
   }
 
   String _finalBriefUsageNote() {
-    return 'How to use the Studio controller briefs above: treat Focus and Constraints as binding direction and Avoid as hard prohibitions. Any "Options:" items are non-binding alternative approaches — choose at most one per brief (or none) that best fits the moment, then write it in your own words. Do not list, mention, or copy the options or any brief text in your reply; weave the chosen direction into natural in-scene prose.';
+    return 'How to use the Studio controller briefs above: the controllers have ALREADY analyzed the scene, tracked continuity, and decided what should happen next. Do NOT re-analyze the scene, re-derive character motivations, or plan the beat structure in your reasoning — that work is done. Your only job is to WRITE the prose that implements their direction.\n\nTreat Focus and Constraints as binding direction and Avoid as hard prohibitions. Any "Options:" items are non-binding alternative approaches — choose at most one per brief (or none) that best fits the moment, then write it in your own words. Do not list, mention, or copy the options or any brief text in your reply; weave the chosen direction into natural in-scene prose.\n\nKeep your reasoning SHORT — a few sentences at most confirming which option you picked and any immediate sensory/structural choices. Do NOT draft full prose in reasoning, do NOT re-check constraints line-by-line, do NOT restate the briefs. Write the final prose directly.';
   }
 
   String _finalHardStyleContract(StudioConfig config) {
