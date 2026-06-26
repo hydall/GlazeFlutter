@@ -718,25 +718,59 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             },
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: _showBuilderPromptDialog,
-                icon: const Icon(Icons.article_outlined, size: 18),
-                label: const Text('Builder prompt'),
+          _buildStudioAdvancedSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudioAdvancedSection() {
+    return Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: Row(
+          children: [
+            Icon(Icons.tune_outlined, size: 20, color: context.cs.primary),
+            const SizedBox(width: 8),
+            Text(
+              'Advanced',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurface,
               ),
-              if (_config != null && _config!.agents.isNotEmpty) ...[
-                const SizedBox(width: 8),
+            ),
+          ],
+        ),
+        subtitle: const Text(
+          'Builder prompt, agent bulk edits, routing, and sidecar settings.',
+          style: TextStyle(fontSize: 11),
+        ),
+        childrenPadding: const EdgeInsets.only(top: 4),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
                 OutlinedButton.icon(
-                  onPressed: _showBulkAgentSettingsDialog,
-                  icon: const Icon(Icons.groups_2_outlined, size: 18),
-                  label: const Text('Bulk agents'),
+                  onPressed: _showBuilderPromptDialog,
+                  icon: const Icon(Icons.article_outlined, size: 18),
+                  label: const Text('Builder prompt'),
                 ),
+                if (_config != null && _config!.agents.isNotEmpty)
+                  OutlinedButton.icon(
+                    onPressed: _showBulkAgentSettingsDialog,
+                    icon: const Icon(Icons.groups_2_outlined, size: 18),
+                    label: const Text('Bulk agents'),
+                  ),
               ],
-            ],
+            ),
           ),
           if (_config != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             _finalHistoryLimitField(),
             const SizedBox(height: 8),
             _buildAgenticAdvancedSection(includeRoutingMode: true),
@@ -2349,7 +2383,32 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               : 'Order: ${agent.order} • Policy: ${isLast ? 'turn' : _normalizedRefreshPolicy(agent.refreshPolicy)} • Model: ${_agentApiConfigLabel(agent)}',
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
-        children: [_buildAgentDetails(agent)],
+        children: [_buildAgentAdvancedDetails(agent)],
+      ),
+    );
+  }
+
+  Widget _buildAgentAdvancedDetails(StudioAgent agent) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Material(
+        type: MaterialType.transparency,
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: Text(
+            'Advanced agent settings',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+          subtitle: const Text(
+            'Prompt shard, refresh policy, model override, temperature, tokens, timeout.',
+            style: TextStyle(fontSize: 11),
+          ),
+          children: [_buildAgentDetails(agent)],
+        ),
       ),
     );
   }
@@ -2358,7 +2417,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     final isFinal = _config?.agents.lastOrNull?.id == agent.id;
     final regenerating = _regeneratingAgentIds.contains(agent.id);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
