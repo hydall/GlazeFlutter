@@ -3,8 +3,10 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import 'memory_selector.dart';
+import 'memory_sidecar_http_client.dart';
 
 typedef MemorySidecarTextClient =
     Future<String> Function(
@@ -65,12 +67,16 @@ class MemorySidecarResult {
   final MemorySelection selection;
   final MemorySidecarDecision? decision;
   final String? error;
+  final List<AgentOperationAttempt> attempts;
+  final int totalElapsedMs;
 
   const MemorySidecarResult({
     required this.status,
     required this.selection,
     this.decision,
     this.error,
+    this.attempts = const [],
+    this.totalElapsedMs = 0,
   });
 
   bool get usedModel => status == 'ok';
@@ -78,8 +84,14 @@ class MemorySidecarResult {
 
 class MemorySidecarRerankerService {
   final MemorySidecarTextClient _client;
+  final MemorySidecarCallWithLog? _callWithLog;
 
-  const MemorySidecarRerankerService(this._client);
+  /// When provided, [rerank] uses this typed call (which carries the retry
+  /// log) instead of the bare [_client]. Null in tests / legacy wiring.
+  MemorySidecarRerankerService(
+    this._client, {
+    MemorySidecarCallWithLog? callWithLog,
+  }) : _callWithLog = callWithLog;
 
   Future<MemorySidecarResult> rerank(
     MemorySidecarRequest request, {
@@ -99,15 +111,39 @@ class MemorySidecarRerankerService {
       );
     }
 
+    List<AgentOperationAttempt> attempts = const [];
+    var totalMs = 0;
     try {
-      final raw = await _client(request, token).timeout(
-        Duration(milliseconds: request.settings.sidecarTimeoutMs),
-        onTimeout: () => throw TimeoutException('memory sidecar timed out'),
-      );
+      final String raw;
+      if (_callWithLog != null) {
+        final outcome = await _callWithLog(request, token).timeout(
+          Duration(milliseconds: request.settings.sidecarTimeoutMs),
+          onTimeout: () => throw TimeoutException('memory sidecar timed out'),
+        );
+        attempts = outcome.attempts;
+        totalMs = outcome.totalElapsedMs;
+        if (!outcome.isOk || outcome.text == null) {
+          return _fallback(
+            request,
+            _statusLabel(outcome.status),
+            outcome.attempts.isNotEmpty ? outcome.attempts.last.error : null,
+            attempts: attempts,
+            totalElapsedMs: totalMs,
+          );
+        }
+        raw = outcome.text!;
+      } else {
+        raw = await _client(request, token).timeout(
+          Duration(milliseconds: request.settings.sidecarTimeoutMs),
+          onTimeout: () => throw TimeoutException('memory sidecar timed out'),
+        );
+      }
       if (token.isCancelled) {
         return MemorySidecarResult(
           status: 'aborted',
           selection: request.fallbackSelection,
+          attempts: attempts,
+          totalElapsedMs: totalMs,
         );
       }
       final decoded = jsonDecode(raw);
@@ -116,6 +152,8 @@ class MemorySidecarRerankerService {
           request,
           'invalid_output',
           'sidecar output was not an object',
+          attempts: attempts,
+          totalElapsedMs: totalMs,
         );
       }
       final decision = MemorySidecarDecision.fromJson(decoded);
@@ -124,29 +162,61 @@ class MemorySidecarRerankerService {
         status: 'ok',
         selection: selection,
         decision: decision,
+        attempts: attempts,
+        totalElapsedMs: totalMs,
       );
     } on TimeoutException {
-      return _fallback(request, 'timeout', null);
+      return _fallback(
+        request,
+        'timeout',
+        null,
+        attempts: attempts,
+        totalElapsedMs: totalMs,
+      );
     } catch (e) {
       if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
         return MemorySidecarResult(
           status: 'aborted',
           selection: request.fallbackSelection,
+          attempts: attempts,
+          totalElapsedMs: totalMs,
         );
       }
-      return _fallback(request, 'invalid_output', '$e');
+      return _fallback(
+        request,
+        'invalid_output',
+        '$e',
+        attempts: attempts,
+        totalElapsedMs: totalMs,
+      );
     }
+  }
+
+  static String _statusLabel(AgentOperationStatus status) {
+    return switch (status) {
+      AgentOperationStatus.ok => 'ok',
+      AgentOperationStatus.disabled => 'disabled',
+      AgentOperationStatus.aborted => 'aborted',
+      AgentOperationStatus.timeout => 'timeout',
+      AgentOperationStatus.httpError => 'http_error',
+      AgentOperationStatus.invalidOutput => 'invalid_output',
+      AgentOperationStatus.error => 'error',
+    };
   }
 
   static MemorySidecarResult _fallback(
     MemorySidecarRequest request,
     String status,
-    String? error,
-  ) {
+    String? error, {
+    List<AgentOperationAttempt> attempts = const [],
+    int totalElapsedMs = 0,
+  }) {
     return MemorySidecarResult(
       status: status,
       selection: request.fallbackSelection,
       error: error,
+      attempts: attempts,
+      totalElapsedMs: totalElapsedMs,
     );
   }
 

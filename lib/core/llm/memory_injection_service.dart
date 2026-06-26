@@ -12,6 +12,7 @@ import '../db/repositories/memory_catalog_repo.dart';
 import '../db/repositories/memory_salience_repo.dart';
 import '../db/repositories/memory_entity_repo.dart';
 import '../models/chat_message.dart';
+import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/memory_graph.dart';
 import '../state/db_provider.dart';
@@ -159,6 +160,7 @@ class MemoryInjectionService {
       double? classifierConfidence,
       String? sidecarStatus,
       int? sidecarLatencyMs,
+      List<AgentOperationAttempt> sidecarAttempts = const [],
       bool prewarmHit = false,
     }) {
       sw.stop();
@@ -182,6 +184,7 @@ class MemoryInjectionService {
                 classifierConfidence: classifierConfidence,
                 sidecarStatus: sidecarStatus,
                 sidecarLatencyMs: sidecarLatencyMs,
+                sidecarAttempts: sidecarAttempts,
                 prewarmHit: prewarmHit,
               ),
       );
@@ -425,6 +428,8 @@ class MemoryInjectionService {
       classifierNeedsMemory: classifierResult?.output?.needsMemory,
       classifierConfidence: classifierResult?.output?.confidence,
       sidecarStatus: sidecarResult?.status,
+      sidecarLatencyMs: sidecarResult?.totalElapsedMs,
+      sidecarAttempts: sidecarResult?.attempts ?? const [],
       prewarmHit: prewarmHit,
     );
   }

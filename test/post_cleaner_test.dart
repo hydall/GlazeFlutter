@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/llm/post_cleaner_service.dart';
+import 'package:glaze_flutter/core/models/agent_operation_record.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
 
 void main() {
@@ -13,6 +14,8 @@ void main() {
       expect(result.status, 'disabled');
       expect(result.cleanedText, 'original');
       expect(result.wasCleaned, isFalse);
+      expect(result.attempts, isEmpty);
+      expect(result.totalElapsedMs, 0);
     });
 
     test('ok status with wasCleaned=true indicates rewrite', () {
@@ -63,6 +66,36 @@ void main() {
       );
       expect(result.status, 'skipped');
       expect(result.wasCleaned, isFalse);
+    });
+
+    test('carries retry attempts when set', () {
+      const attempts = [
+        AgentOperationAttempt(
+          attempt: 1,
+          statusCode: 502,
+          status: 'http_5xx',
+          error: 'Bad Gateway',
+          startedAtMs: 0,
+          elapsedMs: 30,
+        ),
+        AgentOperationAttempt(
+          attempt: 2,
+          statusCode: 200,
+          status: 'ok',
+          startedAtMs: 30,
+          elapsedMs: 50,
+        ),
+      ];
+      const result = PostCleanerResult(
+        status: 'ok',
+        cleanedText: 'cleaned',
+        attempts: attempts,
+        totalElapsedMs: 80,
+      );
+      expect(result.attempts.length, 2);
+      expect(result.attempts.first.statusCode, 502);
+      expect(result.attempts.last.statusCode, 200);
+      expect(result.totalElapsedMs, 80);
     });
   });
 

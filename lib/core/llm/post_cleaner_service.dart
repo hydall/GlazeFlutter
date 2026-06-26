@@ -4,11 +4,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../state/db_provider.dart';
 import '../../features/chat/chat_session_service.dart';
 import '../../features/chat_history/chat_history_provider.dart';
 import 'sidecar_llm_client.dart';
+import 'sidecar_retry_runner.dart';
 
 /// POST-cleaner service (Stage 4).
 ///
@@ -63,7 +65,7 @@ class PostCleanerService {
         return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
       }
 
-      final cleaned = await _askLlmForCleanedText(
+      final outcome = await _askLlmForCleanedText(
         config: config,
         settings: settings,
         assistantText: assistantText,
@@ -72,11 +74,33 @@ class PostCleanerService {
       );
 
       if (token.isCancelled) {
-        return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
+        return PostCleanerResult(
+          status: 'aborted',
+          cleanedText: assistantText,
+          attempts: outcome.attempts,
+          totalElapsedMs: outcome.totalElapsedMs,
+        );
       }
 
+      final cleaned = outcome.text;
       if (cleaned == null || cleaned.trim().isEmpty) {
-        return PostCleanerResult(status: 'ok', cleanedText: assistantText);
+        if (!outcome.isOk) {
+          return PostCleanerResult(
+            status: _statusLabel(outcome.status),
+            cleanedText: assistantText,
+            error: outcome.attempts.isNotEmpty
+                ? outcome.attempts.last.error
+                : null,
+            attempts: outcome.attempts,
+            totalElapsedMs: outcome.totalElapsedMs,
+          );
+        }
+        return PostCleanerResult(
+          status: 'ok',
+          cleanedText: assistantText,
+          attempts: outcome.attempts,
+          totalElapsedMs: outcome.totalElapsedMs,
+        );
       }
 
       // Safety: if the cleaned text is drastically shorter or longer, skip.
@@ -86,7 +110,12 @@ class PostCleanerService {
           '[PostCleaner] skipped: length ratio $ratio out of bounds '
           '(original=${assistantText.length}, cleaned=${cleaned.length})',
         );
-        return PostCleanerResult(status: 'skipped', cleanedText: assistantText);
+        return PostCleanerResult(
+          status: 'skipped',
+          cleanedText: assistantText,
+          attempts: outcome.attempts,
+          totalElapsedMs: outcome.totalElapsedMs,
+        );
       }
 
       return PostCleanerResult(
@@ -94,6 +123,8 @@ class PostCleanerService {
         cleanedText: cleaned,
         originalText: assistantText,
         wasCleaned: cleaned != assistantText,
+        attempts: outcome.attempts,
+        totalElapsedMs: outcome.totalElapsedMs,
       );
     } on TimeoutException {
       return PostCleanerResult(status: 'timeout', cleanedText: assistantText);
@@ -111,7 +142,19 @@ class PostCleanerService {
     }
   }
 
-  Future<String?> _askLlmForCleanedText({
+  static String _statusLabel(AgentOperationStatus status) {
+    return switch (status) {
+      AgentOperationStatus.ok => 'ok',
+      AgentOperationStatus.disabled => 'disabled',
+      AgentOperationStatus.aborted => 'aborted',
+      AgentOperationStatus.timeout => 'timeout',
+      AgentOperationStatus.httpError => 'error',
+      AgentOperationStatus.invalidOutput => 'error',
+      AgentOperationStatus.error => 'error',
+    };
+  }
+
+  Future<SidecarCallOutcome> _askLlmForCleanedText({
     required SidecarApiConfig config,
     required MemoryBookSettings settings,
     required String assistantText,
@@ -127,7 +170,7 @@ class PostCleanerService {
         ? settings.postCleanerMaxTokens
         : (assistantText.length ~/ 2).clamp(1000, 16000);
 
-    final raw = await _llm.callOnce(
+    return _llm.callOnceWithLog(
       config: config,
       prompt: prompt,
       maxTokens: effectiveMaxTokens,
@@ -135,9 +178,6 @@ class PostCleanerService {
       timeoutMs: settings.sidecarTimeoutMs,
       cancelToken: cancelToken,
     );
-
-    final cleaned = raw.trim();
-    return cleaned.isEmpty ? null : cleaned;
   }
 
   /// Builds the POST-cleaner prompt. When [broadcastBlocks] are supplied the
@@ -233,6 +273,8 @@ class PostCleanerResult {
   final String? originalText;
   final bool wasCleaned;
   final String? error;
+  final List<AgentOperationAttempt> attempts;
+  final int totalElapsedMs;
 
   const PostCleanerResult({
     required this.status,
@@ -240,5 +282,7 @@ class PostCleanerResult {
     this.originalText,
     this.wasCleaned = false,
     this.error,
+    this.attempts = const [],
+    this.totalElapsedMs = 0,
   });
 }

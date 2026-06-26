@@ -30,7 +30,11 @@ final memoryClassifierServiceProvider =
 /// Provider for the sidecar reranker service.
 final memorySidecarRerankerServiceProvider =
     Provider<MemorySidecarRerankerService>((ref) {
-  return MemorySidecarRerankerService(buildSidecarClient(ref));
+  return MemorySidecarRerankerService(
+    buildSidecarClient(ref),
+    callWithLog: (request, cancelToken) =>
+        callSidecarWithLog(ref: ref, request: request, cancelToken: cancelToken),
+  );
 });
 
 /// Singleton in-memory prewarm cache for sidecar results.

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
 import '../models/memory_book.dart';
+import 'sidecar_retry_runner.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
@@ -100,10 +101,36 @@ class SidecarLlmClient {
 
   /// Makes a single non-streaming LLM call and returns the raw text response.
   ///
-  /// Retries once on 5xx server errors (502/503/500) after a 2s delay.
-  /// Throws [TimeoutException] if [timeoutMs] is exceeded.
-  /// Throws [DioException] (cancel) if [cancelToken] is cancelled.
+  /// Retries on 5xx server errors (502/503/500) and timeouts using a 3-attempt
+  /// backoff (1s/2s/4s) via [SidecarRetryRunner]. Throws [TimeoutException] if
+  /// all attempts time out. Throws [DioException] (cancel) if [cancelToken] is
+  /// cancelled.
+  ///
+  /// Prefer [callOnceWithLog] when the caller wants the per-attempt log for
+  /// the agentic operations UI.
   Future<String> callOnce({
+    required SidecarApiConfig config,
+    required String prompt,
+    required int maxTokens,
+    required double temperature,
+    required int timeoutMs,
+    CancelToken? cancelToken,
+  }) async {
+    final outcome = await callOnceWithLog(
+      config: config,
+      prompt: prompt,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      timeoutMs: timeoutMs,
+      cancelToken: cancelToken,
+    );
+    if (outcome.isOk && outcome.text != null) return outcome.text!;
+    throw _descriptiveError(outcome);
+  }
+
+  /// Same as [callOnce] but returns a [SidecarCallOutcome] with the per-attempt
+  /// log so callers can record it in the agentic operations log.
+  Future<SidecarCallOutcome> callOnceWithLog({
     required SidecarApiConfig config,
     required String prompt,
     required int maxTokens,
@@ -114,35 +141,41 @@ class SidecarLlmClient {
     if (config.endpoint.isEmpty || config.model.isEmpty) {
       throw Exception('Sidecar API not configured');
     }
+    final runner = const SidecarRetryRunner();
+    return runner.run(
+      cancelToken: cancelToken,
+      attempt: (i) => _callOnce(
+        config: config,
+        prompt: prompt,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        timeoutMs: timeoutMs,
+        cancelToken: cancelToken,
+      ),
+    );
+  }
 
-    for (var attempt = 0; attempt < 2; attempt++) {
-      if (cancelToken?.isCancelled ?? false) {
-        throw DioException(
-          requestOptions: RequestOptions(path: ''),
-          type: DioExceptionType.cancel,
-        );
-      }
-      try {
-        return await _callOnce(
-          config: config,
-          prompt: prompt,
-          maxTokens: maxTokens,
-          temperature: temperature,
-          timeoutMs: timeoutMs,
-          cancelToken: cancelToken,
-        );
-      } on DioException catch (e) {
-        final code = e.response?.statusCode ?? 0;
-        final is5xx = code >= 500 && code < 600;
-        final isLastAttempt = attempt >= 1;
-        if (!is5xx || isLastAttempt || (cancelToken?.isCancelled ?? false)) {
-          rethrow;
-        }
-        debugPrint('[Sidecar] 5xx ($code) on attempt ${attempt + 1}, retrying in 2s');
-        await Future<void>.delayed(const Duration(seconds: 2));
-      }
+  /// Builds a descriptive exception from a non-ok [SidecarCallOutcome] so the
+  /// caller's `catch` block can fall back to the original text with a useful
+  /// error message.
+  Object _descriptiveError(SidecarCallOutcome outcome) {
+    if (outcome.attempts.isEmpty) return Exception('Sidecar call failed');
+    final last = outcome.attempts.last;
+    if (last.status == 'timeout') {
+      return TimeoutException('Sidecar timed out after retries');
     }
-    throw Exception('Sidecar retry exhausted');
+    if (last.statusCode != 0) {
+      return DioException(
+        requestOptions: RequestOptions(path: ''),
+        response: Response(
+          requestOptions: RequestOptions(path: ''),
+          statusCode: last.statusCode,
+        ),
+        type: DioExceptionType.badResponse,
+        message: last.error ?? 'HTTP ${last.statusCode}',
+      );
+    }
+    return Exception(last.error ?? 'Sidecar call failed');
   }
 
   Future<String> _callOnce({

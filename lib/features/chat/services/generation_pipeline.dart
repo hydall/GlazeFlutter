@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
+import '../../../core/models/agent_operation_record.dart';
 import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_agentic_service.dart';
 import '../../../core/state/memory_agent_providers.dart';
@@ -19,6 +20,7 @@ import '../abort_handler.dart';
 import '../chat_generation_service.dart';
 import '../chat_session_service.dart';
 import '../chat_state.dart';
+import '../state/agent_operations_log_provider.dart';
 import '../utils/message_preview.dart';
 
 /// Result of [GenerationPipeline.run] when the regen target's id did not
@@ -610,8 +612,45 @@ class GenerationPipeline {
         '[PostCleaner] result session=$sessionId wasCleaned=${result.wasCleaned} '
         'origChars=${lastAssistant.content.length} '
         'cleanedChars=${result.cleanedText.length} '
-        'error=${result.error ?? "none"}',
+        'error=${result.error ?? "none"} '
+        'attempts=${result.attempts.length}',
       );
+
+      // Record the operation in the agentic operations log so the user can
+      // inspect retries (502 → 200, etc.) from the dedicated UI.
+      ref.read(agentOperationsLogProvider.notifier).state = ref
+          .read(agentOperationsLogProvider)
+          .append(
+            AgentOperationRecord(
+              id:
+                  'cleaner-${lastAssistant.id}-${DateTime.now().microsecondsSinceEpoch}',
+              kind: AgentOperationKind.postCleaner,
+              status: _cleanerStatusToOp(result.status),
+              sessionId: sessionId,
+              messageId: lastAssistant.id,
+              attempts: result.attempts,
+              totalElapsedMs: result.totalElapsedMs,
+              model: book.settings.sidecarModel.isEmpty
+                  ? null
+                  : book.settings.sidecarModel,
+              summary: result.wasCleaned
+                  ? 'cleaned (${result.cleanedText.length} chars)'
+                  : result.status == 'ok'
+                  ? 'no change'
+                  : result.status,
+              startedAtMs: result.attempts.isNotEmpty
+                  ? result.attempts.first.startedAtMs
+                  : DateTime.now().millisecondsSinceEpoch,
+              finishedAtMs: result.attempts.isNotEmpty
+                  ? result.attempts.last.startedAtMs +
+                        result.attempts.last.elapsedMs
+                  : DateTime.now().millisecondsSinceEpoch,
+              canRegenerate:
+                  result.status == 'timeout' ||
+                  result.status == 'error' ||
+                  result.status == 'skipped',
+            ),
+          );
 
       if (!result.wasCleaned) return;
 
@@ -671,4 +710,17 @@ String extractRecentHistoryText(
     lines.add('$role: $content');
   }
   return lines.join('\n\n');
+}
+
+/// Maps a [PostCleanerResult] status string to the operations-log enum.
+AgentOperationStatus _cleanerStatusToOp(String status) {
+  return switch (status) {
+    'ok' => AgentOperationStatus.ok,
+    'skipped' => AgentOperationStatus.invalidOutput,
+    'disabled' => AgentOperationStatus.disabled,
+    'aborted' => AgentOperationStatus.aborted,
+    'timeout' => AgentOperationStatus.timeout,
+    'error' => AgentOperationStatus.error,
+    _ => AgentOperationStatus.error,
+  };
 }

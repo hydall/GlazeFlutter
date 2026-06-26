@@ -1,3 +1,4 @@
+import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import 'memory_budget.dart';
 import 'memory_excerpt_selector.dart';
@@ -133,6 +134,7 @@ class MemoryDiagnostics {
   final double? classifierConfidence;
   final String? sidecarStatus;
   final int? sidecarLatencyMs;
+  final List<AgentOperationAttempt> sidecarAttempts;
   final bool prewarmHit;
 
   const MemoryDiagnostics({
@@ -158,6 +160,7 @@ class MemoryDiagnostics {
     this.classifierConfidence,
     this.sidecarStatus,
     this.sidecarLatencyMs,
+    this.sidecarAttempts = const [],
     this.prewarmHit = false,
   });
 
@@ -178,6 +181,7 @@ class MemoryDiagnostics {
     double? classifierConfidence,
     String? sidecarStatus,
     int? sidecarLatencyMs,
+    List<AgentOperationAttempt> sidecarAttempts = const [],
     bool prewarmHit = false,
   }) {
     final selectedIds = (excerptSelection?.entries ?? selection.entries)
@@ -286,6 +290,7 @@ class MemoryDiagnostics {
       classifierConfidence: classifierConfidence,
       sidecarStatus: sidecarStatus,
       sidecarLatencyMs: sidecarLatencyMs,
+      sidecarAttempts: sidecarAttempts,
       prewarmHit: prewarmHit,
     );
   }
@@ -315,6 +320,8 @@ class MemoryDiagnostics {
       'classifierConfidence': classifierConfidence,
     if (sidecarStatus != null) 'sidecarStatus': sidecarStatus,
     if (sidecarLatencyMs != null) 'sidecarLatencyMs': sidecarLatencyMs,
+    if (sidecarAttempts.isNotEmpty)
+      'sidecarAttempts': sidecarAttempts.map((a) => a.toJson()).toList(),
     'prewarmHit': prewarmHit,
     'candidates': candidates.map((c) => c.toJson()).toList(),
   };

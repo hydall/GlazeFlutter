@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../state/memory_activity_provider.dart';
+import 'agentic_operations_log_dialog.dart';
 import 'memory_graph_panel.dart';
 
 class MemoryActivityCard extends StatefulWidget {
@@ -159,9 +159,19 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                         ),
                       ),
                       if (widget.sessionId != null &&
-                          widget.sessionId!.isNotEmpty)
+                          widget.sessionId!.isNotEmpty) ...[
                         IconButton(
-                          onPressed: () => showDialog(
+                          onPressed: () => AgenticOperationsLogDialog.show(
+                            context,
+                            sessionId: widget.sessionId,
+                          ),
+                          icon: const Icon(Icons.smart_toy_outlined,
+                              size: 18),
+                          tooltip: 'Agentic operations log',
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        IconButton(
+                          onPressed: () => showDialog<void>(
                             context: context,
                             builder: (_) => MemoryGraphPanel(
                               sessionId: widget.sessionId!,
@@ -172,6 +182,7 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                           tooltip: 'Memory Graph',
                           visualDensity: VisualDensity.compact,
                         ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 8),

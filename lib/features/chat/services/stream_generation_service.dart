@@ -15,10 +15,12 @@ import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/models/agent_operation_record.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
+import '../state/agent_operations_log_provider.dart';
 import '../state/cached_token_breakdown.dart';
 import '../state/memory_activity_provider.dart';
 import 'saved_message_writer.dart';
@@ -313,6 +315,11 @@ class StreamGenerationService {
             diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
             updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
           );
+          _recordSidecarOperation(
+            finalState.session!.id,
+            messageId,
+            memoryDiagnostics,
+          );
         } else {
           _ref.read(lastMemoryActivityProvider(_charId).notifier).state = null;
         }
@@ -458,6 +465,11 @@ class StreamGenerationService {
               messageId: messageId,
               diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
               updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+            );
+            _recordSidecarOperation(
+              finalState!.session!.id,
+              messageId,
+              memoryDiagnostics,
             );
           } else {
             _ref.read(lastMemoryActivityProvider(_charId).notifier).state =
@@ -605,5 +617,60 @@ class StreamGenerationService {
 
   static void _log(String message) {
     debugPrint('[StudioGen] $message');
+  }
+
+  /// Records a memory sidecar reranker operation in the agentic operations log
+  /// when the diagnostics carry a `sidecarAttempts` array (deep mode only).
+  void _recordSidecarOperation(
+    String sessionId,
+    String? messageId,
+    Map<String, dynamic> diagnostics,
+  ) {
+    final sidecarStatus = diagnostics['sidecarStatus'] as String?;
+    if (sidecarStatus == null || sidecarStatus == 'disabled') return;
+    final rawAttempts = diagnostics['sidecarAttempts'];
+    if (rawAttempts is! List) return;
+    final attempts = rawAttempts
+        .whereType<Map<dynamic, dynamic>>()
+        .map((e) => AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+    if (attempts.isEmpty) return;
+    final status = _sidecarStatusToOp(sidecarStatus);
+    _ref.read(agentOperationsLogProvider.notifier).state = _ref
+        .read(agentOperationsLogProvider)
+        .append(
+          AgentOperationRecord(
+            id:
+                'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+            kind: AgentOperationKind.memorySidecar,
+            status: status,
+            sessionId: sessionId,
+            messageId: messageId,
+            attempts: attempts,
+            totalElapsedMs: attempts.fold(
+              0,
+              (sum, a) => sum + a.elapsedMs,
+            ),
+            summary: status == AgentOperationStatus.ok
+                ? 'reranked ${diagnostics['selectedCount'] ?? 0} entries'
+                : sidecarStatus,
+            startedAtMs: attempts.first.startedAtMs,
+            finishedAtMs: attempts.last.startedAtMs + attempts.last.elapsedMs,
+            canRegenerate: status.isFailure,
+          ),
+        );
+  }
+
+  static AgentOperationStatus _sidecarStatusToOp(String status) {
+    return switch (status) {
+      'ok' => AgentOperationStatus.ok,
+      'disabled' => AgentOperationStatus.disabled,
+      'aborted' => AgentOperationStatus.aborted,
+      'timeout' => AgentOperationStatus.timeout,
+      'http_error' => AgentOperationStatus.httpError,
+      'invalid_output' => AgentOperationStatus.invalidOutput,
+      'error' => AgentOperationStatus.error,
+      _ => AgentOperationStatus.error,
+    };
   }
 }
