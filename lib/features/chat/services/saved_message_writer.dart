@@ -163,6 +163,20 @@ class SavedMessageWriter {
           agentSwipeId = 0;
         }
 
+        // Sync agentSwipes into swipesMeta[swipeId] so that green-swipe
+        // round-trips (setSwipe) restore the correct blue swipes. Without
+        // this, a studioFinalOnly regen adds a 'final' to agentSwipes on the
+        // message but swipesMeta[swipeId] keeps the old count — switching
+        // away and back loses the extra blue swipe.
+        if (agentSwipes.isNotEmpty && swipeId >= 0 && swipeId < swipesMeta.length) {
+          swipesMeta = List<Map<String, dynamic>>.from(swipesMeta);
+          swipesMeta[swipeId] = {
+            ...swipesMeta[swipeId],
+            'agentSwipes': agentSwipes.map((e) => e.toJson()).toList(),
+            'agentSwipeId': agentSwipeId,
+          };
+        }
+
         final updated = existing.copyWith(
           content: text,
           reasoning: reasoning,
