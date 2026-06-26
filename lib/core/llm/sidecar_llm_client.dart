@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
-import '../models/memory_book.dart';
+import '../models/pipeline_settings.dart';
 import 'sidecar_retry_runner.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
@@ -54,7 +54,7 @@ class SidecarLlmClient {
   /// Resolves the API config from [settings]: either the custom sidecar
   /// endpoint or the active chat config. Throws if not configured.
   Future<SidecarApiConfig> resolveConfig(
-    MemoryBookSettings settings, {
+    PipelineSettings settings, {
     String errorLabel = 'sidecar',
   }) async {
     final isCustom = settings.sidecarSource == 'custom';
@@ -103,7 +103,7 @@ class SidecarLlmClient {
   /// `postCleaner*` fields and falling back to `sidecar*` when the
   /// cleaner-specific fields are empty/zero.
   Future<SidecarApiConfig> resolveConfigForCleaner(
-    MemoryBookSettings settings, {
+    PipelineSettings settings, {
     String errorLabel = 'post-cleaner',
   }) async {
     final source = settings.postCleanerSource == 'inherit'
@@ -157,7 +157,7 @@ class SidecarLlmClient {
 
   /// Resolves the effective timeout for the POST-cleaner, preferring
   /// `postCleanerTimeoutMs` and falling back to `sidecarTimeoutMs`.
-  int resolveCleanerTimeout(MemoryBookSettings settings) {
+  int resolveCleanerTimeout(PipelineSettings settings) {
     return settings.postCleanerTimeoutMs > 0
         ? settings.postCleanerTimeoutMs
         : settings.sidecarTimeoutMs;

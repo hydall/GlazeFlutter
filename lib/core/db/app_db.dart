@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -22,6 +23,7 @@ part 'app_db.g.dart';
     Embeddings,
     ChatSummaries,
     MemoryBookRows,
+    PipelineSettingsRows,
     MemoryCatalogRows,
     MemoryEntityRows,
     MemorySalienceRows,
@@ -39,7 +41,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 47;
+  int get schemaVersion => 48;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -568,6 +570,90 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(
             studioConfigRows,
             studioConfigRows.broadcastBlocksJson,
+          );
+        }
+      }
+      if (from < 48) {
+        // Pipeline settings separation: extract pipeline LLM fields from
+        // memory_book_rows.settings_json into a new pipeline_settings_rows
+        // table so generation-pipeline config is owned by the pipeline, not
+        // the memory book. Additive only — old JSON keys are left in
+        // memory_book_rows.settings_json and silently ignored by the updated
+        // MemoryBookSettings.fromJson (unknown keys are dropped by freezed).
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('pipeline_settings_rows')) {
+          await m.createTable(pipelineSettingsRows);
+        }
+        // Migrate existing per-session pipeline settings out of memory books.
+        // Done in Dart (not SQL) because the field set is large and typed.
+        final rows = await customSelect(
+          'SELECT session_id, settings_json FROM memory_book_rows',
+        ).get();
+        const pipelineKeys = <String>{
+          'generationSource',
+          'generationModel',
+          'generationEndpoint',
+          'generationApiKey',
+          'generationTemperature',
+          'generationMaxTokens',
+          'classifierEnabled',
+          'classifierSource',
+          'classifierModel',
+          'classifierEndpoint',
+          'classifierApiKey',
+          'classifierTimeoutMs',
+          'sidecarEnabled',
+          'sidecarSource',
+          'sidecarModel',
+          'sidecarEndpoint',
+          'sidecarApiKey',
+          'sidecarTimeoutMs',
+          'agenticWriteEnabled',
+          'postCleanerEnabled',
+          'postCleanerTemperature',
+          'postCleanerMaxTokens',
+          'postCleanerSource',
+          'postCleanerModel',
+          'postCleanerEndpoint',
+          'postCleanerApiKey',
+          'postCleanerTimeoutMs',
+          'postCleanerContinuityEnabled',
+          'postCleanerCharacterCheckEnabled',
+          'postCleanerHistoryMessages',
+          'postCleanerMaxCharsPerMessage',
+          'consolidationEnabled',
+          'consolidationThreshold',
+          'consolidationSource',
+          'consolidationModel',
+          'consolidationEndpoint',
+          'consolidationApiKey',
+          'consolidationTimeoutMs',
+        };
+        for (final row in rows) {
+          final sessionId = row.read<String>('session_id');
+          final raw = row.read<String>('settings_json');
+          Map<String, dynamic>? bookJson;
+          try {
+            bookJson = jsonDecode(raw) as Map<String, dynamic>;
+          } catch (_) {
+            bookJson = null;
+          }
+          if (bookJson == null) continue;
+          final pipelineJson = <String, dynamic>{};
+          for (final key in pipelineKeys) {
+            if (bookJson.containsKey(key)) {
+              pipelineJson[key] = bookJson[key];
+            }
+          }
+          if (pipelineJson.isEmpty) continue;
+          await customStatement(
+            'INSERT OR REPLACE INTO pipeline_settings_rows '
+            '(session_id, settings_json, updated_at) '
+            "VALUES (?, ?, CAST(strftime('%s','now') AS INTEGER))",
+            [sessionId, jsonEncode(pipelineJson)],
           );
         }
       }

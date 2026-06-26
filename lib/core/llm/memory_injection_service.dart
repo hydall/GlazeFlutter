@@ -11,6 +11,7 @@ import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/memory_catalog_repo.dart';
 import '../db/repositories/memory_salience_repo.dart';
 import '../db/repositories/memory_entity_repo.dart';
+import '../db/repositories/pipeline_settings_repo.dart';
 import '../models/chat_message.dart';
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
@@ -76,6 +77,7 @@ class MemoryCandidateBuildResult {
 
 class MemoryInjectionService {
   final MemoryBookRepo _repo;
+  final PipelineSettingsRepo _pipelineRepo;
   final EmbeddingRepo _embeddingRepo;
   final MemoryCatalogRepo _catalogRepo;
   final MemorySalienceRepo? _salienceRepo;
@@ -89,6 +91,7 @@ class MemoryInjectionService {
 
   MemoryInjectionService(
     this._repo,
+    this._pipelineRepo,
     this._embeddingRepo,
     this._catalogRepo,
     this._embeddingService,
@@ -196,6 +199,11 @@ class MemoryInjectionService {
       return finish(const MemorySelection());
     }
     if (book == null) {
+      return finish(const MemorySelection());
+    }
+
+    final pipeline = await _pipelineRepo.ensureForSession(sessionId);
+    if (shouldAbort?.call() == true) {
       return finish(const MemorySelection());
     }
 
@@ -316,7 +324,7 @@ class MemoryInjectionService {
     // Balanced mode: classifier for missing-context detection
     if (book.settings.memoryMode == 'balanced' &&
         _classifierService != null &&
-        book.settings.classifierEnabled &&
+        pipeline.classifierEnabled &&
         !selection.allScores.every((s) => s.excludedBySourceWindow || s.score == 0)) {
       final candidateTitles = selection.allScores
           .where((s) => !s.excludedBySourceWindow && s.score > 0)
@@ -324,7 +332,7 @@ class MemoryInjectionService {
           .toList();
       classifierResult = await _classifierService.classify(
         MemoryClassifierRequest(
-          settings: book.settings,
+          settings: pipeline,
           currentText: currentText,
           candidateTitles: candidateTitles,
           missingContextReasons: const [],
@@ -342,7 +350,7 @@ class MemoryInjectionService {
     // Deep mode: sidecar reranker with prewarm
     if (book.settings.memoryMode == 'deep' &&
         _sidecarService != null &&
-        book.settings.sidecarEnabled) {
+        pipeline.sidecarEnabled) {
       // Try prewarm cache first
       if (_prewarmCache != null) {
         final prewarmKey = MemorySidecarPrewarmKey(
@@ -366,7 +374,7 @@ class MemoryInjectionService {
       if (!prewarmHit) {
         sidecarResult = await _sidecarService.rerank(
           MemorySidecarRequest(
-            settings: book.settings,
+            settings: pipeline,
             candidates: selection.allScores
                 .where((s) => !s.excludedBySourceWindow)
                 .toList(),
@@ -406,6 +414,7 @@ class MemoryInjectionService {
         _agenticService != null) {
       agenticResult = await _agenticService.runAgentic(
         settings: book.settings,
+        pipeline: pipeline,
         entries: activeEntries,
         currentText: currentText,
         visibleMessageIds: visibleMessageIds,
@@ -858,6 +867,7 @@ class _CatalogMatchResult {
 final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
   return MemoryInjectionService(
     ref.watch(memoryBookRepoProvider),
+    ref.watch(pipelineSettingsRepoProvider),
     ref.watch(embeddingRepoProvider),
     ref.watch(memoryCatalogRepoProvider),
     EmbeddingService(),

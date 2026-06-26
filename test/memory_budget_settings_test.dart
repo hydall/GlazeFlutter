@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/pipeline_global_settings.dart';
 import 'package:glaze_flutter/core/state/db_provider.dart';
 import 'package:glaze_flutter/core/state/memory_settings_provider.dart';
+import 'package:glaze_flutter/core/state/pipeline_settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -79,6 +81,16 @@ void main() {
             importanceWeight: 1.25,
             sourceWindowExclusion: false,
             factualContinuityGuardEnabled: true,
+            queryIncludeAssistant: false,
+            queryRecentTurns: 4,
+            queryMaxChars: 750,
+          ),
+        );
+
+    await container
+        .read(pipelineGlobalSettingsProvider.notifier)
+        .save(
+          const PipelineGlobalSettings(
             classifierEnabled: true,
             classifierSource: 'custom',
             classifierModel: 'classifier-mini',
@@ -91,42 +103,42 @@ void main() {
             sidecarEndpoint: 'https://sidecar.example/v1',
             sidecarApiKey: 'sidecar-key',
             sidecarTimeoutMs: 4500,
-            queryIncludeAssistant: false,
-            queryRecentTurns: 4,
-            queryMaxChars: 750,
           ),
         );
 
     final prefs = await SharedPreferences.getInstance();
-    final json =
+    final memoryJson =
         jsonDecode(prefs.getString('memorySettings')!) as Map<String, dynamic>;
+    final pipelineJson =
+        jsonDecode(prefs.getString('pipelineSettings')!) as Map<String, dynamic>;
 
-    expect(json['memoryPackingMode'], 'chunk_first');
-    expect(json['memoryExcerptTokensPerChunk'], 300);
-    expect(json['memoryExcerptChunksPerEntry'], 4);
-    expect(json['diversityAware'], false);
-    expect(json['diversityPenalty'], 0.3);
-    expect(json['recencyBoost'], false);
-    expect(json['recencyHalfLifeDays'], 2);
-    expect(json['importanceBoost'], false);
-    expect(json['importanceWeight'], 1.25);
-    expect(json['sourceWindowExclusion'], false);
-    expect(json['factualContinuityGuardEnabled'], true);
-    expect(json['classifierEnabled'], true);
-    expect(json['classifierSource'], 'custom');
-    expect(json['classifierModel'], 'classifier-mini');
-    expect(json['classifierEndpoint'], 'https://classifier.example/v1');
-    expect(json['classifierApiKey'], 'classifier-key');
-    expect(json['classifierTimeoutMs'], 3500);
-    expect(json['sidecarEnabled'], true);
-    expect(json['sidecarSource'], 'custom');
-    expect(json['sidecarModel'], 'sidecar-mini');
-    expect(json['sidecarEndpoint'], 'https://sidecar.example/v1');
-    expect(json['sidecarApiKey'], 'sidecar-key');
-    expect(json['sidecarTimeoutMs'], 4500);
-    expect(json['queryIncludeAssistant'], false);
-    expect(json['queryRecentTurns'], 4);
-    expect(json['queryMaxChars'], 750);
+    expect(memoryJson['memoryPackingMode'], 'chunk_first');
+    expect(memoryJson['memoryExcerptTokensPerChunk'], 300);
+    expect(memoryJson['memoryExcerptChunksPerEntry'], 4);
+    expect(memoryJson['diversityAware'], false);
+    expect(memoryJson['diversityPenalty'], 0.3);
+    expect(memoryJson['recencyBoost'], false);
+    expect(memoryJson['recencyHalfLifeDays'], 2);
+    expect(memoryJson['importanceBoost'], false);
+    expect(memoryJson['importanceWeight'], 1.25);
+    expect(memoryJson['sourceWindowExclusion'], false);
+    expect(memoryJson['factualContinuityGuardEnabled'], true);
+    expect(memoryJson['queryIncludeAssistant'], false);
+    expect(memoryJson['queryRecentTurns'], 4);
+    expect(memoryJson['queryMaxChars'], 750);
+
+    expect(pipelineJson['classifierEnabled'], true);
+    expect(pipelineJson['classifierSource'], 'custom');
+    expect(pipelineJson['classifierModel'], 'classifier-mini');
+    expect(pipelineJson['classifierEndpoint'], 'https://classifier.example/v1');
+    expect(pipelineJson['classifierApiKey'], 'classifier-key');
+    expect(pipelineJson['classifierTimeoutMs'], 3500);
+    expect(pipelineJson['sidecarEnabled'], true);
+    expect(pipelineJson['sidecarSource'], 'custom');
+    expect(pipelineJson['sidecarModel'], 'sidecar-mini');
+    expect(pipelineJson['sidecarEndpoint'], 'https://sidecar.example/v1');
+    expect(pipelineJson['sidecarApiKey'], 'sidecar-key');
+    expect(pipelineJson['sidecarTimeoutMs'], 4500);
   });
 
   test('new memory books inherit advanced selector tuning', () async {
@@ -151,15 +163,22 @@ void main() {
             importanceWeight: 1.5,
             sourceWindowExclusion: false,
             factualContinuityGuardEnabled: true,
+            queryIncludeAssistant: false,
+            queryRecentTurns: 3,
+            queryMaxChars: 900,
+          ),
+        );
+
+    await container
+        .read(pipelineGlobalSettingsProvider.notifier)
+        .save(
+          const PipelineGlobalSettings(
             classifierEnabled: true,
             classifierModel: 'classifier-mini',
             classifierTimeoutMs: 3500,
             sidecarEnabled: true,
             sidecarModel: 'sidecar-mini',
             sidecarTimeoutMs: 4500,
-            queryIncludeAssistant: false,
-            queryRecentTurns: 3,
-            queryMaxChars: 900,
           ),
         );
 
@@ -175,15 +194,19 @@ void main() {
     expect(book.settings.importanceWeight, 1.5);
     expect(book.settings.sourceWindowExclusion, false);
     expect(book.settings.factualContinuityGuardEnabled, true);
-    expect(book.settings.classifierEnabled, true);
-    expect(book.settings.classifierModel, 'classifier-mini');
-    expect(book.settings.classifierTimeoutMs, 3500);
-    expect(book.settings.sidecarEnabled, true);
-    expect(book.settings.sidecarModel, 'sidecar-mini');
-    expect(book.settings.sidecarTimeoutMs, 4500);
     expect(book.settings.queryIncludeAssistant, false);
     expect(book.settings.queryRecentTurns, 3);
     expect(book.settings.queryMaxChars, 900);
+
+    // Pipeline settings inherit from the global defaults.
+    final pipelineRepo = container.read(pipelineSettingsRepoProvider);
+    final pipeline = await pipelineRepo.ensureForSession('session_advanced');
+    expect(pipeline.classifierEnabled, true);
+    expect(pipeline.classifierModel, 'classifier-mini');
+    expect(pipeline.classifierTimeoutMs, 3500);
+    expect(pipeline.sidecarEnabled, true);
+    expect(pipeline.sidecarModel, 'sidecar-mini');
+    expect(pipeline.sidecarTimeoutMs, 4500);
   });
 
   test('memory book settings update persists selector inputs', () async {
@@ -205,14 +228,6 @@ void main() {
         memoryExcerptChunksPerEntry: 4,
         diversityAware: false,
         factualContinuityGuardEnabled: true,
-        classifierEnabled: true,
-        classifierSource: 'current',
-        classifierModel: 'classifier-mini',
-        classifierTimeoutMs: 3000,
-        sidecarEnabled: true,
-        sidecarSource: 'current',
-        sidecarModel: 'sidecar-mini',
-        sidecarTimeoutMs: 5000,
         queryIncludeAssistant: false,
         queryRecentTurns: 5,
         queryMaxChars: 1250,
@@ -226,14 +241,6 @@ void main() {
     expect(updated.settings.memoryExcerptTokensPerChunk, 300);
     expect(updated.settings.memoryExcerptChunksPerEntry, 4);
     expect(updated.settings.factualContinuityGuardEnabled, true);
-    expect(updated.settings.classifierEnabled, true);
-    expect(updated.settings.classifierSource, 'current');
-    expect(updated.settings.classifierModel, 'classifier-mini');
-    expect(updated.settings.classifierTimeoutMs, 3000);
-    expect(updated.settings.sidecarEnabled, true);
-    expect(updated.settings.sidecarSource, 'current');
-    expect(updated.settings.sidecarModel, 'sidecar-mini');
-    expect(updated.settings.sidecarTimeoutMs, 5000);
     expect(updated.settings.queryIncludeAssistant, false);
     expect(updated.settings.queryRecentTurns, 5);
     expect(updated.settings.queryMaxChars, 1250);

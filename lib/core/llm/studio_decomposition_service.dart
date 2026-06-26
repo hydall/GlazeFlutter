@@ -15,7 +15,7 @@ import 'studio_block_router.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
-import '../state/memory_settings_provider.dart';
+import '../state/pipeline_settings_provider.dart';
 import '../../features/settings/api_list_provider.dart';
 
 class _ControllerSpec {
@@ -1118,7 +1118,7 @@ Assigned preset blocks:
     ApiConfig? apiConfig,
     CancelToken? cancelToken,
   }) async {
-    final settings = _ref.read(memoryGlobalSettingsProvider);
+    final settings = _ref.read(pipelineGlobalSettingsProvider);
     final isCustom = settings.sidecarSource == 'custom';
     String endpoint;
     String apiKey;

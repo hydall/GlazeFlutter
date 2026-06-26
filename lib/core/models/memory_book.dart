@@ -85,12 +85,6 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(3) int batchSize,
     @Default(false) bool vectorSearchEnabled,
     @Default('glaze') String keyMatchMode,
-    @Default('current') String generationSource,
-    @Default('') String generationModel,
-    @Default('') String generationEndpoint,
-    @Default('') String generationApiKey,
-    @Default(null) double? generationTemperature,
-    @Default(null) int? generationMaxTokens,
     @Default('detailed_beats') String promptPreset,
     @Default(true) bool diversityAware,
     @Default(0.15) double diversityPenalty,
@@ -100,63 +94,16 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(0.5) double importanceWeight,
     @Default(true) bool sourceWindowExclusion,
     @Default(false) bool factualContinuityGuardEnabled,
-    @Default(false) bool classifierEnabled,
-    @Default('current') String classifierSource,
-    @Default('') String classifierModel,
-    @Default('') String classifierEndpoint,
-    @Default('') String classifierApiKey,
-    @Default(2500) int classifierTimeoutMs,
-    @Default(false) bool sidecarEnabled,
-    @Default('current') String sidecarSource,
-    @Default('') String sidecarModel,
-    @Default('') String sidecarEndpoint,
-    @Default('') String sidecarApiKey,
-    @Default(60000) int sidecarTimeoutMs,
     @Default(true) bool queryIncludeAssistant,
     @Default(6) int queryRecentTurns,
     @Default(1500) int queryMaxChars,
     @Default(3) int cadenceInterval,
+    /// Enables the memory consolidation pass. The consolidation LLM config
+    /// (model/endpoint/key/timeout) lives in [PipelineSettings]; this flag is
+    /// the retrieval-side toggle that gates whether the post-turn pipeline
+    /// triggers consolidation at all.
     @Default(false) bool consolidationEnabled,
     @Default(5) int consolidationThreshold,
-    @Default('current') String consolidationSource,
-    @Default('') String consolidationModel,
-    @Default('') String consolidationEndpoint,
-    @Default('') String consolidationApiKey,
-    @Default(4000) int consolidationTimeoutMs,
-    /// Enables the agentic write-loop: after a turn is finalized, the memory
-    /// agent may write trackers and memory drafts via sidecar JSON. Off by
-    /// default — the agent runs read-only (searchMemory only) unless this is
-    /// explicitly enabled. See docs/PLAN_AGENTIC_STUDIO.md Stage 1.
-    @Default(false) bool agenticWriteEnabled,
-    /// Enables the POST-cleaner: after generation, a sidecar LLM call
-    /// rewrites the final assistant message to remove clichés and repetition.
-    /// The original text is preserved as a swipe; the cleaned version replaces
-    /// the active text. Falls back to original on error. See
-    /// docs/PLAN_CONTINUITY_POST_CLEANER.md.
-    @Default(false) bool postCleanerEnabled,
-    @Default(0.3) double postCleanerTemperature,
-    @Default(0) int postCleanerMaxTokens,
-    /// Per-feature sidecar split: cleaner-specific source/model/endpoint/key/
-    /// timeout. When empty/zero, falls back to the shared sidecar* fields.
-    /// Source 'inherit' = use sidecarSource.
-    @Default('inherit') String postCleanerSource,
-    @Default('') String postCleanerModel,
-    @Default('') String postCleanerEndpoint,
-    @Default('') String postCleanerApiKey,
-    @Default(0) int postCleanerTimeoutMs,
-    /// Continuity check: include recent chat history in the cleaner prompt for
-    /// conservative local continuity checks. On by default — no extra LLM call,
-    /// just enriches the existing cleaner prompt.
-    @Default(true) bool postCleanerContinuityEnabled,
-    /// Character & world audit: opt-in second sidecar pass that checks the
-    /// response against character card + persona + lorebooks + memory. Returns
-    /// a JSON list of contradictions passed to the cleaner as fix instructions.
-    @Default(false) bool postCleanerCharacterCheckEnabled,
-    /// Number of recent messages to include in the cleaner prompt for
-    /// continuity checks.
-    @Default(12) int postCleanerHistoryMessages,
-    /// Max chars per recent message in the cleaner prompt.
-    @Default(3000) int postCleanerMaxCharsPerMessage,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>

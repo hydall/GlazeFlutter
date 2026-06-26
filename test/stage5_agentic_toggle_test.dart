@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 import 'package:glaze_flutter/core/models/studio_config.dart';
 
 void main() {
   group('Stage 5 — Agentic advanced toggle defaults', () {
     test('MemoryBookSettings: all agentic features off by default', () {
-      const settings = MemoryBookSettings();
+      const settings = PipelineSettings();
       expect(settings.agenticWriteEnabled, isFalse);
       expect(settings.postCleanerEnabled, isFalse);
     });
@@ -17,7 +17,7 @@ void main() {
     });
 
     test('MemoryBookSettings: can enable all agentic features', () {
-      const settings = MemoryBookSettings(
+      const settings = PipelineSettings(
         agenticWriteEnabled: true,
         postCleanerEnabled: true,
       );
@@ -36,16 +36,16 @@ void main() {
 
   group('Stage 5 — Feature independence', () {
     test('write-loop and POST-cleaner are independent toggles', () {
-      const writeOnly = MemoryBookSettings(
+      const writeOnly = PipelineSettings(
         agenticWriteEnabled: true,
         postCleanerEnabled: false,
       );
-      const cleanerOnly = MemoryBookSettings(
+      const cleanerOnly = PipelineSettings(
         agenticWriteEnabled: false,
         postCleanerEnabled: true,
       );
-      const bothOff = MemoryBookSettings();
-      const bothOn = MemoryBookSettings(
+      const bothOff = PipelineSettings();
+      const bothOn = PipelineSettings(
         agenticWriteEnabled: true,
         postCleanerEnabled: true,
       );
@@ -61,11 +61,11 @@ void main() {
         sessionId: 's1',
         routingMode: 'compiled',
       );
-      const settings = MemoryBookSettings(
+      const settings = PipelineSettings(
         agenticWriteEnabled: true,
         postCleanerEnabled: true,
       );
-      // routingMode lives on StudioConfig, not MemoryBookSettings
+      // routingMode lives on StudioConfig, not PipelineSettings
       expect(config.routingMode, 'compiled');
       expect(settings.agenticWriteEnabled, isTrue);
       expect(settings.postCleanerEnabled, isTrue);
@@ -78,7 +78,7 @@ void main() {
     // power-user toggle" UX from docs/PLAN_AGENTIC_STUDIO.md §7.
 
     test('no agentic feature is on without explicit opt-in', () {
-      const settings = MemoryBookSettings();
+      const settings = PipelineSettings();
       const config = StudioConfig(sessionId: 's1');
 
       expect(settings.agenticWriteEnabled, isFalse);
@@ -89,7 +89,7 @@ void main() {
     });
 
     test('copyWith preserves existing toggles when updating one', () {
-      const initial = MemoryBookSettings(
+      const initial = PipelineSettings(
         agenticWriteEnabled: true,
         postCleanerEnabled: false,
       );

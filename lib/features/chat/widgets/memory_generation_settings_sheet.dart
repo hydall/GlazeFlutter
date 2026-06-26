@@ -3,15 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/sse_client.dart';
 import '../../../core/llm/memory_budget.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/services/memory_prompt_presets.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
-import '../../../shared/widgets/glaze_toast.dart';
-import '../../settings/api_list_provider.dart';
 import 'custom_prompt_manager_sheet.dart';
 
 class MemoryGenerationSettingsSheet extends ConsumerStatefulWidget {
@@ -44,7 +41,6 @@ class _MemoryGenerationSettingsSheetState
   late int _batchSize;
   late bool _useDelayedAutomation;
   late String _injectionTarget;
-  late String _generationSource;
   late String _promptPreset;
   late String _keyMatchMode;
   late bool _vectorSearchEnabled;
@@ -58,28 +54,11 @@ class _MemoryGenerationSettingsSheetState
   late double _importanceWeight;
   late bool _sourceWindowExclusion;
   late bool _factualContinuityGuardEnabled;
-  late bool _classifierEnabled;
-  late String _classifierSource;
-  late int _classifierTimeoutMs;
-  late bool _sidecarEnabled;
-  late String _sidecarSource;
-  late int _sidecarTimeoutMs;
   late bool _queryIncludeAssistant;
   late int _queryRecentTurns;
   late int _queryMaxChars;
 
-  late final TextEditingController _generationModelCtrl;
-  late final TextEditingController _generationEndpointCtrl;
-  late final TextEditingController _generationApiKeyCtrl;
-  late final TextEditingController _temperatureCtrl;
-  late final TextEditingController _maxTokensCtrl;
   late final TextEditingController _memoryBudgetCtrl;
-  late final TextEditingController _classifierModelCtrl;
-  late final TextEditingController _classifierEndpointCtrl;
-  late final TextEditingController _classifierApiKeyCtrl;
-  late final TextEditingController _sidecarModelCtrl;
-  late final TextEditingController _sidecarEndpointCtrl;
-  late final TextEditingController _sidecarApiKeyCtrl;
 
   @override
   void initState() {
@@ -116,7 +95,6 @@ class _MemoryGenerationSettingsSheetState
     _batchSize = s.batchSize;
     _useDelayedAutomation = s.useDelayedAutomation;
     _injectionTarget = _migrateInjectionTarget(s.injectionTarget);
-    _generationSource = s.generationSource;
     _promptPreset = s.promptPreset;
     _keyMatchMode = s.keyMatchMode;
     _vectorSearchEnabled = s.vectorSearchEnabled;
@@ -130,51 +108,18 @@ class _MemoryGenerationSettingsSheetState
     _importanceWeight = s.importanceWeight;
     _sourceWindowExclusion = s.sourceWindowExclusion;
     _factualContinuityGuardEnabled = s.factualContinuityGuardEnabled;
-    _classifierEnabled = s.classifierEnabled;
-    _classifierSource = _normalizeClassifierSource(s.classifierSource);
-    _classifierTimeoutMs = s.classifierTimeoutMs.clamp(500, 10000);
-    _sidecarEnabled = s.sidecarEnabled;
-    _sidecarSource = _normalizeClassifierSource(s.sidecarSource);
-    _sidecarTimeoutMs = s.sidecarTimeoutMs.clamp(500, 15000);
     _queryIncludeAssistant = s.queryIncludeAssistant;
     _queryRecentTurns = s.queryRecentTurns;
     _queryMaxChars = s.queryMaxChars;
 
-    _generationModelCtrl = TextEditingController(text: s.generationModel);
-    _generationEndpointCtrl = TextEditingController(text: s.generationEndpoint);
-    _generationApiKeyCtrl = TextEditingController(text: s.generationApiKey);
-    _classifierModelCtrl = TextEditingController(text: s.classifierModel);
-    _classifierEndpointCtrl = TextEditingController(text: s.classifierEndpoint);
-    _classifierApiKeyCtrl = TextEditingController(text: s.classifierApiKey);
-    _sidecarModelCtrl = TextEditingController(text: s.sidecarModel);
-    _sidecarEndpointCtrl = TextEditingController(text: s.sidecarEndpoint);
-    _sidecarApiKeyCtrl = TextEditingController(text: s.sidecarApiKey);
-    _temperatureCtrl = TextEditingController(
-      text: s.generationTemperature != null && s.generationTemperature! > 0
-          ? s.generationTemperature!.round().toString()
-          : '',
-    );
-    _maxTokensCtrl = TextEditingController(
-      text: s.generationMaxTokens != null && s.generationMaxTokens! > 0
-          ? s.generationMaxTokens.toString()
-          : '',
+    _memoryBudgetCtrl = TextEditingController(
+      text: (_maxInjectedTokens ?? 6000).toString(),
     );
   }
 
   @override
   void dispose() {
-    _generationModelCtrl.dispose();
-    _generationEndpointCtrl.dispose();
-    _generationApiKeyCtrl.dispose();
-    _temperatureCtrl.dispose();
-    _maxTokensCtrl.dispose();
     _memoryBudgetCtrl.dispose();
-    _classifierModelCtrl.dispose();
-    _classifierEndpointCtrl.dispose();
-    _classifierApiKeyCtrl.dispose();
-    _sidecarModelCtrl.dispose();
-    _sidecarEndpointCtrl.dispose();
-    _sidecarApiKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -184,8 +129,6 @@ class _MemoryGenerationSettingsSheetState
       );
 
   void _save() {
-    final temp = int.tryParse(_temperatureCtrl.text);
-    final tokens = int.tryParse(_maxTokensCtrl.text);
     final settings = widget.settings.copyWith(
       enabled: _enabled,
       memoryMode: _memoryMode,
@@ -205,12 +148,6 @@ class _MemoryGenerationSettingsSheetState
       batchSize: _batchSize,
       useDelayedAutomation: _useDelayedAutomation,
       injectionTarget: _injectionTarget,
-      generationSource: _generationSource,
-      generationModel: _generationModelCtrl.text,
-      generationEndpoint: _generationEndpointCtrl.text,
-      generationApiKey: _generationApiKeyCtrl.text,
-      generationTemperature: temp != null && temp > 0 ? temp.toDouble() : null,
-      generationMaxTokens: tokens != null && tokens > 0 ? tokens : null,
       promptPreset: _promptPreset,
       keyMatchMode: _keyMatchMode,
       vectorSearchEnabled: _vectorSearchEnabled,
@@ -222,18 +159,6 @@ class _MemoryGenerationSettingsSheetState
       importanceWeight: _importanceWeight,
       sourceWindowExclusion: _sourceWindowExclusion,
       factualContinuityGuardEnabled: _factualContinuityGuardEnabled,
-      classifierEnabled: _classifierEnabled,
-      classifierSource: _classifierSource,
-      classifierModel: _classifierModelCtrl.text,
-      classifierEndpoint: _classifierEndpointCtrl.text,
-      classifierApiKey: _classifierApiKeyCtrl.text,
-      classifierTimeoutMs: _classifierTimeoutMs,
-      sidecarEnabled: _sidecarEnabled,
-      sidecarSource: _sidecarSource,
-      sidecarModel: _sidecarModelCtrl.text,
-      sidecarEndpoint: _sidecarEndpointCtrl.text,
-      sidecarApiKey: _sidecarApiKeyCtrl.text,
-      sidecarTimeoutMs: _sidecarTimeoutMs,
       queryIncludeAssistant: _queryIncludeAssistant,
       queryRecentTurns: _queryRecentTurns,
       queryMaxChars: _queryMaxChars,
@@ -323,56 +248,6 @@ class _MemoryGenerationSettingsSheetState
             const SizedBox(height: 12),
             _sectionLabel('regex_script_settings'.tr()),
             _promptPresetSelector(),
-            const SizedBox(height: 12),
-            _sectionLabel('tab_api'.tr()),
-            _switchTile(
-              'settings_use_llm_api'.tr(),
-              _generationSource != 'custom',
-              (v) =>
-                  setState(() => _generationSource = v ? 'current' : 'custom'),
-              subtitle: 'settings_use_llm_api_desc'.tr(),
-            ),
-            if (_generationSource == 'custom') ...[
-              const SizedBox(height: 8),
-              _labeledField(
-                'settings_embedding_endpoint'.tr(),
-                _generationEndpointCtrl,
-                hint: 'memory_classifier_hint'.tr(),
-              ),
-              const SizedBox(height: 8),
-              _modelField(
-                _generationModelCtrl,
-                hint: 'memory_model_hint'.tr(),
-                isCustom: true,
-              ),
-              const SizedBox(height: 8),
-              _labeledField(
-                'label_embedding_key'.tr(),
-                _generationApiKeyCtrl,
-                hint: 'memory_key_hint'.tr(),
-                obscure: true,
-              ),
-            ] else ...[
-              const SizedBox(height: 8),
-              _modelField(
-                _generationModelCtrl,
-                hint: 'memory_leave_blank_hint'.tr(),
-                isCustom: false,
-              ),
-            ],
-            const SizedBox(height: 8),
-            _labeledField(
-              'label_temperature'.tr(),
-              _temperatureCtrl,
-              hint: 'memory_default_hint'.tr(),
-              inputType: TextInputType.number,
-            ),
-            _labeledField(
-              'label_max_tokens'.tr(),
-              _maxTokensCtrl,
-              hint: 'memory_auto_hint'.tr(),
-              inputType: TextInputType.number,
-            ),
             const SizedBox(height: 12),
             _sectionLabel('search'.tr()),
             _switchTile(
@@ -579,8 +454,6 @@ class _MemoryGenerationSettingsSheetState
             (v) => setState(() => _factualContinuityGuardEnabled = v),
             subtitle: 'memory_selector_continuity_guard_desc'.tr(),
           ),
-          _classifierSettings(),
-          _sidecarSettings(),
           _switchTile(
             'memory_selector_query_assistant'.tr(),
             _queryIncludeAssistant,
@@ -703,133 +576,6 @@ class _MemoryGenerationSettingsSheetState
     );
   }
 
-  Widget _classifierSettings() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _switchTile(
-          'memory_selector_classifier'.tr(),
-          _classifierEnabled,
-          (v) => setState(() => _classifierEnabled = v),
-          subtitle: 'memory_selector_classifier_desc'.tr(),
-        ),
-        if (_classifierEnabled) ...[
-          Text(
-            'memory_selector_classifier_disclosure'.tr(),
-            style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
-          ),
-          const SizedBox(height: 8),
-          SegmentedButton<String>(
-            segments: [
-              ButtonSegment(value: 'current', label: Text('memory_select_current_api'.tr())),
-              ButtonSegment(value: 'custom', label: Text('memory_select_custom'.tr())),
-            ],
-            selected: {_classifierSource},
-            onSelectionChanged: (s) =>
-                setState(() => _classifierSource = s.first),
-            style: ButtonStyle(visualDensity: VisualDensity.compact),
-          ),
-          const SizedBox(height: 8),
-          if (_classifierSource == 'custom') ...[
-            _labeledField(
-              'settings_embedding_endpoint'.tr(),
-              _classifierEndpointCtrl,
-              hint: 'memory_classifier_hint'.tr(),
-            ),
-            const SizedBox(height: 8),
-          ],
-          _labeledField(
-            'memory_selector_classifier_model'.tr(),
-            _classifierModelCtrl,
-            hint: _classifierSource == 'custom'
-                ? 'memory_model_hint'.tr()
-                : 'memory_selector_current_model_hint'.tr(),
-          ),
-          if (_classifierSource == 'custom') ...[
-            const SizedBox(height: 8),
-            _labeledField(
-              'label_embedding_key'.tr(),
-              _classifierApiKeyCtrl,
-              hint: 'memory_key_hint'.tr(),
-              obscure: true,
-            ),
-          ],
-          _numberField(
-            'memory_selector_classifier_timeout'.tr(),
-            _classifierTimeoutMs,
-            (v) => setState(() => _classifierTimeoutMs = v),
-            min: 500,
-            max: 10000,
-            step: 500,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _sidecarSettings() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _switchTile(
-          'memory_selector_sidecar'.tr(),
-          _sidecarEnabled,
-          (v) => setState(() => _sidecarEnabled = v),
-          subtitle: 'memory_selector_sidecar_desc'.tr(),
-        ),
-        if (_sidecarEnabled) ...[
-          Text(
-            'memory_selector_sidecar_disclosure'.tr(),
-            style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
-          ),
-          const SizedBox(height: 8),
-          SegmentedButton<String>(
-            segments: [
-              ButtonSegment(value: 'current', label: Text('memory_select_current_api'.tr())),
-              ButtonSegment(value: 'custom', label: Text('memory_select_custom'.tr())),
-            ],
-            selected: {_sidecarSource},
-            onSelectionChanged: (s) => setState(() => _sidecarSource = s.first),
-            style: ButtonStyle(visualDensity: VisualDensity.compact),
-          ),
-          const SizedBox(height: 8),
-          if (_sidecarSource == 'custom') ...[
-            _labeledField(
-              'settings_embedding_endpoint'.tr(),
-              _sidecarEndpointCtrl,
-              hint: 'memory_classifier_hint'.tr(),
-            ),
-            const SizedBox(height: 8),
-          ],
-          _labeledField(
-            'memory_selector_sidecar_model'.tr(),
-            _sidecarModelCtrl,
-            hint: _sidecarSource == 'custom'
-                ? 'memory_model_hint'.tr()
-                : 'memory_selector_current_model_hint'.tr(),
-          ),
-          if (_sidecarSource == 'custom') ...[
-            const SizedBox(height: 8),
-            _labeledField(
-              'label_embedding_key'.tr(),
-              _sidecarApiKeyCtrl,
-              hint: 'memory_key_hint'.tr(),
-              obscure: true,
-            ),
-          ],
-          _numberField(
-            'memory_selector_sidecar_timeout'.tr(),
-            _sidecarTimeoutMs,
-            (v) => setState(() => _sidecarTimeoutMs = v),
-            min: 500,
-            max: 15000,
-            step: 500,
-          ),
-        ],
-      ],
-    );
-  }
-
   Widget _switchTile(
     String label,
     bool value,
@@ -903,39 +649,6 @@ class _MemoryGenerationSettingsSheetState
           ),
         ),
       ],
-    );
-  }
-
-  Widget _labeledField(
-    String label,
-    TextEditingController controller, {
-    String? hint,
-    bool obscure = false,
-    TextInputType? inputType,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: obscure,
-      keyboardType: inputType,
-      inputFormatters: inputType == TextInputType.number
-          ? [FilteringTextInputFormatter.digitsOnly]
-          : null,
-      style: TextStyle(color: context.cs.onSurface, fontSize: 14),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
-        hintText: hint,
-        hintStyle: TextStyle(
-          color: context.cs.onSurfaceVariant.withValues(alpha: 0.4),
-        ),
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.05),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-      ),
     );
   }
 
@@ -1055,117 +768,6 @@ class _MemoryGenerationSettingsSheetState
     return '$tokens ${'memory_tokens'.tr()}';
   }
 
-  Widget _modelField(
-    TextEditingController controller, {
-    String? hint,
-    required bool isCustom,
-  }) {
-    return TextField(
-      controller: controller,
-      style: TextStyle(color: context.cs.onSurface, fontSize: 14),
-      decoration: InputDecoration(
-        labelText: isCustom
-            ? 'label_model'.tr()
-            : "${'label_model'.tr()} (${'hint_optional'.tr()})",
-        labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
-        hintText: hint,
-        hintStyle: TextStyle(
-          color: context.cs.onSurfaceVariant.withValues(alpha: 0.4),
-        ),
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.05),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-        suffixIcon: IconButton(
-          icon: _fetchingModels
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: context.cs.primary,
-                  ),
-                )
-              : Icon(
-                  Icons.download_rounded,
-                  size: 20,
-                  color: context.cs.onSurfaceVariant,
-                ),
-          tooltip: 'memory_books_loading_models'.tr(),
-          onPressed: _fetchingModels ? null : _fetchAndPickModel,
-        ),
-      ),
-    );
-  }
-
-  bool _fetchingModels = false;
-
-  void _fetchAndPickModel() async {
-    setState(() => _fetchingModels = true);
-    try {
-      String endpoint;
-      String apiKey;
-      if (_generationSource == 'custom') {
-        endpoint = _generationEndpointCtrl.text.trim();
-        apiKey = _generationApiKeyCtrl.text.trim();
-      } else {
-        final config = ref.read(activeApiConfigProvider);
-        if (config == null) {
-          if (mounted) GlazeToast.show(context, 'settings_no_api_configs'.tr());
-          return;
-        }
-        endpoint = config.endpoint;
-        apiKey = config.apiKey;
-      }
-      if (endpoint.isEmpty) {
-        if (mounted) {
-          GlazeToast.show(context, 'settings_err_fill_endpoint'.tr());
-        }
-        return;
-      }
-      final models = await SseClient().fetchModels(
-        endpoint: endpoint,
-        apiKey: apiKey,
-      );
-      if (models.isEmpty) {
-        if (mounted) GlazeToast.show(context, 'settings_err_no_models'.tr());
-        return;
-      }
-      if (!mounted) return;
-      final ids =
-          models
-              .map((m) => m['id'] as String?)
-              .where((id) => id != null)
-              .cast<String>()
-              .toList()
-            ..sort();
-      final selected = await GlazeBottomSheet.show<String>(
-        context,
-        title: 'settings_select_model'.tr(),
-        items: ids
-            .map(
-              (id) => BottomSheetItem(
-                label: id,
-                icon: id == _generationModelCtrl.text ? Icons.check : null,
-                iconColor: context.cs.primary,
-                onTap: () => Navigator.pop(context, id),
-              ),
-            )
-            .toList(),
-      );
-      if (selected != null) {
-        _generationModelCtrl.text = selected;
-      }
-    } catch (e) {
-      if (mounted) GlazeToast.show(context, "${'settings_err_failed'.tr()} $e");
-    } finally {
-      if (mounted) setState(() => _fetchingModels = false);
-    }
-  }
-
   Widget _promptPresetSelector() {
     final custom = _customPrompts;
     return Column(
@@ -1274,14 +876,6 @@ class _MemoryGenerationSettingsSheetState
           parallelJobs: current.parallelJobs,
           vectorSearchEnabled: current.vectorSearchEnabled,
           keyMatchMode: current.keyMatchMode,
-          generationSource: current.generationSource,
-          generationModel: current.generationModel,
-          generationUseCurrentModelOverride:
-              current.generationUseCurrentModelOverride,
-          generationEndpoint: current.generationEndpoint,
-          generationApiKey: current.generationApiKey,
-          generationTemperature: current.generationTemperature,
-          generationMaxTokens: current.generationMaxTokens,
           promptPreset: current.promptPreset,
           diversityAware: current.diversityAware,
           diversityPenalty: current.diversityPenalty,
@@ -1291,21 +885,12 @@ class _MemoryGenerationSettingsSheetState
           importanceWeight: current.importanceWeight,
           sourceWindowExclusion: current.sourceWindowExclusion,
           factualContinuityGuardEnabled: current.factualContinuityGuardEnabled,
-          classifierEnabled: current.classifierEnabled,
-          classifierSource: current.classifierSource,
-          classifierModel: current.classifierModel,
-          classifierEndpoint: current.classifierEndpoint,
-          classifierApiKey: current.classifierApiKey,
-          classifierTimeoutMs: current.classifierTimeoutMs,
-          sidecarEnabled: current.sidecarEnabled,
-          sidecarSource: current.sidecarSource,
-          sidecarModel: current.sidecarModel,
-          sidecarEndpoint: current.sidecarEndpoint,
-          sidecarApiKey: current.sidecarApiKey,
-          sidecarTimeoutMs: current.sidecarTimeoutMs,
           queryIncludeAssistant: current.queryIncludeAssistant,
           queryRecentTurns: current.queryRecentTurns,
           queryMaxChars: current.queryMaxChars,
+          cadenceInterval: current.cadenceInterval,
+          consolidationEnabled: current.consolidationEnabled,
+          consolidationThreshold: current.consolidationThreshold,
           customPrompts: MemoryPromptPreset.toJsonList(result),
         ),
       );
@@ -1445,8 +1030,4 @@ String _normalizeMemoryMode(String raw) {
 String _normalizeMemoryPackingMode(String raw) {
   if (raw == 'full' || raw == 'chunk_first') return raw;
   return 'hybrid';
-}
-
-String _normalizeClassifierSource(String raw) {
-  return raw == 'custom' ? 'custom' : 'current';
 }

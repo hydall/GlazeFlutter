@@ -520,7 +520,9 @@ class GenerationPipeline {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      if (book == null || !book.settings.agenticWriteEnabled) return;
+      final pipeline = await ref.read(pipelineSettingsProvider(sessionId).future);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (book == null || !pipeline.agenticWriteEnabled) return;
 
       final trackerRepo = ref.read(trackerRepoProvider);
       final trackers = await trackerRepo.getBySessionId(sessionId);
@@ -530,8 +532,8 @@ class GenerationPipeline {
 
       debugPrint(
         '[AgenticWrite] starting write-loop session=$sessionId '
-        'model=${book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel} '
-        'timeoutMs=${book.settings.sidecarTimeoutMs} '
+        'model=${pipeline.sidecarModel.isEmpty ? "<chat>" : pipeline.sidecarModel} '
+        'timeoutMs=${pipeline.sidecarTimeoutMs} '
         'existingTrackers=${trackers.length} '
         'historyChars=${recentHistory.length}',
       );
@@ -539,7 +541,7 @@ class GenerationPipeline {
       final agenticService = ref.read(memoryAgenticWriteServiceProvider);
       final result = await agenticService.runWriteLoop(
         sessionId: sessionId,
-        settings: book.settings,
+        settings: pipeline,
         recentHistoryText: recentHistory,
         currentTrackers: trackers,
         isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
@@ -570,9 +572,9 @@ class GenerationPipeline {
                 messageId: messages.isNotEmpty ? messages.last.id : null,
                 attempts: result.attempts,
                 totalElapsedMs: result.totalElapsedMs,
-                model: book.settings.sidecarModel.isEmpty
+                model: pipeline.sidecarModel.isEmpty
                     ? null
-                    : book.settings.sidecarModel,
+                    : pipeline.sidecarModel,
                 summary: status == AgentOperationStatus.ok
                     ? (totalWritten > 0
                         ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
@@ -611,7 +613,9 @@ class GenerationPipeline {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      if (book == null || !book.settings.postCleanerEnabled) return;
+      final pipeline = await ref.read(pipelineSettingsProvider(sessionId).future);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (book == null || !pipeline.postCleanerEnabled) return;
 
       // Find the last assistant message.
       ChatMessage? lastAssistant;
@@ -631,8 +635,8 @@ class GenerationPipeline {
       // Collect bounded recent chat history before the assistant response for
       // conservative local continuity checks. Uses configurable history window
       // from settings. Excludes the response being cleaned itself.
-      final maxHistory = book.settings.postCleanerContinuityEnabled
-          ? book.settings.postCleanerHistoryMessages
+      final maxHistory = pipeline.postCleanerContinuityEnabled
+          ? pipeline.postCleanerHistoryMessages
           : 0;
       final recentMessages = <ChatMessage>[];
       if (maxHistory > 0 && lastAssistantIndex > 0) {
@@ -661,14 +665,14 @@ class GenerationPipeline {
 
       debugPrint(
         '[PostCleaner] starting session=$sessionId '
-        'model=${book.settings.postCleanerModel.isNotEmpty ? book.settings.postCleanerModel : (book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel)} '
-        'timeoutMs=${book.settings.postCleanerTimeoutMs > 0 ? book.settings.postCleanerTimeoutMs : book.settings.sidecarTimeoutMs} '
+        'model=${pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : (pipeline.sidecarModel.isEmpty ? "<chat>" : pipeline.sidecarModel)} '
+        'timeoutMs=${pipeline.postCleanerTimeoutMs > 0 ? pipeline.postCleanerTimeoutMs : pipeline.sidecarTimeoutMs} '
         'textChars=${lastAssistant.content.length} '
         'broadcastBlocks=${broadcastBlocks.length} '
         'historyMessages=${recentMessages.length} '
         'studioOutputs=${lastAssistant.studioOutputs.length} '
-        'continuity=${book.settings.postCleanerContinuityEnabled} '
-        'charCheck=${book.settings.postCleanerCharacterCheckEnabled}',
+        'continuity=${pipeline.postCleanerContinuityEnabled} '
+        'charCheck=${pipeline.postCleanerCharacterCheckEnabled}',
       );
 
       ref.read(postCleanerStateProvider.notifier).state = PostCleanerState.running(
@@ -683,7 +687,7 @@ class GenerationPipeline {
       // characterCheckEnabled AND promptPayload is available (exact generation
       // snapshot). Returns null on failure → cleaner runs without audit notes.
       List<String>? auditIssues;
-      if (book.settings.postCleanerCharacterCheckEnabled &&
+      if (pipeline.postCleanerCharacterCheckEnabled &&
           promptPayload != null) {
         try {
           final loreContent = _assembleLorebooksContent(promptPayload);
@@ -698,7 +702,7 @@ class GenerationPipeline {
             arcContent: promptPayload.arcContent,
             entitiesContent: promptPayload.entitiesContent,
             recentMessages: recentMessages,
-            settings: book.settings,
+            settings: pipeline,
           );
           if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
             ref.read(postCleanerStateProvider.notifier).state =
@@ -717,7 +721,7 @@ class GenerationPipeline {
 
       final result = await cleanerService.runCleaner(
         sessionId: sessionId,
-        settings: book.settings,
+        settings: pipeline,
         assistantText: lastAssistant.content,
         broadcastBlocks: broadcastBlocks,
         recentMessages: recentMessages,
@@ -767,9 +771,9 @@ class GenerationPipeline {
               messageId: lastAssistant.id,
               attempts: result.attempts,
               totalElapsedMs: result.totalElapsedMs,
-              model: book.settings.sidecarModel.isEmpty
+              model: pipeline.sidecarModel.isEmpty
                   ? null
-                  : book.settings.sidecarModel,
+                  : pipeline.sidecarModel,
               summary: result.wasCleaned
                   ? 'cleaned (${result.cleanedText.length} chars)'
                   : result.status == 'ok'

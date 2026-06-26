@@ -7,6 +7,7 @@ import '../../core/llm/transport/chat_transport_request.dart';
 import '../../core/llm/transport/llm_protocol.dart';
 import '../../core/llm/transport/transport_factory.dart';
 import '../../core/models/memory_book.dart';
+import '../../core/models/pipeline_settings.dart';
 import '../../core/services/memory_prompt_presets.dart';
 import '../../core/state/memory_settings_provider.dart';
 import '../settings/api_list_provider.dart';
@@ -19,6 +20,7 @@ class MemoryDraftGenerator {
   Future<MemoryDraft> generate({
     required MemoryDraft draft,
     required MemoryBookSettings settings,
+    required PipelineSettings pipeline,
     required String historyText,
     CancelToken? cancelToken,
   }) async {
@@ -31,16 +33,16 @@ class MemoryDraftGenerator {
       prompt = '$prompt\n\n$historyText';
     }
 
-    final isCustom = settings.generationSource == 'custom';
+    final isCustom = pipeline.generationSource == 'custom';
     String endpoint;
     String apiKey;
     String model;
     String protocol;
 
     if (isCustom) {
-      endpoint = settings.generationEndpoint;
-      apiKey = settings.generationApiKey;
-      model = settings.generationModel;
+      endpoint = pipeline.generationEndpoint;
+      apiKey = pipeline.generationApiKey;
+      model = pipeline.generationModel;
       protocol = LlmProtocol.openai;
     } else {
       await _ref.read(apiListProvider.future);
@@ -50,8 +52,8 @@ class MemoryDraftGenerator {
       }
       endpoint = chatConfig.endpoint;
       apiKey = chatConfig.apiKey;
-      model = settings.generationModel.isNotEmpty
-          ? settings.generationModel
+      model = pipeline.generationModel.isNotEmpty
+          ? pipeline.generationModel
           : chatConfig.model;
       protocol = chatConfig.protocol;
     }
@@ -61,10 +63,10 @@ class MemoryDraftGenerator {
       throw Exception('API not configured for memory generation');
     }
 
-    final maxTokens = (settings.generationMaxTokens != null && settings.generationMaxTokens! > 0)
-        ? settings.generationMaxTokens!
+    final maxTokens = (pipeline.generationMaxTokens != null && pipeline.generationMaxTokens! > 0)
+        ? pipeline.generationMaxTokens!
         : 2000;
-    final temperature = settings.generationTemperature ?? 0.4;
+    final temperature = pipeline.generationTemperature ?? 0.4;
 
     final completer = Completer<String>();
     final transport = pickChatTransport(protocol);

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/llm/memory_sidecar_reranker_service.dart';
 import 'package:glaze_flutter/core/llm/memory_selector.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 
 MemoryEntry _entry(
   String id, {
@@ -18,7 +19,7 @@ MemoryEntry _entry(
 }
 
 void main() {
-  const settings = MemoryBookSettings(
+  const settings = PipelineSettings(
     sidecarEnabled: true,
     sidecarTimeoutMs: 50,
   );
@@ -43,7 +44,7 @@ void main() {
 
     final result = await service.rerank(
       MemorySidecarRequest(
-        settings: const MemoryBookSettings(sidecarEnabled: false),
+        settings: const PipelineSettings(sidecarEnabled: false),
         candidates: [MemoryCandidateScore(entry: entry, score: 1)],
         fallbackSelection: fallback([entry]),
         maxInjectedEntries: 3,

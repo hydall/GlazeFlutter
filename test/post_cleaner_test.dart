@@ -4,7 +4,7 @@ import 'package:glaze_flutter/core/llm/post_cleaner_service.dart';
 import 'package:glaze_flutter/core/models/agent_operation_record.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
-import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 import 'package:glaze_flutter/core/models/persona.dart';
 
 void main() {
@@ -102,19 +102,19 @@ void main() {
     });
   });
 
-  group('MemoryBookSettings.postCleanerEnabled', () {
+  group('PipelineSettings.postCleanerEnabled', () {
     test('defaults to false', () {
-      const settings = MemoryBookSettings();
+      const settings = PipelineSettings();
       expect(settings.postCleanerEnabled, isFalse);
     });
 
     test('can be set to true', () {
-      const settings = MemoryBookSettings(postCleanerEnabled: true);
+      const settings = PipelineSettings(postCleanerEnabled: true);
       expect(settings.postCleanerEnabled, isTrue);
     });
 
     test('independent from agenticWriteEnabled', () {
-      const settings = MemoryBookSettings(
+      const settings = PipelineSettings(
         postCleanerEnabled: true,
         agenticWriteEnabled: false,
       );

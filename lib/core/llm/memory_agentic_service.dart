@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
+import '../models/pipeline_settings.dart';
 import 'memory_agentic_policy.dart';
 import 'memory_agentic_tools.dart';
 import 'memory_selector.dart';
@@ -30,6 +31,7 @@ class MemoryAgenticService {
   /// Run the agentic memory loop. Returns selected entries + diagnostics.
   Future<MemoryAgenticResult> runAgentic({
     required MemoryBookSettings settings,
+    required PipelineSettings pipeline,
     required List<MemoryEntry> entries,
     required String currentText,
     required Set<String> visibleMessageIds,
@@ -57,7 +59,7 @@ class MemoryAgenticService {
 
     try {
       final llmOutcome = await _askLlmForSearchQuery(
-        settings: settings,
+        pipeline: pipeline,
         currentText: currentText,
         candidateTitles: fallbackSelection.allScores
             .where((s) => !s.excludedBySourceWindow && s.score > 0)
@@ -152,12 +154,12 @@ class MemoryAgenticService {
   }
 
   Future<_SearchLlmOutcome> _askLlmForSearchQuery({
-    required MemoryBookSettings settings,
+    required PipelineSettings pipeline,
     required String currentText,
     required List<String> candidateTitles,
     required CancelToken cancelToken,
   }) async {
-    final config = await _llm.resolveConfig(settings, errorLabel: 'agentic mode');
+    final config = await _llm.resolveConfig(pipeline, errorLabel: 'agentic mode');
 
     final candidatesBlock = candidateTitles.isEmpty
         ? '(no candidates from deterministic retrieval)'
@@ -184,7 +186,7 @@ Respond with ONLY the JSON object, no markdown or explanation.''';
       prompt: prompt,
       maxTokens: 200,
       temperature: 0.1,
-      timeoutMs: settings.sidecarTimeoutMs,
+      timeoutMs: pipeline.sidecarTimeoutMs,
       cancelToken: cancelToken,
     );
     if (!outcome.isOk || outcome.text == null) {

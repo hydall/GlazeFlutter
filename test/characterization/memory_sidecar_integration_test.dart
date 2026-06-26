@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/llm/memory_sidecar_reranker_service.dart';
 import 'package:glaze_flutter/core/llm/memory_selector.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 
 void main() {
   group('MemorySidecarRerankerService integration (Track 1)', () {
@@ -10,7 +11,7 @@ void main() {
       final service = MemorySidecarRerankerService((_, _) async => '{}');
       final fallback = const MemorySelection();
       final result = await service.rerank(MemorySidecarRequest(
-        settings: const MemoryBookSettings(sidecarEnabled: false),
+        settings: const PipelineSettings(sidecarEnabled: false),
         candidates: const [],
         fallbackSelection: fallback,
         maxInjectedEntries: 5,
@@ -34,7 +35,7 @@ void main() {
 ''';
       final service = MemorySidecarRerankerService((_, _) async => json);
       final result = await service.rerank(MemorySidecarRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           sidecarEnabled: true,
           sidecarTimeoutMs: 5000,
         ),
@@ -52,7 +53,7 @@ void main() {
       final service =
           MemorySidecarRerankerService((_, _) async => 'not json');
       final result = await service.rerank(MemorySidecarRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           sidecarEnabled: true,
           sidecarTimeoutMs: 5000,
         ),
@@ -71,7 +72,7 @@ void main() {
         return '{}';
       });
       final result = await service.rerank(MemorySidecarRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           sidecarEnabled: true,
           sidecarTimeoutMs: 50,
         ),
@@ -87,7 +88,7 @@ void main() {
       const json = '{"selectedEntryIds": [], "selectedReasons": {}, "rejectedReasons": {}}';
       final service = MemorySidecarRerankerService((_, _) async => json);
       final result = await service.rerank(MemorySidecarRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           sidecarEnabled: true,
           sidecarTimeoutMs: 5000,
         ),

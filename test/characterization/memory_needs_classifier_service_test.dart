@@ -1,10 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/llm/memory_needs_classifier_service.dart';
-import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 
 void main() {
-  const enabledSettings = MemoryBookSettings(
+  const enabledSettings = PipelineSettings(
     classifierEnabled: true,
     classifierTimeoutMs: 50,
   );
@@ -18,7 +18,7 @@ void main() {
 
     final result = await service.classify(
       const MemoryClassifierRequest(
-        settings: MemoryBookSettings(classifierEnabled: false),
+        settings: PipelineSettings(classifierEnabled: false),
         currentText: 'remember?',
       ),
     );

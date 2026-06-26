@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
+import '../models/pipeline_settings.dart';
 import 'memory_selector.dart';
 import 'memory_sidecar_http_client.dart';
 
@@ -15,7 +16,7 @@ typedef MemorySidecarTextClient =
     );
 
 class MemorySidecarRequest {
-  final MemoryBookSettings settings;
+  final PipelineSettings settings;
   final List<MemoryCandidateScore> candidates;
   final MemorySelection fallbackSelection;
   final Set<String> visibleMessageIds;

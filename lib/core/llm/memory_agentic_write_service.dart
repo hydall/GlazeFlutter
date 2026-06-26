@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
+import '../models/pipeline_settings.dart';
 import '../models/tracker.dart';
 import '../state/db_provider.dart';
 import '../utils/id_generator.dart';
@@ -37,7 +38,7 @@ class MemoryAgenticWriteService {
   /// Never throws — errors are captured in the result.
   Future<MemoryWriteLoopResult> runWriteLoop({
     required String sessionId,
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
     required String recentHistoryText,
     required List<Tracker> currentTrackers,
     CancelToken? cancelToken,
@@ -151,7 +152,7 @@ class MemoryAgenticWriteService {
 
   Future<_LlmOutcome> _askLlmForWrites({
     required SidecarApiConfig config,
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
     required String recentHistoryText,
     required List<Tracker> currentTrackers,
     required CancelToken cancelToken,

@@ -8,8 +8,11 @@ import '../../../core/llm/lorebook_providers.dart';
 import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/models/memory_book.dart';
+import '../../../core/models/pipeline_settings.dart';
+import '../../../core/models/pipeline_global_settings.dart';
 import '../../../core/state/memory_book_ops_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
+import '../../../core/state/pipeline_settings_provider.dart';
 import '../../chat/chat_provider.dart';
 import '../../chat/memory_draft_generator.dart';
 import '../../settings/api_list_provider.dart';
@@ -40,6 +43,47 @@ class MemoryBookController {
 
   MemoryGlobalSettings get globalSettings =>
       _ref.read(memoryGlobalSettingsProvider);
+
+  PipelineGlobalSettings get pipelineGlobalSettings =>
+      _ref.read(pipelineGlobalSettingsProvider);
+
+  /// Builds a per-session [PipelineSettings] from the global pipeline defaults.
+  /// Used when generating memory drafts (no per-session pipeline row exists in
+  /// the controller flow — drafts use the global pipeline config).
+  PipelineSettings globalPipelineAsPipeline() {
+    final g = pipelineGlobalSettings;
+    return PipelineSettings(
+      generationSource: g.generationSource,
+      generationModel: g.generationModel,
+      generationEndpoint: g.generationEndpoint,
+      generationApiKey: g.generationApiKey,
+      generationTemperature: g.generationTemperature,
+      generationMaxTokens: g.generationMaxTokens,
+      classifierEnabled: g.classifierEnabled,
+      classifierSource: g.classifierSource,
+      classifierModel: g.classifierModel,
+      classifierEndpoint: g.classifierEndpoint,
+      classifierApiKey: g.classifierApiKey,
+      classifierTimeoutMs: g.classifierTimeoutMs,
+      sidecarEnabled: g.sidecarEnabled,
+      sidecarSource: g.sidecarSource,
+      sidecarModel: g.sidecarModel,
+      sidecarEndpoint: g.sidecarEndpoint,
+      sidecarApiKey: g.sidecarApiKey,
+      sidecarTimeoutMs: g.sidecarTimeoutMs,
+      agenticWriteEnabled: g.agenticWriteEnabled,
+      postCleanerEnabled: g.postCleanerEnabled,
+      postCleanerTemperature: g.postCleanerTemperature,
+      postCleanerMaxTokens: g.postCleanerMaxTokens,
+      consolidationEnabled: g.consolidationEnabled,
+      consolidationThreshold: g.consolidationThreshold,
+      consolidationSource: g.consolidationSource,
+      consolidationModel: g.consolidationModel,
+      consolidationEndpoint: g.consolidationEndpoint,
+      consolidationApiKey: g.consolidationApiKey,
+      consolidationTimeoutMs: g.consolidationTimeoutMs,
+    );
+  }
 
   Future<void> load() async {
     _book = await _ref.read(memoryBookOpsProvider).ensureForSession(_sessionId);
@@ -74,12 +118,6 @@ class MemoryBookController {
       batchSize: g.batchSize,
       vectorSearchEnabled: g.vectorSearchEnabled,
       keyMatchMode: g.keyMatchMode,
-      generationSource: g.generationSource,
-      generationModel: g.generationModel,
-      generationEndpoint: g.generationEndpoint,
-      generationApiKey: g.generationApiKey,
-      generationTemperature: g.generationTemperature,
-      generationMaxTokens: g.generationMaxTokens,
       promptPreset: g.promptPreset,
       diversityAware: g.diversityAware,
       diversityPenalty: g.diversityPenalty,
@@ -89,18 +127,6 @@ class MemoryBookController {
       importanceWeight: g.importanceWeight,
       sourceWindowExclusion: g.sourceWindowExclusion,
       factualContinuityGuardEnabled: g.factualContinuityGuardEnabled,
-      classifierEnabled: g.classifierEnabled,
-      classifierSource: g.classifierSource,
-      classifierModel: g.classifierModel,
-      classifierEndpoint: g.classifierEndpoint,
-      classifierApiKey: g.classifierApiKey,
-      classifierTimeoutMs: g.classifierTimeoutMs,
-      sidecarEnabled: g.sidecarEnabled,
-      sidecarSource: g.sidecarSource,
-      sidecarModel: g.sidecarModel,
-      sidecarEndpoint: g.sidecarEndpoint,
-      sidecarApiKey: g.sidecarApiKey,
-      sidecarTimeoutMs: g.sidecarTimeoutMs,
       queryIncludeAssistant: g.queryIncludeAssistant,
       queryRecentTurns: g.queryRecentTurns,
       queryMaxChars: g.queryMaxChars,
@@ -140,17 +166,18 @@ class MemoryBookController {
         ? 'memory_books_summary_auto_out'.tr()
         : '${s.maxInjectedTokens} memory tokens';
     final batchSize = s.batchSize;
+    final pg = pipelineGlobalSettings;
     final outTokens =
-        (s.generationMaxTokens != null && s.generationMaxTokens! > 0)
-        ? '${s.generationMaxTokens} out'
+        (pg.generationMaxTokens != null && pg.generationMaxTokens! > 0)
+        ? '${pg.generationMaxTokens} out'
         : 'memory_books_summary_auto_out'.tr();
     return '$mode • $interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget • $packing • ${s.memoryExcerptChunksPerEntry}x${s.memoryExcerptTokensPerChunk} chunks';
   }
 
   String get searchModelLabel {
-    final s = globalSettings;
-    return s.generationModel.isNotEmpty
-        ? s.generationModel
+    final pg = pipelineGlobalSettings;
+    return pg.generationModel.isNotEmpty
+        ? pg.generationModel
         : 'memory_books_current_llm_model'.tr();
   }
 
@@ -268,6 +295,7 @@ class MemoryBookController {
       final result = await generator.generate(
         draft: draft,
         settings: globalSettingsAsBookSettings(),
+        pipeline: globalPipelineAsPipeline(),
         historyText: historyText,
         cancelToken: cancelToken,
       );
@@ -429,14 +457,6 @@ class MemoryBookController {
       vectorSearchEnabled: newSettings.vectorSearchEnabled,
       vectorThreshold: vectorThreshold,
       keyMatchMode: newSettings.keyMatchMode,
-      generationSource: newSettings.generationSource,
-      generationModel: newSettings.generationModel,
-      generationUseCurrentModelOverride:
-          currentGlobal.generationUseCurrentModelOverride,
-      generationEndpoint: newSettings.generationEndpoint,
-      generationApiKey: newSettings.generationApiKey,
-      generationTemperature: newSettings.generationTemperature,
-      generationMaxTokens: newSettings.generationMaxTokens,
       promptPreset: newSettings.promptPreset,
       diversityAware: newSettings.diversityAware,
       diversityPenalty: newSettings.diversityPenalty,
@@ -446,21 +466,12 @@ class MemoryBookController {
       importanceWeight: newSettings.importanceWeight,
       sourceWindowExclusion: newSettings.sourceWindowExclusion,
       factualContinuityGuardEnabled: newSettings.factualContinuityGuardEnabled,
-      classifierEnabled: newSettings.classifierEnabled,
-      classifierSource: newSettings.classifierSource,
-      classifierModel: newSettings.classifierModel,
-      classifierEndpoint: newSettings.classifierEndpoint,
-      classifierApiKey: newSettings.classifierApiKey,
-      classifierTimeoutMs: newSettings.classifierTimeoutMs,
-      sidecarEnabled: newSettings.sidecarEnabled,
-      sidecarSource: newSettings.sidecarSource,
-      sidecarModel: newSettings.sidecarModel,
-      sidecarEndpoint: newSettings.sidecarEndpoint,
-      sidecarApiKey: newSettings.sidecarApiKey,
-      sidecarTimeoutMs: newSettings.sidecarTimeoutMs,
       queryIncludeAssistant: newSettings.queryIncludeAssistant,
       queryRecentTurns: newSettings.queryRecentTurns,
       queryMaxChars: newSettings.queryMaxChars,
+      cadenceInterval: newSettings.cadenceInterval,
+      consolidationEnabled: newSettings.consolidationEnabled,
+      consolidationThreshold: newSettings.consolidationThreshold,
       customPrompts: currentGlobal.customPrompts,
     );
     await _ref.read(memoryGlobalSettingsProvider.notifier).save(newGlobal);

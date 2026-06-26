@@ -1,11 +1,10 @@
-import 'package:easy_localization/easy_localization.dart';
+﻿import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/studio_request_preset.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
-import '../../../core/models/memory_book.dart';
 import '../../../core/models/preset.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/state/active_selection_provider.dart';
@@ -54,10 +53,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   String _bulkAgentMaxTokens = '';
   List<StudioPresetOverride> _studioPresetOverrides = const [];
   String _builderPromptTemplate = '';
-  bool _agenticWriteEnabled = false;
   String _routingMode = 'verbatim';
-  String _sidecarModel = '';
-  int _sidecarTimeoutMs = 60000;
   bool _loading = true;
   bool _building = false;
   final Set<String> _regeneratingAgentIds = {};
@@ -78,10 +74,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           .getBySessionId(widget.sessionId);
       final profiles = await ref.read(studioConfigRepoProvider).getProfiles();
       final contextInfo = await _loadContextInfo(config: config);
-      // Load MemoryBook settings for agentic features.
-      final book = await ref
-          .read(memoryBookRepoProvider)
-          .getBySessionId(widget.sessionId);
       if (mounted) {
         setState(() {
           _config = config;
@@ -95,9 +87,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           _seedBulkAgentControls(config, contextInfo);
           _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
           _builderPromptTemplate = config?.builderPromptTemplate ?? '';
-          _agenticWriteEnabled = book?.settings.agenticWriteEnabled ?? false;
-          _sidecarModel = book?.settings.sidecarModel ?? '';
-          _sidecarTimeoutMs = book?.settings.sidecarTimeoutMs ?? 60000;
           _routingMode = config?.routingMode ?? 'verbatim';
           _loading = false;
         });
@@ -563,12 +552,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildContextInfoCard(),
-              const SizedBox(height: 12),
-              // Agentic memory works independently of Studio decomposition,
-              // so expose its toggles here before Studio is built. The preset
-              // routing mode lives in StudioConfig, so it's omitted until a
-              // config exists (shown in the agent list card instead).
-              _buildStandaloneAgenticCard(),
               const SizedBox(height: 24),
               Icon(
                 Icons.movie_filter_outlined,
@@ -738,7 +721,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
           ],
         ),
         subtitle: const Text(
-          'Builder prompt, agent bulk edits, routing, and sidecar settings.',
+          'Builder prompt, agent bulk edits, and routing mode.',
           style: TextStyle(fontSize: 11),
         ),
         childrenPadding: const EdgeInsets.only(top: 4),
@@ -767,9 +750,32 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
             const SizedBox(height: 12),
             _finalHistoryLimitField(),
             const SizedBox(height: 8),
-            _buildAgenticAdvancedSection(includeRoutingMode: true),
+            _buildRoutingModeTile(),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildRoutingModeTile() {
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Preset routing mode'),
+      subtitle: const Text(
+        'Verbatim = blocks go to agents as-is (no LLM). '
+        'Compiled = LLM digests blocks into instructions.',
+      ),
+      trailing: DropdownButton<String>(
+        value: _routingMode,
+        items: const [
+          DropdownMenuItem(value: 'verbatim', child: Text('Verbatim')),
+          DropdownMenuItem(value: 'compiled', child: Text('Compiled')),
+        ],
+        onChanged: (v) async {
+          if (v == null || v == _routingMode) return;
+          await _saveRoutingMode(v);
+        },
       ),
     );
   }
@@ -838,260 +844,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
     await ref.read(studioConfigRepoProvider).upsert(updated);
     if (mounted) setState(() => _config = updated);
-  }
-
-  /// Standalone card shown in the empty state (before Studio is built), so
-  /// agentic memory can be toggled without building Studio first. Mirrors the
-  /// styling of [_buildContextInfoCard] for visual consistency.
-  Widget _buildStandaloneAgenticCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: context.cs.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      child: _buildAgenticAdvancedSection(includeRoutingMode: false),
-    );
-  }
-
-  Widget _buildAgenticAdvancedSection({required bool includeRoutingMode}) {
-    // Wrap in a transparent Material so ListTile ink splashes render correctly
-    // even when this section is placed inside a DecoratedBox (Container with
-    // background color) — otherwise the intermediate background hides them.
-    return Material(
-      type: MaterialType.transparency,
-      child: ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: Row(
-        children: [
-          Icon(Icons.psychology_outlined, size: 20, color: context.cs.primary),
-          const SizedBox(width: 8),
-          Text(
-            'Agentic memory (advanced)',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: context.cs.onSurface,
-            ),
-          ),
-        ],
-      ),
-      subtitle: const Text(
-        'Memory agent writes trackers + drafts.',
-        style: TextStyle(fontSize: 11),
-      ),
-      children: [
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Write-loop (trackers + memory drafts)'),
-          subtitle: const Text(
-            'After each accepted turn, the memory agent writes '
-            'lightweight trackers and pending memory drafts.',
-          ),
-          value: _agenticWriteEnabled,
-          onChanged: (v) async {
-            await _saveMemoryBookSetting(
-              (s) => s.copyWith(agenticWriteEnabled: v),
-            );
-            if (mounted) setState(() => _agenticWriteEnabled = v);
-          },
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: _buildSidecarModelSelector(),
-        ),
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Agent timeout'),
-          subtitle: Text(
-            '${(_sidecarTimeoutMs / 1000).toStringAsFixed(0)}s — how long to '
-            'wait for the sidecar agent before giving up.',
-          ),
-          trailing: const Icon(Icons.edit_outlined, size: 18),
-          onTap: _showSidecarTimeoutDialog,
-        ),
-        if (includeRoutingMode)
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Preset routing mode'),
-            subtitle: const Text(
-              'Verbatim = blocks go to agents as-is (no LLM). '
-              'Compiled = LLM digests blocks into instructions.',
-            ),
-            trailing: DropdownButton<String>(
-              value: _routingMode,
-              items: const [
-                DropdownMenuItem(
-                  value: 'verbatim',
-                  child: Text('Verbatim'),
-                ),
-                DropdownMenuItem(
-                  value: 'compiled',
-                  child: Text('Compiled'),
-                ),
-              ],
-              onChanged: (v) async {
-                if (v == null || v == _routingMode) return;
-                await _saveRoutingMode(v);
-                if (mounted) setState(() => _routingMode = v);
-              },
-            ),
-          ),
-      ],
-      ),
-    );
-  }
-
-  Future<void> _saveMemoryBookSetting(
-    MemoryBookSettings Function(MemoryBookSettings) mutator,
-  ) async {
-    final repo = ref.read(memoryBookRepoProvider);
-    // Use ensureForSession (not getBySessionId): on the empty Studio screen the
-    // MemoryBook row may not exist yet. updateSettings is a bare UPDATE and
-    // silently no-ops on a missing row, so the toggle would not persist.
-    final book = await repo.ensureForSession(widget.sessionId);
-    final updated = mutator(book.settings);
-    await repo.updateSettings(widget.sessionId, updated);
-  }
-
-  /// Dropdown model selector for the agentic sidecar (write-loop +
-  /// POST-cleaner). The sidecar reuses the chat Run API config's endpoint/key
-  /// (sidecarSource='current'), so we fetch that provider's model list. An
-  /// empty selection falls back to the chat model — recommended for a cheaper
-  /// /faster agent model while the writer keeps the premium model.
-  Widget _buildSidecarModelSelector() {
-    final config = _contextInfo.runApiConfig;
-    if (config == null) {
-      return const Text(
-        'No chat API config available for the agent.',
-        style: TextStyle(fontSize: 12),
-      );
-    }
-    final fetched = _modelsByApiConfigId[config.id] ?? const <String>[];
-    final models = <String>{
-      ...fetched,
-      if (_sidecarModel.isNotEmpty && !fetched.contains(_sidecarModel))
-        _sidecarModel,
-    }.toList()
-      ..sort();
-    final isFetching = _fetchingModelConfigIds.contains(config.id);
-    // '' represents "use chat model" (sidecarModel empty).
-    final selected = _sidecarModel.isEmpty ? '' : _sidecarModel;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            initialValue: models.contains(selected) || selected.isEmpty
-                ? selected
-                : null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Agent model (sidecar)',
-              helperText: 'Empty = use chat model. A cheaper/faster model is '
-                  'recommended for trackers + cleaner.',
-              helperMaxLines: 2,
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: [
-              const DropdownMenuItem<String>(
-                value: '',
-                child: Text('(use chat model)'),
-              ),
-              ...models.map(
-                (m) => DropdownMenuItem<String>(
-                  value: m,
-                  child: Text(m, overflow: TextOverflow.ellipsis),
-                ),
-              ),
-            ],
-            onChanged: (m) async {
-              await _saveMemoryBookSetting(
-                (s) => s.copyWith(sidecarModel: m ?? ''),
-              );
-              if (mounted) setState(() => _sidecarModel = m ?? '');
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: IconButton.filledTonal(
-            tooltip: 'Fetch models',
-            onPressed: isFetching ? null : () => _fetchProviderModels(config),
-            icon: isFetching
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh, size: 18),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _showSidecarTimeoutDialog() async {
-    final controller = TextEditingController(
-      text: (_sidecarTimeoutMs / 1000).toStringAsFixed(0),
-    );
-    final result = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Agent timeout'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Seconds to wait for the sidecar agent before giving up. '
-              'Slower/larger models need more time (30–90s is typical).',
-              style: TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                suffixText: 'seconds',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final seconds = int.tryParse(controller.text.trim());
-              if (seconds == null || seconds <= 0) {
-                Navigator.of(ctx).pop();
-                return;
-              }
-              Navigator.of(ctx).pop(seconds * 1000);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result == null) return;
-    await _saveMemoryBookSetting((s) => s.copyWith(sidecarTimeoutMs: result));
-    if (mounted) setState(() => _sidecarTimeoutMs = result);
   }
 
   Future<void> _saveRoutingMode(String mode) async {

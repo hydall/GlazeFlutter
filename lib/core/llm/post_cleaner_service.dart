@@ -9,7 +9,7 @@ import '../models/agent_operation_record.dart';
 import '../models/chat_message.dart';
 import '../models/character.dart';
 import '../models/persona.dart';
-import '../models/memory_book.dart';
+import '../models/pipeline_settings.dart';
 import '../state/db_provider.dart';
 import '../../features/chat/chat_session_service.dart';
 import '../../features/chat_history/chat_history_provider.dart';
@@ -50,7 +50,7 @@ class PostCleanerService {
   /// constraints.
   Future<PostCleanerResult> runCleaner({
     required String sessionId,
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
     required String assistantText,
     List<String> broadcastBlocks = const [],
     List<ChatMessage> recentMessages = const [],
@@ -172,7 +172,7 @@ class PostCleanerService {
 
   Future<SidecarCallOutcome> _askLlmForCleanedText({
     required SidecarApiConfig config,
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
     required String assistantText,
     List<String> broadcastBlocks = const [],
     List<ChatMessage> recentMessages = const [],
@@ -438,7 +438,7 @@ class PostCleanerService {
     String? arcContent,
     String? entitiesContent,
     List<ChatMessage> recentMessages = const [],
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
     CancelToken? cancelToken,
   }) async {
     if (assistantText.trim().isEmpty) return const [];

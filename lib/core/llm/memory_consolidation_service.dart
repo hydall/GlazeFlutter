@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../db/repositories/memory_consolidation_repo.dart';
 import '../models/memory_book.dart';
 import '../models/memory_graph.dart';
+import '../models/pipeline_settings.dart';
 import '../utils/time_helpers.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
@@ -26,7 +27,7 @@ class MemoryConsolidationService {
   Future<int> consolidateSession(
     String sessionId,
     List<MemoryEntry> entries, {
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
   }) async {
     if (!settings.consolidationEnabled) return 0;
 
@@ -167,7 +168,7 @@ class MemoryConsolidationService {
 
   Future<Map<String, dynamic>?> _callConsolidationLlm(
     List<MemoryEntry> entries, {
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
   }) async {
     final content = entries
         .map((e) => '--- ${e.title} ---\n${e.content}')
@@ -184,7 +185,7 @@ $content''';
 
   Future<Map<String, dynamic>?> _callArcLlm(
     List<MemoryConsolidation> tier1Summaries, {
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
   }) async {
     final content = tier1Summaries
         .map((c) => '--- $c.title ---\n${c.summary}')
@@ -201,7 +202,7 @@ $content''';
 
   Future<Map<String, dynamic>?> _callLlm(
     String prompt,
-    MemoryBookSettings settings,
+    PipelineSettings settings,
   ) async {
     final isCustom = settings.consolidationSource == 'custom';
     String endpoint;

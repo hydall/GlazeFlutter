@@ -6,6 +6,7 @@ import 'package:glaze_flutter/core/db/repositories/memory_consolidation_repo.dar
 import 'package:glaze_flutter/core/llm/memory_consolidation_service.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
 import 'package:glaze_flutter/core/models/memory_graph.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 
 void main() {
   late AppDatabase db;
@@ -29,7 +30,7 @@ void main() {
       final result = await service.consolidateSession(
         's1',
         entries,
-        settings: const MemoryBookSettings(consolidationEnabled: false),
+        settings: const PipelineSettings(consolidationEnabled: false),
       );
       expect(result, 0);
     });
@@ -42,7 +43,7 @@ void main() {
       final result = await service.consolidateSession(
         's1',
         entries,
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           consolidationEnabled: true,
           consolidationThreshold: 5,
         ),
@@ -62,7 +63,7 @@ void main() {
       await service.consolidateSession(
         's1',
         entries,
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           consolidationEnabled: true,
           consolidationThreshold: 5,
           consolidationSource: 'custom',

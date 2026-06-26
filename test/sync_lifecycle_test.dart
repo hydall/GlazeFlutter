@@ -2195,7 +2195,7 @@ void main() {
   );
 
   test(
-    'memory_book with local generationApiKey does not false-conflict on pull',
+    'memory_book with local device-specific fields does not false-conflict on pull',
     () async {
       final deviceA = SyncWorld();
       final cloudMb = makeMemoryBook('s1', updatedAt: 1000);
@@ -2211,9 +2211,7 @@ void main() {
       await deviceB.memoryBooks.put(
         cloudMb.copyWith(
           updatedAt: 999999,
-          settings: const MemoryBookSettings(
-            generationApiKey: 'sk-local-secret',
-          ),
+          lastProcessedMessageCount: 99,
         ),
       );
       await deviceB.chats.put(makeChat('s1', charId: 'char1'));
@@ -2239,8 +2237,9 @@ void main() {
         conflicts.where((c) => c.type == 'memory_book'),
         isEmpty,
         reason:
-            'Semantic memory_book hash ignores generation settings and '
-            'lastProcessedMessageCount',
+            'Semantic memory_book hash ignores device-local updatedAt and '
+            'lastProcessedMessageCount (generation LLM settings now live on '
+            'PipelineSettings, which is not synced)',
       );
     },
   );
