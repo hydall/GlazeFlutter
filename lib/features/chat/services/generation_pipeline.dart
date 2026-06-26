@@ -536,6 +536,39 @@ class GenerationPipeline {
         'memoriesWritten=${result.memoryResult?.written ?? 0} '
         'error=${result.error ?? "none"}',
       );
+
+      // Record the agentic write-loop in the operations log so the user
+      // can inspect retries (e.g. 502 → 200) from the Agentic Ops UI.
+      if (result.status != 'disabled' && result.attempts.isNotEmpty) {
+        final status = _agenticWriteStatusToOp(result.status);
+        final totalWritten = result.totalWritten;
+        ref.read(agentOperationsLogProvider.notifier).state = ref
+            .read(agentOperationsLogProvider)
+            .append(
+              AgentOperationRecord(
+                id:
+                    'agentic-write-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+                kind: AgentOperationKind.agenticWrite,
+                status: status,
+                sessionId: sessionId,
+                messageId: messages.isNotEmpty ? messages.last.id : null,
+                attempts: result.attempts,
+                totalElapsedMs: result.totalElapsedMs,
+                model: book.settings.sidecarModel.isEmpty
+                    ? null
+                    : book.settings.sidecarModel,
+                summary: status == AgentOperationStatus.ok
+                    ? (totalWritten > 0
+                        ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
+                        : 'no changes')
+                    : result.status,
+                startedAtMs: result.attempts.first.startedAtMs,
+                finishedAtMs: result.attempts.last.startedAtMs +
+                    result.attempts.last.elapsedMs,
+                canRegenerate: status.isFailure,
+              ),
+            );
+      }
     } catch (e) {
       debugPrint('[AgenticWrite] failed session=$sessionId error=$e');
     }
@@ -721,6 +754,19 @@ AgentOperationStatus _cleanerStatusToOp(String status) {
     'aborted' => AgentOperationStatus.aborted,
     'timeout' => AgentOperationStatus.timeout,
     'error' => AgentOperationStatus.error,
+    _ => AgentOperationStatus.error,
+  };
+}
+
+/// Maps a [MemoryWriteLoopResult] status string to the operations-log enum.
+AgentOperationStatus _agenticWriteStatusToOp(String status) {
+  return switch (status) {
+    'ok' => AgentOperationStatus.ok,
+    'disabled' => AgentOperationStatus.disabled,
+    'aborted' => AgentOperationStatus.aborted,
+    'timeout' => AgentOperationStatus.timeout,
+    'error' => AgentOperationStatus.httpError,
+    'invalid_output' => AgentOperationStatus.invalidOutput,
     _ => AgentOperationStatus.error,
   };
 }

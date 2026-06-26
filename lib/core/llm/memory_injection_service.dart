@@ -161,6 +161,9 @@ class MemoryInjectionService {
       String? sidecarStatus,
       int? sidecarLatencyMs,
       List<AgentOperationAttempt> sidecarAttempts = const [],
+      String? agenticStatus,
+      List<AgentOperationAttempt> agenticAttempts = const [],
+      int? agenticLatencyMs,
       bool prewarmHit = false,
     }) {
       sw.stop();
@@ -185,6 +188,9 @@ class MemoryInjectionService {
                 sidecarStatus: sidecarStatus,
                 sidecarLatencyMs: sidecarLatencyMs,
                 sidecarAttempts: sidecarAttempts,
+                agenticStatus: agenticStatus,
+                agenticAttempts: agenticAttempts,
+                agenticLatencyMs: agenticLatencyMs,
                 prewarmHit: prewarmHit,
               ),
       );
@@ -430,6 +436,9 @@ class MemoryInjectionService {
       sidecarStatus: sidecarResult?.status,
       sidecarLatencyMs: sidecarResult?.totalElapsedMs,
       sidecarAttempts: sidecarResult?.attempts ?? const [],
+      agenticStatus: agenticResult?.status,
+      agenticAttempts: agenticResult?.attempts ?? const [],
+      agenticLatencyMs: agenticResult?.totalElapsedMs,
       prewarmHit: prewarmHit,
     );
   }

@@ -4,9 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/db/repositories/tracker_repo.dart';
 import 'package:glaze_flutter/core/llm/memory_agentic_policy.dart';
+import 'package:glaze_flutter/core/models/agent_operation_record.dart';
 import 'package:glaze_flutter/core/llm/memory_agentic_service.dart';
 import 'package:glaze_flutter/core/llm/memory_agentic_tools.dart';
 import 'package:glaze_flutter/core/llm/memory_agentic_write_service.dart';
+import 'package:glaze_flutter/core/llm/memory_selector.dart';
 
 AppDatabase _testDb() => AppDatabase.forTesting(NativeDatabase.memory());
 
@@ -235,6 +237,46 @@ void main() {
     });
   });
 
+  group('MemoryAgenticResult', () {
+    test('disabled result has empty attempts', () {
+      const result = MemoryAgenticResult(
+        status: 'disabled',
+        selection: MemorySelection(),
+      );
+      expect(result.attempts, isEmpty);
+      expect(result.totalElapsedMs, 0);
+    });
+
+    test('carries attempts from LLM call for ops log', () {
+      final attempts = [
+        AgentOperationAttempt(
+          attempt: 1,
+          statusCode: 502,
+          status: 'http_5xx',
+          startedAtMs: 1000,
+          elapsedMs: 500,
+        ),
+        AgentOperationAttempt(
+          attempt: 2,
+          statusCode: 200,
+          status: 'ok',
+          startedAtMs: 2500,
+          elapsedMs: 800,
+        ),
+      ];
+      final result = MemoryAgenticResult(
+        status: 'ok',
+        selection: const MemorySelection(),
+        attempts: attempts,
+        totalElapsedMs: 1300,
+      );
+      expect(result.attempts.length, 2);
+      expect(result.attempts.first.statusCode, 502);
+      expect(result.attempts.last.statusCode, 200);
+      expect(result.totalElapsedMs, 1300);
+    });
+  });
+
   group('MemoryWriteLoopResult', () {
     test('disabled status has no writes', () {
       const result = MemoryWriteLoopResult(status: 'disabled');
@@ -250,6 +292,34 @@ void main() {
       );
       expect(result.totalWritten, 4);
       expect(result.anyWrites, isTrue);
+    });
+
+    test('carries attempts and totalElapsedMs for ops log', () {
+      final attempts = [
+        AgentOperationAttempt(
+          attempt: 1,
+          statusCode: 502,
+          status: 'http_5xx',
+          startedAtMs: 1000,
+          elapsedMs: 500,
+        ),
+        AgentOperationAttempt(
+          attempt: 2,
+          statusCode: 200,
+          status: 'ok',
+          startedAtMs: 2500,
+          elapsedMs: 800,
+        ),
+      ];
+      final result = MemoryWriteLoopResult(
+        status: 'ok',
+        attempts: attempts,
+        totalElapsedMs: 1300,
+      );
+      expect(result.attempts.length, 2);
+      expect(result.attempts.first.statusCode, 502);
+      expect(result.attempts.last.statusCode, 200);
+      expect(result.totalElapsedMs, 1300);
     });
   });
 }

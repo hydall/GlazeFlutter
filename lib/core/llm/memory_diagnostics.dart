@@ -135,6 +135,9 @@ class MemoryDiagnostics {
   final String? sidecarStatus;
   final int? sidecarLatencyMs;
   final List<AgentOperationAttempt> sidecarAttempts;
+  final String? agenticStatus;
+  final int? agenticLatencyMs;
+  final List<AgentOperationAttempt> agenticAttempts;
   final bool prewarmHit;
 
   const MemoryDiagnostics({
@@ -161,6 +164,9 @@ class MemoryDiagnostics {
     this.sidecarStatus,
     this.sidecarLatencyMs,
     this.sidecarAttempts = const [],
+    this.agenticStatus,
+    this.agenticLatencyMs,
+    this.agenticAttempts = const [],
     this.prewarmHit = false,
   });
 
@@ -182,6 +188,9 @@ class MemoryDiagnostics {
     String? sidecarStatus,
     int? sidecarLatencyMs,
     List<AgentOperationAttempt> sidecarAttempts = const [],
+    String? agenticStatus,
+    List<AgentOperationAttempt> agenticAttempts = const [],
+    int? agenticLatencyMs,
     bool prewarmHit = false,
   }) {
     final selectedIds = (excerptSelection?.entries ?? selection.entries)
@@ -291,6 +300,9 @@ class MemoryDiagnostics {
       sidecarStatus: sidecarStatus,
       sidecarLatencyMs: sidecarLatencyMs,
       sidecarAttempts: sidecarAttempts,
+      agenticStatus: agenticStatus,
+      agenticLatencyMs: agenticLatencyMs,
+      agenticAttempts: agenticAttempts,
       prewarmHit: prewarmHit,
     );
   }
@@ -322,6 +334,10 @@ class MemoryDiagnostics {
     if (sidecarLatencyMs != null) 'sidecarLatencyMs': sidecarLatencyMs,
     if (sidecarAttempts.isNotEmpty)
       'sidecarAttempts': sidecarAttempts.map((a) => a.toJson()).toList(),
+    if (agenticStatus != null) 'agenticStatus': agenticStatus,
+    if (agenticLatencyMs != null) 'agenticLatencyMs': agenticLatencyMs,
+    if (agenticAttempts.isNotEmpty)
+      'agenticAttempts': agenticAttempts.map((a) => a.toJson()).toList(),
     'prewarmHit': prewarmHit,
     'candidates': candidates.map((c) => c.toJson()).toList(),
   };

@@ -626,39 +626,91 @@ class StreamGenerationService {
     String? messageId,
     Map<String, dynamic> diagnostics,
   ) {
+    // Memory sidecar (reranker) operation.
     final sidecarStatus = diagnostics['sidecarStatus'] as String?;
-    if (sidecarStatus == null || sidecarStatus == 'disabled') return;
-    final rawAttempts = diagnostics['sidecarAttempts'];
-    if (rawAttempts is! List) return;
-    final attempts = rawAttempts
-        .whereType<Map<dynamic, dynamic>>()
-        .map((e) => AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
-    if (attempts.isEmpty) return;
-    final status = _sidecarStatusToOp(sidecarStatus);
+    if (sidecarStatus != null && sidecarStatus != 'disabled') {
+      final rawAttempts = diagnostics['sidecarAttempts'];
+      if (rawAttempts is List) {
+        final attempts = rawAttempts
+            .whereType<Map<dynamic, dynamic>>()
+            .map((e) => AgentOperationAttempt.fromJson(
+                  Map<String, dynamic>.from(e),
+                ))
+            .toList();
+        if (attempts.isNotEmpty) {
+          final status = _sidecarStatusToOp(sidecarStatus);
+          _appendOperation(
+            AgentOperationRecord(
+              id:
+                  'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+              kind: AgentOperationKind.memorySidecar,
+              status: status,
+              sessionId: sessionId,
+              messageId: messageId,
+              attempts: attempts,
+              totalElapsedMs: attempts.fold(
+                0,
+                (sum, a) => sum + a.elapsedMs,
+              ),
+              summary: status == AgentOperationStatus.ok
+                  ? 'reranked ${diagnostics['selectedCount'] ?? 0} entries'
+                  : sidecarStatus,
+              startedAtMs: attempts.first.startedAtMs,
+              finishedAtMs:
+                  attempts.last.startedAtMs + attempts.last.elapsedMs,
+              canRegenerate: status.isFailure,
+            ),
+          );
+        }
+      }
+    }
+
+    // Agentic search (searchMemory tool) operation.
+    final agenticStatus = diagnostics['agenticStatus'] as String?;
+    if (agenticStatus != null &&
+        agenticStatus != 'disabled' &&
+        agenticStatus != 'aborted') {
+      final rawAttempts = diagnostics['agenticAttempts'];
+      if (rawAttempts is List) {
+        final attempts = rawAttempts
+            .whereType<Map<dynamic, dynamic>>()
+            .map((e) => AgentOperationAttempt.fromJson(
+                  Map<String, dynamic>.from(e),
+                ))
+            .toList();
+        if (attempts.isNotEmpty) {
+          final status = _sidecarStatusToOp(agenticStatus);
+          _appendOperation(
+            AgentOperationRecord(
+              id:
+                  'agentic-search-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+              kind: AgentOperationKind.agenticSearch,
+              status: status,
+              sessionId: sessionId,
+              messageId: messageId,
+              attempts: attempts,
+              totalElapsedMs: attempts.fold(
+                0,
+                (sum, a) => sum + a.elapsedMs,
+              ),
+              summary: status == AgentOperationStatus.ok
+                  ? 'agentic search'
+                  : agenticStatus,
+              startedAtMs: attempts.first.startedAtMs,
+              finishedAtMs:
+                  attempts.last.startedAtMs + attempts.last.elapsedMs,
+              canRegenerate: status.isFailure,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  void _appendOperation(AgentOperationRecord record) {
     _ref.read(agentOperationsLogProvider.notifier).state = _ref
         .read(agentOperationsLogProvider)
-        .append(
-          AgentOperationRecord(
-            id:
-                'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
-            kind: AgentOperationKind.memorySidecar,
-            status: status,
-            sessionId: sessionId,
-            messageId: messageId,
-            attempts: attempts,
-            totalElapsedMs: attempts.fold(
-              0,
-              (sum, a) => sum + a.elapsedMs,
-            ),
-            summary: status == AgentOperationStatus.ok
-                ? 'reranked ${diagnostics['selectedCount'] ?? 0} entries'
-                : sidecarStatus,
-            startedAtMs: attempts.first.startedAtMs,
-            finishedAtMs: attempts.last.startedAtMs + attempts.last.elapsedMs,
-            canRegenerate: status.isFailure,
-          ),
-        );
+        .append(record);
   }
 
   static AgentOperationStatus _sidecarStatusToOp(String status) {

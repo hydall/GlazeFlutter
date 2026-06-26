@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/tracker.dart';
 import '../state/db_provider.dart';
@@ -56,7 +57,7 @@ class MemoryAgenticWriteService {
         return const MemoryWriteLoopResult(status: 'aborted');
       }
 
-      final response = await _askLlmForWrites(
+      final llmOutcome = await _askLlmForWrites(
         config: config,
         settings: settings,
         recentHistoryText: recentHistoryText,
@@ -65,14 +66,23 @@ class MemoryAgenticWriteService {
       );
 
       if (token.isCancelled) {
-        return const MemoryWriteLoopResult(status: 'aborted');
+        return MemoryWriteLoopResult(
+          status: 'aborted',
+          attempts: llmOutcome.attempts,
+          totalElapsedMs: llmOutcome.totalElapsedMs,
+        );
       }
+      final response = llmOutcome.response;
       if (response == null) {
         debugPrint(
           '[AgenticWrite] LLM returned null/unparseable response '
           '(model=${config.model})',
         );
-        return const MemoryWriteLoopResult(status: 'ok');
+        return MemoryWriteLoopResult(
+          status: 'ok',
+          attempts: llmOutcome.attempts,
+          totalElapsedMs: llmOutcome.totalElapsedMs,
+        );
       }
 
       debugPrint(
@@ -99,6 +109,8 @@ class MemoryAgenticWriteService {
         return MemoryWriteLoopResult(
           status: 'aborted',
           trackerResult: trackerResult,
+          attempts: llmOutcome.attempts,
+          totalElapsedMs: llmOutcome.totalElapsedMs,
         );
       }
 
@@ -112,6 +124,8 @@ class MemoryAgenticWriteService {
         status: 'ok',
         trackerResult: trackerResult,
         memoryResult: memoryResult,
+        attempts: llmOutcome.attempts,
+        totalElapsedMs: llmOutcome.totalElapsedMs,
       );
     } on TimeoutException {
       return const MemoryWriteLoopResult(status: 'timeout');
@@ -124,7 +138,7 @@ class MemoryAgenticWriteService {
     }
   }
 
-  Future<_WriteLoopResponse?> _askLlmForWrites({
+  Future<_LlmOutcome> _askLlmForWrites({
     required SidecarApiConfig config,
     required MemoryBookSettings settings,
     required String recentHistoryText,
@@ -166,7 +180,7 @@ Rules:
 - Keep tracker values short (1-5 words).
 - Memory content should be 1-3 sentences describing what happened and why it matters.''';
 
-    final raw = await _llm.callOnce(
+    final outcome = await _llm.callOnceWithLog(
       config: config,
       prompt: prompt,
       maxTokens: 1000,
@@ -174,39 +188,57 @@ Rules:
       timeoutMs: settings.sidecarTimeoutMs,
       cancelToken: cancelToken,
     );
-
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) return null;
-
-    final trackerRequests = <TrackerWriteRequest>[];
-    final trackerRaw = decoded['trackers'];
-    if (trackerRaw is List) {
-      for (final item in trackerRaw) {
-        if (item is Map<String, dynamic>) {
-          final req = TrackerWriteRequest.fromJson(item);
-          if (req.name.isNotEmpty && req.value.isNotEmpty) {
-            trackerRequests.add(req);
+    if (!outcome.isOk || outcome.text == null) {
+      return _LlmOutcome(
+        response: null,
+        attempts: outcome.attempts,
+        totalElapsedMs: outcome.totalElapsedMs,
+      );
+    }
+    _WriteLoopResponse? response;
+    try {
+      final decoded = jsonDecode(outcome.text!);
+      if (decoded is! Map<String, dynamic>) {
+        response = null;
+      } else {
+        final trackerRequests = <TrackerWriteRequest>[];
+        final trackerRaw = decoded['trackers'];
+        if (trackerRaw is List) {
+          for (final item in trackerRaw) {
+            if (item is Map<String, dynamic>) {
+              final req = TrackerWriteRequest.fromJson(item);
+              if (req.name.isNotEmpty && req.value.isNotEmpty) {
+                trackerRequests.add(req);
+              }
+            }
           }
         }
-      }
-    }
 
-    final memoryRequests = <MemoryWriteRequest>[];
-    final memoryRaw = decoded['memories'];
-    if (memoryRaw is List) {
-      for (final item in memoryRaw) {
-        if (item is Map<String, dynamic>) {
-          final req = MemoryWriteRequest.fromJson(item);
-          if (req.title.isNotEmpty && req.content.isNotEmpty) {
-            memoryRequests.add(req);
+        final memoryRequests = <MemoryWriteRequest>[];
+        final memoryRaw = decoded['memories'];
+        if (memoryRaw is List) {
+          for (final item in memoryRaw) {
+            if (item is Map<String, dynamic>) {
+              final req = MemoryWriteRequest.fromJson(item);
+              if (req.title.isNotEmpty && req.content.isNotEmpty) {
+                memoryRequests.add(req);
+              }
+            }
           }
         }
-      }
-    }
 
-    return _WriteLoopResponse(
-      trackerRequests: trackerRequests,
-      memoryRequests: memoryRequests,
+        response = _WriteLoopResponse(
+          trackerRequests: trackerRequests,
+          memoryRequests: memoryRequests,
+        );
+      }
+    } catch (_) {
+      response = null;
+    }
+    return _LlmOutcome(
+      response: response,
+      attempts: outcome.attempts,
+      totalElapsedMs: outcome.totalElapsedMs,
     );
   }
 
@@ -313,17 +345,33 @@ class _WriteLoopResponse {
   });
 }
 
+class _LlmOutcome {
+  final _WriteLoopResponse? response;
+  final List<AgentOperationAttempt> attempts;
+  final int totalElapsedMs;
+
+  const _LlmOutcome({
+    this.response,
+    this.attempts = const [],
+    this.totalElapsedMs = 0,
+  });
+}
+
 class MemoryWriteLoopResult {
   final String status;
   final TrackerWriteResult? trackerResult;
   final MemoryWriteResult? memoryResult;
   final String? error;
+  final List<AgentOperationAttempt> attempts;
+  final int totalElapsedMs;
 
   const MemoryWriteLoopResult({
     this.status = 'ok',
     this.trackerResult,
     this.memoryResult,
     this.error,
+    this.attempts = const [],
+    this.totalElapsedMs = 0,
   });
 
   int get totalWritten =>

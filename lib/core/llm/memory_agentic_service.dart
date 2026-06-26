@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import 'memory_agentic_policy.dart';
 import 'memory_agentic_tools.dart';
@@ -60,7 +61,7 @@ class MemoryAgenticService {
     }
 
     try {
-      final searchQuery = await _askLlmForSearchQuery(
+      final llmOutcome = await _askLlmForSearchQuery(
         settings: settings,
         currentText: currentText,
         candidateTitles: fallbackSelection.allScores
@@ -70,11 +71,14 @@ class MemoryAgenticService {
         cancelToken: token,
       );
 
+      final searchQuery = llmOutcome.searchQuery;
       if (searchQuery == null || searchQuery.isEmpty) {
         return MemoryAgenticResult(
           status: 'ok',
           selection: fallbackSelection,
           searchQuery: searchQuery,
+          attempts: llmOutcome.attempts,
+          totalElapsedMs: llmOutcome.totalElapsedMs,
         );
       }
 
@@ -94,6 +98,8 @@ class MemoryAgenticService {
           selection: fallbackSelection,
           searchQuery: searchQuery,
           searchResult: result,
+          attempts: llmOutcome.attempts,
+          totalElapsedMs: llmOutcome.totalElapsedMs,
         );
       }
 
@@ -126,6 +132,8 @@ class MemoryAgenticService {
         selection: selection,
         searchQuery: searchQuery,
         searchResult: result,
+        attempts: llmOutcome.attempts,
+        totalElapsedMs: llmOutcome.totalElapsedMs,
       );
     } on TimeoutException {
       return MemoryAgenticResult(
@@ -148,7 +156,7 @@ class MemoryAgenticService {
     }
   }
 
-  Future<String?> _askLlmForSearchQuery({
+  Future<_SearchLlmOutcome> _askLlmForSearchQuery({
     required MemoryBookSettings settings,
     required String currentText,
     required List<String> candidateTitles,
@@ -176,7 +184,7 @@ If the deterministic candidates are sufficient or no old context is needed, resp
 
 Respond with ONLY the JSON object, no markdown or explanation.''';
 
-    final raw = await _llm.callOnce(
+    final outcome = await _llm.callOnceWithLog(
       config: config,
       prompt: prompt,
       maxTokens: 200,
@@ -184,13 +192,40 @@ Respond with ONLY the JSON object, no markdown or explanation.''';
       timeoutMs: settings.sidecarTimeoutMs,
       cancelToken: cancelToken,
     );
-
-    final decoded = jsonDecode(raw);
-    if (decoded is Map<String, dynamic>) {
-      return decoded['searchQuery'] as String?;
+    if (!outcome.isOk || outcome.text == null) {
+      return _SearchLlmOutcome(
+        searchQuery: null,
+        attempts: outcome.attempts,
+        totalElapsedMs: outcome.totalElapsedMs,
+      );
     }
-    return null;
+    String? searchQuery;
+    try {
+      final decoded = jsonDecode(outcome.text!);
+      if (decoded is Map<String, dynamic>) {
+        searchQuery = decoded['searchQuery'] as String?;
+      }
+    } catch (_) {
+      searchQuery = null;
+    }
+    return _SearchLlmOutcome(
+      searchQuery: searchQuery,
+      attempts: outcome.attempts,
+      totalElapsedMs: outcome.totalElapsedMs,
+    );
   }
+}
+
+class _SearchLlmOutcome {
+  final String? searchQuery;
+  final List<AgentOperationAttempt> attempts;
+  final int totalElapsedMs;
+
+  const _SearchLlmOutcome({
+    this.searchQuery,
+    this.attempts = const [],
+    this.totalElapsedMs = 0,
+  });
 }
 
 class MemoryAgenticResult {
@@ -199,6 +234,8 @@ class MemoryAgenticResult {
   final String? searchQuery;
   final MemorySearchResult? searchResult;
   final String? error;
+  final List<AgentOperationAttempt> attempts;
+  final int totalElapsedMs;
 
   const MemoryAgenticResult({
     required this.status,
@@ -206,6 +243,8 @@ class MemoryAgenticResult {
     this.searchQuery,
     this.searchResult,
     this.error,
+    this.attempts = const [],
+    this.totalElapsedMs = 0,
   });
 
   bool get usedModel => status == 'ok' && (searchQuery?.isNotEmpty ?? false);
