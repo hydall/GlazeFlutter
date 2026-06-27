@@ -15,6 +15,8 @@ import '../llm/memory_agentic_service.dart';
 import '../llm/memory_agentic_write_service.dart';
 import '../llm/memory_studio_service.dart';
 import '../llm/studio_decomposition_service.dart';
+import '../llm/studio_cleaner_rules_extractor.dart';
+import '../llm/studio_build_llm_client.dart';
 import '../llm/post_cleaner_service.dart';
 import 'memory_settings_provider.dart';
 
@@ -105,6 +107,14 @@ final memoryStudioServiceProvider = Provider<MemoryStudioService>((ref) {
 final studioDecompositionServiceProvider =
     Provider<StudioDecompositionService>((ref) {
   return StudioDecompositionService(ref);
+});
+
+/// Build-time extractor for POST-cleaner style rules. Second LLM call in
+/// `StudioMenuController.buildStudio`: reads the preset and fills the three
+/// `postCleaner*` string fields of `PipelineSettings`.
+final studioCleanerRulesExtractorProvider =
+    Provider<StudioCleanerRulesExtractor>((ref) {
+  return StudioCleanerRulesExtractor(StudioBuildLlmClient(ref));
 });
 
 /// POST-cleaner service (Stage 4). Rewrites the final assistant message
