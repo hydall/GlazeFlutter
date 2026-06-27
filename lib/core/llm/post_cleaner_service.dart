@@ -312,6 +312,22 @@ class PostCleanerService {
         'language and formatting required by the authoritative rules above.',
       )
       ..writeln('- Keep the same approximate length.')
+      ..writeln(
+        '- PRESERVE all inline HTML / formatting markup VERBATIM. This includes '
+        '<font color="...">, <i>, <b>, <em>, <strong>, <mark>, <sub>, <sup>, '
+        'and any other inline tags. These tags carry the user\'s styling '
+        '(colored thoughts, colored speech, emphasis) and are NOT markdown to '
+        'be stripped. Rewrite the prose INSIDE the tags if needed, but never '
+        'remove, move, or alter the tags themselves, and never collapse '
+        '<font><i>...</i></font> into plain text. If a sentence with colored '
+        'markup is rephrased, keep the tags around the rephrased text in the '
+        'same nesting order.',
+      )
+      ..writeln(
+        '- Return ONLY the cleaned text, no explanation. Inline HTML tags '
+        'described above are part of the content, not markdown fences — keep '
+        'them. Do not wrap the output in ``` fences.',
+      )
       ..writeln();
 
     // Continuity rules — only when history is available.
@@ -346,7 +362,6 @@ class PostCleanerService {
     }
 
     buffer
-      ..writeln('- Return ONLY the cleaned text, no explanation, no markdown.')
       ..writeln()
       ..writeln('Assistant response to clean:')
       ..write(assistantText);

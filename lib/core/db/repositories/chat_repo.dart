@@ -332,6 +332,15 @@ class ChatRepo implements SyncChatStore {
 
           messages[i] = msg.copyWith(
             content: content,
+            // The new swipe becomes the active swipe — sync the top-level
+            // rendered genTime/tokens so the chat bubble badge matches the
+            // swipe (mirrors updateAgentSwipeContent's isActive branch).
+            // Without this, appendAgentSwipe leaves the message's genTime/
+            // tokens pointing at the previous (parent) swipe, so the badge
+            // shows stale values or null after a cleaner finalize via the
+            // applyCleanedText fallback path.
+            genTime: genTime ?? msg.genTime,
+            tokens: tokens ?? msg.tokens,
             agentSwipes: agentSwipes,
             agentSwipeId: agentSwipes.length - 1,
             swipesMeta: _syncAgentSwipesToMeta(
