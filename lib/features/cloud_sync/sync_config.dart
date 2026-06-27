@@ -22,8 +22,7 @@ class SyncConfig {
 
   static String? get dropboxAppKey => _dropboxAppKey;
   static String? get dropboxAppSecret => _dropboxAppSecret;
-  static String get dropboxRedirectNative =>
-      'com.hydall.glaze://oauth/dropbox';
+  static String get dropboxRedirectNative => 'com.hydall.glaze://oauth/dropbox';
   static String? get gdriveClientId => _gdriveClientId;
   static String? get gdriveClientSecret => _gdriveClientSecret;
   static String? get gdriveIosClientId => _gdriveIosClientId;

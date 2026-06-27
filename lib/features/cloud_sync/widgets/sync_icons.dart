@@ -36,11 +36,36 @@ class _DropboxIconPainter extends CustomPainter {
       canvas.drawPath(path, paint);
     }
 
-    drawPath([const Offset(6.5, 2), const Offset(2, 5), const Offset(6.5, 8), const Offset(11, 5)]);
-    drawPath([const Offset(17.5, 2), const Offset(13, 5), const Offset(17.5, 8), const Offset(22, 5)]);
-    drawPath([const Offset(6.5, 8), const Offset(2, 11), const Offset(6.5, 14), const Offset(11, 11)]);
-    drawPath([const Offset(17.5, 8), const Offset(13, 11), const Offset(17.5, 14), const Offset(22, 11)]);
-    drawPath([const Offset(12, 14), const Offset(7.5, 17), const Offset(12, 20), const Offset(16.5, 17)]);
+    drawPath([
+      const Offset(6.5, 2),
+      const Offset(2, 5),
+      const Offset(6.5, 8),
+      const Offset(11, 5),
+    ]);
+    drawPath([
+      const Offset(17.5, 2),
+      const Offset(13, 5),
+      const Offset(17.5, 8),
+      const Offset(22, 5),
+    ]);
+    drawPath([
+      const Offset(6.5, 8),
+      const Offset(2, 11),
+      const Offset(6.5, 14),
+      const Offset(11, 11),
+    ]);
+    drawPath([
+      const Offset(17.5, 8),
+      const Offset(13, 11),
+      const Offset(17.5, 14),
+      const Offset(22, 11),
+    ]);
+    drawPath([
+      const Offset(12, 14),
+      const Offset(7.5, 17),
+      const Offset(12, 20),
+      const Offset(16.5, 17),
+    ]);
   }
 
   @override
@@ -96,7 +121,8 @@ class PulsingDot extends StatefulWidget {
   State<PulsingDot> createState() => _PulsingDotState();
 }
 
-class _PulsingDotState extends State<PulsingDot> with SingleTickerProviderStateMixin {
+class _PulsingDotState extends State<PulsingDot>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override

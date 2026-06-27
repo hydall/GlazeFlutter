@@ -61,9 +61,13 @@ class OAuthLocalServer {
         response
           ..statusCode = 400
           ..headers.contentType = ContentType.html
-          ..write(_errorHtml.replaceAll('id="err">', 'id="err">No code in response'));
+          ..write(
+            _errorHtml.replaceAll('id="err">', 'id="err">No code in response'),
+          );
         await response.close();
-        codeCompleter.completeError(Exception('No authorization code received'));
+        codeCompleter.completeError(
+          Exception('No authorization code received'),
+        );
       }
 
       await server.close(force: true);
@@ -75,10 +79,13 @@ class OAuthLocalServer {
       throw Exception('Could not launch browser for OAuth');
     }
 
-    final code = await codeCompleter.future.timeout(timeout, onTimeout: () {
-      server.close(force: true);
-      throw TimeoutException('OAuth flow timed out', timeout);
-    });
+    final code = await codeCompleter.future.timeout(
+      timeout,
+      onTimeout: () {
+        server.close(force: true);
+        throw TimeoutException('OAuth flow timed out', timeout);
+      },
+    );
     return (code: code, redirectUri: redirectUri);
   }
 }

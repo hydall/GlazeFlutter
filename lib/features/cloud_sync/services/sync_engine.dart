@@ -47,6 +47,7 @@ class SyncEngine {
   final SyncExtensionPresetStore _extensionPresetRepo;
   final SyncExtensionsSettingsStore _extensionsSettingsStore;
   final SyncInfoBlockStore _infoBlockStore;
+  final SyncTrackerSnapshotStore _trackerSnapshotStore;
   final SyncStudioConfigStore _studioConfigStore;
   final SyncQueue _queue = SyncQueue();
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
@@ -69,6 +70,7 @@ class SyncEngine {
     this._extensionPresetRepo,
     this._extensionsSettingsStore,
     this._infoBlockStore,
+    this._trackerSnapshotStore,
     this._studioConfigStore,
     this._saveLorebookActivations,
   ) {
@@ -93,6 +95,7 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/persona_avatars');
     await _adapter.ensureFolder('$cloudBase/extension_presets');
     await _adapter.ensureFolder('$cloudBase/info_blocks');
+    await _adapter.ensureFolder('$cloudBase/tracker_snapshots');
     await _adapter.ensureFolder('$cloudBase/studio_configs');
 
     onProgress(const SyncProgress(message: 'Building sync manifest...'));
@@ -734,6 +737,10 @@ class SyncEngine {
           final blocks = await _infoBlockStore.getBySessionId(id);
           if (blocks.isEmpty) return null;
           return SyncSerialization.infoBlocksPayload(blocks);
+        case 'tracker_snapshot':
+          final snaps = await _trackerSnapshotStore.getBySessionId(id);
+          if (snaps.isEmpty) return null;
+          return {'__trackerSnapshots': true, 'items': snaps};
         case 'studio_config':
           final config = await _studioConfigStore.getById(id);
           return config?.toJson();
@@ -795,6 +802,9 @@ class SyncEngine {
         case 'info_block':
           await _applyCloudInfoBlocks(id, data);
           break;
+        case 'tracker_snapshot':
+          await _applyCloudTrackerSnapshots(id, data);
+          break;
         case 'studio_config':
           await _studioConfigStore.put(StudioConfig.fromJson(data));
           break;
@@ -819,6 +829,26 @@ class SyncEngine {
     await _infoBlockStore.deleteBySessionId(sessionId);
     for (final item in items) {
       await _infoBlockStore.insert(InfoBlock.fromJson(item));
+    }
+  }
+
+  Future<void> _applyCloudTrackerSnapshots(
+    String sessionId,
+    Map<String, dynamic> data,
+  ) async {
+    final List<Map<String, dynamic>> items;
+    if (data['__trackerSnapshots'] == true) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else if (data.containsKey('items')) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else {
+      return;
+    }
+
+    // Replace existing snapshots for this session with the cloud version.
+    await _trackerSnapshotStore.deleteBySessionId(sessionId);
+    for (final item in items) {
+      await _trackerSnapshotStore.insertRaw(item);
     }
   }
 
@@ -1055,6 +1085,9 @@ class SyncEngine {
         case 'info_block':
           // id == sessionId for info_block entries
           await _infoBlockStore.deleteBySessionId(id);
+          break;
+        case 'tracker_snapshot':
+          await _trackerSnapshotStore.deleteBySessionId(id);
           break;
         case 'studio_config':
           await _studioConfigStore.delete(id);

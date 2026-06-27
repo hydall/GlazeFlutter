@@ -20,6 +20,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncExtensionPresetStore _extensionPresetRepo;
   final SyncExtensionsSettingsStore _extensionsSettingsStore;
   final SyncInfoBlockStore _infoBlockStore;
+  final SyncTrackerSnapshotStore _trackerSnapshotStore;
   final SyncStudioConfigStore _studioConfigStore;
   final SyncImageStore? _imageStore;
 
@@ -39,6 +40,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required this._extensionPresetRepo,
     required this._extensionsSettingsStore,
     required this._infoBlockStore,
+    required this._trackerSnapshotStore,
     required this._studioConfigStore,
     this._imageStore,
   });
@@ -203,6 +205,32 @@ class SyncManifestBuilder implements SyncManifestProvider {
         type: 'info_block',
         id: sessionId,
         path: cloudPath('info_block', sessionId),
+        updatedAt: updatedAt,
+        hash: hash,
+      );
+    }
+
+    final trackerSnapshotSessionIds = await _trackerSnapshotStore
+        .getAllSessionIds();
+    for (final sessionId in trackerSnapshotSessionIds) {
+      final snapshots = await _trackerSnapshotStore.getBySessionId(sessionId);
+      if (snapshots.isEmpty) continue;
+      final payload = {'__trackerSnapshots': true, 'items': snapshots};
+      final hash = SyncSerialization.computeSyncHash(payload);
+      final key = entryKey('tracker_snapshot', sessionId);
+      final prevEntry = previous.entries[key];
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+
+      entries[key] = SyncManifestEntry(
+        type: 'tracker_snapshot',
+        id: sessionId,
+        path: cloudPath('tracker_snapshot', sessionId),
         updatedAt: updatedAt,
         hash: hash,
       );

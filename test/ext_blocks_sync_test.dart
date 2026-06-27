@@ -224,6 +224,28 @@ class FakeInfoBlockStore implements SyncInfoBlockStore {
   }
 }
 
+class FakeTrackerSnapshotStore implements SyncTrackerSnapshotStore {
+  final Map<String, List<Map<String, dynamic>>> data = {};
+
+  @override
+  Future<List<String>> getAllSessionIds() async => data.keys.toList();
+
+  @override
+  Future<List<Map<String, dynamic>>> getBySessionId(String sessionId) async =>
+      data[sessionId] ?? [];
+
+  @override
+  Future<void> deleteBySessionId(String sessionId) async {
+    data.remove(sessionId);
+  }
+
+  @override
+  Future<void> insertRaw(Map<String, dynamic> snapshot) async {
+    final sid = snapshot['sessionId'] as String? ?? '';
+    data.putIfAbsent(sid, () => []).add(snapshot);
+  }
+}
+
 class FakeStudioConfigStore implements SyncStudioConfigStore {
   final Map<String, StudioConfig> data = {};
 
@@ -319,6 +341,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     required SyncExtensionPresetStore extensionPresetRepo,
     required SyncExtensionsSettingsStore extensionsSettingsStore,
     required SyncInfoBlockStore infoBlockStore,
+    required SyncTrackerSnapshotStore trackerSnapshotStore,
     required SyncStudioConfigStore studioConfigStore,
   }) : _builder = SyncManifestBuilder(
          characterRepo: characterRepo,
@@ -332,6 +355,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
          extensionPresetRepo: extensionPresetRepo,
          extensionsSettingsStore: extensionsSettingsStore,
          infoBlockStore: infoBlockStore,
+         trackerSnapshotStore: trackerSnapshotStore,
          studioConfigStore: studioConfigStore,
        );
 
@@ -390,6 +414,7 @@ class SyncWorld {
   final FakeExtensionsSettingsStore extensionsSettings =
       FakeExtensionsSettingsStore();
   final FakeInfoBlockStore infoBlocks = FakeInfoBlockStore();
+  final FakeTrackerSnapshotStore trackerSnapshots = FakeTrackerSnapshotStore();
   final FakeStudioConfigStore studioConfigs = FakeStudioConfigStore();
   late final InMemoryManifestProvider manifestProvider;
 
@@ -406,6 +431,7 @@ class SyncWorld {
       extensionPresetRepo: extensionPresets,
       extensionsSettingsStore: extensionsSettings,
       infoBlockStore: infoBlocks,
+      trackerSnapshotStore: trackerSnapshots,
       studioConfigStore: studioConfigs,
     );
   }
@@ -426,6 +452,7 @@ class SyncWorld {
     extensionPresets,
     extensionsSettings,
     infoBlocks,
+    trackerSnapshots,
     studioConfigs,
     (_) async {},
   );

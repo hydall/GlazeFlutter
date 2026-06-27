@@ -177,6 +177,8 @@ String cloudPath(String type, String id) {
       return '$cloudBase/extensions_settings.json';
     case 'info_block':
       return '$cloudBase/info_blocks/$id.json';
+    case 'tracker_snapshot':
+      return '$cloudBase/tracker_snapshots/$id.json';
     case 'studio_config':
       return '$cloudBase/studio_configs/$id.json';
     case 'lorebooks':

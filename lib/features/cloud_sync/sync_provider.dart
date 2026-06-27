@@ -34,6 +34,9 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
     ),
     extensionsSettingsStore: ExtensionsSettingsSyncStore(),
     infoBlockStore: InfoBlockSyncStore(ref.watch(infoBlocksRepoProvider)),
+    trackerSnapshotStore: TrackerSnapshotSyncStore(
+      ref.watch(trackerSnapshotRepoProvider),
+    ),
     studioConfigStore: ref.watch(studioConfigRepoProvider),
     saveLorebookActivations: saveLorebookActivations,
   );

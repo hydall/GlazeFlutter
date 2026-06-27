@@ -246,6 +246,25 @@ class FakeInfoBlockStore implements SyncInfoBlockStore {
   }
 }
 
+class FakeTrackerSnapshotStore implements SyncTrackerSnapshotStore {
+  final Map<String, List<Map<String, dynamic>>> data = {};
+  @override
+  Future<List<String>> getAllSessionIds() async => data.keys.toList();
+  @override
+  Future<List<Map<String, dynamic>>> getBySessionId(String sid) async =>
+      data[sid] ?? [];
+  @override
+  Future<void> deleteBySessionId(String sid) async {
+    data.remove(sid);
+  }
+
+  @override
+  Future<void> insertRaw(Map<String, dynamic> snapshot) async {
+    final sid = snapshot['sessionId'] as String? ?? '';
+    data.putIfAbsent(sid, () => []).add(snapshot);
+  }
+}
+
 class FakeStudioConfigStore implements SyncStudioConfigStore {
   final Map<String, StudioConfig> data = {};
   @override
@@ -395,6 +414,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     SyncExtensionPresetStore? extensionPresetRepo,
     SyncExtensionsSettingsStore? extensionsSettingsStore,
     SyncInfoBlockStore? infoBlockStore,
+    SyncTrackerSnapshotStore? trackerSnapshotStore,
     SyncStudioConfigStore? studioConfigStore,
   }) : _builder = SyncManifestBuilder(
          characterRepo: characterRepo,
@@ -409,6 +429,8 @@ class InMemoryManifestProvider implements SyncManifestProvider {
          extensionsSettingsStore:
              extensionsSettingsStore ?? FakeExtensionsSettingsStore(),
          infoBlockStore: infoBlockStore ?? FakeInfoBlockStore(),
+         trackerSnapshotStore:
+             trackerSnapshotStore ?? FakeTrackerSnapshotStore(),
          studioConfigStore: studioConfigStore ?? FakeStudioConfigStore(),
        );
 
@@ -508,6 +530,7 @@ class SyncWorld {
     FakeExtensionPresetStore(),
     FakeExtensionsSettingsStore(),
     FakeInfoBlockStore(),
+    FakeTrackerSnapshotStore(),
     FakeStudioConfigStore(),
     (_) async {},
   );
@@ -2209,10 +2232,7 @@ void main() {
       final deviceB = SyncWorld();
       deviceB.cloud.files.addAll(deviceA.cloud.files);
       await deviceB.memoryBooks.put(
-        cloudMb.copyWith(
-          updatedAt: 999999,
-          lastProcessedMessageCount: 99,
-        ),
+        cloudMb.copyWith(updatedAt: 999999, lastProcessedMessageCount: 99),
       );
       await deviceB.chats.put(makeChat('s1', charId: 'char1'));
 
