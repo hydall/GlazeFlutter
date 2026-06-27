@@ -31,9 +31,10 @@ abstract class StudioConfig with _$StudioConfig {
     @Default('') String builderPromptTemplate,
 
     /// Maximum number of trailing user/assistant chat messages forwarded to the
-    /// FINAL Studio agent. Intermediate agents always see full history; the
-    /// final writer is intentionally limited so it leans on the agent briefs
-    /// instead of re-reading the whole transcript. 0 = no limit.
+    /// FINAL Studio agent (the generator). Trackers (intermediate agents) are
+    /// trimmed per their own [StudioAgent.contextSize]. The final writer leans
+    /// on the tracker briefs instead of re-reading the whole transcript.
+    /// 0 = no limit.
     @Default(15) int maxFinalHistoryMessages,
     /// How preset blocks are turned into agent instructions during
     /// decomposition. `'verbatim'` (default) = blocks are concatenated
@@ -121,6 +122,13 @@ abstract class StudioAgent with _$StudioAgent {
     /// Final agents always run every turn.
     @Default('turn') String refreshPolicy,
     @Default([]) List<String> invalidationSignals,
+
+    /// Number of trailing chat messages forwarded to this tracker (intermediate
+    /// agent). Default 5 (Marinara DEFAULT_AGENT_CONTEXT_SIZE). Hard-capped at
+    /// 200 (MAX_AGENT_CONTEXT_MESSAGES) on normalization. The final agent
+    /// (generator) ignores this and uses [StudioConfig.maxFinalHistoryMessages]
+    /// instead. 0 = no limit (not recommended for trackers).
+    @Default(5) int contextSize,
   }) = _StudioAgent;
 
   factory StudioAgent.fromJson(Map<String, dynamic> json) =>

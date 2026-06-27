@@ -645,7 +645,7 @@ class MemoryStudioService {
         case 'chat_history':
           final history = isFinalResponse
               ? _limitFinalHistory(context.history, config)
-              : context.history;
+              : _limitTrackerHistory(context.history, agent.contextSize);
           messages.addAll(history.map((m) => m.toApiMap()));
           break;
         case 'dynamic_context':
@@ -690,6 +690,83 @@ class MemoryStudioService {
     if (limit <= 0 || history.length <= limit) return history;
     final trimmed = history.sublist(history.length - limit);
     return trimmed;
+  }
+
+  /// Default tracker context size (Marinara DEFAULT_AGENT_CONTEXT_SIZE).
+  static const _defaultTrackerContextSize = 5;
+
+  /// Hard cap on tracker context size (Marinara MAX_AGENT_CONTEXT_MESSAGES).
+  static const _maxTrackerContextSize = 200;
+
+  /// Trim trailing chat history for a tracker (intermediate agent).
+  ///
+  /// Returns the last [contextSize] messages (normalized to
+  /// [_defaultTrackerContextSize]..[_maxTrackerContextSize]), each truncated
+  /// via [_truncateAgentText] and stripped of HTML via [_stripHtmlTags].
+  ///
+  /// Only the `chat_history` block is trimmed — `static_context` (card,
+  /// persona, lorebooks) and `dynamic_context` (memory, summary, worldInfo)
+  /// remain untouched. MemoryBook injection survives the refactor because it
+  /// flows through `dynamic_context`, not `chat_history`. See
+  /// docs/PLAN_AGENTIC_STUDIO.md Phase 3.
+  List<PromptMessage> _limitTrackerHistory(
+    List<PromptMessage> history,
+    int contextSize,
+  ) {
+    final normalized = contextSize.clamp(
+      1,
+      _maxTrackerContextSize,
+    );
+    if (history.length <= normalized) {
+      return history
+          .map((m) => PromptMessage(
+                role: m.role,
+                content: _truncateAgentText(
+                  _stripHtmlTags(m.content),
+                  2000,
+                ),
+              ))
+          .toList();
+    }
+    final trimmed = history.sublist(history.length - normalized);
+    return trimmed
+        .map((m) => PromptMessage(
+              role: m.role,
+              content: _truncateAgentText(
+                _stripHtmlTags(m.content),
+                2000,
+              ),
+            ))
+        .toList();
+  }
+
+  /// Port of Marinara `truncateAgentText`. If the text is longer than
+  /// [maxChars], keeps the head (40%) + a trim marker + the tail (60%),
+  /// preserving both the beginning and the end of the message. Character
+  /// counting uses `String.runes` for Unicode/emoji safety.
+  static const _trimMarker = '\n\n[Trimmed to keep this agent request compact]\n\n';
+
+  String _truncateAgentText(String text, int maxChars) {
+    if (text.length <= maxChars) return text;
+    final runes = text.runes.toList();
+    if (runes.length <= maxChars) return text;
+    final headCount = (maxChars * 0.4).round();
+    final tailCount = maxChars - headCount;
+    final head = String.fromCharCodes(runes.sublist(0, headCount));
+    final tail = String.fromCharCodes(runes.sublist(runes.length - tailCount));
+    return '$head$_trimMarker$tail';
+  }
+
+  /// Port of Marinara `stripHtmlTags`. Removes HTML/XML-like tags, collapses
+  /// 3+ newlines to 2, trims. Conservative: only strips tags that start with
+  /// a letter (avoids eating `==...==` custom markers or fenced code).
+  static final _htmlTagRegex = RegExp(r'</?[a-zA-Z][^>]*>');
+  static final _multiNewlineRegex = RegExp(r'\n{3,}');
+
+  String _stripHtmlTags(String text) {
+    final stripped = text.replaceAll(_htmlTagRegex, '');
+    final collapsed = stripped.replaceAll(_multiNewlineRegex, '\n\n');
+    return collapsed.trim();
   }
 
   String _intermediateRuntimeEnvelope(StudioAgent agent) {
