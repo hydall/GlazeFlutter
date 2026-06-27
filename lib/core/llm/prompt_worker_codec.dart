@@ -53,6 +53,7 @@ Map<String, dynamic> serializePayload(PromptPayload p) => {
       'chunkFirstTopChunks': p.chunkFirstTopChunks,
       'arcContent': p.arcContent,
       'entitiesContent': p.entitiesContent,
+      'recalledMessagesContent': p.recalledMessagesContent,
     };
 
 PromptResult deserializeResult(Map<String, dynamic> json) {
@@ -152,6 +153,7 @@ PromptPayload deserializePayload(Map<String, dynamic> json) {
     chunkFirstTopChunks: json['chunkFirstTopChunks'] as int? ?? 1,
     arcContent: json['arcContent'] as String?,
     entitiesContent: json['entitiesContent'] as String?,
+    recalledMessagesContent: json['recalledMessagesContent'] as String?,
   );
 }
 

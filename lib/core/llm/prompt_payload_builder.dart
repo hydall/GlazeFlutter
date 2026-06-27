@@ -19,6 +19,7 @@ import '../state/memory_settings_provider.dart';
 import 'embedding_types.dart';
 import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';
+import 'message_recall_service.dart';
 import 'memory_selector.dart';
 import '../../features/extensions/services/ext_blocks_prompt_injection.dart';
 import '../../features/extensions/services/runtime_prompt_injection_service.dart';
@@ -114,6 +115,8 @@ class PromptPayloadBuilder {
     List<LorebookEntry> vectorEntries = [];
     MemorySelection? memorySelection;
     var memoryInjectionTarget = 'hard_block';
+    // NEW (patch #3): raw-message recall content for <recalled_messages>.
+    String? recalledMessagesContent;
     final g = _ref.read(memoryGlobalSettingsProvider);
     var memorySettings = MemoryBookSettings(
       memoryExcerptingEnabled: g.memoryExcerptingEnabled,
@@ -177,8 +180,25 @@ class PromptPayloadBuilder {
         contextBudgetTokens: chatApi.contextSize,
       );
 
+      // NEW (patch #3): raw-message recall — cosine search over
+      // `sourceType='chat_message'` chunks embedded by
+      // ChatMessageEmbeddingService after each generation. Lossless
+      // backstop for the lossy MemoryBook compression. Empty / no-op when
+      // embeddingConfig.endpoint is empty or no chunks exist yet.
+      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+      final recallFuture = _ref
+          .read(messageRecallServiceProvider)
+          .recall(
+            sessionId: session.id,
+            currentText: currentText,
+            config: embeddingConfig,
+            cancelToken: cancelToken,
+            shouldAbort: shouldAbort,
+          )
+          .timeout(const Duration(seconds: 15), onTimeout: () => const MessageRecallResult());
+
       throwIfAborted();
-      final results = await Future.wait([memoryFuture, lorebookFuture]);
+      final results = await Future.wait([memoryFuture, lorebookFuture, recallFuture]);
       throwIfAborted();
       final memoryResult = results[0] as MemoryCandidateBuildResult;
       memorySelection = memoryResult.selection;
@@ -187,6 +207,22 @@ class PromptPayloadBuilder {
           ? 'macro'
           : 'hard_block';
       vectorEntries = results[1] as List<LorebookEntry>;
+      final recallResult = results[2] as MessageRecallResult;
+      if (recallResult.matches.isNotEmpty) {
+        final block = StringBuffer();
+        block.writeln('<recalled_messages>');
+        block.writeln(
+          'Semantically relevant raw message chunks from earlier in this chat. '
+          'Do not explicitly reference "remembering" these — use them as ground '
+          'truth context.',
+        );
+        for (final match in recallResult.matches) {
+          block.writeln('---');
+          block.writeln(match.text);
+        }
+        block.writeln('</recalled_messages>');
+        recalledMessagesContent = block.toString();
+      }
       throwIfAborted();
       memoryCoverage = {
         'entryIds': memorySelection.entries.map((e) => e.id).toList(),
@@ -288,6 +324,7 @@ class PromptPayloadBuilder {
       chunkFirstTopChunks: memorySettings.chunkFirstTopChunks,
       arcContent: arcContent,
       entitiesContent: entitiesContent,
+      recalledMessagesContent: recalledMessagesContent,
     );
   }
 
@@ -308,6 +345,7 @@ class PromptPayloadBuilder {
     String? guidanceText,
     bool skipVectorSearch = true,
     List<RuntimePromptBlock> runtimePromptBlocks = const [],
+    String? recalledMessagesContent,
   }) async {
     final lorebookSettings = _ref.read(lorebookSettingsProvider);
     final lorebookActivations = _ref.read(lorebookActivationsProvider);
@@ -395,6 +433,7 @@ class PromptPayloadBuilder {
       chunkFirstTopChunks: memSettings.chunkFirstTopChunks,
       arcContent: arcContent,
       entitiesContent: entitiesContent,
+      recalledMessagesContent: recalledMessagesContent,
     );
   }
 

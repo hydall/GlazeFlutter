@@ -21,6 +21,7 @@ import '../state/memory_settings_provider.dart';
 import '../state/memory_agent_providers.dart';
 import 'embedding_service.dart';
 import 'embedding_types.dart';
+import 'chat_message_embedding_service.dart';
 import 'memory_catalog_builder.dart';
 import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
@@ -28,6 +29,7 @@ import 'memory_embedding_service.dart';
 import 'memory_excerpt_selector.dart';
 import 'memory_formatting.dart';
 import 'memory_needs_classifier_service.dart';
+import 'message_recall_service.dart';
 import 'memory_selector.dart';
 import 'memory_sidecar_prewarm_cache.dart';
 import 'memory_sidecar_reranker_service.dart';
@@ -863,6 +865,23 @@ final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
 
 final memoryEmbeddingServiceProvider = Provider<MemoryEmbeddingService>((ref) {
   return MemoryEmbeddingService(
+    ref.watch(embeddingRepoProvider),
+    EmbeddingService(),
+  );
+});
+
+// NEW (patch #3 — memory continuity): chat-message embedding + recall.
+// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+final chatMessageEmbeddingServiceProvider =
+    Provider<ChatMessageEmbeddingService>((ref) {
+  return ChatMessageEmbeddingService(
+    ref.watch(embeddingRepoProvider),
+    EmbeddingService(),
+  );
+});
+
+final messageRecallServiceProvider = Provider<MessageRecallService>((ref) {
+  return MessageRecallService(
     ref.watch(embeddingRepoProvider),
     EmbeddingService(),
   );

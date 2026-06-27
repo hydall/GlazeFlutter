@@ -49,6 +49,19 @@ abstract class PipelineSettings with _$PipelineSettings {
 
     // ── Agentic write-loop ────────────────────────────────────────────────
     @Default(false) bool agenticWriteEnabled,
+    // Cadence: run the agentic write-loop every N assistant turns, not every
+    // turn. Mirrors Marinara's `runInterval: 8` for the lorebook-keeper agent.
+    // 1 = every turn (legacy behavior). Higher values reduce LLM cost / latency
+    // at the cost of slower memory propagation on long chats.
+    @Default(8) int runAgenticEveryN,
+    // Enable raw-message recall (cosine search over chat_message embeddings).
+    // Pairs with `ChatMessageEmbeddingService` + `MessageRecallService` as the
+    // lossless backstop for the lossy MemoryBook compression. Auto-disables
+    // when the embedding endpoint is empty (see `_embedChatMessages` and
+    // `MessageRecallService.recall`). Mirrors Marinara's `enableMemoryRecall`
+    // per-chat flag, but global here for simplicity.
+    // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3) and §2.1 (ADR).
+    @Default(true) bool messageRecallEnabled,
 
     // ── Studio agents ────────────────────────────────────────────────────
     // Per-agent idle timeout (ms) before the model emits its first chunk.

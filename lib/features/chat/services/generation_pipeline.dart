@@ -12,6 +12,9 @@ import '../../../core/models/agent_operation_record.dart';
 import '../../../core/models/pipeline_settings.dart';
 import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_agentic_service.dart';
+import '../../../core/llm/memory_injection_service.dart'
+    show chatMessageEmbeddingServiceProvider;
+import '../../../core/llm/lorebook_providers.dart' show embeddingConfigProvider;
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/services/generation_notification_service.dart';
@@ -267,6 +270,25 @@ class GenerationPipeline {
       // re-run the full agent cycle per swipe. The stale snapshot from the
       // previous swipe is excluded via getLatestCommittedExcludingMessage.
       if (result.session != null) {
+        // Stage 3.5: Embed raw chat-message chunks (fire-and-forget,
+        // best-effort insurance for the lossy MemoryBook compression).
+        // Pairs with Stage 1's MessageRecallService cosine search to give
+        // the LLM access to verbatim original chunks from earlier in the
+        // chat. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3).
+        unawaited(
+          _embedChatMessages(
+            sessionId: result.session!.id,
+            messages: result.session!.messages,
+            genId: genId,
+          ),
+        );
+
+        // Stage 2: Agentic write-loop — runs on both normal send AND regen.
+        // On regen, SavedMessageWriter resets agentSwipes to a single fresh
+        // 'final' (agentSwipeId=0), so the write-loop anchors the new snapshot
+        // to (messageId, swipeId, 0) — mirroring Marinara's retry-agents which
+        // re-run the full agent cycle per swipe. The stale snapshot from the
+        // previous swipe is excluded via getLatestCommittedExcludingMessage.
         unawaited(
           _runAgenticWriteLoop(
             sessionId: result.session!.id,
@@ -705,6 +727,45 @@ class GenerationPipeline {
       }
     } catch (e) {
       debugPrint('[AgenticWrite] failed session=$sessionId error=$e');
+    }
+  }
+
+  /// Stage 3.5: embed raw chat-message chunks (fire-and-forget, best-effort
+  /// insurance for the lossy MemoryBook compression).
+  ///
+  /// Idempotent via textHash — chunks whose content has not changed since
+  /// the last embedding pass are skipped. Filters to visible user+assistant
+  /// messages, groups them into fixed-size chunks (default 5), and stores
+  /// one embedding row per chunk under `sourceType='chat_message'`. The
+  /// [MessageRecallService] cosine-searches against these rows on the next
+  /// generation and injects top-K chunks as `<recalled_messages>` in the
+  /// prompt.
+  ///
+  /// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3) and §2.1 (ADR:
+  /// mobile escape hatch if latency / binary size becomes prohibitive).
+  ///
+  /// Staleness guard: aborts early if a newer generation has started. The
+  /// underlying [ChatMessageEmbeddingService] wraps all errors in try/catch
+  /// and records them via `putEmbeddingError` so the next run can retry —
+  /// this method never throws to the caller.
+  Future<void> _embedChatMessages({
+    required String sessionId,
+    required List<ChatMessage> messages,
+    required int genId,
+  }) async {
+    try {
+      if (!abortHandler.isCurrentGen(genId)) return;
+      final pipeline = ref.read(pipelineSettingsProvider);
+      if (!pipeline.messageRecallEnabled) return;
+      final config = ref.read(embeddingConfigProvider);
+      if (config.endpoint.isEmpty) return;
+      await ref.read(chatMessageEmbeddingServiceProvider).indexSessionMessages(
+            sessionId: sessionId,
+            messages: messages,
+            config: config,
+          );
+    } catch (e) {
+      debugPrint('[EmbedChat] failed session=$sessionId error=$e');
     }
   }
 

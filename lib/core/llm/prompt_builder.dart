@@ -107,6 +107,13 @@ class PromptPayload {
   final String? arcContent;
   final String? entitiesContent;
 
+  /// Lossless backstop for the lossy MemoryBook compression — top-K raw
+  /// chat-message chunks semantically closest to the current user message,
+  /// returned by [MessageRecallService]. Injected into the prompt as a
+  /// `<recalled_messages>` system block before the first user/assistant
+  /// message. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3).
+  final String? recalledMessagesContent;
+
   const PromptPayload({
     required this.character,
     this.persona,
@@ -144,6 +151,7 @@ class PromptPayload {
     this.chunkFirstTopChunks = 1,
     this.arcContent,
     this.entitiesContent,
+    this.recalledMessagesContent,
   });
 }
 
@@ -916,6 +924,19 @@ PromptResult _assembleMessages({
     // 'macro' target: skip hard block, user must place {{memory}} in preset
   }
 
+  // NEW (patch #3): inject <recalled_messages> BEFORE the memory block so
+  // the LLM sees the raw original chunks first, then the compressed
+  // MemoryBook facts on top. Recall is the lossless backstop; MemoryBook
+  // is the lossy compression. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+  if (payload.recalledMessagesContent != null &&
+      payload.recalledMessagesContent!.isNotEmpty) {
+    _injectRecalledMessagesBlock(
+      messages,
+      attributionBlocks,
+      payload.recalledMessagesContent!,
+    );
+  }
+
   final lorebookReserve = _calculateLorebookReserve(payload);
 
   // Count vector-only tokens so the tokenizer can show "Vector Lorebook" as
@@ -1191,6 +1212,32 @@ void _injectMemoryBlock(
     messages.insert(historyIdx, memMsg);
   } else {
     messages.add(memMsg);
+  }
+}
+
+/// Injects the `<recalled_messages>` system block before the first history
+/// message (and before the memory block, since this is called first). The
+/// raw chunks are the lossless backstop for the lossy MemoryBook compression.
+/// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+void _injectRecalledMessagesBlock(
+  List<PromptMessage> messages,
+  List<StaticBlock> attributionBlocks,
+  String content,
+) {
+  attributionBlocks.add(
+    StaticBlock(id: 'recalled_messages', content: content),
+  );
+  final recallMsg = PromptMessage(
+    role: 'system',
+    content: content,
+    blockId: 'recalled_messages',
+    blockName: 'Recalled Messages',
+  );
+  final historyIdx = messages.indexWhere((m) => m.isHistory);
+  if (historyIdx >= 0) {
+    messages.insert(historyIdx, recallMsg);
+  } else {
+    messages.add(recallMsg);
   }
 }
 
