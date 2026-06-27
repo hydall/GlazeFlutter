@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -11,6 +10,7 @@ import '../models/pipeline_settings.dart';
 import '../models/tracker.dart';
 import '../state/db_provider.dart';
 import '../utils/id_generator.dart';
+import 'agentic_write_request_parser.dart';
 import 'memory_agentic_policy.dart';
 import 'memory_agentic_tools.dart';
 import 'sidecar_llm_client.dart';
@@ -27,6 +27,7 @@ import 'sidecar_llm_client.dart';
 class MemoryAgenticWriteService {
   final Ref _ref;
   final SidecarLlmClient _llm;
+  late final AgenticWriteRequestParser _parser = AgenticWriteRequestParser(_llm);
 
   MemoryAgenticWriteService(this._ref) : _llm = SidecarLlmClient(_ref);
 
@@ -63,7 +64,7 @@ class MemoryAgenticWriteService {
         return const MemoryWriteLoopResult(status: 'aborted');
       }
 
-      final llmOutcome = await _askLlmForWrites(
+      final llmOutcome = await _parser.askLlmForWrites(
         config: config,
         settings: settings,
         recentHistoryText: recentHistoryText,
@@ -180,111 +181,6 @@ class MemoryAgenticWriteService {
     }
   }
 
-  Future<_LlmOutcome> _askLlmForWrites({
-    required SidecarApiConfig config,
-    required PipelineSettings settings,
-    required String recentHistoryText,
-    required List<Tracker> currentTrackers,
-    required CancelToken cancelToken,
-  }) async {
-    final trackersBlock = currentTrackers.isEmpty
-        ? '(no active trackers)'
-        : currentTrackers.map((t) => '- ${t.name}: ${t.value}').join('\n');
-
-    final prompt =
-        '''You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.
-
-Recent conversation:
-$recentHistoryText
-
-Current trackers:
-$trackersBlock
-
-Decide what to write. You have two tools:
-
-1. updateTracker — lightweight key-value state that persists across turns (mood, location, relationship status, inventory, ongoing promises).
-2. writeMemory — a pending memory draft for significant events, revelations, promises. These require user approval before becoming active.
-
-Respond with ONLY a JSON object (no markdown, no explanation):
-{
-  "trackers": [
-    {"name": "mood", "value": "happy", "scope": "chat"},
-    {"name": "location", "value": "tavern"}
-  ],
-  "memories": [
-    {"title": "Lucy reveals the chip", "content": "...", "keys": ["Lucy", "chip"]}
-  ]
-}
-
-Rules:
-- Only write trackers that CHANGED or are NEW. Don't repeat unchanged trackers.
-- Only create memory drafts for SIGNIFICANT events (not every turn).
-- If nothing is worth persisting, return: {"trackers": [], "memories": []}
-- Keep tracker values short (1-5 words).
-- Memory content should be 1-3 sentences describing what happened and why it matters.''';
-
-    final outcome = await _llm.callOnceWithLog(
-      config: config,
-      prompt: prompt,
-      maxTokens: 1000,
-      temperature: 0.2,
-      timeoutMs: settings.sidecarTimeoutMs,
-      cancelToken: cancelToken,
-    );
-    if (!outcome.isOk || outcome.text == null) {
-      return _LlmOutcome(
-        response: null,
-        attempts: outcome.attempts,
-        totalElapsedMs: outcome.totalElapsedMs,
-      );
-    }
-    _WriteLoopResponse? response;
-    try {
-      final decoded = jsonDecode(outcome.text!);
-      if (decoded is! Map<String, dynamic>) {
-        response = null;
-      } else {
-        final trackerRequests = <TrackerWriteRequest>[];
-        final trackerRaw = decoded['trackers'];
-        if (trackerRaw is List) {
-          for (final item in trackerRaw) {
-            if (item is Map<String, dynamic>) {
-              final req = TrackerWriteRequest.fromJson(item);
-              if (req.name.isNotEmpty && req.value.isNotEmpty) {
-                trackerRequests.add(req);
-              }
-            }
-          }
-        }
-
-        final memoryRequests = <MemoryWriteRequest>[];
-        final memoryRaw = decoded['memories'];
-        if (memoryRaw is List) {
-          for (final item in memoryRaw) {
-            if (item is Map<String, dynamic>) {
-              final req = MemoryWriteRequest.fromJson(item);
-              if (req.title.isNotEmpty && req.content.isNotEmpty) {
-                memoryRequests.add(req);
-              }
-            }
-          }
-        }
-
-        response = _WriteLoopResponse(
-          trackerRequests: trackerRequests,
-          memoryRequests: memoryRequests,
-        );
-      }
-    } catch (_) {
-      response = null;
-    }
-    return _LlmOutcome(
-      response: response,
-      attempts: outcome.attempts,
-      totalElapsedMs: outcome.totalElapsedMs,
-    );
-  }
-
   Future<TrackerWriteResult> _executeTrackerWrites({
     required MemoryAgenticPolicy policy,
     required String sessionId,
@@ -390,28 +286,6 @@ Rules:
       requests: requests,
     );
   }
-}
-
-class _WriteLoopResponse {
-  final List<TrackerWriteRequest> trackerRequests;
-  final List<MemoryWriteRequest> memoryRequests;
-
-  const _WriteLoopResponse({
-    this.trackerRequests = const [],
-    this.memoryRequests = const [],
-  });
-}
-
-class _LlmOutcome {
-  final _WriteLoopResponse? response;
-  final List<AgentOperationAttempt> attempts;
-  final int totalElapsedMs;
-
-  const _LlmOutcome({
-    this.response,
-    this.attempts = const [],
-    this.totalElapsedMs = 0,
-  });
 }
 
 class MemoryWriteLoopResult {
