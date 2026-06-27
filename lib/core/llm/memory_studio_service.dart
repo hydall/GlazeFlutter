@@ -233,101 +233,6 @@ class MemoryStudioService {
     }
   }
 
-  Future<StudioStageBrief> _runIntermediateAgentSafely({
-    required int index,
-    required StudioAgent agent,
-    required PromptResult promptResult,
-    required PromptPayload promptPayload,
-    required ApiConfig apiConfig,
-    required StudioConfig config,
-    required String sessionId,
-    required CancelToken cancelToken,
-    bool captureErrors = true,
-  }) async {
-    if (_isMetaPolicyAgent(agent)) {
-      final brief = _metaPolicyBrief(agent);
-      return StudioStageBrief(
-        agentId: agent.id,
-        agentName: agent.name,
-        brief: brief,
-      );
-    }
-    try {
-      final brief = await _runTracker(
-        agent: agent,
-        promptResult: promptResult,
-        promptPayload: promptPayload,
-        apiConfig: apiConfig,
-        config: config,
-        sessionId: sessionId,
-        cancelToken: cancelToken,
-        onIntermediateUpdate: (text) {},
-      );
-      return brief;
-    } catch (e) {
-      if (!captureErrors ||
-          cancelToken.isCancelled ||
-          (e is DioException && CancelToken.isCancel(e))) {
-        rethrow;
-      }
-      final error = formatError(e);
-      return StudioStageBrief(
-        agentId: agent.id,
-        agentName: agent.name,
-        brief: 'Studio agent failed: $error',
-        status: 'error',
-        error: error,
-      );
-    }
-  }
-
-  Future<StudioStageBrief> _runIntermediateAgentWithCache({
-    required int index,
-    required StudioAgent agent,
-    required PromptResult promptResult,
-    required PromptPayload promptPayload,
-    required ApiConfig apiConfig,
-    required StudioConfig config,
-    required String sessionId,
-    required CancelToken cancelToken,
-    required String sceneKey,
-    required int turnIndex,
-  }) async {
-    final cacheProbe = _probeCache(
-      agent: agent,
-      config: config,
-      promptPayload: promptPayload,
-      sceneKey: sceneKey,
-      turnIndex: turnIndex,
-    );
-    if (cacheProbe.hit) {
-      return cacheProbe.brief!;
-    }
-
-    final brief = await _runIntermediateAgentSafely(
-      index: index,
-      agent: agent,
-      promptResult: promptResult,
-      promptPayload: promptPayload,
-      apiConfig: apiConfig,
-      config: config,
-      sessionId: sessionId,
-      cancelToken: cancelToken,
-    );
-    _persistCacheIfCacheable(
-      agent: agent,
-      brief: brief,
-      cacheKey: cacheProbe.cacheKey,
-      policy: cacheProbe.policy,
-      turnIndex: turnIndex,
-      cancelToken: cancelToken,
-    );
-    return brief.copyWithCacheMetadata(
-      refreshPolicy: cacheProbe.policy,
-      cacheKey: _isCacheablePolicy(cacheProbe.policy) ? cacheProbe.cacheKey : null,
-    );
-  }
-
   /// Cache probe result for one tracker. [hit] = true when a usable cached
   /// brief exists for this turn; [brief] carries the sanitized cached brief.
   /// Used by `runTrackerCycle` to split trackers into cached (skip LLM) vs.
@@ -685,6 +590,13 @@ class MemoryStudioService {
   /// `chat_history` (trimmed to [batchContextSize]). The per-agent
   /// `agent_instruction` blocks are NOT here — they go into `<agent_task>`
   /// XML in the batch system prompt.
+  ///
+  /// Phase 6.1 — cache-friendly order: `static_context` (char card, persona,
+  /// scenario — stable across turns) FIRST, then `dynamic_context` (MemoryBook
+  /// injection, worldInfo, summary — stable within a scene), then
+  /// `chat_history` (volatile, last). Combined with the batch system prompt
+  /// layout (`<role>` + `<lore>` prefix, `<agents>` tail), this gives the
+  /// provider's prompt cache a long stable prefix to hit on subsequent turns.
   List<Map<String, dynamic>> _buildSharedBatchMessages({
     required StudioConfig config,
     required _StudioContextBuckets context,

@@ -1,6 +1,6 @@
 # Plan: Agentic Studio — Marinara-Style Refactor
 
-> **Status:** In progress. Phase 1-5 complete (commits `5a4e31e`, `0a9e6cd`, `92c2012`, `6ef6f8e` Phase 1-4; Phase 5 pending commit on branch `plan/continuity-post-cleaner`). Phase 6-8 pending.
+> **Status:** In progress. Phase 1-6 complete (commits `5a4e31e`, `0a9e6cd`, `92c2012`, `6ef6f8e` Phase 1-4; `90efe4e` Phase 5; Phase 6 pending commit on branch `plan/continuity-post-cleaner`). Phase 7-8 pending.
 > **Goal:** Удешевить агентику на большом контексте, ресторить урезанный UI, упростить ментальную модель памяти.
 > **Reference:** [Pasta-Devs/Marinara-Engine](https://github.com/Pasta-Devs/Marinara-Engine) — `packages/server/src/services/agents/` (agent-pipeline.ts, agent-executor.ts), `packages/shared/src/types/agent.ts`.
 
@@ -233,13 +233,15 @@ Agentic write-loop: отдельный pipeline toggle (уже есть agenticW
 
 **Цель:** кросс-трекерный кэш на Anthropic/OpenRouter.
 
-- [ ] **5.1** В `_buildTrackerMessages` / `buildBatchSystemPrompt`: shared static content (char card, persona, lorebooks, memory) **первым**, agent-specific `promptShard` **последним**.
-- [ ] **5.2** Включить `cacheControlTtl` на shared-блоке (уже проходит через `_ResolvedAgentConfig`, проверить что wired).
-- [ ] **5.3** Тест: второй ход с тем же character → cache-hit на static prefix.
-- [ ] **5.4** `flutter analyze` + `flutter test`.
+**Результат:** layout УЖЕ был cache-friendly с Этапа 5 (shared `<role>`+`<lore>` first, per-agent `<agents>` last) — никакой кодовой перестановки не потребовалось. `cacheControlTtl`/`cacheBreakpointMode` wired через `ResolvedAgentConfig → ChatTransportRequest → Anthropic/OpenRouter transport` с Этапа 5. Дополнительно: очищен dead code (`_runIntermediateAgentSafely`/`_runIntermediateAgentWithCache` — 100 строк) и лишний non-null assertion.
 
-**Файлы:** `agent_runner.dart` (edit), `memory_studio_service.dart` (edit).
-**Оценка:** 0.5-1 день.
+- [x] **6.1** В `_buildTrackerMessages` / `buildBatchSystemPrompt`: shared static content (char card, persona, lorebooks, memory) **первым**, agent-specific `promptShard` **последним**. ✅ commit (Phase 6) — layout был уже корректен с Этапа 5; добавлены явные комментарии-маркеры `Phase 6.1 — cache-friendly order` в `tracker_batcher.dart` (`buildBatchSystemPrompt` docstring) и `memory_studio_service.dart` (`_buildSharedBatchMessages` docstring). Документирует что `<role>` → `<lore>` → `<agents>` (stable prefix → volatile tail) — это и есть prompt-cache reorder.
+- [x] **6.2** Включить `cacheControlTtl` на shared-блоке (уже проходит через `_ResolvedAgentConfig`, проверить что wired). ✅ commit (Phase 6) — `ResolvedAgentConfig.fromApiConfig` (`agent_runner.dart:488-489`) наследует `cacheControlTtl`/`cacheBreakpointMode` из `ApiConfig`; `AgentRunner.runAgent` пробрасывает их в `ChatTransportRequest` (`:140-141`); `AnthropicChatTransport`/`OpenRouterChatTransport` ставят `cache_control` на system+depth. Infra была готова с Этапа 5 — wired автоматически, когда user включает кэш на API config.
+- [-] **6.3** Тест: второй ход с тем же character → cache-hit на static prefix. ⏳ отложено — требует мануального runtime-теста (`flutter run`), агент не может запустить; `cache-hit` виден в provider dashboard (Anthropic)/response headers (OpenRouter), не в unit-тестах
+- [x] **6.4** `flutter analyze` + `flutter test`. ✅ commit (Phase 6) — `flutter analyze` 0 errors (0 warnings на изменённых файлах, очищены dead code + unnecessary non-null assertion); `flutter test` 1266 passed (1265 + 1 новый Phase 6.1 cache-order тест).
+
+**Файлы:** `agent_runner.dart` (no change — уже wired), `memory_studio_service.dart` (doc comment + dead code cleanup), `tracker_batcher.dart` (doc comment + non-null assertion fix), `test/characterization/tracker_batcher_test.dart` (1 new test).
+**Оценка:** 0.5 дня (фактически — infra уже готова с Этапа 5; этот этап свёлся к документации + тесту на ordering).
 **Риск:** низкий.
 
 ### Phase 7 — Lightweight Studio UI + разделение agent outputs от memory records (parallel to 2-6)

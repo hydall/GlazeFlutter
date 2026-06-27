@@ -178,7 +178,7 @@ class TrackerBatcher {
         'a non-null runner.',
       );
     }
-    final runner = _runner!;
+    final runner = _runner;
     final groups = <String, List<StudioAgent>>{};
     final resolvedByKey = <String, ResolvedAgentConfig>{};
     for (final agent in batchable) {
@@ -299,25 +299,26 @@ class TrackerBatcher {
     return subGroups;
   }
 
-  /// Build the batched system prompt for a group. Layout (Phase 5.1):
+  /// Build the batched system prompt for a group. Layout (Phase 5.1 +
+  /// Phase 6.1 — prompt-cache-friendly order):
   /// ```
-  /// <role>{shared role text}</role>
-  /// <lore>{shared static_context + dynamic_context + chat_history}</lore>
-  /// <agents>
+  /// <role>{shared role text}</role>            ← stable, cached first
+  /// <lore>{shared static + dynamic + history}</lore>  ← stable prefix
+  /// <agents>                                    ← per-agent, volatile, last
   ///   <agent_task id="{agent.id}" name="{agent.name}">{task text}</agent_task>
   ///   ...
   /// </agents>
-  ///
   /// ─── REQUIRED OUTPUT FORMAT ───
-  /// Respond with exactly one <result> block per agent_task, in order:
-  /// <result agent="{agent.id}">{this agent's output}</result>
-  /// <result agent="{other.id}">{...}</result>
-  ///
-  /// CRITICAL:
-  /// - You MUST produce a <result> block for EVERY agent_task id listed above.
-  /// - Each <result> block must contain ONLY that agent's output, nothing else.
-  /// - Do not add commentary, summaries, or explanations outside <result> blocks.
+  /// <result agent="{agent.id}">...</result>
   /// ```
+  ///
+  /// Cache rationale (Phase 6.1): the shared `<role>` + `<lore>` (char card,
+  /// persona, lorebooks, MemoryBook injection) are identical across turns for
+  /// the same character, so they form a stable prefix that the provider's
+  /// prompt cache (Anthropic ephemeral / OpenRouter `cache_control`) can hit
+  /// on the second turn onwards. The per-agent `<agent_task>` content varies
+  /// per turn (lane contract, current shard expansion), so it sits at the
+  /// tail — never inside the cached prefix.
   ///
   /// [sharedMessages] = the shared `static_context` + `dynamic_context` +
   /// `chat_history` messages, already built and trimmed by the caller. They

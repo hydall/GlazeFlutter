@@ -84,6 +84,46 @@ void main() {
       // Raw <foo> must NOT appear unescaped.
       expect(prompt, isNot(contains('<foo>')));
     });
+
+    test('Phase 6.1 — cache-friendly order: <role> → <lore> → <agents>', () {
+      // The shared stable prefix must come FIRST (cache hit window), the
+      // per-agent volatile tail LAST. Otherwise the prompt cache cannot
+      // find a stable prefix across turns.
+      final group = TrackerBatchGroup(
+        key: 'anthropic|claude',
+        resolved: _stubResolved(model: 'claude-3-5-sonnet'),
+        agents: [
+          StudioAgent(id: 'a1', name: 'Continuity', promptShard: 'track facts'),
+        ],
+        batchMaxTokens: 1000,
+        batchTemperature: 0.3,
+        batchContextSize: 5,
+      );
+      final prompt = batcher.buildBatchSystemPrompt(
+        group: group,
+        sharedMessages: [
+          {'role': 'system', 'content': 'STABLE_CHAR_CARD'},
+          {'role': 'user', 'content': 'VOLATILE_HISTORY'},
+        ],
+        perAgentTaskText: {'a1': 'VOLATILE_TASK'},
+        roleText: 'STABLE_ROLE',
+      );
+
+      final roleIdx = prompt.indexOf('<role>');
+      final loreIdx = prompt.indexOf('<lore>');
+      final agentsIdx = prompt.indexOf('<agents>');
+      expect(roleIdx, lessThan(loreIdx), reason: '<role> must precede <lore>');
+      expect(loreIdx, lessThan(agentsIdx), reason: '<lore> must precede <agents>');
+      // Output-format block comes AFTER <agents> (tail) — never inside the
+      // cached prefix.
+      final formatIdx = prompt.indexOf('REQUIRED OUTPUT FORMAT');
+      expect(agentsIdx, lessThan(formatIdx));
+      // Stable content is inside the prefix region; volatile content inside
+      // the tail region.
+      expect(prompt.indexOf('STABLE_ROLE'), lessThan(loreIdx));
+      expect(prompt.indexOf('STABLE_CHAR_CARD'), lessThan(agentsIdx));
+      expect(prompt.indexOf('VOLATILE_TASK'), greaterThan(agentsIdx));
+    });
   });
 
   group('TrackerBatcher.parseBatchResponse', () {
@@ -312,11 +352,11 @@ Focus: anti-loop
   });
 }
 
-ResolvedAgentConfig _stubResolved() {
-  return const ResolvedAgentConfig(
+ResolvedAgentConfig _stubResolved({String model = 'gpt-4'}) {
+  return ResolvedAgentConfig(
     endpoint: 'https://test',
     apiKey: 'k',
-    model: 'gpt-4',
+    model: model,
     protocol: 'openai',
     stream: false,
   );
