@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/platform_paths.dart';
+import '../utils/time_helpers.dart';
 import 'tables.dart';
 
 part 'app_db.g.dart';
@@ -42,7 +43,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 50;
+  int get schemaVersion => 51;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -690,6 +691,58 @@ class AppDatabase extends _$AppDatabase {
         final tableNames = tables.map((r) => r.read<String>('name')).toSet();
         if (!tableNames.contains('tracker_snapshots')) {
           await m.createTable(trackerSnapshots);
+        }
+      }
+      if (from < 51) {
+        // Migrate existing tracker_rows into baseline tracker_snapshots so
+        // legacy sessions get a committed snapshot the read path can find.
+        // For each session with trackers, insert one snapshot at the sentinel
+        // anchor (messageId='', swipeId=0, agentSwipeId=0, committed=1). This
+        // snapshot is never dropped by deleteForMessage (no real message has
+        // id='') and is naturally superseded when a new turn writes a real
+        // snapshot with a higher createdAt.
+        final snapTables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final snapNames =
+            snapTables.map((r) => r.read<String>('name')).toSet();
+        if (snapNames.contains('tracker_snapshots') &&
+            snapNames.contains('tracker_rows')) {
+          // Aggregate each session's trackers into a JSON array and insert
+          // as a single baseline snapshot.
+          final sessions = await customSelect(
+            'SELECT DISTINCT session_id FROM tracker_rows',
+          ).get();
+          final now = currentTimestampSeconds();
+          for (final s in sessions) {
+            final sessionId = s.read<String>('session_id');
+            final rows = await customSelect(
+              'SELECT name, value, scope, provenance, updated_at '
+              'FROM tracker_rows WHERE session_id = ? '
+              'ORDER BY name',
+              variables: [Variable.withString(sessionId)],
+            ).get();
+            if (rows.isEmpty) continue;
+            final trackersJson = rows
+                .map((r) {
+                  return jsonEncode({
+                    'sessionId': sessionId,
+                    'name': r.read<String>('name'),
+                    'value': r.read<String>('value'),
+                    'scope': r.read<String>('scope'),
+                    'provenance': r.read<String>('provenance'),
+                    'updatedAt': r.read<int>('updated_at'),
+                  });
+                })
+                .join(',');
+            await customStatement(
+              'INSERT OR REPLACE INTO tracker_snapshots '
+              '(session_id, message_id, swipe_id, agent_swipe_id, '
+              'trackers_json, committed, created_at) VALUES '
+              "(?, '', 0, 0, ?, 1, ?)",
+              [sessionId, '[$trackersJson]', now],
+            );
+          }
         }
       }
     },
