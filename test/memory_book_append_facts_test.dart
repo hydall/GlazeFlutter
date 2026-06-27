@@ -208,5 +208,40 @@ void main() {
       // messageIds unchanged by the append.
       expect(after!.entries.first.messageIds, ['m40', 'm41']);
     });
+
+    test('locked entries are protected from append (Marinara analog)',
+        () async {
+      // A locked entry cannot be modified by the agentic write-loop.
+      // appendFactsToEntry must skip it and return false (the entry exists
+      // but was not updated). Mirrors Marinara's `locked` flag.
+      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.4.
+      final book = MemoryBook(
+        id: 'memorybook_s7',
+        sessionId: 's7',
+        entries: [
+          MemoryEntry(
+            id: 'mem_locked',
+            title: 'Protected fact',
+            content: 'Original protected content.',
+            status: 'active',
+            locked: true,
+          ),
+        ],
+      );
+      await repo.put(book);
+
+      final updated = await repo.appendFactsToEntry(
+        sessionId: 's7',
+        entryId: 'mem_locked',
+        newFacts: 'Attempted append.',
+      );
+
+      // The entry was found, but locked → not updated. We return false
+      // (the append did not land) so the caller can fall back to creating
+      // a new entry rather than silently dropping the fact.
+      expect(updated, isFalse);
+      final after = await repo.getBySessionId('s7');
+      expect(after!.entries.first.content, 'Original protected content.');
+    });
   });
 }

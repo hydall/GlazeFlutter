@@ -59,6 +59,22 @@ abstract class MemoryEntry with _$MemoryEntry {
     /// MemoryBook UI tab agent-sourced entries separately from curated
     /// ones (see `memory_books_sheet.dart` "Agent memories" tab).
     @Default('') String source,
+    /// When true, the agentic write-loop MUST NOT modify this entry —
+    /// `MemoryBookRepo.appendFactsToEntry` skips it and the parser marks
+    /// it as `[locked]` in the `<existing_memory_entries>` prompt block
+    /// so the LLM knows not to propose updates to it. Mirrors Marinara's
+    /// `locked` flag on lorebook entries. User-toggled via the MemoryBook
+    /// UI to protect manually-curated facts from being rewritten by the
+    /// agent. See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.4.
+    @Default(false) bool locked,
+    /// When true, this entry is excluded from the embedding pipeline —
+    /// `MemoryEmbeddingService` skips it, and `MessageRecallService` /
+    /// memory vector search do not surface it. Useful for spoiler entries
+    /// or entries that should only activate via explicit keyword match,
+    /// never via semantic similarity. Mirrors Marinara's
+    /// `excludeFromVectorization` flag. See docs/plans/PLAN_MEMORY_CONTINUITY.md
+    /// §4 (out-of-scope → now in-scope).
+    @Default(false) bool excludeFromVectorization,
   }) = _MemoryEntry;
 
   factory MemoryEntry.fromJson(Map<String, dynamic> json) =>

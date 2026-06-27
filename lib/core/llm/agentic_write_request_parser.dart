@@ -43,7 +43,9 @@ class AgenticWriteRequestParser {
     // avoid duplicates and append newFacts to existing entries instead of
     // rewriting them. Title + keys only — content is omitted to keep the
     // prompt lean (mirrors Marinara's `<existing_entries>` block, which
-    // also omits full content). See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+    // also omits full content). Locked entries are marked with `[locked]`
+    // so the LLM knows not to propose updates to them (Marinara analog).
+    // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 and §2.4.
     final existingBlock = existingMemories.isEmpty
         ? '(no existing memory entries)'
         : existingMemories
@@ -51,7 +53,8 @@ class AgenticWriteRequestParser {
             .map((e) {
               final keysStr =
                   e.keys.isEmpty ? '' : ' [keys: ${e.keys.join(', ')}]';
-              return '- ${e.title.isNotEmpty ? e.title : e.id}$keysStr';
+              final lockedStr = e.locked ? ' [locked: do not modify]' : '';
+              return '- ${e.title.isNotEmpty ? e.title : e.id}$keysStr$lockedStr';
             })
             .join('\n');
 

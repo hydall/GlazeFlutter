@@ -21,6 +21,15 @@ class MemoryEmbeddingService {
     String embeddingTarget = 'content',
   }) async {
     if (config.endpoint.isEmpty) return;
+    // excludeFromVectorization: user opt-out for spoiler entries or
+    // entries that should only activate via keyword, never via semantic
+    // similarity. Drop any existing embedding row too so the entry is
+    // fully invisible to vector search. Mirrors Marinara's
+    // `excludeFromVectorization` flag. See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    if (entry.excludeFromVectorization) {
+      await _repo.deleteByEntryId(entry.id);
+      return;
+    }
 
     final text = _getEmbeddingText(entry, embeddingTarget);
     if (text.trim().isEmpty) return;
@@ -93,13 +102,20 @@ class MemoryEmbeddingService {
     int retryAfter = 0;
 
     final entries = book.entries.where((e) => e.status == 'active').toList();
+    // Drop any existing embeddings for excluded entries up front so the
+    // reindex leaves the embedding table clean for them.
+    final excluded = entries.where((e) => e.excludeFromVectorization).toList();
+    for (final e in excluded) {
+      await _repo.deleteByEntryId(e.id);
+    }
+    final indexable = entries.where((e) => !e.excludeFromVectorization).toList();
 
-    for (int i = 0; i < entries.length; i++) {
-      onProgress?.call(i, entries.length);
+    for (int i = 0; i < indexable.length; i++) {
+      onProgress?.call(i, indexable.length);
       try {
-        final existing = await _repo.getByEntryId(entries[i].id);
-        final text = _getEmbeddingText(entries[i], embeddingTarget);
-        final fingerprint = _buildFingerprint(entries[i], text);
+        final existing = await _repo.getByEntryId(indexable[i].id);
+        final text = _getEmbeddingText(indexable[i], embeddingTarget);
+        final fingerprint = _buildFingerprint(indexable[i], text);
     final textHash = computeHash(fingerprint);
 
         if (existing != null &&
@@ -111,7 +127,7 @@ class MemoryEmbeddingService {
         }
 
         await indexMemoryEntry(
-          entries[i],
+          indexable[i],
           charId: charId,
           sessionId: sessionId,
           config: config,

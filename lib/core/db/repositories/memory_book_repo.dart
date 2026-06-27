@@ -177,12 +177,18 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     List<String> newKeys = const [],
   }) async {
     if (newFacts.trim().isEmpty) return false;
+    var didAppend = false;
     await transaction(() async {
       final existing = await getBySessionId(sessionId);
       if (existing == null) return;
       final idx = existing.entries.indexWhere((e) => e.id == entryId);
       if (idx < 0) return;
       final entry = existing.entries[idx];
+      // Locked entries are user-protected — agent cannot modify them.
+      // Mirrors Marinara's `locked` flag. See
+      // docs/plans/PLAN_MEMORY_CONTINUITY.md §2.4.
+      if (entry.locked) return;
+      didAppend = true;
       final appendedContent = entry.content.isEmpty
           ? newFacts
           : '${entry.content}\n\n$newFacts';
@@ -201,21 +207,12 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
       final updatedEntry = entry.copyWith(
         content: appendedContent,
         keys: mergedKeys,
-        // Append the new messageId linkage is the caller's responsibility
-        // (the agentic write service passes [messageId] separately and
-        // sets it on the request). Here we only merge text + keys.
       );
       final updatedEntries = List<MemoryEntry>.from(existing.entries);
       updatedEntries[idx] = updatedEntry;
       await put(existing.copyWith(entries: updatedEntries));
     });
-    // Re-read to confirm the update landed — the transaction returns
-    // true if the index lookup succeeded, false otherwise. We can't
-    // return that from inside the transaction closure cleanly, so we
-    // check the outcome here.
-    final after = await getBySessionId(sessionId);
-    if (after == null) return false;
-    return after.entries.any((e) => e.id == entryId);
+    return didAppend;
   }
 
   /// Atomically removes all `MemoryEntry` and `MemoryDraft` items whose
