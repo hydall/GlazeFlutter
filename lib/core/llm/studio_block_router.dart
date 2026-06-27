@@ -193,7 +193,7 @@ $blockLines''';
     Set<String> validBucketIds,
     Set<String> validBlockIds,
   ) {
-    final jsonText = _extractJsonObject(text);
+    final jsonText = extractJsonObject(text);
     if (jsonText == null) return const {};
     final Object? decoded;
     try {
@@ -216,13 +216,6 @@ $blockLines''';
       result[block] = bucket;
     }
     return result;
-  }
-
-  String? _extractJsonObject(String text) {
-    final start = text.indexOf('{');
-    final end = text.lastIndexOf('}');
-    if (start < 0 || end <= start) return null;
-    return text.substring(start, end + 1);
   }
 
   void _log(String message) {

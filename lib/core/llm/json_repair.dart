@@ -36,6 +36,44 @@ import 'dart:convert';
 ///   return null;
 /// }
 /// ```
+/// Extract the first JSON object substring from an LLM response that may be
+/// wrapped in markdown code fences and/or surrounding prose. Returns the
+/// `{ ... }` slice (from the first `{` to the last `}`), or `null` if no
+/// brace-delimited object is present.
+///
+/// Fence handling: a leading/trailing ```` ```json ```` (or any/no language
+/// tag) fence is stripped first. With no fence the regex simply does not match
+/// and the brace scan runs on the trimmed input — so fenced and unfenced
+/// inputs both resolve to the same inner object.
+///
+/// Pair with [repairJson] before `jsonDecode`:
+/// ```dart
+/// final raw = extractJsonObject(text);
+/// if (raw == null) return null;
+/// try {
+///   return jsonDecode(repairJson(raw));
+/// } catch (_) {
+///   return null;
+/// }
+/// ```
+///
+/// Consolidated from the former `MemoryStudioService._extractJsonObject`
+/// (fence-aware) and `StudioBlockRouter._extractJsonObject` (brace-only) —
+/// see `docs/PLAN_STUDIO_REFACTOR.md` §1.3. The fence-aware behavior is a
+/// superset of the brace-only one for both call sites.
+String? extractJsonObject(String text) {
+  var trimmed = text.trim();
+  final fenced = RegExp(
+    r'^```(?:json)?\s*([\s\S]*?)\s*```$',
+    caseSensitive: false,
+  ).firstMatch(trimmed);
+  if (fenced != null) trimmed = fenced.group(1)?.trim() ?? trimmed;
+  final start = trimmed.indexOf('{');
+  final end = trimmed.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  return trimmed.substring(start, end + 1);
+}
+
 String repairJson(String input) {
   if (input.isEmpty) return input;
   final buf = StringBuffer();

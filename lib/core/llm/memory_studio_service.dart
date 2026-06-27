@@ -1403,7 +1403,7 @@ Rules:
   }
 
   String? _typedStudioBrief(StudioAgent agent, String text) {
-    final raw = _extractJsonObject(text);
+    final raw = extractJsonObject(text);
     if (raw == null) return null;
     Object? decoded;
     try {
@@ -1535,19 +1535,6 @@ Rules:
     writeSection('Avoid:', avoid);
     writeSection('Options:', options);
     return buffer.toString().trim();
-  }
-
-  String? _extractJsonObject(String text) {
-    var trimmed = text.trim();
-    final fenced = RegExp(
-      r'^```(?:json)?\s*([\s\S]*?)\s*```$',
-      caseSensitive: false,
-    ).firstMatch(trimmed);
-    if (fenced != null) trimmed = fenced.group(1)?.trim() ?? trimmed;
-    final start = trimmed.indexOf('{');
-    final end = trimmed.lastIndexOf('}');
-    if (start < 0 || end <= start) return null;
-    return trimmed.substring(start, end + 1);
   }
 
   List<String> _safeJsonStringList(Object? value) {
