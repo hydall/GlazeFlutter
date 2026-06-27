@@ -9,16 +9,14 @@ import '../models/studio_config.dart';
 import '../state/db_provider.dart';
 import '../utils/error_format.dart';
 import 'agent_runner.dart';
-import 'history_assembler.dart';
-import 'macro_engine.dart';
 import 'prompt_builder.dart';
 import 'studio_activation_gate.dart';
 import 'studio_brief_cache.dart';
 import 'studio_brief_deduper.dart';
 import 'studio_brief_parser.dart';
 import 'studio_context_bucketizer.dart';
+import 'studio_message_builder.dart';
 import 'studio_prompt_text.dart';
-import 'studio_request_preset.dart';
 import 'studio_stage_brief.dart';
 import 'tracker_batcher.dart';
 
@@ -40,6 +38,11 @@ class MemoryStudioService {
   late final StudioBriefParser _briefParser = StudioBriefParser(_log);
   late final StudioBriefDeduper _briefDeduper = StudioBriefDeduper(_briefParser);
   late final StudioBriefCache _briefCache = StudioBriefCache(_briefParser);
+  late final StudioMessageBuilder _messageBuilder = StudioMessageBuilder(
+    _bucketizer,
+    _promptText,
+    _briefDeduper,
+  );
 
   MemoryStudioService(this._ref);
 
@@ -359,7 +362,7 @@ class MemoryStudioService {
       );
     }
     try {
-      final messages = _buildAgentMessages(
+      final messages = _messageBuilder.buildAgentMessages(
         agent: agent,
         promptResult: promptResult,
         promptPayload: promptPayload,
@@ -419,7 +422,7 @@ class MemoryStudioService {
     required CancelToken cancelToken,
   }) async {
     try {
-      final messages = _buildAgentMessages(
+      final messages = _messageBuilder.buildAgentMessages(
         agent: agent,
         promptResult: promptResult,
         promptPayload: promptPayload,
@@ -478,7 +481,7 @@ class MemoryStudioService {
     required int batchContextSize,
   }) async {
     final context = _bucketizer.bucketize(promptResult, promptPayload: promptPayload);
-    final sharedMessages = _buildSharedBatchMessages(
+    final sharedMessages = _messageBuilder.buildSharedBatchMessages(
       config: config,
       context: context,
       promptPayload: promptPayload,
@@ -487,7 +490,7 @@ class MemoryStudioService {
     );
     final perAgentTask = <String, String>{};
     for (final agent in group.agents) {
-      perAgentTask[agent.id] = _buildPerAgentTaskText(
+      perAgentTask[agent.id] = _messageBuilder.buildPerAgentTaskText(
         agent: agent,
         config: config,
         promptResult: promptResult,
@@ -495,7 +498,12 @@ class MemoryStudioService {
         context: context,
       );
     }
-    final roleText = _batchRoleText(config, context, promptPayload, promptResult);
+    final roleText = _messageBuilder.batchRoleText(
+      config,
+      context,
+      promptPayload,
+      promptResult,
+    );
     final batcher = _ref.read(trackerBatcherProvider);
     final systemPrompt = batcher.buildBatchSystemPrompt(
       group: group,
@@ -697,122 +705,6 @@ class MemoryStudioService {
     }
   }
 
-  /// Shared messages for a batch: `static_context` + `dynamic_context` +
-  /// `chat_history` (trimmed to [batchContextSize]). The per-agent
-  /// `agent_instruction` blocks are NOT here — they go into `<agent_task>`
-  /// XML in the batch system prompt.
-  ///
-  /// Phase 6.1 — cache-friendly order: `static_context` (char card, persona,
-  /// scenario — stable across turns) FIRST, then `dynamic_context` (MemoryBook
-  /// injection, worldInfo, summary — stable within a scene), then
-  /// `chat_history` (volatile, last). Combined with the batch system prompt
-  /// layout (`<role>` + `<lore>` prefix, `<agents>` tail), this gives the
-  /// provider's prompt cache a long stable prefix to hit on subsequent turns.
-  List<Map<String, dynamic>> _buildSharedBatchMessages({
-    required StudioConfig config,
-    required StudioContextBuckets context,
-    required PromptPayload promptPayload,
-    required PromptResult promptResult,
-    required int batchContextSize,
-  }) {
-    final messages = <Map<String, dynamic>>[];
-    messages.addAll(context.staticContext.map((m) => m.toApiMap()));
-    messages.addAll(context.dynamicContext.map((m) => m.toApiMap()));
-    final history = _limitTrackerHistory(context.history, batchContextSize);
-    messages.addAll(history.map((m) => m.toApiMap()));
-    return messages;
-  }
-
-  /// Per-agent task text: the agent's `promptShard` + the preset's
-  /// `agent_instruction` block content + the runtime envelope (lane contract).
-  /// Already macro-expanded.
-  String _buildPerAgentTaskText({
-    required StudioAgent agent,
-    required StudioConfig config,
-    required PromptResult promptResult,
-    required PromptPayload promptPayload,
-    required StudioContextBuckets context,
-  }) {
-    final studioPreset = studioRequestPresetById(
-      config.agentStudioPresetId,
-      finalPreset: false,
-      overrides: config.studioPresetOverrides,
-    );
-    final blocks = studioPreset.blocks
-        .where((b) => b.enabled && b.kind == 'agent_instruction')
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
-    final buf = StringBuffer();
-    final promptShard = _expandStudioBlockContent(
-      agent.promptShard,
-      promptPayload: promptPayload,
-      promptResult: promptResult,
-      context: context,
-    ).trim();
-    if (promptShard.isNotEmpty) {
-      buf.writeln(promptShard);
-      buf.writeln();
-    }
-    for (final block in blocks) {
-      final content = _expandStudioBlockContent(
-        block.content,
-        promptPayload: promptPayload,
-        promptResult: promptResult,
-        context: context,
-      ).trim();
-      if (content.isNotEmpty) {
-        buf.writeln(content);
-        buf.writeln();
-      }
-    }
-    buf.writeln(_promptText.intermediateRuntimeEnvelope(agent));
-    return buf.toString().trim();
-  }
-
-  /// Role text for the `<role>` element: the shared role/instruction text
-  /// from the preset's non-`agent_instruction` blocks (e.g. global rules,
-  /// output language). Kept short — most guidance goes into per-agent
-  /// `<agent_task>`.
-  String _batchRoleText(
-    StudioConfig config,
-    StudioContextBuckets context,
-    PromptPayload promptPayload,
-    PromptResult promptResult,
-  ) {
-    final studioPreset = studioRequestPresetById(
-      config.agentStudioPresetId,
-      finalPreset: false,
-      overrides: config.studioPresetOverrides,
-    );
-    final blocks = studioPreset.blocks
-        .where((b) => b.enabled && b.kind != 'agent_instruction')
-        .where((b) => b.kind != 'static_context')
-        .where((b) => b.kind != 'chat_history')
-        .where((b) => b.kind != 'dynamic_context')
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
-    final buf = StringBuffer();
-    for (final block in blocks) {
-      final promptMessages = context.messagesForKind(block.kind);
-      if (promptMessages.isNotEmpty) {
-        for (final m in promptMessages) {
-          if (m.content.isNotEmpty) buf.writeln(m.content);
-        }
-        continue;
-      }
-      final content = _expandStudioBlockContent(
-        block.content,
-        promptPayload: promptPayload,
-        promptResult: promptResult,
-        context: context,
-      ).trim();
-      if (content.isNotEmpty) {
-        buf.writeln(content);
-      }
-    }
-    return buf.toString().trim();
-  }
-
   bool _allOk(List<TrackerBatchResult> results) {
     return results.every((r) => r.status == 'ok' && r.text.isNotEmpty);
   }
@@ -828,7 +720,7 @@ class MemoryStudioService {
     required CancelToken cancelToken,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
   }) async {
-    final messages = _buildAgentMessages(
+    final messages = _messageBuilder.buildAgentMessages(
       agent: agent,
       promptResult: promptResult,
       promptPayload: promptPayload,
@@ -851,294 +743,6 @@ class MemoryStudioService {
       reasoning: result.reasoning,
       rawResponseJson: result.rawResponseJson,
     );
-  }
-
-  List<Map<String, dynamic>> _buildAgentMessages({
-    required StudioAgent agent,
-    required PromptResult promptResult,
-    required PromptPayload promptPayload,
-    required StudioConfig config,
-    required List<StudioStageBrief> priorBriefs,
-    required bool isFinalResponse,
-    // Feature 6 — when non-empty, this is a post-processing tracker. The
-    // generator's response is appended as an `<assistant_response>` block at
-    // the END of the message list so the tracker can rewrite it. Pre-gen
-    // trackers and the generator pass this empty (default).
-    String mainResponse = '',
-  }) {
-    final studioPreset = studioRequestPresetById(
-      isFinalResponse ? config.finalStudioPresetId : config.agentStudioPresetId,
-      finalPreset: isFinalResponse,
-      overrides: config.studioPresetOverrides,
-    );
-    final context = _bucketizer.bucketize(
-      promptResult,
-      promptPayload: promptPayload,
-    );
-    final blocks = studioPreset.blocks.where((b) => b.enabled).toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
-    final messages = <Map<String, dynamic>>[];
-
-    for (final block in blocks) {
-      switch (block.kind) {
-        case 'agent_instruction':
-          final control = StringBuffer();
-          final promptShard = _expandStudioBlockContent(
-            agent.promptShard,
-            promptPayload: promptPayload,
-            promptResult: promptResult,
-            context: context,
-          ).trim();
-          if (promptShard.isNotEmpty) {
-            control
-              ..writeln(promptShard)
-              ..writeln();
-          }
-          control.writeln(
-            _expandStudioBlockContent(
-              block.content,
-              promptPayload: promptPayload,
-              promptResult: promptResult,
-              context: context,
-            ).trim(),
-          );
-          if (!isFinalResponse) {
-            control
-              ..writeln()
-              ..writeln(_promptText.intermediateRuntimeEnvelope(agent));
-          }
-          if (isFinalResponse) {
-            control
-              ..writeln()
-              ..writeln(_promptText.finalBriefUsageNote());
-            final styleContract = _promptText.finalHardStyleContract(config);
-            if (styleContract.isNotEmpty) {
-              control
-                ..writeln()
-                ..writeln(styleContract);
-            }
-          }
-          messages.add({
-            'role': _normalizeRole(
-              block.role.isNotEmpty ? block.role : agent.role,
-            ),
-            'content': control.toString().trim(),
-          });
-          break;
-        case 'previous_agents':
-          if (!isFinalResponse) break;
-          final sanitized = priorBriefs
-              .where((b) => b.brief.trim().isNotEmpty)
-              .map((b) => _briefDeduper.sanitizePriorBriefForFinal(b, config))
-              .toList();
-          final deduped = _briefDeduper.dedupePriorBriefs(sanitized);
-          messages.addAll(
-            deduped
-                .where((b) => b.brief.trim().isNotEmpty)
-                .map(
-                  (b) => {
-                    'role': _normalizeRole(block.role),
-                    'content': 'Studio agent brief: ${b.agentName}\n${b.brief}',
-                  },
-                ),
-          );
-          break;
-        case 'static_context':
-          messages.addAll(context.staticContext.map((m) => m.toApiMap()));
-          break;
-        case 'chat_history':
-          final history = isFinalResponse
-              ? _limitFinalHistory(context.history, config)
-              : _limitTrackerHistory(context.history, agent.contextSize);
-          messages.addAll(history.map((m) => m.toApiMap()));
-          break;
-        case 'dynamic_context':
-          messages.addAll(context.dynamicContext.map((m) => m.toApiMap()));
-          break;
-        default:
-          final promptMessages = context.messagesForKind(block.kind);
-          if (promptMessages.isNotEmpty) {
-            messages.addAll(promptMessages.map((m) => m.toApiMap()));
-            break;
-          }
-          final content = _expandStudioBlockContent(
-            block.content,
-            promptPayload: promptPayload,
-            promptResult: promptResult,
-            context: context,
-          ).trim();
-          if (content.isNotEmpty) {
-            messages.add({
-              'role': _normalizeRole(block.role),
-              'content': content,
-            });
-          }
-      }
-    }
-
-    // Feature 6 — post-processing trackers receive the generator's response
-    // as an `<assistant_response>` block appended at the END of the message
-    // list. This is the Marinara `context.mainResponse` injection: the
-    // tracker's prompt shard instructs it to rewrite/edit the response, and
-    // the response itself is provided here as read-only source material. We
-    // append rather than prepend so the tracker's instructions (earlier
-    // blocks) come first and the response-to-edit is the last thing the
-    // model sees before generating.
-    if (mainResponse.trim().isNotEmpty) {
-      messages.add({
-        'role': 'user',
-        'content':
-            '<assistant_response>\n${mainResponse.trim()}\n</assistant_response>\n\n'
-            'The text above inside <assistant_response> is the generator\'s '
-            'current reply. Edit, rewrite, or fix it according to your '
-            'instructions. Output ONLY the final rewritten reply (no '
-            'explanations, no <assistant_response> wrapper, no markdown '
-            'fences). If no edit is needed, output the text verbatim.',
-      });
-    }
-
-    return messages;
-  }
-
-  /// Cap how many trailing chat messages reach the FINAL responder.
-  ///
-  /// Intermediate agents always analyze the full transcript; the final writer
-  /// is intentionally limited (default 15) so it relies on the compact agent
-  /// briefs instead of re-reading the whole history. We keep the most recent
-  /// [StudioConfig.maxFinalHistoryMessages] messages, which always preserves
-  /// the current user turn (it is last). 0 (or negative) means no limit.
-  List<PromptMessage> _limitFinalHistory(
-    List<PromptMessage> history,
-    StudioConfig config,
-  ) {
-    final limit = config.maxFinalHistoryMessages;
-    if (limit <= 0 || history.length <= limit) return history;
-    final trimmed = history.sublist(history.length - limit);
-    return trimmed;
-  }
-
-  /// Hard cap on tracker context size (Marinara MAX_AGENT_CONTEXT_MESSAGES).
-  static const _maxTrackerContextSize = 200;
-
-  /// Trim trailing chat history for a tracker (intermediate agent).
-  ///
-  /// Returns the last [contextSize] messages (clamped to
-  /// `1..[_maxTrackerContextSize]`), each truncated via
-  /// [_truncateAgentText] and stripped of HTML via [_stripHtmlTags].
-  ///
-  /// Only the `chat_history` block is trimmed — `static_context` (card,
-  /// persona, lorebooks) and `dynamic_context` (memory, summary, worldInfo)
-  /// remain untouched. MemoryBook injection survives the refactor because it
-  /// flows through `dynamic_context`, not `chat_history`. See
-  /// docs/PLAN_AGENTIC_STUDIO.md Phase 3.
-  List<PromptMessage> _limitTrackerHistory(
-    List<PromptMessage> history,
-    int contextSize,
-  ) {
-    final normalized = contextSize.clamp(
-      1,
-      _maxTrackerContextSize,
-    );
-    if (history.length <= normalized) {
-      return history
-          .map((m) => PromptMessage(
-                role: m.role,
-                content: _truncateAgentText(
-                  _stripHtmlTags(m.content),
-                  2000,
-                ),
-              ))
-          .toList();
-    }
-    final trimmed = history.sublist(history.length - normalized);
-    return trimmed
-        .map((m) => PromptMessage(
-              role: m.role,
-              content: _truncateAgentText(
-                _stripHtmlTags(m.content),
-                2000,
-              ),
-            ))
-        .toList();
-  }
-
-  /// Port of Marinara `truncateAgentText`. If the text is longer than
-  /// [maxChars], keeps the head (40%) + a trim marker + the tail (60%),
-  /// preserving both the beginning and the end of the message. Character
-  /// counting uses `String.runes` for Unicode/emoji safety.
-  static const _trimMarker = '\n\n[Trimmed to keep this agent request compact]\n\n';
-
-  String _truncateAgentText(String text, int maxChars) {
-    if (text.length <= maxChars) return text;
-    final runes = text.runes.toList();
-    if (runes.length <= maxChars) return text;
-    final headCount = (maxChars * 0.4).round();
-    final tailCount = maxChars - headCount;
-    final head = String.fromCharCodes(runes.sublist(0, headCount));
-    final tail = String.fromCharCodes(runes.sublist(runes.length - tailCount));
-    return '$head$_trimMarker$tail';
-  }
-
-  /// Port of Marinara `stripHtmlTags`. Removes HTML/XML-like tags, collapses
-  /// 3+ newlines to 2, trims. Conservative: only strips tags that start with
-  /// a letter (avoids eating `==...==` custom markers or fenced code).
-  static final _htmlTagRegex = RegExp(r'</?[a-zA-Z][^>]*>');
-  static final _multiNewlineRegex = RegExp(r'\n{3,}');
-
-  String _stripHtmlTags(String text) {
-    final stripped = text.replaceAll(_htmlTagRegex, '');
-    final collapsed = stripped.replaceAll(_multiNewlineRegex, '\n\n');
-    return collapsed.trim();
-  }
-
-  String _expandStudioBlockContent(
-    String content, {
-    required PromptPayload promptPayload,
-    required PromptResult promptResult,
-    required StudioContextBuckets context,
-  }) {
-    if (!content.contains('{')) return content;
-    final macroCtx = MacroContext(
-      charName: promptPayload.character.name,
-      charDescription: promptPayload.character.description,
-      charScenario: promptPayload.character.scenario,
-      charPersonality: promptPayload.character.personality,
-      charMesExample: promptPayload.character.mesExample,
-      userName: promptPayload.persona?.name ?? 'User',
-      personaPrompt: promptPayload.persona?.prompt,
-      reasoningStart: promptPayload.preset?.reasoningStart,
-      reasoningEnd: promptPayload.preset?.reasoningEnd,
-      sessionVars: promptResult.sessionVars,
-      globalVars: promptResult.globalVars,
-      charId: promptPayload.character.id,
-      sessionId: promptPayload.sessionId ?? '',
-      summaryContent:
-          promptPayload.summaryContent ?? context.joinKind('summary'),
-      memoryContent:
-          promptPayload.memoryMacroContent ??
-          promptPayload.memoryContent ??
-          context
-              .joinKind('memory')
-              .ifBlank(context.taggedDynamicContent('summary')),
-      lorebooksContent:
-          [
-                context.joinKind('worldInfoBefore'),
-                context.joinKind('worldInfoAfter'),
-              ]
-              .where((value) => value.trim().isNotEmpty)
-              .join('\n\n')
-              .ifBlank(context.taggedDynamicContent('lorebooks')),
-      guidanceText: promptPayload.guidanceText,
-      macroName: promptPayload.character.macroName,
-      arcContent: promptPayload.arcContent,
-      entitiesContent: promptPayload.entitiesContent,
-    );
-    return replaceMacros(content, macroCtx).text;
-  }
-
-  String _normalizeRole(String role) {
-    const allowed = {'system', 'user', 'assistant'};
-    return allowed.contains(role) ? role : 'system';
   }
 
   /// Keyword-activation gate for trackers (Marinara
@@ -1200,10 +804,6 @@ class MemoryStudioService {
   void _log(String message) {
     debugPrint('[Studio] $message');
   }
-}
-
-extension _BlankStringFallback on String {
-  String ifBlank(String fallback) => trim().isEmpty ? fallback : this;
 }
 
 class StudioPipelineResult {
