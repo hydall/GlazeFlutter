@@ -158,6 +158,24 @@ abstract class StudioAgent with _$StudioAgent {
     /// `illustrator` / `lorebook` patterns, even when this field is false,
     /// for forward compatibility with existing configs.
     @Default(false) bool runIndividually,
+
+    /// Optional keyword-activation gate for this tracker. When non-empty,
+    /// the tracker activates ONLY on turns where at least one of these
+    /// keywords appears in the last [activationScanDepth] chat messages
+    /// (case-insensitive, whole-word-optional substring match). When empty
+    /// (the default), the tracker always activates (subject to
+    /// [runInterval] and [enabled]).
+    ///
+    /// Port of Marinara `agent-activation.ts:matchCustomAgentActivation`.
+    /// Use case: a "weather tracker" that should only run when weather is
+    /// mentioned in the recent chat, not on every turn; a "combat tracker"
+    /// that activates only on fight scenes. Combined with `runInterval`
+    /// (turn-count gate) for two-layer gating.
+    @Default([]) List<String> activationKeywords,
+    /// Number of trailing chat messages scanned for [activationKeywords].
+    /// Default 5 (matches `DEFAULT_AGENT_CONTEXT_SIZE`). 0 = scan the
+    /// entire available history (not recommended — expensive and stale).
+    @Default(5) int activationScanDepth,
   }) = _StudioAgent;
 
   factory StudioAgent.fromJson(Map<String, dynamic> json) =>

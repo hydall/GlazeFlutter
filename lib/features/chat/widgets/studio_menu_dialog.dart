@@ -684,6 +684,11 @@ class _TrackerRow extends StatelessWidget {
       if (agent.runInterval != 1)
         _StatusChip(label: 'every ${agent.runInterval}'),
       if (agent.runIndividually) _StatusChip(label: 'solo', emphasize: true),
+      if (agent.activationKeywords.isNotEmpty)
+        _StatusChip(
+          label: 'kw:${agent.activationKeywords.length}',
+          emphasize: true,
+        ),
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),

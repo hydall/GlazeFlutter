@@ -88,9 +88,23 @@ class MemoryStudioService {
 
       // Phase 5.4 — runInterval: skip trackers whose interval doesn't fire
       // this turn. Final generator always runs.
+      // Phase F5 — activationKeywords: skip trackers whose keyword gate
+      // does not match the recent chat. Trackers with empty
+      // activationKeywords always activate (subject to runInterval). The
+      // scan window is [activationScanDepth] trailing history messages.
+      final historyForScan = promptResult.messages
+          .where((m) => m.isHistory)
+          .map((m) => m.content)
+          .toList();
       final dueTrackers = allTrackers.where((a) {
         final interval = a.runInterval <= 0 ? 1 : a.runInterval;
-        return turnIndex % interval == 0;
+        if (turnIndex % interval != 0) return false;
+        if (a.activationKeywords.isEmpty) return true;
+        return matchesActivationKeywords(
+          a.activationKeywords,
+          historyForScan,
+          a.activationScanDepth,
+        );
       }).toList();
 
       // Cache-aware batching: probe cache for each due tracker. Hits become
@@ -1897,6 +1911,45 @@ Rules:
         r'\b(new scene|next scene|time skip|timeskip|later|meanwhile|the next day|next morning|новая сцена|следующая сцена|позже|тем временем|на следующий день|утром|вечером|ночью|перенес[её]мся)\b',
         caseSensitive: false,
       ).hasMatch(text);
+    }
+    return false;
+  }
+
+  /// Keyword-activation gate for trackers (Marinara
+  /// `agent-activation.ts:matchCustomAgentActivation` port). Returns true
+  /// if at least one of [keywords] appears (case-insensitive substring
+  /// match) in the last [scanDepth] entries of [historyContents]. When
+  /// [scanDepth] is 0 or negative, scans the entire list. When [keywords]
+  /// is empty, returns true (always activate — handled by the caller, but
+  /// kept here for completeness).
+  ///
+  /// Match semantics: case-insensitive `contains` per keyword. We do NOT
+  /// use regex (Marinara `activationKeywords` are plain strings, not
+  /// patterns) and we do NOT require whole-word boundaries by default
+  /// (cheaper, fewer false negatives on inflected forms). If a user wants
+  /// exact word matching they can pad the keyword with spaces.
+  @visibleForTesting
+  static bool matchesActivationKeywords(
+    List<String> keywords,
+    List<String> historyContents,
+    int scanDepth,
+  ) {
+    if (keywords.isEmpty) return true;
+    if (historyContents.isEmpty) return false;
+    final effectiveDepth =
+        scanDepth <= 0 ? historyContents.length : scanDepth;
+    final start = historyContents.length - effectiveDepth;
+    final window = historyContents.sublist(start < 0 ? 0 : start);
+    final loweredKeywords = keywords
+        .map((k) => k.trim().toLowerCase())
+        .where((k) => k.isNotEmpty)
+        .toList();
+    if (loweredKeywords.isEmpty) return true;
+    for (final content in window) {
+      final lowered = content.toLowerCase();
+      for (final keyword in loweredKeywords) {
+        if (lowered.contains(keyword)) return true;
+      }
     }
     return false;
   }
