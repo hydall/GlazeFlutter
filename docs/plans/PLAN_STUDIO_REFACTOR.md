@@ -1,11 +1,16 @@
 # Plan: Studio / Agent Subsystem Decomposition
 
-> **Status:** 📋 PROPOSED (not started).
+> **Status:** ✅ CORE DONE — shared specialists (§1), decomposition (§3),
+> TrackerBatcher (§4), MemoryStudioService pure/leaf specialists (§2, 5/9),
+> StudioMenuController (§5), MemorySettingsMapper (§6, partial). Deeply-coupled
+> stateful clusters deferred as follow-up (see §2/§6 notes).
 > **Goal:** Break up the studio/agent god objects into thin orchestrators + injected
 > specialists per `docs/CODE_STYLE.md` (one class = one job, ~250 lines). No behavior
 > change — pure structural refactor, gated by the existing test suite.
-> **Branch:** `refactor/studio-decomposition` off `plan/continuity-post-cleaner` (or
-> off `master` once the latter merges).
+> **Branch:** Work directly on the current `plan/continuity-post-cleaner` branch — **no
+> separate branch**. This refactor is one continuous body of work on the studio /
+> agent / post-cleaner subsystem and lands as a **series of small commits** on that
+> branch (one specialist extraction per commit, per §9).
 
 ---
 
@@ -195,18 +200,28 @@ Note: this is the only file in the set using `WidgetRef` (the rest use `Ref`).
 
 ## 8. Suggested order (impact × test-safety)
 
-1. **Shared specialists** `StudioApiConfigResolver`, `ReasoningStripper`,
+Each numbered step below is **one or more commits on `plan/continuity-post-cleaner`**
+(one specialist extraction per commit). Land them incrementally — never one giant
+commit. After every commit, analyze + test must be green before the next.
+
+1. ✅ **Shared specialists** `StudioApiConfigResolver`, `ReasoningStripper`,
    `extractJsonObject` (§1) — removes 3+2+3 copies, unblocks the rest.
-2. **`StudioDecompositionService`** (§3) — biggest single win; classifiers already
+2. ✅ **`StudioDecompositionService`** (§3) — biggest single win; classifiers already
    have characterization tests.
-3. **`TrackerBatcher`** (§4) — fully test-covered, safe split.
-4. **`MemoryStudioService`** (§2) — largest file; do cache + parser + bucketizer
-   first (purely functional / single-state), then message builder + executors.
-5. **`studio_menu_dialog`** (§5) — removes the 3rd config-resolver copy.
-6. **`MemoryBookController`** (§6) and the §7 items.
+3. ✅ **`TrackerBatcher`** (§4) — fully test-covered, safe split.
+4. ⚠️ **`MemoryStudioService`** (§2) — pure/leaf specialists done (5/9: ActivationGate,
+   PromptText, BriefParser, ContextBucketizer, BriefDeduper); deeply-coupled stateful
+   cluster deferred (see §10).
+5. ✅ **`studio_menu_dialog`** (§5) — `StudioMenuController` extracted; removes the 3rd
+   config-resolver copy.
+6. ⚠️ **`MemoryBookController`** (§6) — `MemorySettingsMapper` extracted (pure mapper);
+   `MemoryDraftGenerationController` deferred (see §10). §7 items not done.
 
 ## 9. Guardrails
 
+- Work on the current `plan/continuity-post-cleaner` branch — do **not** cut a separate
+  refactor branch. The studio / agent / post-cleaner work is one continuous effort that
+  lands as a series of small commits on that branch.
 - One specialist extraction per commit; run `flutter analyze` (must stay
   `No issues found!`) + `flutter test` (1409 green) after **each** commit.
 - Constructor injection only; no new upward `Ref` dependencies in pure specialists
@@ -215,3 +230,35 @@ Note: this is the only file in the set using `WidgetRef` (the rest use `Ref`).
   constraints in §2/§3/§4) — do not edit tests as part of a "no behavior change"
   refactor unless a delegator is genuinely impossible.
 - Regenerate `build_runner` only if a model changes (none planned here).
+
+## 10. Deferred follow-up (stateful clusters)
+
+The remaining extractions share mutable host state (`_ref`, `_log`, `_briefCache`,
+`_book` + `save()`/`updateBook()`) across multiple methods. Extracting them under the
+"no behavior change" mandate would require threading that state through a fragile
+callback/interface with no net readability win at the current size. They are deferred
+to a follow-up that can pair the extraction with the necessary interface design (and
+optionally characterization tests for the moved cluster).
+
+### §2 — MemoryStudioService (chat-time), 4 remaining specialists
+- `StudioBriefCache` (owns `_briefCache`, cache probe/persist + refresh-policy).
+- `StudioMessageBuilder` (agent/batch/per-agent message assembly, history limits,
+  macro expansion).
+- `StudioAgentExecutor` (single-agent + post-gen + individual + final run adapters).
+- `StudioBatchCoordinator` (batch group exec + 2-layer retry/fallback).
+All four are glued through `runTrackerCycle` + the shared `_ref`/`_log`/`_briefCache`.
+`MemoryStudioService` is now ~1500 lines (from ~2346, a 36% reduction from the 5
+completed specialists).
+
+### §6 — MemoryBookController, 1 remaining specialist
+- `MemoryDraftGenerationController` (draft-generation lifecycle: timers, cancel tokens,
+  active/generating sets, `generateDraft`/`batchGenerate`/`cancelDraftGeneration`).
+  INV-M3 mutex is pinned by `test/characterization/memory_draft_mutex_test.dart`, which
+  tests the shared `memoryActiveDraftsProvider` contract (not the controller directly),
+  so the extraction is safe — just needs the `_book` reads + `save()`/`updateBook()`
+  writes threaded through. `MemoryBookController` is now 552 lines (from 619).
+
+### §7 — lower-priority items
+- `agent_runner.dart`: `AgentStreamRunner` extraction (streaming state machine).
+- `memory_agentic_write_service.dart`: `AgenticWriteRequestParser`.
+- `memory_agentic_tools.dart`: file split (cosmetic).
