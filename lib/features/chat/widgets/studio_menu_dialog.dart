@@ -1,10 +1,13 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../../settings/api_list_provider.dart';
 import 'post_building_menu_dialog.dart';
 
@@ -39,6 +42,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   StudioConfig? _config;
   List<Tracker> _trackers = const [];
   bool _loading = true;
+  bool _loadingModels = false;
 
   @override
   void initState() {
@@ -86,90 +90,105 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     setState(() => _config = updated);
   }
 
-  /// Edit a tracker's model override. Trackers run on the chat's resolved run
-  /// API; the override only swaps the model id (empty = use the chat model).
-  /// We surface the models from saved API configs as quick picks plus a free
-  /// text field for anything not in the list.
-  Future<void> _editAgentModel(StudioAgent agent) async {
+  /// Resolve the [ApiConfig] a tracker runs against, mirroring
+  /// [AgentRunner]'s resolution: the Studio's `runApiConfigId` if set,
+  /// otherwise the chat's active API config. Trackers reuse this config's
+  /// provider/endpoint/key — only the model id is overridden per agent — so
+  /// the model list must come from this exact provider.
+  ApiConfig? _resolveTrackerApiConfig() {
     final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
-    // Build a de-duplicated suggestion list from saved configs' models.
-    final suggestions = <String>{};
-    for (final c in apiConfigs) {
-      if (c.model.isNotEmpty) suggestions.add(c.model);
+    final runId = _config?.runApiConfigId ?? '';
+    if (runId.isNotEmpty) {
+      final byRunId = apiConfigs.where((c) => c.id == runId).firstOrNull;
+      if (byRunId != null) return byRunId;
     }
-    final controller = TextEditingController(text: agent.modelOverride);
-    final result = await showDialog<String?>(
-      context: context,
-      useRootNavigator: true,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(
-            agent.name.isEmpty ? agent.id : agent.name,
-            style: Theme.of(ctx).textTheme.titleMedium,
+    return ref.read(activeApiConfigProvider);
+  }
+
+  /// Edit a tracker's model override by picking from the provider's live model
+  /// list. Trackers run on the chat's resolved run API; the override only swaps
+  /// the model id (empty = use the chat model). We fetch the available models
+  /// from that provider's `/models` endpoint, exactly like the API settings
+  /// screen, and present them in a bottom sheet.
+  Future<void> _editAgentModel(StudioAgent agent) async {
+    final apiConfig = _resolveTrackerApiConfig();
+    if (apiConfig == null) {
+      GlazeToast.show(
+        context,
+        'No chat API configured. Set one up in API settings first.',
+      );
+      return;
+    }
+    final endpoint = apiConfig.endpoint.trim();
+    final apiKey = apiConfig.apiKey.trim();
+
+    // Fetch the live model list from the provider behind a blocking spinner.
+    setState(() => _loadingModels = true);
+    List<String> models;
+    try {
+      final fetched = await pickChatTransport(
+        apiConfig.protocol,
+      ).fetchModels(endpoint: endpoint, apiKey: apiKey);
+      models =
+          fetched
+              .map((m) => (m['id'] ?? '').toString())
+              .where((id) => id.isNotEmpty)
+              .toList()
+            ..sort();
+    } catch (_) {
+      models = const [];
+    }
+    if (!mounted) return;
+    setState(() => _loadingModels = false);
+
+    if (models.isEmpty) {
+      GlazeToast.show(
+        context,
+        'Could not fetch models from ${apiConfig.name.isEmpty ? "the provider" : apiConfig.name}. '
+        'Check the API endpoint and key in settings.',
+      );
+      return;
+    }
+
+    // Surface the current override (and the chat's own model) so the user sees
+    // what is active and can pin it even if it is missing from the live list.
+    final current = agent.modelOverride;
+    final chatModel = apiConfig.model;
+    if (current.isNotEmpty && !models.contains(current)) {
+      models.insert(0, current);
+    }
+    final selectedIndex = current.isNotEmpty ? models.indexOf(current) : -1;
+
+    if (!mounted) return;
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: agent.name.isEmpty ? agent.id : agent.name,
+      scrollToIndex: selectedIndex >= 0 ? selectedIndex : null,
+      items: [
+        // Sentinel option: clear the override and fall back to the chat model.
+        BottomSheetItem(
+          label: 'Use chat model',
+          hint: chatModel.isEmpty ? null : chatModel,
+          icon: current.isEmpty ? Icons.check : Icons.chat_bubble_outline,
+          iconColor: Theme.of(context).colorScheme.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _setAgentModelOverride(agent, '');
+          },
+        ),
+        ...models.map(
+          (m) => BottomSheetItem(
+            label: m,
+            icon: m == current ? Icons.check : null,
+            iconColor: Theme.of(context).colorScheme.primary,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _setAgentModelOverride(agent, m);
+            },
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Model override for this tracker. Leave empty to use the '
-                "chat's configured model.",
-                style: Theme.of(ctx).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'e.g. anthropic/claude-3.5-haiku',
-                  isDense: true,
-                ),
-              ),
-              if (suggestions.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'From your API configs:',
-                  style: Theme.of(ctx).textTheme.labelSmall,
-                ),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: suggestions
-                      .map(
-                        (m) => ActionChip(
-                          label: Text(
-                            m,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          onPressed: () => Navigator.of(ctx).pop(m),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop('\u0000'), // sentinel: clear
-              child: const Text('Use chat model'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
+        ),
+      ],
     );
-    if (result == null) return; // cancelled
-    final newOverride = result == '\u0000' ? '' : result;
-    await _setAgentModelOverride(agent, newOverride);
   }
 
   Future<void> _setAgentModelOverride(
@@ -213,108 +232,120 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     return Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.tune, color: cs.primary),
-                    const SizedBox(width: 8),
-                    Text('Studio', style: tt.titleMedium),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, size: 20),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (_loading)
-                  const Center(child: CircularProgressIndicator())
-                else ...[
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Enable Studio trackers'),
-                    subtitle: Text(
-                      'Trackers run alongside the main generator. Batched by '
-                      '(provider, model). Configure prompts in the Post-Building menu.',
-                      style: tt.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                    value: _config?.enabled ?? false,
-                    onChanged: (v) => _toggleEnabled(v),
-                  ),
-                  const SizedBox(height: 12),
-                  if (activeAgents.isEmpty && disabledAgents.isEmpty)
-                    Text(
-                      'No trackers configured. Add agents in the Post-Building '
-                      'menu under the write-loop / generation sections.',
-                      style: tt.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    )
-                  else ...[
-                    Text(
-                      'Active trackers (${activeAgents.length})',
-                      style: tt.labelMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (activeAgents.isEmpty)
-                      Text(
-                        '— none —',
-                        style: tt.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant,
+                    Row(
+                      children: [
+                        Icon(Icons.tune, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Text('Studio', style: tt.titleMedium),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close, size: 20),
+                          visualDensity: VisualDensity.compact,
                         ),
-                      )
-                    else
-                      ...activeAgents.map(
-                        (a) => _TrackerRow(
-                          agent: a,
-                          value: _trackerValueFor(a.name),
-                          onToggle: (v) => _toggleAgent(a, v),
-                          onEditModel: () => _editAgentModel(a),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (_loading)
+                      const Center(child: CircularProgressIndicator())
+                    else ...[
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Enable Studio trackers'),
+                        subtitle: Text(
+                          'Trackers run alongside the main generator. Batched by '
+                          '(provider, model). Configure prompts in the Post-Building menu.',
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
+                        value: _config?.enabled ?? false,
+                        onChanged: (v) => _toggleEnabled(v),
                       ),
-                    if (disabledAgents.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      Text(
-                        'Disabled (${disabledAgents.length})',
-                        style: tt.labelMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
+                      if (activeAgents.isEmpty && disabledAgents.isEmpty)
+                        Text(
+                          'No trackers configured. Add agents in the Post-Building '
+                          'menu under the write-loop / generation sections.',
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        )
+                      else ...[
+                        Text(
+                          'Active trackers (${activeAgents.length})',
+                          style: tt.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      ...disabledAgents.map(
-                        (a) => _TrackerRow(
-                          agent: a,
-                          value: _trackerValueFor(a.name),
-                          onToggle: (v) => _toggleAgent(a, v),
-                          onEditModel: () => _editAgentModel(a),
+                        const SizedBox(height: 4),
+                        if (activeAgents.isEmpty)
+                          Text(
+                            '— none —',
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          )
+                        else
+                          ...activeAgents.map(
+                            (a) => _TrackerRow(
+                              agent: a,
+                              value: _trackerValueFor(a.name),
+                              onToggle: (v) => _toggleAgent(a, v),
+                              onEditModel: () => _editAgentModel(a),
+                            ),
+                          ),
+                        if (disabledAgents.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'Disabled (${disabledAgents.length})',
+                            style: tt.labelMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          ...disabledAgents.map(
+                            (a) => _TrackerRow(
+                              agent: a,
+                              value: _trackerValueFor(a.name),
+                              onToggle: (v) => _toggleAgent(a, v),
+                              onEditModel: () => _editAgentModel(a),
+                            ),
+                          ),
+                        ],
+                      ],
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _openAdvanced,
+                          icon: const Icon(Icons.open_in_new, size: 16),
+                          label: const Text('Advanced / POST-building config'),
                         ),
                       ),
                     ],
                   ],
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: _openAdvanced,
-                      icon: const Icon(Icons.open_in_new, size: 16),
-                      label: const Text('Advanced / POST-building config'),
-                    ),
-                  ),
-                ],
-              ],
+                ),
+              ),
             ),
-          ),
+            // Blocking overlay while the provider model list is fetched.
+            if (_loadingModels)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: cs.scrim.withValues(alpha: 0.4),
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -365,10 +396,7 @@ class _TrackerRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Switch(
-            value: agent.enabled,
-            onChanged: onToggle,
-          ),
+          Switch(value: agent.enabled, onChanged: onToggle),
           const SizedBox(width: 4),
           Expanded(
             child: Column(
@@ -402,9 +430,7 @@ class _TrackerRow extends StatelessWidget {
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      ...chips.map(
-                        (c) => _chip(context, c.label, c.emphasize),
-                      ),
+                      ...chips.map((c) => _chip(context, c.label, c.emphasize)),
                       // Tappable model chip — the one piece of per-tracker
                       // config the lightweight dialog edits inline.
                       _modelChip(context),
@@ -442,9 +468,7 @@ class _TrackerRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: hasOverride
-              ? cs.primaryContainer
-              : cs.surfaceContainerHighest,
+          color: hasOverride ? cs.primaryContainer : cs.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
             color: cs.primary.withValues(alpha: 0.4),
@@ -463,8 +487,9 @@ class _TrackerRow extends StatelessWidget {
             Text(
               label,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color:
-                    hasOverride ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                color: hasOverride
+                    ? cs.onPrimaryContainer
+                    : cs.onSurfaceVariant,
               ),
             ),
           ],
