@@ -234,6 +234,20 @@ class ChatSessionService {
           fromSessionId: current.id,
           toSessionId: session.id,
         );
+    // Copy tracker snapshots for the sliced message range into the new
+    // sessionId. Messages are not re-id'd on branch, so the sessionId prefix
+    // in the snapshot PK isolates each branch's rows (no cross-session
+    // aliasing). Without this, a branched session would lose all tracker
+    // provenance — the read path (getLatestCommitted) would find no snapshots
+    // and fall back to an empty tracker list.
+    final branchedMessageIds = session.messages.map((m) => m.id).toSet();
+    await _ref
+        .read(trackerSnapshotRepoProvider)
+        .copyForSessionBranch(
+          fromSessionId: current.id,
+          toSessionId: session.id,
+          messageIds: branchedMessageIds,
+        );
     await saveCurrentSessionIndex(charId, nextIndex);
     return session;
   }
