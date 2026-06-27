@@ -223,31 +223,40 @@ class StreamGenerationService {
             'studio agent_errors char=$_charId session=${session.id} '
             'error=${studioResult.error}',
           );
-          final elapsed =
-              DateTime.now().difference(startGenTime).inMilliseconds;
-          final finalState = _writer.writeAssistant(
-            text: '',
-            reasoning: null,
-            currentSession: saveSession ?? session,
-            isAborted: _isAborted,
-            pendingSessionVars: pendingSessionVars,
-            genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
-            tokens: 0,
-            rawResponse: '',
-            previousSwipes: previousSwipes,
-            previousSwipeId: previousSwipeId,
-            previousReasoning: previousReasoning,
-            previousGenTime: previousGenTime,
-            previousTokens: previousTokens,
-            previousSwipesMeta: previousSwipesMeta,
-            guidanceText: guidanceText,
-            memoryCoverage: coverage,
-            isAllReasoning: false,
-            triggeredLorebooks: triggeredLorebooks,
-            triggeredMemories: triggeredMemories,
-            regenTargetId: regenTargetId,
-            visibleStartIndex: vsi,
-          ).copyWith(promptPayload: payload);
+          _recordStudioTrackerOperation(
+            sessionId: session.id,
+            startGenTime: startGenTime,
+            result: studioResult,
+            model: apiConfig.model,
+          );
+          final elapsed = DateTime.now()
+              .difference(startGenTime)
+              .inMilliseconds;
+          final finalState = _writer
+              .writeAssistant(
+                text: '',
+                reasoning: null,
+                currentSession: saveSession ?? session,
+                isAborted: _isAborted,
+                pendingSessionVars: pendingSessionVars,
+                genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
+                tokens: 0,
+                rawResponse: '',
+                previousSwipes: previousSwipes,
+                previousSwipeId: previousSwipeId,
+                previousReasoning: previousReasoning,
+                previousGenTime: previousGenTime,
+                previousTokens: previousTokens,
+                previousSwipesMeta: previousSwipesMeta,
+                guidanceText: guidanceText,
+                memoryCoverage: coverage,
+                isAllReasoning: false,
+                triggeredLorebooks: triggeredLorebooks,
+                triggeredMemories: triggeredMemories,
+                regenTargetId: regenTargetId,
+                visibleStartIndex: vsi,
+              )
+              .copyWith(promptPayload: payload);
           return finalState;
         }
         if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
@@ -256,6 +265,12 @@ class StreamGenerationService {
           _log(
             'studio failed char=$_charId session=${session.id} '
             'status=${studioResult.status} error=$message',
+          );
+          _recordStudioTrackerOperation(
+            sessionId: session.id,
+            startGenTime: startGenTime,
+            result: studioResult,
+            model: apiConfig.model,
           );
           if (regenTargetId != null && saveSession != null) {
             return _writer.writeRegenError(
@@ -278,31 +293,40 @@ class StreamGenerationService {
           'elapsedMs=$elapsed chars=${studioResult.response.length} '
           'briefs=${studioResult.stageBriefs.length}',
         );
-        final finalState = _writer.writeAssistant(
-          text: studioResult.response,
-          reasoning: studioResult.reasoning.isNotEmpty
-              ? studioResult.reasoning
-              : null,
-          currentSession: saveSession ?? session,
-          isAborted: _isAborted,
-          pendingSessionVars: pendingSessionVars,
-          genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
-          tokens: estimateTokens(studioResult.response),
-          rawResponse: studioResult.rawResponseJson ?? studioResult.response,
-          previousSwipes: previousSwipes,
-          previousSwipeId: previousSwipeId,
-          previousReasoning: previousReasoning,
-          previousGenTime: previousGenTime,
-          previousTokens: previousTokens,
-          previousSwipesMeta: previousSwipesMeta,
-          guidanceText: guidanceText,
-          memoryCoverage: coverage,
-          isAllReasoning: false,
-          triggeredLorebooks: triggeredLorebooks,
-          triggeredMemories: triggeredMemories,
-          regenTargetId: regenTargetId,
-          visibleStartIndex: vsi,
-        ).copyWith(promptPayload: payload);
+        _recordStudioTrackerOperation(
+          sessionId: session.id,
+          startGenTime: startGenTime,
+          result: studioResult,
+          model: apiConfig.model,
+        );
+        final finalState = _writer
+            .writeAssistant(
+              text: studioResult.response,
+              reasoning: studioResult.reasoning.isNotEmpty
+                  ? studioResult.reasoning
+                  : null,
+              currentSession: saveSession ?? session,
+              isAborted: _isAborted,
+              pendingSessionVars: pendingSessionVars,
+              genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
+              tokens: estimateTokens(studioResult.response),
+              rawResponse:
+                  studioResult.rawResponseJson ?? studioResult.response,
+              previousSwipes: previousSwipes,
+              previousSwipeId: previousSwipeId,
+              previousReasoning: previousReasoning,
+              previousGenTime: previousGenTime,
+              previousTokens: previousTokens,
+              previousSwipesMeta: previousSwipesMeta,
+              guidanceText: guidanceText,
+              memoryCoverage: coverage,
+              isAllReasoning: false,
+              triggeredLorebooks: triggeredLorebooks,
+              triggeredMemories: triggeredMemories,
+              regenTargetId: regenTargetId,
+              visibleStartIndex: vsi,
+            )
+            .copyWith(promptPayload: payload);
         if (memoryDiagnostics is Map<String, dynamic> &&
             finalState.session != null) {
           final messageId = _lastAssistantId(
@@ -430,29 +454,31 @@ class StreamGenerationService {
               .inMilliseconds;
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
           final tokenCount = estimateTokens(finalText);
-          finalState = _writer.writeAssistant(
-            text: finalText,
-            reasoning: finalReasoning,
-            currentSession: saveSession ?? session,
-            isAborted: _isAborted,
-            pendingSessionVars: pendingSessionVars,
-            genTime: timeStr,
-            tokens: tokenCount,
-            rawResponse: rawResponseJson ?? text,
-            previousSwipes: previousSwipes,
-            previousSwipeId: previousSwipeId,
-            previousReasoning: previousReasoning,
-            previousGenTime: previousGenTime,
-            previousTokens: previousTokens,
-            previousSwipesMeta: previousSwipesMeta,
-            guidanceText: guidanceText,
-            memoryCoverage: coverage,
-            isAllReasoning: isAllReasoning,
-            triggeredLorebooks: triggeredLorebooks,
-            triggeredMemories: triggeredMemories,
-            regenTargetId: regenTargetId,
-            visibleStartIndex: vsi,
-          ).copyWith(promptPayload: payload);
+          finalState = _writer
+              .writeAssistant(
+                text: finalText,
+                reasoning: finalReasoning,
+                currentSession: saveSession ?? session,
+                isAborted: _isAborted,
+                pendingSessionVars: pendingSessionVars,
+                genTime: timeStr,
+                tokens: tokenCount,
+                rawResponse: rawResponseJson ?? text,
+                previousSwipes: previousSwipes,
+                previousSwipeId: previousSwipeId,
+                previousReasoning: previousReasoning,
+                previousGenTime: previousGenTime,
+                previousTokens: previousTokens,
+                previousSwipesMeta: previousSwipesMeta,
+                guidanceText: guidanceText,
+                memoryCoverage: coverage,
+                isAllReasoning: isAllReasoning,
+                triggeredLorebooks: triggeredLorebooks,
+                triggeredMemories: triggeredMemories,
+                regenTargetId: regenTargetId,
+                visibleStartIndex: vsi,
+              )
+              .copyWith(promptPayload: payload);
           if (memoryDiagnostics is Map<String, dynamic> &&
               finalState?.session != null) {
             final messageId = _lastAssistantId(
@@ -586,31 +612,27 @@ class StreamGenerationService {
       if (rawAttempts is List) {
         final attempts = rawAttempts
             .whereType<Map<dynamic, dynamic>>()
-            .map((e) => AgentOperationAttempt.fromJson(
-                  Map<String, dynamic>.from(e),
-                ))
+            .map(
+              (e) =>
+                  AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)),
+            )
             .toList();
         if (attempts.isNotEmpty) {
           final status = _sidecarStatusToOp(sidecarStatus);
           _appendOperation(
             AgentOperationRecord(
-              id:
-                  'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+              id: 'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
               kind: AgentOperationKind.memorySidecar,
               status: status,
               sessionId: sessionId,
               messageId: messageId,
               attempts: attempts,
-              totalElapsedMs: attempts.fold(
-                0,
-                (sum, a) => sum + a.elapsedMs,
-              ),
+              totalElapsedMs: attempts.fold(0, (sum, a) => sum + a.elapsedMs),
               summary: status == AgentOperationStatus.ok
                   ? 'reranked ${diagnostics['selectedCount'] ?? 0} entries'
                   : sidecarStatus,
               startedAtMs: attempts.first.startedAtMs,
-              finishedAtMs:
-                  attempts.last.startedAtMs + attempts.last.elapsedMs,
+              finishedAtMs: attempts.last.startedAtMs + attempts.last.elapsedMs,
               canRegenerate: status.isFailure,
             ),
           );
@@ -627,31 +649,27 @@ class StreamGenerationService {
       if (rawAttempts is List) {
         final attempts = rawAttempts
             .whereType<Map<dynamic, dynamic>>()
-            .map((e) => AgentOperationAttempt.fromJson(
-                  Map<String, dynamic>.from(e),
-                ))
+            .map(
+              (e) =>
+                  AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)),
+            )
             .toList();
         if (attempts.isNotEmpty) {
           final status = _sidecarStatusToOp(agenticStatus);
           _appendOperation(
             AgentOperationRecord(
-              id:
-                  'agentic-search-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+              id: 'agentic-search-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
               kind: AgentOperationKind.agenticSearch,
               status: status,
               sessionId: sessionId,
               messageId: messageId,
               attempts: attempts,
-              totalElapsedMs: attempts.fold(
-                0,
-                (sum, a) => sum + a.elapsedMs,
-              ),
+              totalElapsedMs: attempts.fold(0, (sum, a) => sum + a.elapsedMs),
               summary: status == AgentOperationStatus.ok
                   ? 'agentic search'
                   : agenticStatus,
               startedAtMs: attempts.first.startedAtMs,
-              finishedAtMs:
-                  attempts.last.startedAtMs + attempts.last.elapsedMs,
+              finishedAtMs: attempts.last.startedAtMs + attempts.last.elapsedMs,
               canRegenerate: status.isFailure,
             ),
           );
@@ -664,6 +682,92 @@ class StreamGenerationService {
     _ref.read(agentOperationsLogProvider.notifier).state = _ref
         .read(agentOperationsLogProvider)
         .append(record);
+  }
+
+  /// Records a Studio tracker-cycle operation in the agentic operations log.
+  ///
+  /// Studio differs from the other agentic ops in that the per-agent LLM
+  /// attempts are not surfaced as a structured `attempts` array on the
+  /// pipeline result — they are summarised as `stageBriefs` (one per tracker
+  /// agent) plus an overall `status`. We synthesise a single aggregate
+  /// `AgentOperationAttempt` covering the whole cycle elapsed time and put
+  /// the per-agent breakdown into the `summary` text.
+  ///
+  /// Call sites:
+  ///   - success path (`status == 'ok'`)
+  ///   - partial agent errors (`status == 'agent_errors'`)
+  ///   - hard failure (`status != 'ok' && status != 'agent_errors' &&
+  ///     status != 'aborted' && status != 'disabled'`)
+  ///
+  /// Aborted / disabled runs are not logged — they are user-initiated
+  /// cancellations or no-op configurations, not real operations.
+  void _recordStudioTrackerOperation({
+    required String sessionId,
+    required DateTime startGenTime,
+    required StudioPipelineResult result,
+    String? model,
+  }) {
+    final status = _studioStatusToOp(result.status);
+    if (status == AgentOperationStatus.aborted ||
+        status == AgentOperationStatus.disabled) {
+      return;
+    }
+    final now = DateTime.now();
+    final elapsedMs = now.difference(startGenTime).inMilliseconds;
+    final startedAtMs = startGenTime.millisecondsSinceEpoch;
+
+    final briefs = result.stageBriefs;
+    final okCount = briefs.where((b) => b.status == 'ok').length;
+    final errCount = briefs.length - okCount;
+
+    final summary = switch (result.status) {
+      'ok' =>
+        briefs.isEmpty
+            ? 'studio ok (no trackers)'
+            : 'ran ${briefs.length} tracker${briefs.length > 1 ? 's' : ''}'
+                  '${okCount > 0 ? '' : ''}',
+      'agent_errors' =>
+        'agent errors: $errCount/${briefs.length} failed (${briefs.where((b) => b.status != 'ok').map((b) => b.agentName).join(', ')})',
+      _ => result.error ?? result.status,
+    };
+
+    _appendOperation(
+      AgentOperationRecord(
+        id: 'studio-tracker-$sessionId-${now.microsecondsSinceEpoch}',
+        kind: AgentOperationKind.studioTracker,
+        status: status,
+        sessionId: sessionId,
+        messageId: null,
+        attempts: [
+          AgentOperationAttempt(
+            attempt: 1,
+            statusCode: 0,
+            status: status.label,
+            error: status.isFailure ? (result.error ?? result.status) : null,
+            startedAtMs: startedAtMs,
+            elapsedMs: elapsedMs,
+          ),
+        ],
+        totalElapsedMs: elapsedMs,
+        model: model,
+        summary: summary,
+        startedAtMs: startedAtMs,
+        finishedAtMs: now.millisecondsSinceEpoch,
+        canRegenerate: status.isFailure,
+      ),
+    );
+  }
+
+  static AgentOperationStatus _studioStatusToOp(String status) {
+    return switch (status) {
+      'ok' => AgentOperationStatus.ok,
+      'disabled' => AgentOperationStatus.disabled,
+      'aborted' => AgentOperationStatus.aborted,
+      'timeout' => AgentOperationStatus.timeout,
+      'error' => AgentOperationStatus.error,
+      'agent_errors' => AgentOperationStatus.error,
+      _ => AgentOperationStatus.error,
+    };
   }
 
   static AgentOperationStatus _sidecarStatusToOp(String status) {

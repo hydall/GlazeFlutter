@@ -551,6 +551,7 @@ class _OperationTile extends StatelessWidget {
       AgentOperationKind.agenticWrite => Icons.edit_note,
       AgentOperationKind.classifier => Icons.category_outlined,
       AgentOperationKind.consolidation => Icons.merge_type_outlined,
+      AgentOperationKind.studioTracker => Icons.auto_awesome_outlined,
     };
   }
 
