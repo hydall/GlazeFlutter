@@ -4,31 +4,21 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/api_config.dart';
-import '../models/chat_message.dart';
 import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
 import '../utils/cast_helpers.dart';
 import '../utils/error_format.dart';
-import '../../features/settings/api_list_provider.dart';
+import 'agent_runner.dart';
 import 'history_assembler.dart';
 import 'macro_engine.dart';
 import 'prompt_builder.dart';
 import 'studio_request_preset.dart';
-import 'tokenizer.dart';
-import 'transport/anthropic_chat_transport.dart';
-import 'transport/chat_transport_request.dart';
-import 'transport/gemini_chat_transport.dart';
-import 'transport/llm_protocol.dart';
-import 'transport/openai_chat_transport.dart';
-import 'transport/openrouter_chat_transport.dart';
-import 'transport/transport_factory.dart';
+import 'tracker_batcher.dart';
 
 const _mandatoryBlockIds = {'char_card', 'char_personality', 'user_persona'};
-const _studioAgentStartDelay = Duration(seconds: 2);
 const _studioMetaPolicyAgentName = 'Meta-Weaver / Lumia Policy';
 
 /// Session-bound Studio pipeline.
@@ -90,32 +80,122 @@ class MemoryStudioService {
       }
 
       final finalAgent = agents.last;
-      final trackerAgents = agents.sublist(0, agents.length - 1);
+      final allTrackers = agents.sublist(0, agents.length - 1);
 
       final sceneKey = _sceneCacheKey(promptPayload);
       final turnIndex = _assistantTurnCount(promptPayload);
-      final briefs = trackerAgents.isEmpty
-          ? <StudioStageBrief>[]
-          : await Future.wait([
-              for (var i = 0; i < trackerAgents.length; i++)
-                _runStaggeredIntermediateAgent(
-                  index: i,
-                  agent: trackerAgents[i],
-                  promptResult: promptResult,
-                  promptPayload: promptPayload,
-                  apiConfig: apiConfig,
-                  config: config,
-                  sessionId: sessionId,
-                  cancelToken: token,
-                  sceneKey: sceneKey,
-                  turnIndex: turnIndex,
-                ),
-            ]);
+
+      // Phase 5.4 — runInterval: skip trackers whose interval doesn't fire
+      // this turn. Final generator always runs.
+      final dueTrackers = allTrackers.where((a) {
+        final interval = a.runInterval <= 0 ? 1 : a.runInterval;
+        return turnIndex % interval == 0;
+      }).toList();
+
+      // Cache-aware batching: probe cache for each due tracker. Hits become
+      // final briefs directly; misses go to the batcher.
+      final cachedBriefs = <StudioStageBrief>[];
+      final fetchTrackers = <StudioAgent>[];
+      final cacheProbeByAgent = <String, _CacheProbe>{};
+      for (final agent in dueTrackers) {
+        final probe = _probeCache(
+          agent: agent,
+          config: config,
+          promptPayload: promptPayload,
+          sceneKey: sceneKey,
+          turnIndex: turnIndex,
+        );
+        cacheProbeByAgent[agent.id] = probe;
+        if (probe.hit && probe.brief != null) {
+          cachedBriefs.add(probe.brief!);
+        } else {
+          fetchTrackers.add(agent);
+        }
+      }
+
+      // Phase 5 — group due+missed trackers into batch groups + individuals.
+      final batcher = _ref.read(trackerBatcherProvider);
+      final grouping = await batcher.groupAgents(
+        agents: fetchTrackers,
+        apiConfig: apiConfig,
+        sessionId: sessionId,
+      );
+
+      final fetchedResults = await batcher.runPhase(
+        batchGroups: grouping.batchGroups,
+        individualAgents: grouping.individualAgents,
+        runBatch: (group) => _runBatchGroup(
+          group: group,
+          config: config,
+          promptResult: promptResult,
+          promptPayload: promptPayload,
+          apiConfig: apiConfig,
+          sessionId: sessionId,
+          cancelToken: token,
+          batchContextSize: group.batchContextSize,
+        ),
+        runIndividual: (agent) => _runIndividualTracker(
+          agent: agent,
+          config: config,
+          promptResult: promptResult,
+          promptPayload: promptPayload,
+          apiConfig: apiConfig,
+          sessionId: sessionId,
+          cancelToken: token,
+        ),
+      );
+
+      // Convert batch results + individual results into StudioStageBriefs,
+      // persist cache for the ones that succeeded.
+      final fetchedBriefs = <StudioStageBrief>[];
+      for (final result in fetchedResults) {
+        final probe = cacheProbeByAgent[result.agentId];
+        final agent = dueTrackers.firstWhere((a) => a.id == result.agentId);
+        final sanitized = result.status == 'ok'
+            ? _sanitizeIntermediateAgentOutput(agent, result.text)
+            : result.text;
+        final brief = StudioStageBrief(
+          agentId: result.agentId,
+          agentName: result.agentName,
+          brief: sanitized,
+          status: result.status,
+          error: result.error,
+          refreshPolicy: probe?.policy ?? 'turn',
+          cacheKey: _isCacheablePolicy(probe?.policy ?? 'turn')
+              ? probe?.cacheKey
+              : null,
+          cacheHit: false,
+        );
+        _persistCacheIfCacheable(
+          agent: agent,
+          brief: brief,
+          cacheKey: probe?.cacheKey ?? '',
+          policy: probe?.policy ?? 'turn',
+          turnIndex: turnIndex,
+          cancelToken: token,
+        );
+        fetchedBriefs.add(brief);
+      }
+
+      // Re-assemble briefs in the original pipeline order (cached + fetched),
+      // matching `allTrackers` order. Trackers skipped by runInterval are
+      // omitted entirely — the final generator sees only the due briefs.
+      final briefs = <StudioStageBrief>[];
+      for (final agent in dueTrackers) {
+        final cached = cachedBriefs.where((b) => b.agentId == agent.id).firstOrNull;
+        if (cached != null) {
+          briefs.add(cached);
+          continue;
+        }
+        final fetched = fetchedBriefs.where((b) => b.agentId == agent.id).firstOrNull;
+        if (fetched != null) briefs.add(fetched);
+      }
+
       if (token.isCancelled) {
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
-      final agentResult = await _runAgent(
+      final agentResult = await _runFinalGenerator(
         agent: finalAgent,
         promptResult: promptResult,
         promptPayload: promptPayload,
@@ -124,7 +204,6 @@ class MemoryStudioService {
         priorBriefs: briefs,
         sessionId: sessionId,
         cancelToken: token,
-        isFinalResponse: true,
         onFinalResponseUpdate: onFinalResponseUpdate,
       );
       if (token.isCancelled) {
@@ -154,41 +233,6 @@ class MemoryStudioService {
     }
   }
 
-  Future<StudioStageBrief> _runStaggeredIntermediateAgent({
-    required int index,
-    required StudioAgent agent,
-    required PromptResult promptResult,
-    required PromptPayload promptPayload,
-    required ApiConfig apiConfig,
-    required StudioConfig config,
-    required String sessionId,
-    required CancelToken cancelToken,
-    required String sceneKey,
-    required int turnIndex,
-  }) async {
-    if (index > 0) {
-      await Future<void>.delayed(_studioAgentStartDelay * index);
-      if (cancelToken.isCancelled) {
-        throw DioException.requestCancelled(
-          requestOptions: RequestOptions(),
-          reason: 'Studio pipeline cancelled before agent start',
-        );
-      }
-    }
-    return _runIntermediateAgentWithCache(
-      index: index,
-      agent: agent,
-      promptResult: promptResult,
-      promptPayload: promptPayload,
-      apiConfig: apiConfig,
-      config: config,
-      sessionId: sessionId,
-      cancelToken: cancelToken,
-      sceneKey: sceneKey,
-      turnIndex: turnIndex,
-    );
-  }
-
   Future<StudioStageBrief> _runIntermediateAgentSafely({
     required int index,
     required StudioAgent agent,
@@ -209,27 +253,17 @@ class MemoryStudioService {
       );
     }
     try {
-      final result = await _runAgent(
+      final brief = await _runTracker(
         agent: agent,
         promptResult: promptResult,
         promptPayload: promptPayload,
         apiConfig: apiConfig,
         config: config,
-        priorBriefs: const [],
         sessionId: sessionId,
         cancelToken: cancelToken,
-        isFinalResponse: false,
         onIntermediateUpdate: (text) {},
       );
-      final sanitizedText = _sanitizeIntermediateAgentOutput(
-        agent,
-        result.text,
-      );
-      return StudioStageBrief(
-        agentId: agent.id,
-        agentName: agent.name,
-        brief: sanitizedText,
-      );
+      return brief;
     } catch (e) {
       if (!captureErrors ||
           cancelToken.isCancelled ||
@@ -259,6 +293,52 @@ class MemoryStudioService {
     required String sceneKey,
     required int turnIndex,
   }) async {
+    final cacheProbe = _probeCache(
+      agent: agent,
+      config: config,
+      promptPayload: promptPayload,
+      sceneKey: sceneKey,
+      turnIndex: turnIndex,
+    );
+    if (cacheProbe.hit) {
+      return cacheProbe.brief!;
+    }
+
+    final brief = await _runIntermediateAgentSafely(
+      index: index,
+      agent: agent,
+      promptResult: promptResult,
+      promptPayload: promptPayload,
+      apiConfig: apiConfig,
+      config: config,
+      sessionId: sessionId,
+      cancelToken: cancelToken,
+    );
+    _persistCacheIfCacheable(
+      agent: agent,
+      brief: brief,
+      cacheKey: cacheProbe.cacheKey,
+      policy: cacheProbe.policy,
+      turnIndex: turnIndex,
+      cancelToken: cancelToken,
+    );
+    return brief.copyWithCacheMetadata(
+      refreshPolicy: cacheProbe.policy,
+      cacheKey: _isCacheablePolicy(cacheProbe.policy) ? cacheProbe.cacheKey : null,
+    );
+  }
+
+  /// Cache probe result for one tracker. [hit] = true when a usable cached
+  /// brief exists for this turn; [brief] carries the sanitized cached brief.
+  /// Used by `runTrackerCycle` to split trackers into cached (skip LLM) vs.
+  /// batchable/individual before invoking `TrackerBatcher`.
+  _CacheProbe _probeCache({
+    required StudioAgent agent,
+    required StudioConfig config,
+    required PromptPayload promptPayload,
+    required String sceneKey,
+    required int turnIndex,
+  }) {
     final policy = _effectiveRefreshPolicy(agent);
     final cacheKey = _cacheKeyForAgent(
       config: config,
@@ -277,44 +357,444 @@ class MemoryStudioService {
         agent,
         cached.brief,
       );
-      final brief = StudioStageBrief(
-        agentId: agent.id,
-        agentName: agent.name,
-        brief: sanitizedCachedBrief,
-        status: 'cached',
-        refreshPolicy: policy,
-        cacheKey: cacheKey,
-        cacheHit: true,
-      );
-      return brief;
-    }
-
-    final brief = await _runIntermediateAgentSafely(
-      index: index,
-      agent: agent,
-      promptResult: promptResult,
-      promptPayload: promptPayload,
-      apiConfig: apiConfig,
-      config: config,
-      sessionId: sessionId,
-      cancelToken: cancelToken,
-    );
-    if (!cancelToken.isCancelled &&
-        brief.status == 'ok' &&
-        _isCacheablePolicy(policy)) {
-      _briefCache[cacheKey] = _CachedStudioBrief(
-        brief: brief.brief,
+      return _CacheProbe(
+        hit: true,
         policy: policy,
-        createdTurnIndex: turnIndex,
+        cacheKey: cacheKey,
+        brief: StudioStageBrief(
+          agentId: agent.id,
+          agentName: agent.name,
+          brief: sanitizedCachedBrief,
+          status: 'cached',
+          refreshPolicy: policy,
+          cacheKey: cacheKey,
+          cacheHit: true,
+        ),
       );
     }
-    return brief.copyWithCacheMetadata(
-      refreshPolicy: policy,
-      cacheKey: _isCacheablePolicy(policy) ? cacheKey : null,
+    return _CacheProbe(hit: false, policy: policy, cacheKey: cacheKey);
+  }
+
+  /// Persist a freshly-fetched brief into `_briefCache` if its refresh policy
+  /// is cacheable and the run was successful.
+  void _persistCacheIfCacheable({
+    required StudioAgent agent,
+    required StudioStageBrief brief,
+    required String cacheKey,
+    required String policy,
+    required int turnIndex,
+    required CancelToken cancelToken,
+  }) {
+    if (cancelToken.isCancelled) return;
+    if (brief.status != 'ok') return;
+    if (!_isCacheablePolicy(policy)) return;
+    _briefCache[cacheKey] = _CachedStudioBrief(
+      brief: brief.brief,
+      policy: policy,
+      createdTurnIndex: turnIndex,
     );
   }
 
-  Future<_StudioAgentRunResult> _runAgent({
+  /// Delegate the actual LLM call to [AgentRunner]. This method still
+  /// builds the `messages` list (prompt assembly remains here) and adapts
+  /// the result type to the internal [StudioStageBrief] pipeline.
+  ///
+  /// Per-agent failure isolation (Phase 5.7.5): when [isFinalResponse] is
+  /// false, [AgentRunner.runAgent] wraps any failure into an
+  /// [AgentRunFailedException]; here we unwrap it into a failed brief so the
+  /// rest of the pipeline keeps going. The final generator rethrows.
+  Future<StudioStageBrief> _runTracker({
+    required StudioAgent agent,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required StudioConfig config,
+    required String sessionId,
+    required CancelToken cancelToken,
+    void Function(String text)? onIntermediateUpdate,
+  }) async {
+    if (_isMetaPolicyAgent(agent)) {
+      return StudioStageBrief(
+        agentId: agent.id,
+        agentName: agent.name,
+        brief: _metaPolicyBrief(agent),
+      );
+    }
+    try {
+      final messages = _buildAgentMessages(
+        agent: agent,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        config: config,
+        priorBriefs: const [],
+        isFinalResponse: false,
+      );
+      final runner = _ref.read(agentRunnerProvider);
+      final result = await runner.runAgent(
+        agent: agent,
+        messages: messages,
+        apiConfig: apiConfig,
+        sessionId: sessionId,
+        isFinalResponse: false,
+        cancelToken: cancelToken,
+        onIntermediateUpdate: onIntermediateUpdate,
+      );
+      final sanitized = _sanitizeIntermediateAgentOutput(agent, result.text);
+      return StudioStageBrief(
+        agentId: agent.id,
+        agentName: agent.name,
+        brief: sanitized,
+      );
+    } on AgentRunFailedException catch (e) {
+      return StudioStageBrief(
+        agentId: e.agentId,
+        agentName: e.agentName,
+        brief: 'Studio agent failed: ${e.reason}',
+        status: 'error',
+        error: e.reason,
+      );
+    }
+  }
+
+  /// Run one batch group: build the shared messages (trimmed to
+  /// [batchContextSize] = max contextSize across the group), per-agent task
+  /// text, the batched system prompt, fire a single LLM request, parse the
+  /// `<result>` blocks, and run the in-batch invalid-JSON retry (Phase 5.1
+  /// layer 1) + individual fallback (layer 2) for any agents whose blocks
+  /// came back empty/failed.
+  Future<List<TrackerBatchResult>> _runBatchGroup({
+    required TrackerBatchGroup group,
+    required StudioConfig config,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required String sessionId,
+    required CancelToken cancelToken,
+    required int batchContextSize,
+  }) async {
+    final context = _studioContextBuckets(promptResult, promptPayload: promptPayload);
+    final sharedMessages = _buildSharedBatchMessages(
+      config: config,
+      context: context,
+      promptPayload: promptPayload,
+      promptResult: promptResult,
+      batchContextSize: batchContextSize,
+    );
+    final perAgentTask = <String, String>{};
+    for (final agent in group.agents) {
+      perAgentTask[agent.id] = _buildPerAgentTaskText(
+        agent: agent,
+        config: config,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        context: context,
+      );
+    }
+    final roleText = _batchRoleText(config, context, promptPayload, promptResult);
+    final batcher = _ref.read(trackerBatcherProvider);
+    final systemPrompt = batcher.buildBatchSystemPrompt(
+      group: group,
+      sharedMessages: sharedMessages,
+      perAgentTaskText: perAgentTask,
+      roleText: roleText,
+    );
+    final batchMessages = <Map<String, dynamic>>[
+      {'role': 'system', 'content': systemPrompt},
+    ];
+    // Use a synthetic StudioAgent for the batch request: carry the group's
+    // budget/temperature. The AgentRunner will resolve the API config from
+    // this agent's fields (modelSource='current' → use the group's resolved
+    // (provider, model) via runApiConfigId). We override maxTokens/temperature
+    // on a per-call basis by passing them through ChatTransportRequest — but
+    // AgentRunner.runAgent reads them off the agent. So we synthesize a
+    // per-batch agent that carries the batch budget.
+    final batchAgent = group.agents.first.copyWith(
+      maxTokens: group.batchMaxTokens,
+      temperature: group.batchTemperature,
+      contextSize: batchContextSize,
+    );
+    final runner = _ref.read(agentRunnerProvider);
+    try {
+      final result = await runner.runAgent(
+        agent: batchAgent,
+        messages: batchMessages,
+        apiConfig: apiConfig,
+        sessionId: sessionId,
+        isFinalResponse: false,
+        cancelToken: cancelToken,
+      );
+      final parsed = batcher.parseBatchResponse(result.text, group);
+      // Layer 1 — in-batch invalid-JSON retry: if ANY agent's block came back
+      // empty/failed, re-request the WHOLE batch ONCE (the model may have
+      // truncated mid-batch on the first try). If the retry succeeds, use
+      // it; otherwise fall through to layer 2 (individual fallback).
+      if (_allOk(parsed)) {
+        return parsed;
+      }
+      final failedCount = parsed.where((r) => r.status != 'ok').length;
+      _log(
+        'batch group ${group.key} had $failedCount failed agents on first '
+        'attempt — retrying batch',
+      );
+      final retryResult = await runner.runAgent(
+        agent: batchAgent,
+        messages: batchMessages,
+        apiConfig: apiConfig,
+        sessionId: sessionId,
+        isFinalResponse: false,
+        cancelToken: cancelToken,
+      );
+      final retryParsed = batcher.parseBatchResponse(retryResult.text, group);
+      if (_allOk(retryParsed)) {
+        return retryParsed;
+      }
+      // Layer 2 — individual fallback: take the union of failed agents from
+      // BOTH attempts and re-run each one as its own LLM request, concurrency
+      // limited to 2 (Phase 5.7.2).
+      final failedIds = <String>{};
+      for (final r in parsed.where((r) => r.status != 'ok')) {
+        failedIds.add(r.agentId);
+      }
+      for (final r in retryParsed.where((r) => r.status != 'ok')) {
+        failedIds.add(r.agentId);
+      }
+      // Keep the ok results from either attempt (an agent ok in attempt 1
+      // but failed in attempt 2 should NOT be re-run — keep the ok version).
+      final okResults = <TrackerBatchResult>[
+        ...parsed.where((r) => r.status == 'ok' && !failedIds.contains(r.agentId)),
+        ...retryParsed.where((r) => r.status == 'ok' && !failedIds.contains(r.agentId)),
+      ];
+      final failedAgents = group.agents
+          .where((a) => failedIds.contains(a.id))
+          .toList();
+      final retried = await _retryFailedIndividually(
+        agents: failedAgents,
+        config: config,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        apiConfig: apiConfig,
+        sessionId: sessionId,
+        cancelToken: cancelToken,
+      );
+      return [...okResults, ...retried];
+    } on AgentRunFailedException catch (e) {
+      // Whole batch request failed — fall back to individual for ALL agents
+      // in this group (Phase 5.7.5 per-agent failure isolation at the batch
+      // level: a single transport failure should not lose every agent).
+      _log(
+        'batch group ${group.key} request failed (${e.reason}) — falling '
+        'back to individual for ${group.agents.length} agents',
+      );
+      return _retryFailedIndividually(
+        agents: group.agents,
+        config: config,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        apiConfig: apiConfig,
+        sessionId: sessionId,
+        cancelToken: cancelToken,
+      );
+    }
+  }
+
+  /// Per-agent fallback (Phase 5.1 layer 2 + Phase 5.7.2). Run each failed
+  /// agent as its own LLM request, concurrency-limited to 2.
+  Future<List<TrackerBatchResult>> _retryFailedIndividually({
+    required List<StudioAgent> agents,
+    required StudioConfig config,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required String sessionId,
+    required CancelToken cancelToken,
+  }) async {
+    if (agents.isEmpty) return const [];
+    final batcher = _ref.read(trackerBatcherProvider);
+    return batcher.settleWithConcurrencyLimit(
+      items: agents,
+      limit: 2,
+      run: (agent) async {
+        try {
+          final brief = await _runTracker(
+            agent: agent,
+            promptResult: promptResult,
+            promptPayload: promptPayload,
+            apiConfig: apiConfig,
+            config: config,
+            sessionId: sessionId,
+            cancelToken: cancelToken,
+            onIntermediateUpdate: null,
+          );
+          return TrackerBatchResult(
+            agentId: agent.id,
+            agentName: agent.name,
+            text: brief.brief,
+            status: brief.status,
+            error: brief.error,
+          );
+        } catch (e) {
+          return TrackerBatchResult.failed(
+            agentId: agent.id,
+            agentName: agent.name,
+            reason: formatError(e),
+          );
+        }
+      },
+    );
+  }
+
+  /// Run one individual tracker (not part of any batch group). Reuses the
+  /// existing per-agent prompt assembly + AgentRunner.
+  Future<TrackerBatchResult> _runIndividualTracker({
+    required StudioAgent agent,
+    required StudioConfig config,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required String sessionId,
+    required CancelToken cancelToken,
+  }) async {
+    try {
+      final brief = await _runTracker(
+        agent: agent,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        apiConfig: apiConfig,
+        config: config,
+        sessionId: sessionId,
+        cancelToken: cancelToken,
+        onIntermediateUpdate: null,
+      );
+      return TrackerBatchResult(
+        agentId: agent.id,
+        agentName: agent.name,
+        text: brief.brief,
+        status: brief.status,
+        error: brief.error,
+      );
+    } catch (e) {
+      return TrackerBatchResult.failed(
+        agentId: agent.id,
+        agentName: agent.name,
+        reason: formatError(e),
+      );
+    }
+  }
+
+  /// Shared messages for a batch: `static_context` + `dynamic_context` +
+  /// `chat_history` (trimmed to [batchContextSize]). The per-agent
+  /// `agent_instruction` blocks are NOT here — they go into `<agent_task>`
+  /// XML in the batch system prompt.
+  List<Map<String, dynamic>> _buildSharedBatchMessages({
+    required StudioConfig config,
+    required _StudioContextBuckets context,
+    required PromptPayload promptPayload,
+    required PromptResult promptResult,
+    required int batchContextSize,
+  }) {
+    final messages = <Map<String, dynamic>>[];
+    messages.addAll(context.staticContext.map((m) => m.toApiMap()));
+    messages.addAll(context.dynamicContext.map((m) => m.toApiMap()));
+    final history = _limitTrackerHistory(context.history, batchContextSize);
+    messages.addAll(history.map((m) => m.toApiMap()));
+    return messages;
+  }
+
+  /// Per-agent task text: the agent's `promptShard` + the preset's
+  /// `agent_instruction` block content + the runtime envelope (lane contract).
+  /// Already macro-expanded.
+  String _buildPerAgentTaskText({
+    required StudioAgent agent,
+    required StudioConfig config,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required _StudioContextBuckets context,
+  }) {
+    final studioPreset = studioRequestPresetById(
+      config.agentStudioPresetId,
+      finalPreset: false,
+      overrides: config.studioPresetOverrides,
+    );
+    final blocks = studioPreset.blocks
+        .where((b) => b.enabled && b.kind == 'agent_instruction')
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final buf = StringBuffer();
+    final promptShard = _expandStudioBlockContent(
+      agent.promptShard,
+      promptPayload: promptPayload,
+      promptResult: promptResult,
+      context: context,
+    ).trim();
+    if (promptShard.isNotEmpty) {
+      buf.writeln(promptShard);
+      buf.writeln();
+    }
+    for (final block in blocks) {
+      final content = _expandStudioBlockContent(
+        block.content,
+        promptPayload: promptPayload,
+        promptResult: promptResult,
+        context: context,
+      ).trim();
+      if (content.isNotEmpty) {
+        buf.writeln(content);
+        buf.writeln();
+      }
+    }
+    buf.writeln(_intermediateRuntimeEnvelope(agent));
+    return buf.toString().trim();
+  }
+
+  /// Role text for the `<role>` element: the shared role/instruction text
+  /// from the preset's non-`agent_instruction` blocks (e.g. global rules,
+  /// output language). Kept short — most guidance goes into per-agent
+  /// `<agent_task>`.
+  String _batchRoleText(
+    StudioConfig config,
+    _StudioContextBuckets context,
+    PromptPayload promptPayload,
+    PromptResult promptResult,
+  ) {
+    final studioPreset = studioRequestPresetById(
+      config.agentStudioPresetId,
+      finalPreset: false,
+      overrides: config.studioPresetOverrides,
+    );
+    final blocks = studioPreset.blocks
+        .where((b) => b.enabled && b.kind != 'agent_instruction')
+        .where((b) => b.kind != 'static_context')
+        .where((b) => b.kind != 'chat_history')
+        .where((b) => b.kind != 'dynamic_context')
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final buf = StringBuffer();
+    for (final block in blocks) {
+      final promptMessages = context.messagesForKind(block.kind);
+      if (promptMessages.isNotEmpty) {
+        for (final m in promptMessages) {
+          if (m.content.isNotEmpty) buf.writeln(m.content);
+        }
+        continue;
+      }
+      final content = _expandStudioBlockContent(
+        block.content,
+        promptPayload: promptPayload,
+        promptResult: promptResult,
+        context: context,
+      ).trim();
+      if (content.isNotEmpty) {
+        buf.writeln(content);
+      }
+    }
+    return buf.toString().trim();
+  }
+
+  bool _allOk(List<TrackerBatchResult> results) {
+    return results.every((r) => r.status == 'ok' && r.text.isNotEmpty);
+  }
+
+  Future<_FinalRunResult> _runFinalGenerator({
     required StudioAgent agent,
     required PromptResult promptResult,
     required PromptPayload promptPayload,
@@ -323,235 +803,31 @@ class MemoryStudioService {
     required List<StudioStageBrief> priorBriefs,
     required String sessionId,
     required CancelToken cancelToken,
-    required bool isFinalResponse,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
-    void Function(String text)? onIntermediateUpdate,
   }) async {
-    final resolved = await _resolveAgentConfig(agent, apiConfig, sessionId);
-    if (resolved.endpoint.isEmpty || resolved.model.isEmpty) {
-      throw Exception('Studio agent "${agent.name}" API is not configured');
-    }
-
-    final completer = Completer<_StudioAgentRunResult>();
     final messages = _buildAgentMessages(
       agent: agent,
       promptResult: promptResult,
       promptPayload: promptPayload,
       config: config,
       priorBriefs: priorBriefs,
-      isFinalResponse: isFinalResponse,
+      isFinalResponse: true,
     );
-    final requestMessages =
-        isFinalResponse &&
-            (!resolved.requestReasoning || resolved.omitReasoning)
-        ? _stripPromptLevelReasoning(messages)
-        : messages;
-    final shouldStream = resolved.stream;
-    final request = ChatTransportRequest(
-      endpoint: resolved.endpoint,
-      apiKey: resolved.apiKey,
-      model: resolved.model,
-      messages: requestMessages,
-      maxTokens: agent.maxTokens,
-      temperature: agent.temperature,
-      topP: resolved.topP,
-      topK: resolved.topK,
-      frequencyPenalty: resolved.frequencyPenalty,
-      presencePenalty: resolved.presencePenalty,
-      stream: shouldStream,
-      requestReasoning: isFinalResponse ? resolved.requestReasoning : false,
-      reasoningEffort: isFinalResponse ? resolved.reasoningEffort : null,
-      omitTemperature: resolved.omitTemperature,
-      omitTopP: resolved.omitTopP,
-      omitReasoning: isFinalResponse ? resolved.omitReasoning : true,
-      omitReasoningEffort: isFinalResponse
-          ? resolved.omitReasoningEffort
-          : true,
+    final runner = _ref.read(agentRunnerProvider);
+    final result = await runner.runAgent(
+      agent: agent,
+      messages: messages,
+      apiConfig: apiConfig,
       sessionId: sessionId,
-      cacheControlTtl: resolved.cacheControlTtl,
-      cacheBreakpointMode: resolved.cacheBreakpointMode,
-      sessionIdMode: resolved.sessionIdMode,
+      isFinalResponse: true,
+      cancelToken: cancelToken,
+      onFinalResponseUpdate: onFinalResponseUpdate,
     );
-    final transport = pickChatTransport(resolved.protocol);
-    final startedAt = DateTime.now();
-    final timeoutMs = _effectiveTimeoutMs(agent, isFinalResponse);
-    final output = StringBuffer();
-    final reasoning = StringBuffer();
-    Timer? idleTimer;
-    CancelToken? agentCancelToken;
-    void completeWithAccumulated(String reason) {
-      if (completer.isCompleted) return;
-      final text = output.toString().trim();
-      final reasoningText = isFinalResponse ? reasoning.toString().trim() : '';
-      completer.complete(
-        _StudioAgentRunResult(text: text, reasoning: reasoningText),
-      );
-    }
-
-    void resetAgentTimer() {
-      idleTimer?.cancel();
-      idleTimer = Timer(Duration(milliseconds: timeoutMs), () {
-        if (shouldStream && (output.isNotEmpty || reasoning.isNotEmpty)) {
-          completeWithAccumulated('idle_timeout');
-          agentCancelToken?.cancel('Studio agent idle timeout');
-        } else if (!completer.isCompleted) {
-          completer.completeError(
-            TimeoutException(
-              'Studio agent "${agent.name}" timed out after ${timeoutMs}ms',
-            ),
-          );
-        }
-      });
-    }
-
-    agentCancelToken = CancelToken();
-    unawaited(
-      cancelToken.whenCancel.then((_) {
-        if (!(agentCancelToken?.isCancelled ?? true)) {
-          agentCancelToken?.cancel('Studio pipeline cancelled');
-        }
-      }),
+    return _FinalRunResult(
+      text: result.text,
+      reasoning: result.reasoning,
+      rawResponseJson: result.rawResponseJson,
     );
-    resetAgentTimer();
-
-    unawaited(
-      transport.stream(
-        request: request,
-        cancelToken: agentCancelToken,
-        onUpdate: (delta, reasoningDelta) {
-          if (delta.isNotEmpty) output.write(delta);
-          if (isFinalResponse && delta.isNotEmpty) {
-            onFinalResponseUpdate?.call(
-              output.toString().trimLeft(),
-              reasoning.isNotEmpty ? reasoning.toString() : null,
-            );
-          } else if (!isFinalResponse && delta.isNotEmpty) {
-            onIntermediateUpdate?.call(output.toString().trimLeft());
-          }
-          if (reasoningDelta != null && reasoningDelta.isNotEmpty) {
-            reasoning.write(reasoningDelta);
-            if (isFinalResponse) {
-              onFinalResponseUpdate?.call(
-                output.toString().trimLeft(),
-                reasoning.toString(),
-              );
-            }
-          }
-          if (delta.isNotEmpty || reasoningDelta?.isNotEmpty == true) {
-            resetAgentTimer();
-          }
-        },
-        onComplete: (text, finalReasoning, {rawResponseJson}) {
-          idleTimer?.cancel();
-          if (shouldStream && output.isEmpty && text.isNotEmpty) {
-            output.write(text);
-          }
-          if (isFinalResponse) {
-            final accumulated = output.toString().trimLeft();
-            final reasoningText = reasoning.isNotEmpty
-                ? reasoning.toString()
-                : finalReasoning?.trim().isNotEmpty == true
-                ? finalReasoning!.trim()
-                : null;
-            if (accumulated.isNotEmpty) {
-              onFinalResponseUpdate?.call(accumulated, reasoningText);
-            } else if (text.isNotEmpty) {
-              onFinalResponseUpdate?.call(text.trimLeft(), reasoningText);
-            }
-          } else {
-            final accumulated = output.toString().trimLeft();
-            if (accumulated.isNotEmpty) {
-              onIntermediateUpdate?.call(accumulated);
-            } else if (text.isNotEmpty) {
-              onIntermediateUpdate?.call(text.trimLeft());
-            }
-          }
-          if (!completer.isCompleted) {
-            final accumulated = output.toString().trim();
-            final reasoningText = isFinalResponse
-                ? reasoning.isNotEmpty
-                      ? reasoning.toString().trim()
-                      : finalReasoning?.trim() ?? ''
-                : '';
-            completer.complete(
-              _StudioAgentRunResult(
-                text: shouldStream && accumulated.isNotEmpty
-                    ? accumulated
-                    : text.trim(),
-                reasoning: reasoningText,
-                rawResponseJson: rawResponseJson,
-              ),
-            );
-          }
-        },
-        onError: (error) {
-          final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
-          idleTimer?.cancel();
-          if (shouldStream &&
-              (agentCancelToken?.isCancelled ?? false) &&
-              output.isNotEmpty) {
-            completeWithAccumulated('cancel_with_streamed_text');
-            return;
-          }
-          _log(
-            'agent error session=$sessionId name="${agent.name}" '
-            'elapsedMs=$elapsed error=$error',
-          );
-          if (!completer.isCompleted) completer.completeError(error);
-        },
-      ),
-    );
-
-    return completer.future.whenComplete(() {
-      idleTimer?.cancel();
-    });
-  }
-
-  Future<_ResolvedAgentConfig> _resolveAgentConfig(
-    StudioAgent agent,
-    ApiConfig current,
-    String sessionId,
-  ) async {
-    if (agent.modelSource == 'custom') {
-      await _ref.read(apiListProvider.future);
-      final apiConfigs =
-          _ref.read(apiListProvider).value ?? const <ApiConfig>[];
-      final selected = apiConfigs.where((c) => c.id == agent.model).firstOrNull;
-      if (selected != null) {
-        return _ResolvedAgentConfig.fromApiConfig(
-          selected,
-          modelOverride: agent.modelOverride,
-        );
-      }
-      return _ResolvedAgentConfig(
-        endpoint: agent.endpoint,
-        apiKey: current.apiKey,
-        model: agent.modelOverride.isNotEmpty
-            ? agent.modelOverride
-            : agent.model,
-        protocol: LlmProtocol.openai,
-        stream: current.stream,
-      );
-    }
-
-    await _ref.read(apiListProvider.future);
-    final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
-    final configRunId = await _readRunApiConfigId(sessionId);
-    final selected = configRunId.isNotEmpty
-        ? apiConfigs.where((c) => c.id == configRunId).firstOrNull
-        : null;
-    final active = selected ?? _ref.read(activeApiConfigProvider) ?? current;
-    return _ResolvedAgentConfig.fromApiConfig(
-      active,
-      modelOverride: agent.modelOverride,
-    );
-  }
-
-  Future<String> _readRunApiConfigId(String sessionId) async {
-    final config = await _ref
-        .read(studioConfigRepoProvider)
-        .getBySessionId(sessionId);
-    return config?.runApiConfigId ?? '';
   }
 
   List<Map<String, dynamic>> _buildAgentMessages({
@@ -692,17 +968,14 @@ class MemoryStudioService {
     return trimmed;
   }
 
-  /// Default tracker context size (Marinara DEFAULT_AGENT_CONTEXT_SIZE).
-  static const _defaultTrackerContextSize = 5;
-
   /// Hard cap on tracker context size (Marinara MAX_AGENT_CONTEXT_MESSAGES).
   static const _maxTrackerContextSize = 200;
 
   /// Trim trailing chat history for a tracker (intermediate agent).
   ///
-  /// Returns the last [contextSize] messages (normalized to
-  /// [_defaultTrackerContextSize]..[_maxTrackerContextSize]), each truncated
-  /// via [_truncateAgentText] and stripped of HTML via [_stripHtmlTags].
+  /// Returns the last [contextSize] messages (clamped to
+  /// `1..[_maxTrackerContextSize]`), each truncated via
+  /// [_truncateAgentText] and stripped of HTML via [_stripHtmlTags].
   ///
   /// Only the `chat_history` block is trimmed — `static_context` (card,
   /// persona, lorebooks) and `dynamic_context` (memory, summary, worldInfo)
@@ -1350,44 +1623,6 @@ Rules:
     return 'Hard final formatting constraints from Studio controllers:\n${rules.join('\n')}';
   }
 
-  List<Map<String, dynamic>> _stripPromptLevelReasoning(
-    List<Map<String, dynamic>> messages,
-  ) {
-    return [
-      for (final message in messages)
-        {
-          ...message,
-          if (message['content'] is String)
-            'content': _stripThinkDirective(message['content'] as String),
-        },
-    ];
-  }
-
-  String _stripThinkDirective(String content) {
-    var result = content;
-    final patterns = <RegExp>[
-      RegExp(
-        r'\s*Plan internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
-        caseSensitive: false,
-      ),
-      RegExp(
-        r'\s*Think internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
-        caseSensitive: false,
-      ),
-      RegExp(
-        r'\s*Use\s+<think>[\s\S]*?</think>\s*(?:for|to)[^.]*\. ?',
-        caseSensitive: false,
-      ),
-    ];
-    for (final pattern in patterns) {
-      result = result.replaceAll(pattern, ' ');
-    }
-    result = result.replaceAll('<think>', 'hidden reasoning');
-    result = result.replaceAll('</think>', 'hidden reasoning');
-    result = result.replaceAll(RegExp(r'\s{2,}'), ' ');
-    return result.trim();
-  }
-
   String _expandStudioBlockContent(
     String content, {
     required PromptPayload promptPayload,
@@ -1622,12 +1857,6 @@ Rules:
     return allowed.contains(role) ? role : 'system';
   }
 
-  int _effectiveTimeoutMs(StudioAgent agent, bool isFinalResponse) {
-    final fallback = isFinalResponse ? 90000 : 60000;
-    if (agent.timeoutMs <= 4000) return fallback;
-    return agent.timeoutMs.clamp(1000, 120000);
-  }
-
   String _normalizeRefreshPolicy(String policy) {
     return switch (policy.trim().toLowerCase()) {
       'static' || 'scene' || 'turn' => policy.trim().toLowerCase(),
@@ -1795,77 +2024,6 @@ extension _BlankStringFallback on String {
   String ifBlank(String fallback) => trim().isEmpty ? fallback : this;
 }
 
-class _ResolvedAgentConfig {
-  final String endpoint;
-  final String apiKey;
-  final String model;
-  final String protocol;
-  final double topP;
-  final int topK;
-  final double frequencyPenalty;
-  final double presencePenalty;
-  final bool omitTemperature;
-  final bool omitTopP;
-  final bool requestReasoning;
-  final String? reasoningEffort;
-  final bool omitReasoning;
-  final bool omitReasoningEffort;
-  final bool stream;
-  final String cacheControlTtl;
-  final String cacheBreakpointMode;
-  final String sessionIdMode;
-  final int contextSize;
-
-  const _ResolvedAgentConfig({
-    required this.endpoint,
-    required this.apiKey,
-    required this.model,
-    required this.protocol,
-    this.topP = 1.0,
-    this.topK = 0,
-    this.frequencyPenalty = 0.0,
-    this.presencePenalty = 0.0,
-    this.omitTemperature = false,
-    this.omitTopP = false,
-    this.requestReasoning = false,
-    this.reasoningEffort,
-    this.omitReasoning = false,
-    this.omitReasoningEffort = false,
-    this.stream = false,
-    this.cacheControlTtl = 'off',
-    this.cacheBreakpointMode = 'depth',
-    this.sessionIdMode = 'openrouter',
-    this.contextSize = 32000,
-  });
-
-  factory _ResolvedAgentConfig.fromApiConfig(
-    ApiConfig config, {
-    String modelOverride = '',
-  }) {
-    return _ResolvedAgentConfig(
-      endpoint: config.endpoint,
-      apiKey: config.apiKey,
-      model: modelOverride.isNotEmpty ? modelOverride : config.model,
-      protocol: config.protocol,
-      topP: config.topP,
-      topK: config.topK,
-      frequencyPenalty: config.frequencyPenalty,
-      presencePenalty: config.presencePenalty,
-      omitTemperature: config.omitTemperature,
-      omitTopP: config.omitTopP,
-      requestReasoning: config.requestReasoning,
-      reasoningEffort: config.reasoningEffort,
-      omitReasoning: config.omitReasoning,
-      omitReasoningEffort: config.omitReasoningEffort,
-      stream: config.stream,
-      cacheControlTtl: config.cacheControlTtl,
-      cacheBreakpointMode: config.cacheBreakpointMode,
-      sessionIdMode: config.sessionIdMode,
-      contextSize: config.contextSize,
-    );
-  }
-}
-
 class StudioPipelineResult {
   final String status;
   final String response;
@@ -1884,12 +2042,15 @@ class StudioPipelineResult {
   });
 }
 
-class _StudioAgentRunResult {
+/// Final-generator run result returned by [AgentRunner.runAgent] for the
+/// final agent, adapted back to the pipeline-level shape used by
+/// [StudioPipelineResult].
+class _FinalRunResult {
   final String text;
   final String reasoning;
   final String? rawResponseJson;
 
-  const _StudioAgentRunResult({
+  const _FinalRunResult({
     required this.text,
     this.reasoning = '',
     this.rawResponseJson,
@@ -1944,6 +2105,21 @@ class _CachedStudioBrief {
     required this.brief,
     required this.policy,
     required this.createdTurnIndex,
+  });
+}
+
+/// Result of probing `_briefCache` for one tracker before batching.
+class _CacheProbe {
+  final bool hit;
+  final String policy;
+  final String cacheKey;
+  final StudioStageBrief? brief;
+
+  const _CacheProbe({
+    required this.hit,
+    required this.policy,
+    required this.cacheKey,
+    this.brief,
   });
 }
 

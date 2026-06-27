@@ -129,6 +129,35 @@ abstract class StudioAgent with _$StudioAgent {
     /// (generator) ignores this and uses [StudioConfig.maxFinalHistoryMessages]
     /// instead. 0 = no limit (not recommended for trackers).
     @Default(5) int contextSize,
+
+    /// How often this tracker runs, in assistant turns. 1 = every turn
+    /// (default), 3 = every 3rd turn, etc. Useful for "director"-style
+    /// trackers whose guidance changes slowly. The final agent (generator)
+    /// always runs every turn regardless of this field.
+    ///
+    /// Port of Marinara `AgentSettings.runInterval`. We do not keep
+    /// `BUILT_IN_AGENT_RUN_INTERVAL_DEFAULTS` (Marinara's per-type defaults)
+    /// because GlazeFlutter trackers are arbitrary user-defined agents, not
+    /// built-in typed controllers. Default 1 = run every turn.
+    @Default(1) int runInterval,
+
+    /// Maximum number of parallel jobs this agent can be split into inside a
+    /// batch group (Marinara `AgentSettings.maxParallelJobs`, clamped to
+    /// `[1, 16]` on use). For MVP this is effectively always 1 — one batch
+    /// group = one LLM request — but the field is kept so the model can grow
+    /// later without a migration. See docs/PLAN_AGENTIC_STUDIO.md Phase 5.7.3.
+    @Default(1) int maxParallelJobs,
+
+    /// Force this tracker to run as its own individual LLM request, never
+    /// batched with others. Set heuristically for "heavy" trackers whose large
+    /// private extras must not leak into other trackers' batch prompt
+    /// (Marinara `shouldRunAgentIndividually`). Default false.
+    ///
+    /// Heuristic: [MemoryStudioService._shouldRunIndividually] sets this
+    /// implicitly for trackers whose name matches `expression` /
+    /// `illustrator` / `lorebook` patterns, even when this field is false,
+    /// for forward compatibility with existing configs.
+    @Default(false) bool runIndividually,
   }) = _StudioAgent;
 
   factory StudioAgent.fromJson(Map<String, dynamic> json) =>

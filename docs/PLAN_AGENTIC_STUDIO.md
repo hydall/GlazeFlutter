@@ -1,6 +1,6 @@
 # Plan: Agentic Studio — Marinara-Style Refactor
 
-> **Status:** In progress. Phase 1-4 complete (commits `5a4e31e`, `0a9e6cd`, `92c2012`, Phase 4 pending commit on branch `plan/continuity-post-cleaner`). Phase 5-8 pending.
+> **Status:** In progress. Phase 1-5 complete (commits `5a4e31e`, `0a9e6cd`, `92c2012`, `6ef6f8e` Phase 1-4; Phase 5 pending commit on branch `plan/continuity-post-cleaner`). Phase 6-8 pending.
 > **Goal:** Удешевить агентику на большом контексте, ресторить урезанный UI, упростить ментальную модель памяти.
 > **Reference:** [Pasta-Devs/Marinara-Engine](https://github.com/Pasta-Devs/Marinara-Engine) — `packages/server/src/services/agents/` (agent-pipeline.ts, agent-executor.ts), `packages/shared/src/types/agent.ts`.
 
@@ -201,37 +201,33 @@ Agentic write-loop: отдельный pipeline toggle (уже есть agenticW
 
 **Цель:** трекеры с одинаковым provider+model → один запрос через `<agent_task>`-XML.
 
-- [ ] **5.1** Реализовать `executeTrackerBatch` в `agent_runner.dart` (порт `agent-executor.ts:executeAgentBatch`):
-  - `buildBatchSystemPrompt`: `<role>` + `<lore>` (shared) + `<agents>` с `<agent_task id="..." name="...">template</agent_task>` (значения макросов **escape-XML**!) + extras + `─── REQUIRED OUTPUT FORMAT ───` с `<result agent="...">` блоками + CRITICAL-инструкция перечислить все agent IDs.
-  - **Batch budget:** `batchMaxTokens` = СУММА `maxTokens` всех агентов группы, затем cap провайдером (`maxTokensOverrideValue`) и моделью (`maxOutputTokens`). `temperature` = MIN по группе. Если не суммировать — длинный батч обрежется на полпути и половина `<result>` блоков пропадёт.
-  - `parseBatchResponse`: extract `<result agent="type">...</result>` (вложенные/несбалансированные теги — брать до следующего `<result>` или `</result>`, как `extractResultBlocks`). Fallback на остатке текста: `matchLegacyResultTag` для `<result_TYPE>...</result_TYPE>` где `TYPE` = тип агента.
-  - **Слой 1 — invalid-JSON retry** (порт `shouldRetryInvalidJsonAgent`): если JSON-агент вернул невалидный JSON внутри батча → пометить как failed.
-  - **Слой 2 — individual fallback:** все failed → переиграть по одному через concurrency-limited gather (порт `settleAgentJobsWithConcurrencyLimit`, лимит `AGENT_BATCH_FALLBACK_MAX_CONCURRENT=4`).
-- [ ] **5.2** Изоляция "тяжёлых" трекеров от батча (порт `shouldRunAgentIndividually`): `expression`/`illustrator`/`lorebook-keeper` (+ music-JSON, у нас не актуально) идут отдельно — большие приватные extras не должны попадать в чужие батч-запросы. Если в группе только изолированные → все individual; если смесь → изолированные параллельно с батчем остальных.
-- [ ] **5.3** Per-tracker `connectionId` + `model` override (уже есть в `StudioAgent.modelOverride`/`endpoint` — убедиться что wired в `agent_runner`).
-- [ ] **5.4** `runInterval` для части трекеров (например director — раз в 3 хода). Добавить поле `runInterval` в `StudioAgent` (default 1 = каждый ход). В `runTrackerCycle` пропускать трекеры где `turnCount % runInterval != 0`. Marinara держит дефолты per-type в `BUILT_IN_AGENT_RUN_INTERVAL_DEFAULTS` (из манифеста) + override в `settings.runInterval` — повторить ту же двухуровневую схему (дефолт трекера + пер-чат override).
-- [ ] **5.5** Тест: 4 трекера с одним provider+model → 1 батч-вызов вместо 4. Токен-экономия на static-context: 1× вместо 4×.
-- [ ] **5.6** `flutter analyze` + `flutter test`.
+- [x] **5.1** Реализовать батчинг трекеров. ✅ commit (Phase 5):
+  - [x] `buildBatchSystemPrompt` в `tracker_batcher.dart`: `<role>` + `<lore>` (shared) + `<agents>` с `<agent_task id="..." name="...">template</agent_task>` (значения макросов **escape-XML**!) + `─── REQUIRED OUTPUT FORMAT ───` с `<result agent="...">` блоками + CRITICAL-инструкция перечислить все agent IDs. Атрибут `agent=` = `agent.id` (не `name` — стабильно при переименовании).
+  - [x] **Batch budget:** `batchMaxTokens` = СУММА `maxTokens` всех агентов группы, cap провайдером (`resolved.contextSize ~/ 2` — половина окна на output). `temperature` = MIN по группе. `batchContextSize` = MAX по группе (агент с contextSize=20 получает нужное; агент с contextSize=5 видит больше — безопасно).
+  - [x] `parseBatchResponse`: extract `<result agent="ID">...</result>`, берёт EARLIER of `</result>` close OR next `<result` opening (модель может забыть close). Fallback `matchLegacyResultTag` для `<result_ID>...</result_ID>`.
+  - [x] **Слой 1 — in-batch retry:** если ANY агент failed → re-request ВСЕГО батча 1 раз.
+  - [x] **Слой 2 — individual fallback:** все failed (из обеих попыток) → переиграть по одному через `settleWithConcurrencyLimit` (лимит 2).
+  - [x] Cache-aware batching: `_probeCache` перед батчингом, cache hits исключаются из батча; cache miss → батч; после батча — `_persistCacheIfCacheable` для успешных.
+  - [x] Выделен `agent_runner.dart` (thin orchestrator: resolveAgentConfig + build request + stream + accumulate + return). Используется и генератором, и трекерами, и батчем.
+- [x] **5.2** Изоляция "тяжёлых" трекеров от батча (порт `shouldRunAgentIndividually`). ✅ commit (Phase 5): heuristic по имени — `expression`/`illustrator`/`lorebook` (case-insensitive substring) → `runIndividually=true`. Дополнительно: `StudioAgent.runIndividually: bool` (default false) для явного override. Смесь → изолированные параллельно с батчем остальных (через `TrackerBatcher.groupAgents` → `batchGroups` + `individualAgents`).
+- [x] **5.3** Per-tracker model override wired в `agent_runner.resolveAgentConfig`: `modelSource='custom'` → pick `ApiConfig` by `agent.model` id, apply `agent.modelOverride` поверх. `modelSource='current'` → use session's `runApiConfigId` or active API, apply `agent.modelOverride`.
+- [x] **5.4** `runInterval` поле в `StudioAgent` (default 1 = каждый ход). ✅ commit (Phase 5): `runTrackerCycle` пропускает трекеры где `turnIndex % runInterval != 0`. Финальный генератор всегда бежит. **Без `BUILT_IN_AGENT_RUN_INTERVAL_DEFAULTS`** (наши трекеры — произвольные user-defined, не built-in типы как в Marinara) — default=1 всегда, override per-agent.
+- [x] **5.5** Тест: 12 unit-тестов на `TrackerBatcher` в `test/characterization/tracker_batcher_test.dart` — `buildBatchSystemPrompt` (XML structure, escape, role/lore/agents), `parseBatchResponse` (вложенные теги, missing close, legacy fallback, failed), `shouldRunIndividually` (runIndividually flag + name heuristic), `normalizeMaxParallelJobs` (clamp [1,16]), `splitGroupForParallelJobs` (MVP no-op + split при >1).
+- [x] **5.6** `flutter analyze`: 0 errors. `flutter test`: 1265 passed.
 
 #### 5.7 Concurrency & batch grouping (порт деталей Marinara, без которых батч ломается)
 
 Эти механизмы есть в `agent-pipeline.ts`/`agent-executor.ts` и должны быть портированы вместе с батчингом — иначе либо лишние одновременные SSE-стримы, либо неправильная группировка.
 
-- [ ] **5.7.1 Группировка батча — не только provider+model.** Ключ группы = `(provider, model, postProcessingDataKey)`. Для `post_processing`-трекеров `postProcessingDataKey` учитывает `includePreGenInjections`/`includeParallelResults` — трекеры с разными требованиями к контексту НЕ попадают в один батч (иначе кто-то получит лишний/недостающий контекст). Для pre_generation/parallel ключ = `"default"`.
-- [ ] **5.7.2 Конкурренси-лимиты (адаптировать под Dio/SSE на десктопе).** Marinara держит:
-  - `AGENT_PHASE_MAX_CONCURRENT_GROUPS = 8` — макс. одновременных групп в фазе.
-  - `AGENT_BATCH_FALLBACK_MAX_CONCURRENT = 4` — макс. одновременных individual-ретраев.
-  - `AGENT_GROUP_MAX_CONCURRENT_TOOL_CALLS = 4` — если прикрутим tool-calling (Phase 5 open question).
-  - Портировать как `settleAgentJobsWithConcurrencyLimit`-аналог (Dart: `Pool`/семафор или ручной chunked `Future.wait`). **На десктопе 8 одновременных SSE-стримов — реальный риск** rate-limit/таймаутов; начать с консервативных лимитов (4/2).
-- [ ] **5.7.3 `maxParallelJobs` / `splitGroupForParallelJobs`** — внутри одной группы агенты могут дробиться на N параллельных джобов (`normalizeAgentMaxParallelJobs` клампит в `[1,16]`). Для MVP можно `maxParallelJobs=1` (одна группа = один запрос), но оставить поле, чтобы не ломать модель позже.
-- [ ] **5.7.4 Safe `onResult` wrapper** — колбэк результата трекера оборачивать в try/catch: ошибка в колбэке (например запись в закрытый стрим при abort) НЕ должна ронять всю группу и молча терять результаты остальных. Порт `safeOnResult` из `executeGroup`.
-- [ ] **5.7.5 Per-agent failure isolation** — `executeAgent` ловит rethrow внутри себя и возвращает failed `AgentResult` для ЭТОГО агента, а не reject промиса (иначе `Future.wait` группы упадёт целиком и заберёт со-групповые результаты). При порте на Dart: каждый трекер-вызов в свой try/catch → failed-result, не throw наружу.
+- [-] **5.7.1 Группировка батча — не только provider+model.** ⏳ отложено — у нас НЕТ post_processing-трекеров (POST-cleaner — это отдельный post-gen rewrite-pass, не tracker). Ключ группы = `(provider, model)`. `postProcessingDataKey` не нужен пока не появятся настоящие post-gen-трекеры (например, expression-picker как отдельный агент). Решение пользователя: все трекеры pre-gen, key = (provider, model).
+- [x] **5.7.2 Конкурренси-лимиты.** ✅ commit (Phase 5): `_maxConcurrentGroups = 4` (вместо Marinara 8), `_maxConcurrentFallback = 2` (вместо 4) — консервативно для десктопа (1 user → 1 provider → меньше риска rate-limit). Реализован через chunked `Future.wait` в `settleWithConcurrencyLimit<I, R>`. `AGENT_GROUP_MAX_CONCURRENT_TOOL_CALLS` не порт (tool-calling отложен до post-MVP).
+- [x] **5.7.3 `maxParallelJobs` / `splitGroupForParallelJobs`.** ✅ commit (Phase 5): `maxParallelJobs` поле в `StudioAgent` (default 1, clamp [1,16] через `normalizeMaxParallelJobs`). `splitGroupForParallelJobs`: при `=1` возвращает группу как есть (MVP: одна группа = один запрос); при `>1` разделяет на N саб-групп с пропорциональным budget. MemoryStudioService может использовать split для параллельной диспетчеризации саб-групп в будущем.
+- [x] **5.7.4 Safe `onResult` wrapper.** ✅ commit (Phase 5): все колбэки результатов (`_runTracker`, `_runBatchGroup`, `_runIndividualTracker`, `_retryFailedIndividually`) обёрнуты try/catch — `AgentRunFailedException` не роняет группу; failed tracker → failed brief/result, остальные продолжаются. `AgentRunner.runAgent` оборачивает exceptions для non-final в `AgentRunFailedException` (per-agent isolation на transport-уровне).
+- [x] **5.7.5 Per-agent failure isolation.** ✅ commit (Phase 5): `AgentRunner.runAgent` для trackers (isFinalResponse=false) ловит все exceptions (timeout, transport, idle) и кидает `AgentRunFailedException` с reason. `MemoryStudioService._runTracker` ловит его → failed `StudioStageBrief` (status='error', error=reason). Финальный генератор rethrows (его failure = abort turn). В батче: `AgentRunFailedException` в `_runBatchGroup` → fallback на individual для ВСЕХ агентов группы (per-agent failure isolation на batch-уровне).
 
-- [ ] **5.8** `flutter analyze` + `flutter test`.
+- [x] **5.8** `flutter analyze`: 0 errors. `flutter test`: 1265 passed (1253 + 12 новых tracker_batcher_test).
 
-**Файлы:** `agent_runner.dart` (major edit), `studio_config.dart` (`runInterval` + `maxParallelJobs` fields), `tables.dart` (migration), `memory_studio_service.dart` (wire batching + concurrency pool).
-**Оценка:** 2-3 дня.
-**Риск:** средний — батч-парсинг может ломаться на плохих моделях. Многослойный fallback (invalid-JSON retry → individual retry → error-result) уже в дизайне. Конкурренси-лимиты консервативные на старте.
+**Файлы:** `agent_runner.dart` (new, ~390 строк), `tracker_batcher.dart` (new, ~530 строк), `studio_config.dart` (+3 поля: `runInterval`, `maxParallelJobs`, `runIndividually`), `memory_studio_service.dart` (refactor: `runTrackerCycle` переписан под cache-aware batching, `_runBatchGroup`/`_retryFailedIndividually`/`_runIndividualTracker`/`_probeCache`/`_persistCacheIfCacheable` добавлены, `_runStaggeredIntermediateAgent` удалён, `_runAgent`/`_resolveAgentConfig`/`_ResolvedAgentConfig`/`_StudioAgentRunResult`/`_stripPromptLevelReasoning`/`_stripThinkDirective`/`_effectiveTimeoutMs` перенесены в `agent_runner.dart`). **Migration НЕ нужна** — `StudioAgent` сериализован в `StudioConfigRows.agentsJson` (JSON-текст), новые поля имеют `@Default`.
 
 ### Phase 6 — Prompt-cache reorder (low effort, medium impact)
 
