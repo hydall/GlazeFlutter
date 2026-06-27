@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/studio_api_config_resolver.dart';
+import '../../../core/llm/studio_cleaner_rules_extractor.dart';
 import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
@@ -190,17 +191,17 @@ class StudioMenuController {
   /// Returns the toast message to surface on success/failure. The widget owns
   /// the actual `GlazeToast.show` call (UI concern).
   Future<String> buildStudio() async {
-    final preset = effectivePreset;
-    if (preset == null) {
-      return 'No preset available. Create or select a preset first.';
-    }
-    final apiConfig = resolveBuildApiConfig();
-    if (apiConfig == null) {
-      return 'No API configured. Set one up in API settings first.';
-    }
-
     _building = true;
     try {
+      final preset = effectivePreset;
+      if (preset == null) {
+        return 'No preset available. Create or select a preset first.';
+      }
+      final apiConfig = resolveBuildApiConfig();
+      if (apiConfig == null) {
+        return 'No API configured. Set one up in API settings first.';
+      }
+
       final decompositionService = _ref.read(studioDecompositionServiceProvider);
       final agents = await decompositionService.decompose(
         preset: preset,
@@ -242,11 +243,55 @@ class StudioMenuController {
 
       await _ref.read(studioConfigRepoProvider).upsert(newConfig);
       _config = newConfig;
-      return 'Studio built: ${agents.length} agents from "${preset.name}".';
+
+      // Second LLM call: extract POST-cleaner style rules from the preset and
+      // write them into PipelineSettings. Non-fatal: tracker build already
+      // succeeded; a failure here surfaces a toast but does not roll back.
+      final cleanerToast = await _extractCleanerRules(
+        preset: preset,
+        apiConfig: apiConfig,
+      );
+
+      return 'Studio built: ${agents.length} agents from "${preset.name}"$cleanerToast';
     } catch (e) {
       return 'Build failed: $e';
     } finally {
       _building = false;
+    }
+  }
+
+  /// Second LLM call in [buildStudio]: extracts banned/avoid/style rules from
+  /// [preset] via [StudioCleanerRulesExtractor] and writes them into the three
+  /// `postCleaner*` string fields of `PipelineSettings`. Returns a toast
+  /// fragment describing the outcome (always non-empty, prefixed with a space
+  /// and a separator so it can be appended to the main build toast).
+  Future<String> _extractCleanerRules({
+    required Preset preset,
+    required ApiConfig apiConfig,
+  }) async {
+    final extractor = _ref.read(studioCleanerRulesExtractorProvider);
+    try {
+      final rules = await extractor.extract(
+        preset: preset,
+        apiConfig: apiConfig,
+      );
+      if (rules.isEmpty) {
+        // Should not happen — the extractor throws [NoCleanerRulesFoundException]
+        // for the empty case. Treat as a defensive no-op.
+        return '. No cleaner rules extracted.';
+      }
+      final pipeline = _ref.read(pipelineSettingsProvider);
+      final updated = pipeline.copyWith(
+        postCleanerBannedWords: rules.bannedWords,
+        postCleanerAvoidInstructions: rules.avoidInstructions,
+        postCleanerStyleInstructions: rules.styleInstructions,
+      );
+      await _ref.read(pipelineSettingsProvider.notifier).save(updated);
+      return '. Cleaner rules extracted.';
+    } on NoCleanerRulesFoundException {
+      return '. No cleaner rules found in preset.';
+    } catch (e) {
+      return '. Cleaner rules extraction failed: $e';
     }
   }
 
@@ -263,17 +308,17 @@ class StudioMenuController {
     if (current == null || _regeneratingAgentIds.contains(agent.id)) {
       return '';
     }
-    final preset = effectivePreset;
-    if (preset == null) {
-      return 'No preset available. Cannot regenerate instruction.';
-    }
-    final apiConfig = resolveBuildApiConfig();
-    if (apiConfig == null) {
-      return 'No API configured. Set one up in API settings first.';
-    }
-
     _regeneratingAgentIds.add(agent.id);
     try {
+      final preset = effectivePreset;
+      if (preset == null) {
+        return 'No preset available. Cannot regenerate instruction.';
+      }
+      final apiConfig = resolveBuildApiConfig();
+      if (apiConfig == null) {
+        return 'No API configured. Set one up in API settings first.';
+      }
+
       final decompositionService = _ref.read(studioDecompositionServiceProvider);
       final updatedAgent = await decompositionService.regenerateAgentInstruction(
         preset: preset,

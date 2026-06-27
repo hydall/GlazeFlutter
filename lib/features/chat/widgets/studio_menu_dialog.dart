@@ -197,6 +197,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   }
 
   Future<void> _buildStudio() async {
+    setState(() {}); // show "Building Studio…" overlay immediately
     final message = await _ctrl.buildStudio();
     if (!mounted) return;
     setState(() {});
@@ -209,6 +210,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   /// deterministic keyword bucketing (no LLM router call); the build-time LLM
   /// map only matters for a full decompose.
   Future<void> _regenerateAgentInstruction(StudioAgent agent) async {
+    setState(() {}); // show regenerating chip immediately
     final message = await _ctrl.regenerateAgentInstruction(agent);
     if (!mounted) return;
     setState(() {});
