@@ -18,7 +18,10 @@ class BackupExporter {
   //   3 — added extension_presets and info_blocks tables
   //   4 — added studio_config_rows (Studio agent profiles/settings)
   //   5 — added tracker_snapshots (per-message tracker state for rollback)
-  static const int _schemaVersion = 5;
+  //   6 — added pipeline_settings_rows (per-session pipeline LLM settings:
+  //         cleaner/sidecar/classifier/consolidation config, including
+  //         postCleanerAuditModel). Previously a backup-whitelist gap.
+  static const int _schemaVersion = 6;
 
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
@@ -184,6 +187,7 @@ class BackupExporter {
       'info_blocks',
       'studio_config_rows',
       'tracker_snapshots',
+      'pipeline_settings_rows',
     ];
   }
 }

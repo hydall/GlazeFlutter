@@ -283,6 +283,24 @@ class FakeStudioConfigStore implements SyncStudioConfigStore {
   }
 }
 
+class FakePipelineSettingsStore implements SyncPipelineSettingsStore {
+  final Map<String, Map<String, dynamic>> data = {};
+  @override
+  Future<List<Map<String, dynamic>>> getAll() async => data.values.toList();
+  @override
+  Future<Map<String, dynamic>?> getBySessionId(String id) async => data[id];
+  @override
+  Future<void> putRaw(Map<String, dynamic> entry) async {
+    final sid = entry['sessionId'] as String?;
+    if (sid != null && sid.isNotEmpty) data[sid] = entry;
+  }
+
+  @override
+  Future<void> deleteBySessionId(String id) async {
+    data.remove(id);
+  }
+}
+
 class FakeImageStore implements SyncImageStore {
   final Map<String, Uint8List> saved = {};
 
@@ -416,23 +434,26 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     SyncInfoBlockStore? infoBlockStore,
     SyncTrackerSnapshotStore? trackerSnapshotStore,
     SyncStudioConfigStore? studioConfigStore,
+    SyncPipelineSettingsStore? pipelineSettingsStore,
   }) : _builder = SyncManifestBuilder(
-         characterRepo: characterRepo,
-         chatRepo: chatRepo,
-         personaRepo: personaRepo,
-         presetRepo: presetRepo,
-         apiRepo: apiRepo,
-         memoryBookRepo: memoryBookRepo,
-         lorebookRepo: lorebookRepo,
-         themePresetRepo: themePresetRepo,
-         extensionPresetRepo: extensionPresetRepo ?? FakeExtensionPresetStore(),
-         extensionsSettingsStore:
-             extensionsSettingsStore ?? FakeExtensionsSettingsStore(),
-         infoBlockStore: infoBlockStore ?? FakeInfoBlockStore(),
-         trackerSnapshotStore:
-             trackerSnapshotStore ?? FakeTrackerSnapshotStore(),
-         studioConfigStore: studioConfigStore ?? FakeStudioConfigStore(),
-       );
+          characterRepo: characterRepo,
+          chatRepo: chatRepo,
+          personaRepo: personaRepo,
+          presetRepo: presetRepo,
+          apiRepo: apiRepo,
+          memoryBookRepo: memoryBookRepo,
+          lorebookRepo: lorebookRepo,
+          themePresetRepo: themePresetRepo,
+          extensionPresetRepo: extensionPresetRepo ?? FakeExtensionPresetStore(),
+          extensionsSettingsStore:
+              extensionsSettingsStore ?? FakeExtensionsSettingsStore(),
+          infoBlockStore: infoBlockStore ?? FakeInfoBlockStore(),
+          trackerSnapshotStore:
+              trackerSnapshotStore ?? FakeTrackerSnapshotStore(),
+          studioConfigStore: studioConfigStore ?? FakeStudioConfigStore(),
+          pipelineSettingsStore:
+              pipelineSettingsStore ?? FakePipelineSettingsStore(),
+        );
 
   @override
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) async {
@@ -532,6 +553,7 @@ class SyncWorld {
     FakeInfoBlockStore(),
     FakeTrackerSnapshotStore(),
     FakeStudioConfigStore(),
+    FakePipelineSettingsStore(),
     (_) async {},
   );
 }

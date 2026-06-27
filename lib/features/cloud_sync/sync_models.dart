@@ -92,7 +92,12 @@ class SyncManifestEntry {
 class SyncManifest {
   /// Bump when hash/canonicalization changes so push can skip re-uploading
   /// existing cloud files and refresh manifest only.
-  static const int currentVersion = 4;
+  ///
+  /// Version history:
+  ///   4 — baseline before pipeline_settings sync.
+  ///   5 — added `pipeline_settings` entity type (per-session pipeline LLM
+  ///         settings: cleaner/sidecar/classifier/consolidation config).
+  static const int currentVersion = 5;
 
   final int version;
   final String deviceId;
@@ -181,6 +186,8 @@ String cloudPath(String type, String id) {
       return '$cloudBase/tracker_snapshots/$id.json';
     case 'studio_config':
       return '$cloudBase/studio_configs/$id.json';
+    case 'pipeline_settings':
+      return '$cloudBase/pipeline_settings/$id.json';
     case 'lorebooks':
       return '$cloudBase/lorebooks.json';
     case 'api_presets':

@@ -22,6 +22,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncInfoBlockStore _infoBlockStore;
   final SyncTrackerSnapshotStore _trackerSnapshotStore;
   final SyncStudioConfigStore _studioConfigStore;
+  final SyncPipelineSettingsStore _pipelineSettingsStore;
   final SyncImageStore? _imageStore;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
@@ -42,6 +43,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required this._infoBlockStore,
     required this._trackerSnapshotStore,
     required this._studioConfigStore,
+    required this._pipelineSettingsStore,
     this._imageStore,
   });
 
@@ -258,6 +260,34 @@ class SyncManifestBuilder implements SyncManifestProvider {
         type: 'studio_config',
         id: id,
         path: cloudPath('studio_config', id),
+        updatedAt: updatedAt,
+        hash: hash,
+      );
+    }
+
+    final pipelineSettingsEntries = await _pipelineSettingsStore.getAll();
+    for (final entry in pipelineSettingsEntries) {
+      final sessionId = entry['sessionId'] as String?;
+      if (sessionId == null || sessionId.isEmpty) continue;
+      final hash = SyncSerialization.computeSyncHash(entry);
+      final key = entryKey('pipeline_settings', sessionId);
+      final prevEntry = previous.entries[key];
+      final cloudEntry = cloudManifest?.entries[key];
+      var updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+      final entryUpdatedAt = entry['updatedAt'] as int?;
+      if (entryUpdatedAt != null && entryUpdatedAt > updatedAt) {
+        updatedAt = entryUpdatedAt;
+      }
+
+      entries[key] = SyncManifestEntry(
+        type: 'pipeline_settings',
+        id: sessionId,
+        path: cloudPath('pipeline_settings', sessionId),
         updatedAt: updatedAt,
         hash: hash,
       );

@@ -97,6 +97,58 @@ class PipelineSettingsRepo extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.sessionId.equals(sessionId))).go();
   }
 
+  // ── Cloud-sync raw-map API ───────────────────────────────────────────────
+  //
+  // Cloud sync exchanges raw JSON maps (not typed models) to avoid coupling
+  // the wire format to the freezed shape. Each entry is
+  // `{sessionId, settings: <PipelineSettings.toJson>, updatedAt}`.
+
+  /// All rows for cloud-sync manifest building. Returns raw maps so the
+  /// adapter layer does not depend on the freezed model.
+  Future<List<Map<String, dynamic>>> getAllRaw() async {
+    final rows = await select(pipelineSettingsRows).get();
+    return rows.map(_rowToRawMap).toList();
+  }
+
+  /// One row as a raw map, or `null` if missing.
+  Future<Map<String, dynamic>?> getRawBySessionId(String sessionId) async {
+    final row = await (select(
+      pipelineSettingsRows,
+    )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
+    return row == null ? null : _rowToRawMap(row);
+  }
+
+  /// Upserts a raw `{sessionId, settings, updatedAt}` map from cloud.
+  Future<void> putRaw(Map<String, dynamic> entry) async {
+    final sessionId = entry['sessionId'] as String?;
+    if (sessionId == null || sessionId.isEmpty) return;
+    final settingsJson = entry['settings'] is Map
+        ? jsonEncode(entry['settings'])
+        : (entry['settings'] as String? ?? '{}');
+    final updatedAt = entry['updatedAt'] as int?;
+    await into(pipelineSettingsRows).insertOnConflictUpdate(
+      PipelineSettingsRowsCompanion.insert(
+        sessionId: sessionId,
+        settingsJson: Value(settingsJson),
+        updatedAt: Value(updatedAt ?? currentTimestampSeconds()),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _rowToRawMap(PipelineSettingsRow row) {
+    dynamic settings;
+    try {
+      settings = jsonDecode(row.settingsJson);
+    } catch (_) {
+      settings = <String, dynamic>{};
+    }
+    return {
+      'sessionId': row.sessionId,
+      'settings': settings,
+      'updatedAt': row.updatedAt,
+    };
+  }
+
   PipelineSettings _rowToModel(PipelineSettingsRow row) {
     try {
       return PipelineSettings.fromJson(

@@ -170,7 +170,21 @@ Phase 1 (badge metadata) → Phase 3 (audit model — independent, easy) → Pha
 - `121d736` — **Phase 2**: swipe-first streaming + partial-text preservation. Pre-create empty `'cleaned'` swipe at cleaner start (snapshot cloned); `_lastStreamedText` captured in `onCleanedChunk`; finalize via `ChatRepo.updateAgentSwipeContent` / `removeAgentSwipe` (new atomic methods); abort + hard-failure paths remove the pre-created swipe; legacy `applyCleanedText` fallback when pre-create failed. Full suite 1339 tests pass.
 - (this commit) — **Phase 4**: docs (ARCHITECTURE / rules/generation / INVARIANTS INV-ST4 + INV-TS5 / rules/database) updated; this execution log appended.
 
-## Known gaps (NOT introduced by this work — pre-existing)
+## Known gaps
 
-- **`pipeline_settings_rows` is NOT in the backup whitelist** (`backup_exporter.dart:_knownTableNames`) and has **no cloud-sync adapter**. This means the entire `PipelineSettings` object (including the new `postCleanerAuditModel` and every other cleaner/sidecar/consolidation field) is not exported or synced. This is a pre-existing gap affecting all pipeline settings fields, not just the one added in Phase 3. Follow-up: add `pipeline_settings_rows` to the backup whitelist (bump `_schemaVersion` to 6) and a cloud-sync store mirroring `TrackerSnapshotSyncStore`.
+- ~~`pipeline_settings_rows` is NOT in the backup whitelist~~ → **CLOSED** (commit below): added to `backup_exporter._knownTableNames` (bumped `_schemaVersion` to 6) and a full cloud-sync adapter (`SyncPipelineSettingsStore` + `PipelineSettingsSyncStore` wired through `SyncManifestBuilder` / `SyncEngine` / `SyncService` / `sync_provider`; new `'pipeline_settings'` case in `cloudPath()`; `SyncManifest.currentVersion` bumped to 5 so the new entity type is pushed on the next sync). The entire `PipelineSettings` object (including `postCleanerAuditModel`) now exports to `.glz` backups AND round-trips through cloud sync.
 - The new `ChatRepo.updateAgentSwipeContent` / `removeAgentSwipe` methods have no dedicated unit tests (the existing `ChatRepo` tests require a full Drift harness; the post_cleaner characterization tests cover model serialization, not the repo). Verified via the full 1339-test suite (no regressions) + `flutter analyze` (0 errors).
+
+## Follow-up commit (backup + cloud-sync gap closure)
+
+- `(this commit)` — **Backup + cloud-sync for `pipeline_settings_rows`**:
+  - `backup_exporter.dart`: `_schemaVersion` 5 → 6; `'pipeline_settings_rows'` added to `_knownTableNames()`. Importer is generic (`tables/*.jsonl` → `INSERT OR REPLACE` by column names) so the table restores automatically — no importer changes needed.
+  - `pipeline_settings_repo.dart`: new raw-map API (`getAllRaw` / `getRawBySessionId` / `putRaw`) so the cloud-sync adapter exchanges `{sessionId, settings, updatedAt}` maps without coupling to the freezed `PipelineSettings` shape.
+  - `sync_repo_interfaces.dart`: new `SyncPipelineSettingsStore` interface (`getAll` / `getBySessionId` / `putRaw` / `deleteBySessionId`).
+  - `adapters/ext_blocks_sync_stores.dart`: new `PipelineSettingsSyncStore` adapter wrapping `PipelineSettingsRepo`.
+  - `sync_models.dart`: new `'pipeline_settings'` case in `cloudPath()` (→ `/Glaze/pipeline_settings/<sessionId>.json`); `SyncManifest.currentVersion` 4 → 5 (history comment added) so the new entity type is pushed on the next sync rather than hash-skipped.
+  - `sync_manifest.dart`: `SyncManifestBuilder` gained a `_pipelineSettingsStore` field + ctor param + a `buildLocalManifest` loop (after `studio_config` entries) that hashes raw entries and resolves `updatedAt` from the row's `updatedAt` when present.
+  - `sync_engine.dart`: `SyncEngine` gained a `_pipelineSettingsStore` field + ctor param; `pushEntities` ensures `/Glaze/pipeline_settings`; `_readLocalEntity('pipeline_settings', id)` returns the raw entry map verbatim; `_applyCloudEntity` calls `putRaw` (with `sessionId` fallback to entry id for older pushes); `_deleteLocalEntity` calls `deleteBySessionId`.
+  - `sync_service.dart`: `SyncService` gained the field + ctor param; threaded through both the `_manifestBuilder` and `_engine` getters.
+  - `sync_provider.dart`: wired `PipelineSettingsSyncStore(ref.watch(pipelineSettingsRepoProvider))`.
+  - Tests: added `FakePipelineSettingsStore` to both `ext_blocks_sync_test.dart` and `sync_lifecycle_test.dart`; updated their `InMemoryManifestProvider` + `SyncWorld` wirings. `flutter analyze` 0 errors; full suite 1339 passes.

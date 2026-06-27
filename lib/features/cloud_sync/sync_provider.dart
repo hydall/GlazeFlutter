@@ -38,6 +38,9 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
       ref.watch(trackerSnapshotRepoProvider),
     ),
     studioConfigStore: ref.watch(studioConfigRepoProvider),
+    pipelineSettingsStore: PipelineSettingsSyncStore(
+      ref.watch(pipelineSettingsRepoProvider),
+    ),
     saveLorebookActivations: saveLorebookActivations,
   );
   await service.init();

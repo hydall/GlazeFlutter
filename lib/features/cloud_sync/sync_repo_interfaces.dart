@@ -115,6 +115,17 @@ abstract class SyncStudioConfigStore {
   Future<void> delete(String id);
 }
 
+/// Cloud-sync store for per-session pipeline LLM settings. Exchanges raw
+/// `{sessionId, settings, updatedAt}` maps (not typed models) so the wire
+/// format is decoupled from the freezed `PipelineSettings` shape. Mirrors
+/// `SyncTrackerSnapshotStore`'s raw-map approach.
+abstract class SyncPipelineSettingsStore {
+  Future<List<Map<String, dynamic>>> getAll();
+  Future<Map<String, dynamic>?> getBySessionId(String sessionId);
+  Future<void> putRaw(Map<String, dynamic> entry);
+  Future<void> deleteBySessionId(String sessionId);
+}
+
 abstract class SyncManifestProvider {
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest});
   Future<SyncManifest> readLocalManifest();
