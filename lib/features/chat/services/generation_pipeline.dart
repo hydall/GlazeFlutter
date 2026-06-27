@@ -70,6 +70,23 @@ class GenerationPipeline {
     required this.getState,
   });
 
+  /// Latest accumulated chunk from the cleaner's onCleanedChunk callback.
+  /// Captured so we can persist partial text when the cleaner fails
+  /// mid-stream (Fix 1): SidecarCallOutcome.text is null on any failure, so
+  /// the partial text the user saw live is only reachable via the callback.
+  /// Reset in `_runPostCleaner`'s finally block.
+  String _lastStreamedText = '';
+
+  /// The agent-swipe id of the blue 'cleaned' swipe pre-created at cleaner
+  /// start (Fix 1). `-1` when no pre-created swipe exists. Reset in the
+  /// finally block so a stale id never leaks into the next run.
+  int _preCreatedCleanerSwipeId = -1;
+
+  /// The message id the pre-created swipe belongs to (tracked so the catch
+  /// block can remove the swipe on a hard pipeline failure, when
+  /// `lastAssistant` is out of scope).
+  String? _preCreatedMessageId;
+
   /// Run the full post-SSE pipeline. Returns the final [GenerationOutcome]
   /// describing the state to apply, or null if the genId was invalidated
   /// (caller should drop the result).
@@ -744,6 +761,81 @@ class GenerationPipeline {
         }
       }
 
+      // ── Swipe-first: pre-create the blue 'cleaned' swipe NOW (Fix 1) ────────
+      //
+      // Append an empty 'cleaned' sub-swipe before the cleaner runs, so the
+      // blue swipe switcher is visible immediately while the rewrite streams
+      // into the chat bubble for live preview. On completion we fill the
+      // pre-created swipe with the final text via applyCleanedText (which
+      // appends ANOTHER swipe — see below), or remove it if nothing useful
+      // was produced.
+      //
+      // Note: applyCleanedText itself calls appendAgentSwipe, which means the
+      // final state has TWO 'cleaned' swipes if we pre-create one here. To
+      // avoid that, when wasCleaned / partial-save we instead update the
+      // pre-created swipe in place via removeAgentSwipe followed by
+      // applyCleanedText (append) — simplest sequence that reuses the existing
+      // atomic append + snapshot-clone logic. The user-visible result is one
+      // 'cleaned' swipe carrying the final text.
+      //
+      // Snapshot clone: the 'cleaned' sub-swipe must inherit the parent
+      // 'final' tracker snapshot so navigating to it restores the correct
+      // tracker state. applyCleanedText does this clone after its append; here
+      // we clone into the pre-created empty swipe so the snapshot is correct
+      // even if the cleaner crashes before finalization.
+      _lastStreamedText = '';
+      _preCreatedCleanerSwipeId = -1;
+      _preCreatedMessageId = lastAssistant.id;
+      try {
+        final chatRepo = ref.read(chatRepoProvider);
+        final preCreated = await chatRepo.appendAgentSwipe(
+          sessionId: sessionId,
+          messageId: lastAssistant.id,
+          content: '',
+          kind: 'cleaned',
+        );
+        if (preCreated && ref.mounted) {
+          // Re-read to capture the new active agentSwipeId (handles
+          // lazy-backfill for legacy messages the same way applyCleanedText
+          // does at post_cleaner_service.dart:417).
+          final postAppend = await chatRepo.getById(sessionId);
+          if (postAppend != null) {
+            ChatSessionService.updateCache(postAppend);
+            final msg = postAppend.messages
+                .where((m) => m.id == lastAssistant!.id)
+                .firstOrNull;
+            if (msg != null && msg.agentSwipeId > 0) {
+              _preCreatedCleanerSwipeId = msg.agentSwipeId;
+              final parentAgentSwipeId = msg.agentSwipeId - 1;
+              final snapshotRepo = ref.read(
+                trackerSnapshotRepoProvider,
+              );
+              final parent = await snapshotRepo.getByAnchor(
+                sessionId: sessionId,
+                messageId: lastAssistant.id,
+                swipeId: msg.swipeId,
+                agentSwipeId: parentAgentSwipeId,
+              );
+              if (parent != null) {
+                await snapshotRepo.upsertTrackers(
+                  sessionId: sessionId,
+                  messageId: lastAssistant.id,
+                  swipeId: msg.swipeId,
+                  agentSwipeId: msg.agentSwipeId,
+                  trackers: parent.trackers,
+                );
+              }
+              ref.invalidate(chatHistoryProvider);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint(
+          '[PostCleaner] pre-create swipe failed session=$sessionId error=$e',
+        );
+        _preCreatedCleanerSwipeId = -1;
+      }
+
       final result = await cleanerService.runCleaner(
         sessionId: sessionId,
         settings: pipeline,
@@ -762,10 +854,34 @@ class GenerationPipeline {
           // previous swipe.
           ref.read(streamingStateProvider(charId).notifier).state =
               StreamingState(text: text, targetMessageId: lastAssistant!.id);
+          // Track the latest accumulated chunk (Fix 1 — "preserve partial
+          // text on failure"). SidecarCallOutcome.text is null on any failure
+          // (timeout, error, abort), so the partial text the user saw live is
+          // only available via this callback. Retries reset the accumulator
+          // and re-call onChunk from '', so only overwrite lastStreamedText
+          // when the incoming chunk is at least as long — that picks the
+          // latest attempt's partial output.
+          if (text.length >= _lastStreamedText.length) {
+            _lastStreamedText = text;
+          }
         },
       );
 
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
+        // Aborted mid-cleaner. The pre-created empty 'cleaned' swipe would be
+        // left dangling — remove it and revert to the parent 'final'. We do
+        // NOT persist partial text on abort (per plan: default delete on
+        // abort). onCleanedChunk early-returns on stale genId, so
+        // _lastStreamedText is empty here.
+        if (_preCreatedCleanerSwipeId >= 0) {
+          try {
+            await ref.read(chatRepoProvider).removeAgentSwipe(
+              sessionId: sessionId,
+              messageId: lastAssistant.id,
+              agentSwipeId: _preCreatedCleanerSwipeId,
+            );
+          } catch (_) {}
+        }
         ref.read(postCleanerStateProvider.notifier).state =
             const PostCleanerState.idle();
         return;
@@ -776,7 +892,8 @@ class GenerationPipeline {
         'origChars=${lastAssistant.content.length} '
         'cleanedChars=${result.cleanedText.length} '
         'error=${result.error ?? "none"} '
-        'attempts=${result.attempts.length}',
+        'attempts=${result.attempts.length} '
+        'partialChars=${_lastStreamedText.length}',
       );
 
       ref.read(postCleanerStateProvider.notifier).state = result.wasCleaned
@@ -813,6 +930,8 @@ class GenerationPipeline {
                   ? 'cleaned (${result.cleanedText.length} chars)'
                   : result.status == 'ok'
                   ? 'no change'
+                  : _lastStreamedText.trim().isNotEmpty
+                  ? 'partialSaved (${_lastStreamedText.length} chars)'
                   : result.status,
               startedAtMs: result.attempts.isNotEmpty
                   ? result.attempts.first.startedAtMs
@@ -828,31 +947,80 @@ class GenerationPipeline {
             ),
           );
 
-      if (!result.wasCleaned) {
-        // Cleaned text equals original (no change). Reset the streaming state
-        // we may have populated during the stream so the bubble doesn't stay
-        // flagged isTyping.
-        if (ref.mounted) {
-          ref.read(streamingStateProvider(charId).notifier).state =
-              const StreamingState();
-        }
-        return;
-      }
+      // ── Swipe-first finalization (Fix 1) ─────────────────────────────────
+      //
+      // The blue 'cleaned' swipe was pre-created before runCleaner (above).
+      // Now we finalize it based on what the cleaner produced:
+      //   - wasCleaned==true → fill the pre-created swipe with the cleaned text.
+      //   - wasCleaned==false BUT the cleaner streamed partial text before
+      //     failing (timeout/error) → keep the partial text in the swipe so
+      //     the user doesn't lose what they saw live.
+      //   - wasCleaned==false AND nothing was streamed → delete the pre-created
+      //     empty swipe and revert to the 'final'.
+      //
+      // We update the pre-created swipe IN PLACE via updateAgentSwipeContent
+      // (not append another swipe) so the final state has exactly one 'cleaned'
+      // sub-swipe. The tracker snapshot was already cloned at pre-create time.
+      //
+      // genTime/tokens wiring is from Phase 1 (Fix 3 + Fix 4): per-swipe badge
+      // carrying the cleaner's own elapsed time + the cleaned text's token
+      // estimate so the badge doesn't disappear on the blue sub-swipe.
 
-      await cleanerService.applyCleanedText(
-        sessionId: sessionId,
-        messageId: lastAssistant.id,
-        cleanedText: result.cleanedText,
-        // Cleaner elapsed time → per-swipe "Ns" badge on the blue sub-swipe
-        // (Fix 3). Matches the main genTime format used by
-        // StreamGenerationService ('${(elapsed/1000).toStringAsFixed(1)}s').
-        genTime:
-            '${(result.totalElapsedMs / 1000).toStringAsFixed(1)}s',
-        // Token count of the cleaned text → keeps the token badge visible on
-        // the cleaned swipe (Fix 4). Same estimator as the main assistant
-        // badge (estimateTokens in tokenizer.dart).
-        tokens: estimateTokens(result.cleanedText),
-      );
+      final genTime =
+          '${(result.totalElapsedMs / 1000).toStringAsFixed(1)}s';
+      final chatRepo = ref.read(chatRepoProvider);
+
+      if (result.wasCleaned) {
+        if (_preCreatedCleanerSwipeId >= 0) {
+          await chatRepo.updateAgentSwipeContent(
+            sessionId: sessionId,
+            messageId: lastAssistant.id,
+            agentSwipeId: _preCreatedCleanerSwipeId,
+            content: result.cleanedText,
+            genTime: genTime,
+            tokens: estimateTokens(result.cleanedText),
+          );
+        } else {
+          // Pre-create failed earlier — fall back to the legacy append path so
+          // the user still gets a 'cleaned' swipe.
+          await cleanerService.applyCleanedText(
+            sessionId: sessionId,
+            messageId: lastAssistant.id,
+            cleanedText: result.cleanedText,
+            genTime: genTime,
+            tokens: estimateTokens(result.cleanedText),
+          );
+        }
+      } else if (_lastStreamedText.trim().isNotEmpty) {
+        // Cleaner failed mid-stream but produced partial text — keep it.
+        if (_preCreatedCleanerSwipeId >= 0) {
+          await chatRepo.updateAgentSwipeContent(
+            sessionId: sessionId,
+            messageId: lastAssistant.id,
+            agentSwipeId: _preCreatedCleanerSwipeId,
+            content: _lastStreamedText,
+            genTime: genTime,
+            tokens: estimateTokens(_lastStreamedText),
+          );
+        } else {
+          // Pre-create failed — append the partial text as a new swipe.
+          await cleanerService.applyCleanedText(
+            sessionId: sessionId,
+            messageId: lastAssistant.id,
+            cleanedText: _lastStreamedText,
+            genTime: genTime,
+            tokens: estimateTokens(_lastStreamedText),
+          );
+        }
+      } else if (_preCreatedCleanerSwipeId >= 0) {
+        // Nothing useful was produced — delete the pre-created empty swipe
+        // and revert to the parent 'final'.
+        await chatRepo.removeAgentSwipe(
+          sessionId: sessionId,
+          messageId: lastAssistant.id,
+          agentSwipeId: _preCreatedCleanerSwipeId,
+        );
+      }
 
       // Reset the streaming state so the WebView stops treating the bubble
       // as isTyping. The chatHistoryProvider invalidate below pushes the
@@ -863,9 +1031,9 @@ class GenerationPipeline {
       }
 
       // Refresh ChatNotifier state so the UI picks up the new swipe
-      // immediately without requiring the user to re-enter the chat.
-      // applyCleanedText writes to DB + invalidates chatHistoryProvider,
-      // but ChatNotifier holds its own ChatState copy that must be pushed.
+      // immediately without requiring the user to re-enter the chat. The
+      // update/remove above wrote to DB; ChatNotifier holds its own
+      // ChatState copy that must be pushed.
       // Note: we do NOT check isCurrentGen here — the cleaner may run
       // after a regen, and the UI must always reflect the cleaned swipe.
       if (ref.mounted) {
@@ -891,7 +1059,35 @@ class GenerationPipeline {
             const StreamingState();
         ref.read(postCleanerStateProvider.notifier).state =
             const PostCleanerState.idle();
+        // Best-effort cleanup of the pre-created swipe on a hard pipeline
+        // failure (e.g. runCleaner threw before returning). Revert to final.
+        if (_preCreatedCleanerSwipeId >= 0) {
+          try {
+            final removed = await ref
+                .read(chatRepoProvider)
+                .removeAgentSwipe(
+                  sessionId: sessionId,
+                  messageId: _preCreatedMessageId ?? '',
+                  agentSwipeId: _preCreatedCleanerSwipeId,
+                );
+            if (removed) {
+              final reverted = await ref
+                  .read(chatRepoProvider)
+                  .getById(sessionId);
+              if (reverted != null) {
+                ChatSessionService.updateCache(reverted);
+                ref.invalidate(chatHistoryProvider);
+              }
+            }
+          } catch (_) {
+            // swallow — already in an error path
+          }
+        }
       }
+    } finally {
+      _lastStreamedText = '';
+      _preCreatedCleanerSwipeId = -1;
+      _preCreatedMessageId = null;
     }
   }
 }
