@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/prompt_builder.dart' show PromptPayload;
+import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/agent_operation_record.dart';
@@ -842,6 +843,15 @@ class GenerationPipeline {
         sessionId: sessionId,
         messageId: lastAssistant.id,
         cleanedText: result.cleanedText,
+        // Cleaner elapsed time → per-swipe "Ns" badge on the blue sub-swipe
+        // (Fix 3). Matches the main genTime format used by
+        // StreamGenerationService ('${(elapsed/1000).toStringAsFixed(1)}s').
+        genTime:
+            '${(result.totalElapsedMs / 1000).toStringAsFixed(1)}s',
+        // Token count of the cleaned text → keeps the token badge visible on
+        // the cleaned swipe (Fix 4). Same estimator as the main assistant
+        // badge (estimateTokens in tokenizer.dart).
+        tokens: estimateTokens(result.cleanedText),
       );
 
       // Reset the streaming state so the WebView stops treating the bubble

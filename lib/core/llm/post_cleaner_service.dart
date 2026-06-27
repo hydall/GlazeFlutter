@@ -384,6 +384,11 @@ class PostCleanerService {
   /// [ChatRepo.appendAgentSwipe]. The original 'final' text remains available
   /// as the parent swipe and is lazy-migrated on first clean.
   ///
+  /// [genTime] is the cleaner's own elapsed time (e.g. `"12.3s"`), surfaced as
+  /// a per-swipe badge on the cleaned sub-swipe (Fix 3). [tokens] is the
+  /// cleaned text's token count (Fix 4). When null, the badge is omitted by
+  /// the mapper and renderer — pass non-null to keep the badge visible.
+  ///
   /// After the append, clones the parent agent-swipe's tracker snapshot into
   /// the new 'cleaned' anchor so navigating to the blue sub-swipe restores the
   /// correct tracker state (the cleaner rewrites prose, not trackers).
@@ -391,6 +396,8 @@ class PostCleanerService {
     required String sessionId,
     required String messageId,
     required String cleanedText,
+    String? genTime,
+    int? tokens,
   }) async {
     final chatRepo = _ref.read(chatRepoProvider);
     final updated = await chatRepo.appendAgentSwipe(
@@ -398,6 +405,8 @@ class PostCleanerService {
       messageId: messageId,
       content: cleanedText,
       kind: 'cleaned',
+      genTime: genTime,
+      tokens: tokens,
     );
     if (!updated) return;
 
