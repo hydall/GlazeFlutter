@@ -48,6 +48,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   bool _loading = true;
   bool _loadingModels = false;
   bool _building = false;
+  final Set<String> _regeneratingAgentIds = {};
 
   @override
   void initState() {
@@ -140,9 +141,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   /// [MemoryStudioService.runTrackerCycle] consumes.
   Future<void> _buildStudio() async {
     final preset = ref.read(
-      effectivePresetForChatProvider(
-        (charId: widget.charId, sessionId: widget.sessionId),
-      ),
+      effectivePresetForChatProvider((
+        charId: widget.charId,
+        sessionId: widget.sessionId,
+      )),
     );
     if (preset == null) {
       GlazeToast.show(
@@ -324,6 +326,138 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     setState(() => _config = updated);
   }
 
+  /// Open a multi-line editor for one tracker's `promptShard` (manual shard
+  /// editing). Persists on Save; Cancel discards. This complements the auto
+  /// [StudioDecompositionService.decompose] build — the user can hand-tune
+  /// any agent's instruction after a build.
+  Future<void> _editAgentShard(StudioAgent agent) async {
+    final controller = TextEditingController(text: agent.promptShard);
+    final result = await showDialog<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            agent.name.isEmpty ? 'Edit prompt shard' : 'Edit "${agent.name}"',
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: TextField(
+              controller: controller,
+              maxLines: 12,
+              autofocus: true,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Prompt shard for this tracker…',
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(controller.text),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    if (result == null) return;
+    await _setAgentPromptShard(agent, result);
+  }
+
+  Future<void> _setAgentPromptShard(StudioAgent agent, String shard) async {
+    final repo = ref.read(studioConfigRepoProvider);
+    final current = _config;
+    if (current == null) return;
+    final agents = current.agents.map((a) {
+      if (a.id == agent.id) return a.copyWith(promptShard: shard);
+      return a;
+    }).toList();
+    final updated = current.copyWith(
+      agents: agents,
+      updatedAt: currentTimestampSeconds(),
+    );
+    await repo.upsert(updated);
+    if (!mounted) return;
+    setState(() => _config = updated);
+  }
+
+  /// Regenerate one tracker's `promptShard` from its source preset blocks via
+  /// [StudioDecompositionService.regenerateAgentInstruction]. Uses the same
+  /// build API config as [_buildStudio]. Single-agent regen reuses the
+  /// deterministic keyword bucketing (no LLM router call); the build-time LLM
+  /// map only matters for a full decompose.
+  Future<void> _regenerateAgentInstruction(StudioAgent agent) async {
+    final current = _config;
+    if (current == null || _regeneratingAgentIds.contains(agent.id)) return;
+    final preset = ref.read(
+      effectivePresetForChatProvider((
+        charId: widget.charId,
+        sessionId: widget.sessionId,
+      )),
+    );
+    if (preset == null) {
+      GlazeToast.show(
+        context,
+        'No preset available. Cannot regenerate instruction.',
+      );
+      return;
+    }
+    final apiConfig = _resolveBuildApiConfig();
+    if (apiConfig == null) {
+      GlazeToast.show(
+        context,
+        'No API configured. Set one up in API settings first.',
+      );
+      return;
+    }
+
+    setState(() => _regeneratingAgentIds.add(agent.id));
+    try {
+      final decompositionService = ref.read(studioDecompositionServiceProvider);
+      final routingMode = current.routingMode.isNotEmpty
+          ? current.routingMode
+          : 'verbatim';
+      final updatedAgent = await decompositionService
+          .regenerateAgentInstruction(
+            preset: preset,
+            agent: agent,
+            apiConfig: apiConfig,
+            builderPromptTemplate: current.builderPromptTemplate,
+            routingMode: routingMode,
+          );
+      if (!mounted || _config == null) return;
+      final agents = current.agents.map((a) {
+        return a.id == agent.id ? updatedAgent.copyWith(order: a.order) : a;
+      }).toList();
+      final updatedConfig = current.copyWith(
+        agents: agents,
+        sourcePresetHash: StudioDecompositionService.computePresetHash(
+          preset.blocks.where((b) => b.enabled).toList(),
+        ),
+        buildApiConfigId: apiConfig.id,
+        updatedAt: currentTimestampSeconds(),
+      );
+      await ref.read(studioConfigRepoProvider).upsert(updatedConfig);
+      if (!mounted) return;
+      setState(() => _config = updatedConfig);
+      GlazeToast.show(
+        context,
+        'Instruction regenerated for "${agent.name.isEmpty ? agent.id : agent.name}".',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      GlazeToast.show(context, 'Regenerate failed: $e');
+    } finally {
+      if (mounted) setState(() => _regeneratingAgentIds.remove(agent.id));
+    }
+  }
+
   Future<void> _openAdvanced() async {
     Navigator.of(context).pop();
     await showDialog<void>(
@@ -419,6 +553,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                               value: _trackerValueFor(a.name),
                               onToggle: (v) => _toggleAgent(a, v),
                               onEditModel: () => _editAgentModel(a),
+                              onEditShard: () => _editAgentShard(a),
+                              onRegenerate: () =>
+                                  _regenerateAgentInstruction(a),
+                              regenerating: _regeneratingAgentIds.contains(
+                                a.id,
+                              ),
                             ),
                           ),
                         if (disabledAgents.isNotEmpty) ...[
@@ -436,6 +576,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                               value: _trackerValueFor(a.name),
                               onToggle: (v) => _toggleAgent(a, v),
                               onEditModel: () => _editAgentModel(a),
+                              onEditShard: () => _editAgentShard(a),
+                              onRegenerate: () =>
+                                  _regenerateAgentInstruction(a),
+                              regenerating: _regeneratingAgentIds.contains(
+                                a.id,
+                              ),
                             ),
                           ),
                         ],
@@ -508,12 +654,18 @@ class _TrackerRow extends StatelessWidget {
   final String? value;
   final ValueChanged<bool> onToggle;
   final VoidCallback onEditModel;
+  final VoidCallback onEditShard;
+  final VoidCallback onRegenerate;
+  final bool regenerating;
 
   const _TrackerRow({
     required this.agent,
     required this.value,
     required this.onToggle,
     required this.onEditModel,
+    required this.onEditShard,
+    required this.onRegenerate,
+    required this.regenerating,
   });
 
   @override
@@ -569,6 +721,10 @@ class _TrackerRow extends StatelessWidget {
                       // Tappable model chip — the one piece of per-tracker
                       // config the lightweight dialog edits inline.
                       _modelChip(context),
+                      // Tappable prompt-shard chip — opens a multi-line
+                      // editor for the tracker's promptShard (manual shard
+                      // editing, Phase B).
+                      _shardChip(context),
                     ],
                   ),
                 ),
@@ -587,6 +743,20 @@ class _TrackerRow extends StatelessWidget {
                   ),
               ],
             ),
+          ),
+          // Regenerate this tracker's instruction from its source preset
+          // blocks (Phase B). Spinner while the LLM build call is in flight.
+          IconButton(
+            onPressed: regenerating ? null : onRegenerate,
+            icon: regenerating
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(Icons.refresh, size: 18, color: cs.onSurfaceVariant),
+            tooltip: 'Regenerate instruction from preset',
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
@@ -626,6 +796,39 @@ class _TrackerRow extends StatelessWidget {
                     ? cs.onPrimaryContainer
                     : cs.onSurfaceVariant,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _shardChip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasShard = agent.promptShard.trim().isNotEmpty;
+    return InkWell(
+      onTap: onEditShard,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: cs.primary.withValues(alpha: 0.4),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.edit_note, size: 12, color: cs.onSurfaceVariant),
+            const SizedBox(width: 3),
+            Text(
+              hasShard ? 'prompt' : 'add prompt',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ],
         ),
