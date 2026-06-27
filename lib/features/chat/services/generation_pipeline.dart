@@ -586,6 +586,28 @@ class GenerationPipeline {
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.agenticWriteEnabled) return;
 
+      // Cadence (Marinara runInterval=8 analog): run the agentic write-loop
+      // every N assistant turns, not every turn. Cuts LLM cost / latency on
+      // long chats at the cost of slower memory propagation between runs.
+      // 1 = every turn (legacy behavior). The current turn number is the
+      // count of assistant messages in the session — this method is called
+      // after the just-finished assistant turn is persisted, so the count
+      // includes it.
+      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (cadence) and
+      // PipelineSettings.runAgenticEveryN.
+      final assistantTurnCount =
+          messages.where((m) => m.role == 'assistant' && !m.isTyping).length;
+      final cadence = pipeline.runAgenticEveryN < 1
+          ? 1
+          : pipeline.runAgenticEveryN;
+      if (cadence > 1 && assistantTurnCount % cadence != 0) {
+        debugPrint(
+          '[AgenticWrite] skipping write-loop — cadence=$cadence, '
+          'turn=$assistantTurnCount (not a multiple)',
+        );
+        return;
+      }
+
       // Read the current tracker state from snapshots (preferred) with a
       // tracker_rows fallback for legacy sessions pre-migration. On regen,
       // exclude the regenerating message's own stale snapshot so the base
