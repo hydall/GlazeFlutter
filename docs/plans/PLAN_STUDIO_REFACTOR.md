@@ -1,10 +1,10 @@
 # Plan: Studio / Agent Subsystem Decomposition
 
-> **Status:** ✅ CORE DONE — shared specialists (§1), decomposition (§3),
+> **Status:** ✅ COMPLETE — shared specialists (§1), decomposition (§3),
 > TrackerBatcher (§4), MemoryStudioService fully decomposed (§2, 9/9),
-> StudioMenuController (§5), MemorySettingsMapper +
-> MemoryDraftGenerationController (§6). §7 lower-priority items remaining
-> (see §10). §2 + §6 complete.
+> StudioMenuController (§5), MemoryBookController fully decomposed (§6),
+> and the §7 lower-priority items (AgentStreamRunner, AgenticWriteRequestParser,
+> memory_agentic_tools file split). All planned extractions landed.
 > **Goal:** Break up the studio/agent god objects into thin orchestrators + injected
 > specialists per `docs/CODE_STYLE.md` (one class = one job, ~250 lines). No behavior
 > change — pure structural refactor, gated by the existing test suite.
@@ -185,17 +185,21 @@ Note: this is the only file in the set using `WidgetRef` (the rest use `Ref`).
 
 ---
 
-## 7. Lower-priority
+## 7. Lower-priority ✅ COMPLETE
 
-- `agent_runner.dart`: optionally extract `AgentStreamRunner` (the 180-line streaming
-  state machine), leaving `AgentRunner` as resolver + failure-wrapper. Move
-  reasoning-stripping to `ReasoningStripper` (§1.2).
-- `memory_agentic_write_service.dart`: extract `AgenticWriteRequestParser`
-  (`_askLlmForWrites` prompt+parse) from the write-execution.
-- `memory_agentic_tools.dart`: split into tool-defs / search-handler / write-DTOs
-  files (no single class is over 250; cosmetic).
+- ✅ `agent_runner.dart`: `AgentStreamRunner` extracted (the 180-line streaming
+  state machine); `AgentRunner` is now a resolver + failure-wrapper. Reasoning-
+  stripping already delegates to `ReasoningStripper` (§1.2); the static
+  `AgentRunner.stripPromptLevelReasoning` shim stays for call sites.
+- ✅ `memory_agentic_write_service.dart`: `AgenticWriteRequestParser` extracted
+  (`_askLlmForWrites` prompt+parse); the write-execution stays in the host.
+- ✅ `memory_agentic_tools.dart`: split into `memory_agentic_tool_definitions.dart`
+  (schemas), `memory_agentic_search_handler.dart` (searchMemory handler + result
+  types), `memory_agentic_write_dtos.dart` (write-loop request/result DTOs). The
+  original file is now a barrel re-export so the 3 existing importers keep their
+  import path unchanged.
 - `studio_request_preset.dart`: optionally move legacy migration helpers to
-  `StudioPresetMigration` so the data file is pure data. Low priority.
+  `StudioPresetMigration` so the data file is pure data. Low priority, deferred.
 
 ---
 
@@ -216,7 +220,10 @@ commit. After every commit, analyze + test must be green before the next.
 5. ✅ **`studio_menu_dialog`** (§5) — `StudioMenuController` extracted; removes the 3rd
    config-resolver copy.
 6. ✅ **`MemoryBookController`** (§6) — `MemorySettingsMapper` +
-   `MemoryDraftGenerationController` extracted. §7 items not done.
+   `MemoryDraftGenerationController` extracted.
+7. ✅ **Lower-priority** (§7) — `AgentStreamRunner` (streaming state
+   machine), `AgenticWriteRequestParser` (write-loop prompt+parse), and
+   `memory_agentic_tools.dart` cosmetic file split all done.
 
 ## 9. Guardrails
 
@@ -275,7 +282,7 @@ imports dropped out of the host (now owned by the executor + batch coordinator).
   `bookGetter`/`persistAndSet` closures. `MemoryBookController` is now 322 lines (from
   619, a 48% reduction) — a thin orchestrator.
 
-### §7 — lower-priority items
-- `agent_runner.dart`: `AgentStreamRunner` extraction (streaming state machine).
-- `memory_agentic_write_service.dart`: `AgenticWriteRequestParser`.
-- `memory_agentic_tools.dart`: file split (cosmetic).
+### §7 — lower-priority items ✅ COMPLETE
+- ✅ `agent_runner.dart`: `AgentStreamRunner` extracted (streaming state machine).
+- ✅ `memory_agentic_write_service.dart`: `AgenticWriteRequestParser` extracted.
+- ✅ `memory_agentic_tools.dart`: split into 3 focused files + barrel re-export.
