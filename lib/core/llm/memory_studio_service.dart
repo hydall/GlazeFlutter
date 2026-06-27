@@ -16,8 +16,14 @@ import 'json_repair.dart';
 import 'history_assembler.dart';
 import 'macro_engine.dart';
 import 'prompt_builder.dart';
+import 'studio_activation_gate.dart';
 import 'studio_request_preset.dart';
 import 'tracker_batcher.dart';
+
+// Re-export so existing importers of `AgentPhaseSplit` via this file (e.g.
+// tests, studio_post_processing) keep their import path after the move to
+// studio_activation_gate.dart.
+export 'studio_activation_gate.dart' show AgentPhaseSplit;
 
 const _mandatoryBlockIds = {'char_card', 'char_personality', 'user_persona'};
 const _studioMetaPolicyAgentName = 'Meta-Weaver / Lumia Policy';
@@ -2083,31 +2089,20 @@ Rules:
   /// patterns) and we do NOT require whole-word boundaries by default
   /// (cheaper, fewer false negatives on inflected forms). If a user wants
   /// exact word matching they can pad the keyword with spaces.
+  /// Static delegator — see [StudioActivationGate.matchesActivationKeywords].
+  /// Kept on this class because tests reference
+  /// `MemoryStudioService.matchesActivationKeywords`.
   @visibleForTesting
   static bool matchesActivationKeywords(
     List<String> keywords,
     List<String> historyContents,
     int scanDepth,
-  ) {
-    if (keywords.isEmpty) return true;
-    if (historyContents.isEmpty) return false;
-    final effectiveDepth =
-        scanDepth <= 0 ? historyContents.length : scanDepth;
-    final start = historyContents.length - effectiveDepth;
-    final window = historyContents.sublist(start < 0 ? 0 : start);
-    final loweredKeywords = keywords
-        .map((k) => k.trim().toLowerCase())
-        .where((k) => k.isNotEmpty)
-        .toList();
-    if (loweredKeywords.isEmpty) return true;
-    for (final content in window) {
-      final lowered = content.toLowerCase();
-      for (final keyword in loweredKeywords) {
-        if (lowered.contains(keyword)) return true;
-      }
-    }
-    return false;
-  }
+  ) =>
+      StudioActivationGate.matchesActivationKeywords(
+        keywords,
+        historyContents,
+        scanDepth,
+      );
 
   /// Feature 6 — split a sorted (by `order`) list of enabled agents into the
   /// three pipeline phases. Exposed `@visibleForTesting` so the splitting
@@ -2131,51 +2126,11 @@ Rules:
   ///   of its phase, so the pipeline never loses its writer. In that fallback
   ///   the chosen generator is also removed from `postGenTrackers` (it
   ///   cannot be both generator and post-gen tracker).
+  /// Static delegator — see [StudioActivationGate.splitAgentsByPhase]. Kept on
+  /// this class because tests reference `MemoryStudioService.splitAgentsByPhase`.
   @visibleForTesting
-  static AgentPhaseSplit splitAgentsByPhase(List<StudioAgent> agents) {
-    if (agents.isEmpty) {
-      return const AgentPhaseSplit(
-        preGenTrackers: [],
-        postGenTrackers: [],
-        finalAgent: null,
-      );
-    }
-    final normalized = agents.map((a) {
-      final phase = StudioAgent.normalizeAgentPhaseForType(a.id, a.phase);
-      return (agent: a, phase: phase);
-    }).toList();
-
-    final preGen = normalized
-        .where((e) => e.phase == 'pre_generation')
-        .map((e) => e.agent)
-        .toList();
-    final postGen = normalized
-        .where((e) => e.phase == 'post_processing')
-        .map((e) => e.agent)
-        .toList();
-
-    if (preGen.isNotEmpty) {
-      // Last pre-gen agent = generator; the rest are pre-gen trackers.
-      final finalAgent = preGen.last;
-      final preGenTrackers = preGen.sublist(0, preGen.length - 1);
-      return AgentPhaseSplit(
-        preGenTrackers: preGenTrackers,
-        postGenTrackers: postGen,
-        finalAgent: finalAgent,
-      );
-    }
-
-    // Fallback: no pre-gen agent at all. Use the last enabled agent overall
-    // as the generator, regardless of phase, and remove it from the post-gen
-    // list so it isn't run twice.
-    final finalAgent = agents.last;
-    final filteredPostGen = postGen.where((a) => a.id != finalAgent.id).toList();
-    return AgentPhaseSplit(
-      preGenTrackers: const [],
-      postGenTrackers: filteredPostGen,
-      finalAgent: finalAgent,
-    );
-  }
+  static AgentPhaseSplit splitAgentsByPhase(List<StudioAgent> agents) =>
+      StudioActivationGate.splitAgentsByPhase(agents);
 
   void _log(String message) {
     debugPrint('[Studio] $message');
@@ -2330,17 +2285,4 @@ class _ControllerScope {
   const _ControllerScope({required this.owns, required this.skip});
 }
 
-/// Feature 6 — the 3-phase split of a sorted list of enabled agents. Produced
-/// by [MemoryStudioService.splitAgentsByPhase]. Exposed for unit testing the
-/// split logic without a live `runTrackerCycle`.
-class AgentPhaseSplit {
-  final List<StudioAgent> preGenTrackers;
-  final List<StudioAgent> postGenTrackers;
-  final StudioAgent? finalAgent;
 
-  const AgentPhaseSplit({
-    required this.preGenTrackers,
-    required this.postGenTrackers,
-    required this.finalAgent,
-  });
-}
