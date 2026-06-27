@@ -81,6 +81,29 @@ void main() {
       expect(result['a'], [1, 2, 3]);
     });
 
+    test('preserves a literal ", ]" inside a string value (no corruption)', () {
+      // Regression: the trailing-comma pass must be string-aware. A string
+      // value that contains a comma followed by whitespace then `]` must NOT
+      // have that comma stripped (it would silently mutate the value into
+      // valid-but-wrong JSON that jsonDecode accepts).
+      const input = '{"rule": "avoid lists like [a, b, ]"}';
+      final result = jsonDecode(repairJson(input)) as Map<String, dynamic>;
+      expect(result['rule'], 'avoid lists like [a, b, ]');
+    });
+
+    test('preserves a literal ", }" inside an embedded-JSON string value', () {
+      const input = '{"example": "{\\"x\\": 1, }"}';
+      final result = jsonDecode(repairJson(input)) as Map<String, dynamic>;
+      expect(result['example'], '{"x": 1, }');
+    });
+
+    test('strips real trailing comma but keeps an in-string one in same doc', () {
+      const input = '{"rule": "drop a, ]", "items": [1, 2,]}';
+      final result = jsonDecode(repairJson(input)) as Map<String, dynamic>;
+      expect(result['rule'], 'drop a, ]');
+      expect(result['items'], [1, 2]);
+    });
+
     test('handles escaped quotes inside strings correctly', () {
       const input = '{"text": "he said \\"hi\\" // not a comment"}';
       final result = jsonDecode(repairJson(input)) as Map<String, dynamic>;

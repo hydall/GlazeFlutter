@@ -497,14 +497,15 @@ class MemoryStudioService {
       );
       // Post-gen trackers produce prose (a rewrite), NOT a brief — skip the
       // brief-shape sanitization that pre-gen trackers go through. Empty
-      // output means "no edit needed" → caller keeps `mainResponse`.
+      // output means "no edit needed" → caller keeps `mainResponse`. This is
+      // the intentional happy-path no-op, so it is reported as 'skipped'
+      // (NOT 'error') to avoid surfacing a false failure in the stage briefs.
       final text = result.text.trim();
       return StudioStageBrief(
         agentId: agent.id,
         agentName: agent.name,
         brief: text,
-        status: text.isNotEmpty ? 'ok' : 'error',
-        error: text.isEmpty ? 'post-processing tracker produced empty output' : null,
+        status: text.isNotEmpty ? 'ok' : 'skipped',
       );
     } on AgentRunFailedException catch (e) {
       return StudioStageBrief(

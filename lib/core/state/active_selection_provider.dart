@@ -7,6 +7,7 @@ import '../models/persona.dart';
 import '../models/preset.dart';
 import 'shared_prefs_provider.dart';
 import 'memory_settings_provider.dart';
+import 'pipeline_settings_provider.dart';
 
 export 'active_regex_provider.dart';
 export 'persona_resolution.dart';
@@ -63,6 +64,7 @@ Future<void> loadActiveSelections(WidgetRef ref) async {
     } catch (_) {}
   }
   await ref.read(memoryGlobalSettingsProvider.notifier).load();
+  await ref.read(pipelineSettingsProvider.notifier).load();
 }
 
 Future<void> setActivePreset(WidgetRef ref, String? id) async {

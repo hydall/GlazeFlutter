@@ -87,6 +87,12 @@ class GenerationPipeline {
   /// `lastAssistant` is out of scope).
   String? _preCreatedMessageId;
 
+  /// Cancel token for the parallel character-audit call (Feature 3). On the
+  /// race-loser path the audit Future outlives the cleaner; this lets the
+  /// `finally` block cancel the orphaned LLM request. `null` when no audit
+  /// is in flight.
+  CancelToken? _auditCancelToken;
+
   /// Run the full post-SSE pipeline. Returns the final [GenerationOutcome]
   /// describing the state to apply, or null if the genId was invalidated
   /// (caller should drop the result).
@@ -751,6 +757,12 @@ class GenerationPipeline {
       Future<List<String>?>? auditFuture;
       if (pipeline.postCleanerCharacterCheckEnabled && promptPayload != null) {
         final loreContent = _assembleLorebooksContent(promptPayload);
+        // Dedicated cancel token: on the race-loser path the audit Future
+        // keeps running in the background. Without this it would run to
+        // completion (burning an LLM call / quota) even after the cleaner
+        // finalized or the turn was aborted. We cancel it in the `finally`
+        // block so the orphaned call is always bounded.
+        _auditCancelToken = CancelToken();
         auditFuture = cleanerService
             .runCharacterAudit(
               assistantText: lastAssistant.content,
@@ -764,6 +776,7 @@ class GenerationPipeline {
               entitiesContent: promptPayload.entitiesContent,
               recentMessages: recentMessages,
               settings: pipeline,
+              cancelToken: _auditCancelToken,
             )
             .catchError((Object e) {
               debugPrint('[PostCleaner] audit failed session=$sessionId error=$e');
@@ -1043,8 +1056,25 @@ class GenerationPipeline {
             tokens: estimateTokens(result.cleanedText),
           );
         }
+      } else if (result.status == 'skipped') {
+        // The cleaner ran to completion but the result was DELIBERATELY
+        // rejected by a safety guard (length-ratio out of bounds, or the
+        // rewrite dropped protected markup — see PostCleanerService). In this
+        // case `_lastStreamedText` holds the rejected (e.g. markup-stripped)
+        // text that was streamed live for UX; we must NOT persist it, or the
+        // guard is defeated. Delete the pre-created swipe and revert to the
+        // parent 'final' (the untouched original).
+        if (_preCreatedCleanerSwipeId >= 0) {
+          await chatRepo.removeAgentSwipe(
+            sessionId: sessionId,
+            messageId: lastAssistant.id,
+            agentSwipeId: _preCreatedCleanerSwipeId,
+          );
+        }
       } else if (_lastStreamedText.trim().isNotEmpty) {
-        // Cleaner failed mid-stream but produced partial text — keep it.
+        // Cleaner failed mid-stream (error/timeout/aborted) but produced
+        // partial text — keep it (do-no-harm: partial cleaned text is still
+        // closer to the user's intent than discarding the work).
         if (_preCreatedCleanerSwipeId >= 0) {
           await chatRepo.updateAgentSwipeContent(
             sessionId: sessionId,
@@ -1137,6 +1167,15 @@ class GenerationPipeline {
         }
       }
     } finally {
+      // Cancel any still-running (race-loser) audit call so it doesn't burn
+      // an LLM request after the cleaner has finalized / the turn aborted.
+      // No-op if the audit already completed (won the race) or was never
+      // started. The `.catchError` on `auditFuture` neutralizes the
+      // resulting cancellation error for the late `.then` logger.
+      if (_auditCancelToken != null && !_auditCancelToken!.isCancelled) {
+        _auditCancelToken!.cancel();
+      }
+      _auditCancelToken = null;
       _lastStreamedText = '';
       _preCreatedCleanerSwipeId = -1;
       _preCreatedMessageId = null;

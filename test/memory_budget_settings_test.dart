@@ -40,6 +40,48 @@ void main() {
   );
 
   test(
+    'pipeline settings survive a cold start: saved values reload via load()',
+    () async {
+      // Regression: pipelineSettingsProvider.load() must actually be reachable
+      // and round-trip the persisted SharedPreferences value. Previously the
+      // notifier seeded defaults and load() was never wired into startup, so
+      // after a restart every read returned defaults (and the first save
+      // overwrote the persisted config with defaults).
+      SharedPreferences.setMockInitialValues({});
+
+      // First "session": user configures + saves.
+      final container1 = ProviderContainer();
+      await container1
+          .read(pipelineSettingsProvider.notifier)
+          .save(
+            const PipelineSettings(
+              postCleanerEnabled: true,
+              postCleanerBannedWords: 'suddenly, palpable',
+              classifierEnabled: true,
+              classifierModel: 'classifier-mini',
+            ),
+          );
+      container1.dispose();
+
+      // Cold start: a brand-new container starts from defaults and must load
+      // the persisted values (this is the call wired into loadActiveSelections).
+      final container2 = ProviderContainer();
+      addTearDown(container2.dispose);
+
+      // Before load(), state is defaults (proves load() is what restores it).
+      expect(container2.read(pipelineSettingsProvider).postCleanerEnabled, false);
+
+      await container2.read(pipelineSettingsProvider.notifier).load();
+
+      final loaded = container2.read(pipelineSettingsProvider);
+      expect(loaded.postCleanerEnabled, true);
+      expect(loaded.postCleanerBannedWords, 'suddenly, palpable');
+      expect(loaded.classifierEnabled, true);
+      expect(loaded.classifierModel, 'classifier-mini');
+    },
+  );
+
+  test(
     'memory global settings loads legacy percent-only data as auto',
     () async {
       SharedPreferences.setMockInitialValues({

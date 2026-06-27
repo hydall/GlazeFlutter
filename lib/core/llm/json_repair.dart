@@ -11,7 +11,9 @@ import 'dart:convert';
 /// - `...` ellipsis placeholders that LLMs love to emit for "more items
 ///   here" (only outside strings).
 /// - Trailing commas immediately before `]` or `}` (the classic
-///   "last element in array has a comma" mistake).
+///   "last element in array has a comma" mistake). Detected inside the same
+///   string-aware scanner, so a literal `, ]` / `, }` inside a string value
+///   is preserved verbatim.
 ///
 /// Use this right before `jsonDecode` when the upstream text was extracted
 /// from an LLM response (e.g. via `_extractJsonObject`). If [jsonDecode]
@@ -87,16 +89,31 @@ String repairJson(String input) {
       i += 3;
       continue;
     }
+    // Trailing comma: a `,` whose next non-whitespace char (outside any
+    // string) is `]` or `}`. Done inside the scanner — NOT as a post-hoc
+    // regex — so a literal `, ]` / `, }` INSIDE a JSON string value (e.g.
+    // {"rule": "avoid lists like [a, b, ]"}) is never touched. We only
+    // reach here when `inString` is false. Peek ahead over whitespace; if
+    // the comma is trailing, drop it (skip the `,`, keep the whitespace so
+    // line/column shapes stay close to the original).
+    if (ch == ',') {
+      var j = i + 1;
+      while (j < input.length &&
+          (input[j] == ' ' ||
+              input[j] == '\t' ||
+              input[j] == '\n' ||
+              input[j] == '\r')) {
+        j++;
+      }
+      if (j < input.length && (input[j] == ']' || input[j] == '}')) {
+        // Skip the comma only; the whitespace run is re-emitted by the
+        // normal path on the next iterations.
+        i++;
+        continue;
+      }
+    }
     buf.write(ch);
     i++;
   }
-  // Trailing-comma removal: `,\n]` → `\n]` and `,\n}` → `\n}`. Cheap regex pass
-  // after comment stripping — doesn't need string awareness because a
-  // trailing comma inside a string literal is extremely rare and the
-  // downstream jsonDecode is the final authority. Use replaceAllMapped
-  // (not replaceAll) because the replacement string `$1` would otherwise
-  // be emitted literally rather than as a backreference.
-  return buf
-      .toString()
-      .replaceAllMapped(RegExp(r',\s*([\]}])'), (m) => m.group(1)!);
+  return buf.toString();
 }
