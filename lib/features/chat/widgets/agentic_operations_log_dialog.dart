@@ -280,33 +280,102 @@ class _TrackerValuesTabState extends ConsumerState<_TrackerValuesTab> {
     return scope?.sessionId;
   }
 
+  Future<void> _purgeTrackers() async {
+    final sessionId = _sessionIdOf(context);
+    if (sessionId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Purge tracker values?'),
+        content: const Text(
+          'This permanently deletes all tracker rows and snapshots for this '
+          'session. Use this to clear orphaned trackers left by deleted '
+          'messages or a Clear chat. The action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Purge'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(trackerRepoProvider).clearForSession(sessionId);
+    await ref.read(trackerSnapshotRepoProvider).deleteBySessionId(sessionId);
+    if (!mounted) return;
+    setState(() {
+      _trackers = const <Tracker>[];
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
       return const Center(child: CircularProgressIndicator());
     }
     final trackers = _trackers ?? const <Tracker>[];
-    if (trackers.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'No tracker values recorded yet for this session.\n\n'
-            'Trackers are written by the post-turn write-loop and the '
-            'memory tracker. They hold lightweight state (scene, weather, '
-            'relationship, ...) injected into later prompts via macros.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
+    return Column(
+      children: [
+        if (trackers.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: [
+                Text(
+                  '${trackers.length} tracker${trackers.length == 1 ? '' : 's'}',
+                  style: TextStyle(
+                    color: context.cs.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _purgeTrackers,
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 16),
+                  label: const Text('Purge'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: context.cs.error,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
           ),
+        Expanded(
+          child: trackers.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'No tracker values recorded yet for this session.\n\n'
+                      'Trackers are written by the post-turn write-loop and the '
+                      'memory tracker. They hold lightweight state (scene, '
+                      'weather, relationship, ...) injected into later prompts '
+                      'via macros.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: context.cs.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  itemCount: trackers.length,
+                  separatorBuilder: (_, _) =>
+                      const Divider(height: 1, indent: 12, endIndent: 12),
+                  itemBuilder: (context, i) =>
+                      _TrackerTile(tracker: trackers[i]),
+                ),
         ),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      itemCount: trackers.length,
-      separatorBuilder: (_, _) =>
-          const Divider(height: 1, indent: 12, endIndent: 12),
-      itemBuilder: (context, i) => _TrackerTile(tracker: trackers[i]),
+      ],
     );
   }
 }

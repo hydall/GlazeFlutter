@@ -119,7 +119,17 @@ class ChatMessageService {
       // deleteForMessage and serves as the legacy baseline.
       return snapshotRepo.getLatestCommitted(session.id);
     }).then((snapshot) {
-      if (snapshot == null) return;
+      if (snapshot == null) {
+        // No committed snapshot exists — the deleted message was the first
+        // (its snapshot was uncommitted; commit happens only on the next
+        // user turn via chat_provider.commitLatest). There is nothing to
+        // roll back to, so clear the live store entirely: otherwise the
+        // trackers written by the deleted turn would persist in
+        // `tracker_rows` forever (the UI falls back to tracker_rows when
+        // no snapshot is found). See chat_message_service.deleteMessage.
+        trackerRepo.clearForSession(session.id);
+        return;
+      }
       trackerRepo.replaceForSession(session.id, snapshot.trackers);
     }).catchError((Object _) {});
     return _persist(session, newMessages);
