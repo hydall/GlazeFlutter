@@ -260,6 +260,13 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     );
 
     await ref.read(chatRepoProvider).put(updatedSession);
+    // Mark the latest tracker snapshot as committed — the user has moved on
+    // from the previous assistant turn by sending a follow-up. This separates
+    // accepted state (committed=1, used by getLatestCommitted) from
+    // tentative/regen state (committed=0).
+    await ref
+        .read(trackerSnapshotRepoProvider)
+        .commitLatest(current.session!.id);
     if (!ref.mounted) return;
     ChatSessionService.updateCache(updatedSession);
     _invalidateHistory();
