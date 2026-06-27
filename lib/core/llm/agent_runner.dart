@@ -10,8 +10,8 @@ import '../state/db_provider.dart';
 import '../utils/error_format.dart';
 import '../../features/settings/api_list_provider.dart';
 import 'reasoning_stripper.dart';
+import 'studio_api_config_resolver.dart';
 import 'transport/chat_transport_request.dart';
-import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
 
 /// Thin LLM orchestrator extracted from `MemoryStudioService` (Phase 5.1,
@@ -290,39 +290,15 @@ class AgentRunner {
     ApiConfig current,
     String sessionId,
   ) async {
-    if (agent.modelSource == 'custom') {
-      await _ref.read(apiListProvider.future);
-      final apiConfigs =
-          _ref.read(apiListProvider).value ?? const <ApiConfig>[];
-      final selected = apiConfigs.where((c) => c.id == agent.model).firstOrNull;
-      if (selected != null) {
-        return ResolvedAgentConfig.fromApiConfig(
-          selected,
-          modelOverride: agent.modelOverride,
-        );
-      }
-      return ResolvedAgentConfig(
-        endpoint: agent.endpoint,
-        apiKey: current.apiKey,
-        model: agent.modelOverride.isNotEmpty
-            ? agent.modelOverride
-            : agent.model,
-        protocol: LlmProtocol.openai,
-        stream: current.stream,
-      );
-    }
-
     await _ref.read(apiListProvider.future);
-    final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
-    final configRunId = await _readRunApiConfigId(sessionId);
-    final selected = configRunId.isNotEmpty
-        ? apiConfigs.where((c) => c.id == configRunId).firstOrNull
-        : null;
-    final active = selected ?? _ref.read(activeApiConfigProvider) ?? current;
-    return ResolvedAgentConfig.fromApiConfig(
-      active,
-      modelOverride: agent.modelOverride,
+    final apiConfigs =
+        _ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    final runApiConfigId = await _readRunApiConfigId(sessionId);
+    final resolver = StudioApiConfigResolver(
+      apiConfigs: apiConfigs,
+      activeConfig: _ref.read(activeApiConfigProvider),
     );
+    return resolver.resolveAgentConfig(agent, current, runApiConfigId);
   }
 
   Future<String> _readRunApiConfigId(String sessionId) async {

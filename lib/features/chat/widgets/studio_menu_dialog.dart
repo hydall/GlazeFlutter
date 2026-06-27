@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/studio_api_config_resolver.dart';
 import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
@@ -109,13 +110,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   /// provider/endpoint/key — only the model id is overridden per agent — so
   /// the model list must come from this exact provider.
   ApiConfig? _resolveTrackerApiConfig() {
-    final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
-    final runId = _config?.runApiConfigId ?? '';
-    if (runId.isNotEmpty) {
-      final byRunId = apiConfigs.where((c) => c.id == runId).firstOrNull;
-      if (byRunId != null) return byRunId;
-    }
-    return ref.read(activeApiConfigProvider);
+    return StudioApiConfigResolver(
+      apiConfigs: ref.read(apiListProvider).value ?? const <ApiConfig>[],
+      activeConfig: ref.read(activeApiConfigProvider),
+    ).resolveRunConfig(_config?.runApiConfigId ?? '');
   }
 
   /// Resolve the [ApiConfig] used for the one-shot build-time decomposition
@@ -124,20 +122,13 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   /// config. The Studio's `buildModelOverride` is applied on top when set so
   /// the user can run the builder on a different model than chat.
   ApiConfig? _resolveBuildApiConfig() {
-    final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
-    final buildId = _config?.buildApiConfigId ?? '';
-    final override = _config?.buildModelOverride ?? '';
-    if (buildId.isNotEmpty) {
-      final byBuildId = apiConfigs.where((c) => c.id == buildId).firstOrNull;
-      if (byBuildId != null) {
-        return override.isNotEmpty
-            ? byBuildId.copyWith(model: override)
-            : byBuildId;
-      }
-    }
-    final active = ref.read(activeApiConfigProvider);
-    if (active == null) return null;
-    return override.isNotEmpty ? active.copyWith(model: override) : active;
+    return StudioApiConfigResolver(
+      apiConfigs: ref.read(apiListProvider).value ?? const <ApiConfig>[],
+      activeConfig: ref.read(activeApiConfigProvider),
+    ).resolveBuildConfig(
+      _config?.buildApiConfigId ?? '',
+      _config?.buildModelOverride ?? '',
+    );
   }
 
   /// Build Studio trackers from the chat's effective preset (auto
