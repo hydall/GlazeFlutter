@@ -9,6 +9,7 @@ import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/agent_operation_record.dart';
+import '../../../core/models/pipeline_settings.dart';
 import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_agentic_service.dart';
 import '../../../core/state/memory_agent_providers.dart';
@@ -797,452 +798,16 @@ class GenerationPipeline {
       }
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
-      debugPrint(
-        '[PostCleaner] starting session=$sessionId '
-        'model=${pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : (pipeline.sidecarModel.isEmpty ? "<chat>" : pipeline.sidecarModel)} '
-        'timeoutMs=${pipeline.postCleanerTimeoutMs > 0 ? pipeline.postCleanerTimeoutMs : pipeline.sidecarTimeoutMs} '
-        'textChars=${lastAssistant.content.length} '
-        'broadcastBlocks=${broadcastBlocks.length} '
-        'historyMessages=${recentMessages.length} '
-        'continuity=${pipeline.postCleanerContinuityEnabled} '
-        'charCheck=${pipeline.postCleanerCharacterCheckEnabled}',
-      );
-
-      ref
-          .read(postCleanerStateProvider.notifier)
-          .state = PostCleanerState.running(
+      await _executeAndApplyCleaner(
         sessionId: sessionId,
-        messageId: lastAssistant.id,
-        originalChars: lastAssistant.content.length,
-      );
-
-      final cleanerService = ref.read(postCleanerServiceProvider);
-
-      // Pass 0: Character/World Auditor (diagnostic, optional). Runs only when
-      // characterCheckEnabled AND promptPayload is available (exact generation
-      // snapshot). Returns null on failure → cleaner runs without audit notes.
-      //
-      // Parallelised with the cleaner (Marinara `mergePairedBuiltInRewriteAgents`
-      // adaptation for streaming UX): audit is non-streaming and short; the
-      // cleaner is streaming and long. We fire audit `unawaited`-style in a
-      // Future and `await` it with a SHORT timeout that races the cleaner's
-      // pre-create-swipe + first-chunk work. If audit wins → its issues are
-      // injected into the cleaner prompt as CHARACTER CONSISTENCY NOTES (same
-      // as the serial path). If audit loses the race → cleaner runs without
-      // audit notes this turn (graceful degradation; the audit Future is left
-      // running and its result is logged when it completes — it does NOT block
-      // cleanup). This trades 1 serial LLM call's latency for parallel
-      // execution: UX-feel is "blue swipe starts streaming immediately,
-      // audit badge appears later if it finished in time".
-      List<String>? auditIssues;
-      Future<List<String>?>? auditFuture;
-      if (pipeline.postCleanerCharacterCheckEnabled && promptPayload != null) {
-        final loreContent = _assembleLorebooksContent(promptPayload);
-        // Dedicated cancel token: on the race-loser path the audit Future
-        // keeps running in the background. Without this it would run to
-        // completion (burning an LLM call / quota) even after the cleaner
-        // finalized or the turn was aborted. We cancel it in the `finally`
-        // block so the orphaned call is always bounded.
-        _auditCancelToken = CancelToken();
-        auditFuture = cleanerService
-            .runCharacterAudit(
-              assistantText: lastAssistant.content,
-              character: promptPayload.character,
-              persona: promptPayload.persona,
-              lorebooksContent: loreContent,
-              memoryContent:
-                  promptPayload.memoryContent ?? promptPayload.memoryMacroContent,
-              summaryContent: promptPayload.summaryContent,
-              arcContent: promptPayload.arcContent,
-              entitiesContent: promptPayload.entitiesContent,
-              recentMessages: recentMessages,
-              settings: pipeline,
-              cancelToken: _auditCancelToken,
-            )
-            .catchError((Object e) {
-              debugPrint('[PostCleaner] audit failed session=$sessionId error=$e');
-              return null;
-            });
-        // Log late-landing audit results (race-loser case): the Future
-        // keeps running after the 3s timeout below; when it completes we
-        // emit a debug line so the user can see "audit found N issues" even
-        // on a turn where the cleaner ran without them. Fire-and-forget.
-        unawaited(
-          auditFuture.then((r) {
-            if (r != null && r.isNotEmpty) {
-              debugPrint(
-                '[PostCleaner] audit late-landed session=$sessionId '
-                'issues=${r.length} (not applied this turn — race loser)',
-              );
-            }
-          }),
-        );
-      }
-
-      // ── Swipe-first: pre-create the blue 'cleaned' swipe NOW (Fix 1) ────────
-      //
-      // Append an empty 'cleaned' sub-swipe before the cleaner runs, so the
-      // blue swipe switcher is visible immediately while the rewrite streams
-      // into the chat bubble for live preview. On completion we fill the
-      // pre-created swipe with the final text via applyCleanedText (which
-      // appends ANOTHER swipe — see below), or remove it if nothing useful
-      // was produced.
-      //
-      // Note: applyCleanedText itself calls appendAgentSwipe, which means the
-      // final state has TWO 'cleaned' swipes if we pre-create one here. To
-      // avoid that, when wasCleaned / partial-save we instead update the
-      // pre-created swipe in place via removeAgentSwipe followed by
-      // applyCleanedText (append) — simplest sequence that reuses the existing
-      // atomic append + snapshot-clone logic. The user-visible result is one
-      // 'cleaned' swipe carrying the final text.
-      //
-      // Snapshot clone: the 'cleaned' sub-swipe must inherit the parent
-      // 'final' tracker snapshot so navigating to it restores the correct
-      // tracker state. applyCleanedText does this clone after its append; here
-      // we clone into the pre-created empty swipe so the snapshot is correct
-      // even if the cleaner crashes before finalization.
-      _lastStreamedText = '';
-      _preCreatedCleanerSwipeId = -1;
-      _preCreatedMessageId = lastAssistant.id;
-      try {
-        final chatRepo = ref.read(chatRepoProvider);
-        final preCreated = await chatRepo.appendAgentSwipe(
-          sessionId: sessionId,
-          messageId: lastAssistant.id,
-          content: '',
-          kind: 'cleaned',
-        );
-        if (preCreated && ref.mounted) {
-          // Re-read to capture the new active agentSwipeId (handles
-          // lazy-backfill for legacy messages the same way applyCleanedText
-          // does at post_cleaner_service.dart:417).
-          final postAppend = await chatRepo.getById(sessionId);
-          if (postAppend != null) {
-            ChatSessionService.updateCache(postAppend);
-            final msg = postAppend.messages
-                .where((m) => m.id == lastAssistant!.id)
-                .firstOrNull;
-            if (msg != null && msg.agentSwipeId > 0) {
-              _preCreatedCleanerSwipeId = msg.agentSwipeId;
-              final parentAgentSwipeId = msg.agentSwipeId - 1;
-              final snapshotRepo = ref.read(
-                trackerSnapshotRepoProvider,
-              );
-              final parent = await snapshotRepo.getByAnchor(
-                sessionId: sessionId,
-                messageId: lastAssistant.id,
-                swipeId: msg.swipeId,
-                agentSwipeId: parentAgentSwipeId,
-              );
-              if (parent != null) {
-                await snapshotRepo.upsertTrackers(
-                  sessionId: sessionId,
-                  messageId: lastAssistant.id,
-                  swipeId: msg.swipeId,
-                  agentSwipeId: msg.agentSwipeId,
-                  trackers: parent.trackers,
-                );
-              }
-              ref.invalidate(chatHistoryProvider);
-            }
-          }
-        }
-      } catch (e) {
-        debugPrint(
-          '[PostCleaner] pre-create swipe failed session=$sessionId error=$e',
-        );
-        _preCreatedCleanerSwipeId = -1;
-      }
-
-      // Race the audit Future against a short budget (3s). If audit wins,
-      // its issues flow into the cleaner prompt as CHARACTER CONSISTENCY
-      // NOTES (same as the serial path). If it loses the race, the cleaner
-      // runs without audit notes this turn — graceful degradation. The
-      // audit Future keeps running in the background; we log its result
-      // when it lands (below, after the cleaner returns) so the user can
-      // still see "audit found N issues" even on a losing race.
-      if (auditFuture != null) {
-        try {
-          auditIssues = await auditFuture.timeout(
-            const Duration(seconds: 3),
-            onTimeout: () => null,
-          );
-          if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
-            ref.read(postCleanerStateProvider.notifier).state =
-                const PostCleanerState.idle();
-            return;
-          }
-          debugPrint(
-            '[PostCleaner] audit session=$sessionId '
-            'issues=${auditIssues?.length ?? "null(timeout/failed)"}',
-          );
-        } catch (e) {
-          debugPrint('[PostCleaner] audit await error=$e');
-          auditIssues = null;
-        }
-      }
-
-      _cleanerCancelToken = CancelToken();
-      ref.read(cleanerCancelTokenProvider.notifier).state = _cleanerCancelToken;
-      final result = await cleanerService.runCleaner(
-        sessionId: sessionId,
-        settings: pipeline,
+        genId: genId,
+        targetMessage: lastAssistant,
         assistantText: lastAssistant.content,
-        broadcastBlocks: broadcastBlocks,
         recentMessages: recentMessages,
-        auditIssues: auditIssues,
-        cancelToken: _cleanerCancelToken,
-        onCleanedChunk: (text) {
-          if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-          // Stream the cleaner's rewrite into the last assistant message in
-          // the WebView. targetMessageId makes _listenStreaming update the
-          // existing bubble's content in place (like regen) instead of
-          // creating a new virtual streaming message. The original text is
-          // preserved in the DB until applyCleanedText finalizes — at that
-          // point a new swipe is appended and the original becomes the
-          // previous swipe.
-          ref.read(streamingStateProvider(charId).notifier).state =
-              StreamingState(text: text, targetMessageId: lastAssistant!.id);
-          // Track the latest accumulated chunk (Fix 1 — "preserve partial
-          // text on failure"). SidecarCallOutcome.text is null on any failure
-          // (timeout, error, abort), so the partial text the user saw live is
-          // only available via this callback. Retries reset the accumulator
-          // and re-call onChunk from '', so only overwrite lastStreamedText
-          // when the incoming chunk is at least as long — that picks the
-          // latest attempt's partial output.
-          if (text.length >= _lastStreamedText.length) {
-            _lastStreamedText = text;
-          }
-        },
+        broadcastBlocks: broadcastBlocks,
+        pipeline: pipeline,
+        promptPayload: promptPayload,
       );
-
-      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
-        // Aborted mid-cleaner. The pre-created empty 'cleaned' swipe would be
-        // left dangling — remove it and revert to the parent 'final'. We do
-        // NOT persist partial text on abort (per plan: default delete on
-        // abort). onCleanedChunk early-returns on stale genId, so
-        // _lastStreamedText is empty here.
-        if (_preCreatedCleanerSwipeId >= 0) {
-          try {
-            await ref.read(chatRepoProvider).removeAgentSwipe(
-              sessionId: sessionId,
-              messageId: lastAssistant.id,
-              agentSwipeId: _preCreatedCleanerSwipeId,
-            );
-          } catch (_) {}
-        }
-        ref.read(postCleanerStateProvider.notifier).state =
-            const PostCleanerState.idle();
-        return;
-      }
-
-      debugPrint(
-        '[PostCleaner] result session=$sessionId wasCleaned=${result.wasCleaned} '
-        'origChars=${lastAssistant.content.length} '
-        'cleanedChars=${result.cleanedText.length} '
-        'error=${result.error ?? "none"} '
-        'attempts=${result.attempts.length} '
-        'partialChars=${_lastStreamedText.length}',
-      );
-
-      ref.read(postCleanerStateProvider.notifier).state = result.wasCleaned
-          ? PostCleanerState.done(
-              sessionId: sessionId,
-              messageId: lastAssistant.id,
-              originalChars: lastAssistant.content.length,
-              cleanedChars: result.cleanedText.length,
-            )
-          : (result.status == 'ok' || result.status == 'disabled')
-          ? const PostCleanerState.idle()
-          : PostCleanerState.error(
-              sessionId: sessionId,
-              messageId: lastAssistant.id,
-            );
-
-      // Record the operation in the agentic operations log so the user can
-      // inspect retries (502 → 200, etc.) from the dedicated UI.
-      ref.read(agentOperationsLogProvider.notifier).state = ref
-          .read(agentOperationsLogProvider)
-          .append(
-            AgentOperationRecord(
-              id: 'cleaner-${lastAssistant.id}-${DateTime.now().microsecondsSinceEpoch}',
-              kind: AgentOperationKind.postCleaner,
-              status: _cleanerStatusToOp(result.status),
-              sessionId: sessionId,
-              messageId: lastAssistant.id,
-              attempts: result.attempts,
-              totalElapsedMs: result.totalElapsedMs,
-              model: pipeline.sidecarModel.isEmpty
-                  ? null
-                  : pipeline.sidecarModel,
-              summary: result.wasCleaned
-                  ? 'cleaned (${result.cleanedText.length} chars)'
-                  : result.status == 'ok'
-                  ? 'no change'
-                  : _lastStreamedText.trim().isNotEmpty
-                  ? 'partialSaved (${_lastStreamedText.length} chars)'
-                  : result.status,
-              startedAtMs: result.attempts.isNotEmpty
-                  ? result.attempts.first.startedAtMs
-                  : DateTime.now().millisecondsSinceEpoch,
-              finishedAtMs: result.attempts.isNotEmpty
-                  ? result.attempts.last.startedAtMs +
-                        result.attempts.last.elapsedMs
-                  : DateTime.now().millisecondsSinceEpoch,
-              canRegenerate:
-                  result.status == 'timeout' ||
-                  result.status == 'error' ||
-                  result.status == 'skipped',
-            ),
-          );
-
-      // ── Swipe-first finalization (Fix 1) ─────────────────────────────────
-      //
-      // The blue 'cleaned' swipe was pre-created before runCleaner (above).
-      // Now we finalize it based on what the cleaner produced:
-      //   - wasCleaned==true → fill the pre-created swipe with the cleaned text.
-      //   - wasCleaned==false BUT the cleaner streamed partial text before
-      //     failing (timeout/error) → keep the partial text in the swipe so
-      //     the user doesn't lose what they saw live.
-      //   - wasCleaned==false AND nothing was streamed → delete the pre-created
-      //     empty swipe and revert to the 'final'.
-      //
-      // We update the pre-created swipe IN PLACE via updateAgentSwipeContent
-      // (not append another swipe) so the final state has exactly one 'cleaned'
-      // sub-swipe. The tracker snapshot was already cloned at pre-create time.
-      //
-      // genTime/tokens wiring is from Phase 1 (Fix 3 + Fix 4): per-swipe badge
-      // carrying the cleaner's own elapsed time + the cleaned text's token
-      // estimate so the badge doesn't disappear on the blue sub-swipe.
-
-      // Guard: if the user deleted the message while the cleaner was running,
-      // lastAssistant.id no longer exists in the session. Applying the cleaned
-      // swipe now would either fail silently or attach to the wrong message
-      // (e.g. the previous assistant turn). Re-read the session and abort if
-      // the target message is gone.
-      final currentSession = await ref.read(chatRepoProvider).getById(sessionId);
-      if (currentSession == null ||
-          !currentSession.messages.any((m) => m.id == lastAssistant!.id)) {
-        debugPrint(
-          '[PostCleaner] target message ${lastAssistant.id} no longer exists '
-          'in session $sessionId — aborting cleaner apply',
-        );
-        if (_preCreatedCleanerSwipeId >= 0) {
-          try {
-            await ref.read(chatRepoProvider).removeAgentSwipe(
-              sessionId: sessionId,
-              messageId: lastAssistant.id,
-              agentSwipeId: _preCreatedCleanerSwipeId,
-            );
-          } catch (_) {}
-        }
-        ref.read(postCleanerStateProvider.notifier).state =
-            const PostCleanerState.idle();
-        return;
-      }
-
-      final genTime =
-          '${(result.totalElapsedMs / 1000).toStringAsFixed(1)}s';
-      final chatRepo = ref.read(chatRepoProvider);
-
-      if (result.wasCleaned) {
-        if (_preCreatedCleanerSwipeId >= 0) {
-          await chatRepo.updateAgentSwipeContent(
-            sessionId: sessionId,
-            messageId: lastAssistant.id,
-            agentSwipeId: _preCreatedCleanerSwipeId,
-            content: result.cleanedText,
-            genTime: genTime,
-            tokens: estimateTokens(result.cleanedText),
-          );
-        } else {
-          // Pre-create failed earlier — fall back to the legacy append path so
-          // the user still gets a 'cleaned' swipe.
-          await cleanerService.applyCleanedText(
-            sessionId: sessionId,
-            messageId: lastAssistant.id,
-            cleanedText: result.cleanedText,
-            genTime: genTime,
-            tokens: estimateTokens(result.cleanedText),
-          );
-        }
-      } else if (result.status == 'skipped') {
-        // The cleaner ran to completion but the result was DELIBERATELY
-        // rejected by a safety guard (length-ratio out of bounds, or the
-        // rewrite dropped protected markup — see PostCleanerService). In this
-        // case `_lastStreamedText` holds the rejected (e.g. markup-stripped)
-        // text that was streamed live for UX; we must NOT persist it, or the
-        // guard is defeated. Delete the pre-created swipe and revert to the
-        // parent 'final' (the untouched original).
-        if (_preCreatedCleanerSwipeId >= 0) {
-          await chatRepo.removeAgentSwipe(
-            sessionId: sessionId,
-            messageId: lastAssistant.id,
-            agentSwipeId: _preCreatedCleanerSwipeId,
-          );
-        }
-      } else if (_lastStreamedText.trim().isNotEmpty) {
-        // Cleaner failed mid-stream (error/timeout/aborted) but produced
-        // partial text — keep it (do-no-harm: partial cleaned text is still
-        // closer to the user's intent than discarding the work).
-        if (_preCreatedCleanerSwipeId >= 0) {
-          await chatRepo.updateAgentSwipeContent(
-            sessionId: sessionId,
-            messageId: lastAssistant.id,
-            agentSwipeId: _preCreatedCleanerSwipeId,
-            content: _lastStreamedText,
-            genTime: genTime,
-            tokens: estimateTokens(_lastStreamedText),
-          );
-        } else {
-          // Pre-create failed — append the partial text as a new swipe.
-          await cleanerService.applyCleanedText(
-            sessionId: sessionId,
-            messageId: lastAssistant.id,
-            cleanedText: _lastStreamedText,
-            genTime: genTime,
-            tokens: estimateTokens(_lastStreamedText),
-          );
-        }
-      } else if (_preCreatedCleanerSwipeId >= 0) {
-        // Nothing useful was produced — delete the pre-created empty swipe
-        // and revert to the parent 'final'.
-        await chatRepo.removeAgentSwipe(
-          sessionId: sessionId,
-          messageId: lastAssistant.id,
-          agentSwipeId: _preCreatedCleanerSwipeId,
-        );
-      }
-
-      // Reset the streaming state so the WebView stops treating the bubble
-      // as isTyping. The chatHistoryProvider invalidate below pushes the
-      // finalized message (with the new cleaned swipe) to the WebView.
-      if (ref.mounted) {
-        ref.read(streamingStateProvider(charId).notifier).state =
-            const StreamingState();
-      }
-
-      // Refresh ChatNotifier state so the UI picks up the new swipe
-      // immediately without requiring the user to re-enter the chat. The
-      // update/remove above wrote to DB; ChatNotifier holds its own
-      // ChatState copy that must be pushed.
-      // Note: we do NOT check isCurrentGen here — the cleaner may run
-      // after a regen, and the UI must always reflect the cleaned swipe.
-      if (ref.mounted) {
-        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
-        if (refreshed != null) {
-          ChatSessionService.updateCache(refreshed);
-          final current = getState().value;
-          if (current != null) {
-            setState(
-              AsyncData(
-                current.copyWith(session: refreshed, isGenerating: false),
-              ),
-            );
-          }
-          ref.invalidate(chatHistoryProvider);
-        }
-      }
     } catch (e) {
       debugPrint('[PostCleaner] failed session=$sessionId error=$e');
       if (ref.mounted) {
@@ -1282,6 +847,560 @@ class GenerationPipeline {
       // No-op if the audit already completed (won the race) or was never
       // started. The `.catchError` on `auditFuture` neutralizes the
       // resulting cancellation error for the late `.then` logger.
+      if (_auditCancelToken != null && !_auditCancelToken!.isCancelled) {
+        _auditCancelToken!.cancel();
+      }
+      _auditCancelToken = null;
+      _cleanerCancelToken = null;
+      ref.read(cleanerCancelTokenProvider.notifier).state = null;
+      _lastStreamedText = '';
+      _preCreatedCleanerSwipeId = -1;
+      _preCreatedMessageId = null;
+    }
+  }
+
+  /// Shared core of the POST-cleaner pipeline. Handles:
+  ///   - debugPrint start line + `PostCleanerState.running`
+  ///   - optional parallel character audit (race against pre-create+chunk)
+  ///   - pre-create the blue 'cleaned' sub-swipe (Fix 1)
+  ///   - `runCleaner` with streaming into the chat bubble
+  ///   - finalize the pre-created swipe (update / remove / append fallback)
+  ///   - record to the agentic operations log
+  ///   - setState with the refreshed session so the UI picks up the new swipe
+  ///
+  /// [targetMessage] is the assistant message being cleaned. [assistantText]
+  /// is the text passed to `runCleaner` — for the auto post-generation path
+  /// this is `targetMessage.content` (the just-streamed final text); for
+  /// `rerunCleaner` it is `targetMessage.agentSwipes[0].content` (the parent
+  /// 'final' text, regardless of which blue sub-swipe is currently active).
+  ///
+  /// The `genId` is used only for abort checks (`abortHandler.isCurrentGen`).
+  /// Pass `-1` for a manual rerun (no abort possible — the user can still
+  /// stop via the Stop button which cancels the in-flight cleaner token).
+  Future<void> _executeAndApplyCleaner({
+    required String sessionId,
+    required int genId,
+    required ChatMessage targetMessage,
+    required String assistantText,
+    required List<ChatMessage> recentMessages,
+    required List<String> broadcastBlocks,
+    required PipelineSettings pipeline,
+    PromptPayload? promptPayload,
+  }) async {
+    final isManualRerun = genId < 0;
+    bool abortCheck() =>
+        ref.mounted && (isManualRerun || abortHandler.isCurrentGen(genId));
+
+    debugPrint(
+      '[PostCleaner] starting session=$sessionId '
+      'model=${pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : (pipeline.sidecarModel.isEmpty ? "<chat>" : pipeline.sidecarModel)} '
+      'timeoutMs=${pipeline.postCleanerTimeoutMs > 0 ? pipeline.postCleanerTimeoutMs : pipeline.sidecarTimeoutMs} '
+      'textChars=${assistantText.length} '
+      'broadcastBlocks=${broadcastBlocks.length} '
+      'historyMessages=${recentMessages.length} '
+      'continuity=${pipeline.postCleanerContinuityEnabled} '
+      'charCheck=${pipeline.postCleanerCharacterCheckEnabled} '
+      'rerun=$isManualRerun',
+    );
+
+    ref
+        .read(postCleanerStateProvider.notifier)
+        .state = PostCleanerState.running(
+        sessionId: sessionId,
+        messageId: targetMessage.id,
+        originalChars: assistantText.length,
+      );
+
+    final cleanerService = ref.read(postCleanerServiceProvider);
+
+    // Pass 0: Character/World Auditor (diagnostic, optional). Runs only when
+    // characterCheckEnabled AND promptPayload is available (exact generation
+    // snapshot). Returns null on failure → cleaner runs without audit notes.
+    //
+    // Parallelised with the cleaner (Marinara `mergePairedBuiltInRewriteAgents`
+    // adaptation for streaming UX): audit is non-streaming and short; the
+    // cleaner is streaming and long. We fire audit `unawaited`-style in a
+    // Future and `await` it with a SHORT timeout that races the cleaner's
+    // pre-create-swipe + first-chunk work. If audit wins → its issues are
+    // injected into the cleaner prompt as CHARACTER CONSISTENCY NOTES (same
+    // as the serial path). If audit loses the race → cleaner runs without
+    // audit notes this turn (graceful degradation; the audit Future is left
+    // running and its result is logged when it completes — it does NOT block
+    // cleanup). This trades 1 serial LLM call's latency for parallel
+    // execution: UX-feel is "blue swipe starts streaming immediately,
+    // audit badge appears later if it finished in time".
+    List<String>? auditIssues;
+    Future<List<String>?>? auditFuture;
+    if (pipeline.postCleanerCharacterCheckEnabled && promptPayload != null) {
+      final loreContent = _assembleLorebooksContent(promptPayload);
+      // Dedicated cancel token: on the race-loser path the audit Future
+      // keeps running in the background. Without this it would run to
+      // completion (burning an LLM call / quota) even after the cleaner
+      // finalized or the turn was aborted. We cancel it in the `finally`
+      // block so the orphaned call is always bounded.
+      _auditCancelToken = CancelToken();
+      auditFuture = cleanerService
+          .runCharacterAudit(
+            assistantText: assistantText,
+            character: promptPayload.character,
+            persona: promptPayload.persona,
+            lorebooksContent: loreContent,
+            memoryContent:
+                promptPayload.memoryContent ?? promptPayload.memoryMacroContent,
+            summaryContent: promptPayload.summaryContent,
+            arcContent: promptPayload.arcContent,
+            entitiesContent: promptPayload.entitiesContent,
+            recentMessages: recentMessages,
+            settings: pipeline,
+            cancelToken: _auditCancelToken,
+          )
+          .catchError((Object e) {
+            debugPrint('[PostCleaner] audit failed session=$sessionId error=$e');
+            return null;
+          });
+      // Log late-landing audit results (race-loser case): the Future
+      // keeps running after the 3s timeout below; when it completes we
+      // emit a debug line so the user can see "audit found N issues" even
+      // on a turn where the cleaner ran without them. Fire-and-forget.
+      unawaited(
+        auditFuture.then((r) {
+          if (r != null && r.isNotEmpty) {
+            debugPrint(
+              '[PostCleaner] audit late-landed session=$sessionId '
+              'issues=${r.length} (not applied this turn — race loser)',
+            );
+          }
+        }),
+      );
+    }
+
+    // ── Swipe-first: pre-create the blue 'cleaned' swipe NOW (Fix 1) ─────────
+    _lastStreamedText = '';
+    _preCreatedCleanerSwipeId = -1;
+    _preCreatedMessageId = targetMessage.id;
+    try {
+      final chatRepo = ref.read(chatRepoProvider);
+      final preCreated = await chatRepo.appendAgentSwipe(
+        sessionId: sessionId,
+        messageId: targetMessage.id,
+        content: '',
+        kind: 'cleaned',
+      );
+      if (preCreated && ref.mounted) {
+        // Re-read to capture the new active agentSwipeId (handles
+        // lazy-backfill for legacy messages the same way applyCleanedText
+        // does at post_cleaner_service.dart:417).
+        final postAppend = await chatRepo.getById(sessionId);
+        if (postAppend != null) {
+          ChatSessionService.updateCache(postAppend);
+          final msg = postAppend.messages
+              .where((m) => m.id == targetMessage.id)
+              .firstOrNull;
+          if (msg != null && msg.agentSwipeId > 0) {
+            _preCreatedCleanerSwipeId = msg.agentSwipeId;
+            final parentAgentSwipeId = msg.agentSwipeId - 1;
+            final snapshotRepo = ref.read(
+              trackerSnapshotRepoProvider,
+            );
+            final parent = await snapshotRepo.getByAnchor(
+              sessionId: sessionId,
+              messageId: targetMessage.id,
+              swipeId: msg.swipeId,
+              agentSwipeId: parentAgentSwipeId,
+            );
+            if (parent != null) {
+              await snapshotRepo.upsertTrackers(
+                sessionId: sessionId,
+                messageId: targetMessage.id,
+                swipeId: msg.swipeId,
+                agentSwipeId: msg.agentSwipeId,
+                trackers: parent.trackers,
+              );
+            }
+            ref.invalidate(chatHistoryProvider);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint(
+        '[PostCleaner] pre-create swipe failed session=$sessionId error=$e',
+      );
+      _preCreatedCleanerSwipeId = -1;
+    }
+
+    // Race the audit Future against a short budget (3s). If audit wins,
+    // its issues flow into the cleaner prompt as CHARACTER CONSISTENCY
+    // NOTES (same as the serial path). If it loses the race, the cleaner
+    // runs without audit notes this turn — graceful degradation. The
+    // audit Future keeps running in the background; we log its result
+    // when it lands (below, after the cleaner returns) so the user can
+    // still see "audit found N issues" even on a losing race.
+    if (auditFuture != null) {
+      try {
+        auditIssues = await auditFuture.timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => null,
+        );
+        if (!abortCheck()) {
+          ref.read(postCleanerStateProvider.notifier).state =
+              const PostCleanerState.idle();
+          return;
+        }
+        debugPrint(
+          '[PostCleaner] audit session=$sessionId '
+          'issues=${auditIssues?.length ?? "null(timeout/failed)"}',
+        );
+      } catch (e) {
+        debugPrint('[PostCleaner] audit await error=$e');
+        auditIssues = null;
+      }
+    }
+
+    _cleanerCancelToken = CancelToken();
+    ref.read(cleanerCancelTokenProvider.notifier).state = _cleanerCancelToken;
+    final result = await cleanerService.runCleaner(
+      sessionId: sessionId,
+      settings: pipeline,
+      assistantText: assistantText,
+      broadcastBlocks: broadcastBlocks,
+      recentMessages: recentMessages,
+      auditIssues: auditIssues,
+      cancelToken: _cleanerCancelToken,
+      onCleanedChunk: (text) {
+        if (!abortCheck()) return;
+        // Stream the cleaner's rewrite into the target assistant message in
+        // the WebView. targetMessageId makes _listenStreaming update the
+        // existing bubble's content in place (like regen) instead of
+        // creating a new virtual streaming message. The original text is
+        // preserved in the DB until applyCleanedText finalizes — at that
+        // point a new swipe is appended and the original becomes the
+        // previous swipe.
+        ref.read(streamingStateProvider(charId).notifier).state =
+            StreamingState(text: text, targetMessageId: targetMessage.id);
+        // Track the latest accumulated chunk (Fix 1 — "preserve partial
+        // text on failure"). SidecarCallOutcome.text is null on any failure
+        // (timeout, error, abort), so the partial text the user saw live is
+        // only available via this callback. Retries reset the accumulator
+        // and re-call onChunk from '', so only overwrite lastStreamedText
+        // when the incoming chunk is at least as long — that picks the
+        // latest attempt's partial output.
+        if (text.length >= _lastStreamedText.length) {
+          _lastStreamedText = text;
+        }
+      },
+    );
+
+    if (!abortCheck()) {
+      // Aborted mid-cleaner. The pre-created empty 'cleaned' swipe would be
+      // left dangling — remove it and revert to the parent 'final'. We do
+      // NOT persist partial text on abort (per plan: default delete on
+      // abort). onCleanedChunk early-returns on stale genId, so
+      // _lastStreamedText is empty here.
+      if (_preCreatedCleanerSwipeId >= 0) {
+        try {
+          await ref.read(chatRepoProvider).removeAgentSwipe(
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            agentSwipeId: _preCreatedCleanerSwipeId,
+          );
+        } catch (_) {}
+      }
+      ref.read(postCleanerStateProvider.notifier).state =
+          const PostCleanerState.idle();
+      return;
+    }
+
+    debugPrint(
+      '[PostCleaner] result session=$sessionId wasCleaned=${result.wasCleaned} '
+      'origChars=${assistantText.length} '
+      'cleanedChars=${result.cleanedText.length} '
+      'error=${result.error ?? "none"} '
+      'attempts=${result.attempts.length} '
+      'partialChars=${_lastStreamedText.length}',
+    );
+
+    ref.read(postCleanerStateProvider.notifier).state = result.wasCleaned
+        ? PostCleanerState.done(
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            originalChars: assistantText.length,
+            cleanedChars: result.cleanedText.length,
+          )
+        : (result.status == 'ok' || result.status == 'disabled')
+        ? const PostCleanerState.idle()
+        : PostCleanerState.error(
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+          );
+
+    // Record the operation in the agentic operations log so the user can
+    // inspect retries (502 → 200, etc.) from the dedicated UI.
+    ref.read(agentOperationsLogProvider.notifier).state = ref
+        .read(agentOperationsLogProvider)
+        .append(
+          AgentOperationRecord(
+            id: 'cleaner-${targetMessage.id}-${DateTime.now().microsecondsSinceEpoch}',
+            kind: AgentOperationKind.postCleaner,
+            status: _cleanerStatusToOp(result.status),
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            attempts: result.attempts,
+            totalElapsedMs: result.totalElapsedMs,
+            model: pipeline.sidecarModel.isEmpty
+                ? null
+                : pipeline.sidecarModel,
+            summary: result.wasCleaned
+                ? 'cleaned (${result.cleanedText.length} chars)'
+                : result.status == 'ok'
+                ? 'no change'
+                : _lastStreamedText.trim().isNotEmpty
+                ? 'partialSaved (${_lastStreamedText.length} chars)'
+                : result.status,
+            startedAtMs: result.attempts.isNotEmpty
+                ? result.attempts.first.startedAtMs
+                : DateTime.now().millisecondsSinceEpoch,
+            finishedAtMs: result.attempts.isNotEmpty
+                ? result.attempts.last.startedAtMs +
+                      result.attempts.last.elapsedMs
+                : DateTime.now().millisecondsSinceEpoch,
+            canRegenerate:
+                result.status == 'timeout' ||
+                result.status == 'error' ||
+                result.status == 'skipped',
+          ),
+        );
+
+    // ── Swipe-first finalization (Fix 1) ─────────────────────────────────
+    final genTime =
+        '${(result.totalElapsedMs / 1000).toStringAsFixed(1)}s';
+    final chatRepo = ref.read(chatRepoProvider);
+
+    if (result.wasCleaned) {
+      if (_preCreatedCleanerSwipeId >= 0) {
+        await chatRepo.updateAgentSwipeContent(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          agentSwipeId: _preCreatedCleanerSwipeId,
+          content: result.cleanedText,
+          genTime: genTime,
+          tokens: estimateTokens(result.cleanedText),
+        );
+      } else {
+        // Pre-create failed earlier — fall back to the legacy append path so
+        // the user still gets a 'cleaned' swipe.
+        await cleanerService.applyCleanedText(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          cleanedText: result.cleanedText,
+          genTime: genTime,
+          tokens: estimateTokens(result.cleanedText),
+        );
+      }
+    } else if (result.status == 'skipped') {
+      // The cleaner ran to completion but the result was DELIBERATELY
+      // rejected by a safety guard (length-ratio out of bounds, or the
+      // rewrite dropped protected markup — see PostCleanerService). In this
+      // case `_lastStreamedText` holds the rejected (e.g. markup-stripped)
+      // text that was streamed live for UX; we must NOT persist it, or the
+      // guard is defeated. Delete the pre-created swipe and revert to the
+      // parent 'final' (the untouched original).
+      if (_preCreatedCleanerSwipeId >= 0) {
+        await chatRepo.removeAgentSwipe(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          agentSwipeId: _preCreatedCleanerSwipeId,
+        );
+      }
+    } else if (_lastStreamedText.trim().isNotEmpty) {
+      // Cleaner failed mid-stream (error/timeout/aborted) but produced
+      // partial text — keep it (do-no-harm: partial cleaned text is still
+      // closer to the user's intent than discarding the work).
+      if (_preCreatedCleanerSwipeId >= 0) {
+        await chatRepo.updateAgentSwipeContent(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          agentSwipeId: _preCreatedCleanerSwipeId,
+          content: _lastStreamedText,
+          genTime: genTime,
+          tokens: estimateTokens(_lastStreamedText),
+        );
+      } else {
+        // Pre-create failed — append the partial text as a new swipe.
+        await cleanerService.applyCleanedText(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          cleanedText: _lastStreamedText,
+          genTime: genTime,
+          tokens: estimateTokens(_lastStreamedText),
+        );
+      }
+    } else if (_preCreatedCleanerSwipeId >= 0) {
+      // Nothing useful was produced — delete the pre-created empty swipe
+      // and revert to the parent 'final'.
+      await chatRepo.removeAgentSwipe(
+        sessionId: sessionId,
+        messageId: targetMessage.id,
+        agentSwipeId: _preCreatedCleanerSwipeId,
+      );
+    }
+
+    // Reset the streaming state so the WebView stops treating the bubble
+    // as isTyping. The chatHistoryProvider invalidate below pushes the
+    // finalized message (with the new cleaned swipe) to the WebView.
+    if (ref.mounted) {
+      ref.read(streamingStateProvider(charId).notifier).state =
+          const StreamingState();
+    }
+
+    // Refresh ChatNotifier state so the UI picks up the new swipe
+    // immediately without requiring the user to re-enter the chat. The
+    // update/remove above wrote to DB; ChatNotifier holds its own
+    // ChatState copy that must be pushed.
+    // Note: we do NOT check isCurrentGen here — the cleaner may run
+    // after a regen, and the UI must always reflect the cleaned swipe.
+    if (ref.mounted) {
+      final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+      if (refreshed != null) {
+        ChatSessionService.updateCache(refreshed);
+        final current = getState().value;
+        if (current != null) {
+          setState(
+            AsyncData(
+              current.copyWith(session: refreshed, isGenerating: false),
+            ),
+          );
+        }
+        ref.invalidate(chatHistoryProvider);
+      }
+    }
+  }
+
+  /// Re-run the POST-cleaner against an existing assistant message.
+  ///
+  /// Unlike the auto post-generation `_runPostCleaner` which cleans the
+  /// just-streamed trailing message, this:
+  ///   - Takes the **final** (agentSwipes[0]) text as the cleaner input,
+  ///     regardless of which blue sub-swipe is currently active (so the
+  ///     rerun always re-cleans the original, not a previous cleaned swipe).
+  ///   - Appends a NEW 'cleaned' sub-swipe (does not overwrite the existing
+  ///     one). The user sees a third (fourth, etc.) blue swipe appear.
+  ///   - Streams the rewrite into the bubble as it arrives (same live-preview
+  ///     UX as the auto path).
+  ///   - Has no `genId` abort (genId = -1) — the user can still stop via the
+  ///     Stop button which cancels the in-flight cleaner token.
+  ///
+  /// [messageIndex] is the index of the target message in the current
+  /// `ChatNotifier` messages list. No-op if the message is not an assistant
+  /// message, has no `agentSwipes`, or the cleaner is already running.
+  Future<void> rerunCleaner({
+    required String sessionId,
+    required String messageId,
+  }) async {
+    if (!ref.mounted) return;
+
+    // Refuse concurrent cleaner runs — the pre-created swipe tracking
+    // (`_preCreatedCleanerSwipeId`) is single-slot; a second run would
+    // clobber it and leave the first in a broken state.
+    if (_cleanerCancelToken != null) {
+      debugPrint('[PostCleaner] rerun skipped: cleaner already in flight');
+      return;
+    }
+
+    final pipeline = ref.read(pipelineSettingsProvider);
+    if (!pipeline.postCleanerEnabled) {
+      debugPrint('[PostCleaner] rerun skipped: postCleaner disabled');
+      return;
+    }
+
+    final session = await ref.read(chatRepoProvider).getById(sessionId);
+    if (session == null) return;
+    final targetIndex = session.messages.indexWhere(
+      (m) => m.id == messageId,
+    );
+    if (targetIndex < 0) return;
+    final target = session.messages[targetIndex];
+    if (target.role != 'assistant' || target.isError || target.isTyping) {
+      return;
+    }
+    // The 'final' agentSwipe carries the original assistant text we want
+    // to re-clean. If the message somehow has no agentSwipes (e.g. legacy
+    // greeting), fall back to the top-level content — appendAgentSwipe's
+    // lazy-backfill will synthesize a 'final' from it on the first clean.
+    final finalText = target.agentSwipes.isNotEmpty
+        ? target.agentSwipes[0].content
+        : target.content;
+    if (finalText.trim().isEmpty) return;
+
+    final bookRepo = ref.read(memoryBookRepoProvider);
+    final book = await bookRepo.getBySessionId(sessionId);
+    if (!ref.mounted) return;
+    if (book == null) {
+      debugPrint('[PostCleaner] rerun skipped: no memory book for session');
+      return;
+    }
+
+    // Collect recent chat history before the target message for continuity
+    // checks (same window as the auto path).
+    final maxHistory = pipeline.postCleanerContinuityEnabled
+        ? pipeline.postCleanerHistoryMessages
+        : 0;
+    final recentMessages = <ChatMessage>[];
+    if (maxHistory > 0 && targetIndex > 0) {
+      final start = (targetIndex - maxHistory).clamp(0, targetIndex);
+      for (var i = start; i < targetIndex; i++) {
+        final m = session.messages[i];
+        if (m.content.trim().isEmpty || m.isError) continue;
+        recentMessages.add(m);
+      }
+    }
+
+    // Load broadcast blocks (same as auto path).
+    List<String> broadcastBlocks = const [];
+    try {
+      final studioConfig = await ref
+          .read(studioConfigRepoProvider)
+          .getBySessionId(sessionId);
+      broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
+    } catch (e) {
+      debugPrint(
+        '[PostCleaner] rerun broadcast load failed session=$sessionId error=$e',
+      );
+    }
+    if (!ref.mounted) return;
+
+    // Manual rerun has no promptPayload snapshot (the original generation
+    // context is gone), so the character-audit pass is skipped — the
+    // cleaner runs without CHARACTER CONSISTENCY NOTES. This matches the
+    // auto path's graceful-degradation case (audit timeout / failure).
+    try {
+      await _executeAndApplyCleaner(
+        sessionId: sessionId,
+        genId: -1,
+        targetMessage: target,
+        assistantText: finalText,
+        recentMessages: recentMessages,
+        broadcastBlocks: broadcastBlocks,
+        pipeline: pipeline,
+        promptPayload: null,
+      );
+    } catch (e) {
+      debugPrint('[PostCleaner] rerun failed session=$sessionId error=$e');
+      if (ref.mounted) {
+        ref.read(streamingStateProvider(charId).notifier).state =
+            const StreamingState();
+        ref.read(postCleanerStateProvider.notifier).state =
+            const PostCleanerState.idle();
+        if (_preCreatedCleanerSwipeId >= 0) {
+          try {
+            await ref.read(chatRepoProvider).removeAgentSwipe(
+              sessionId: sessionId,
+              messageId: target.id,
+              agentSwipeId: _preCreatedCleanerSwipeId,
+            );
+          } catch (_) {}
+        }
+      }
+    } finally {
       if (_auditCancelToken != null && !_auditCancelToken!.isCancelled) {
         _auditCancelToken!.cancel();
       }

@@ -221,6 +221,10 @@ class ChatBridgeController {
   void Function(String id, String direction)? onAgentSwipe;
   void Function(String id, int direction)? onChangeGreeting;
   void Function(String id, String mode)? onRegenerate;
+  /// Called when the user taps the "Re-run cleaner" icon on an assistant
+  /// message: re-runs POST-cleaner against that message's final (agentSwipes[0])
+  /// text and appends a new 'cleaned' sub-swipe. Carries the message id.
+  void Function(String messageId)? onRerunCleaner;
   void Function(String action, String text)? onSelectionAction;
   void Function(String id, String text)? onEditSave;
   void Function(String id)? onEditCancel;
@@ -354,6 +358,8 @@ class ChatBridgeController {
         onInjectClick?.call(s);
       case 'onExtBlocksRunAll':
         onExtBlocksRunAll?.call(s);
+      case 'onRerunCleaner':
+        onRerunCleaner?.call(s);
     }
   }
 

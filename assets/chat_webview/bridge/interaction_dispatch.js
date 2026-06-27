@@ -209,6 +209,7 @@ export class InteractionDispatch {
       'stop': (e, el) => bridge._sendToFlutter('onStop', []),
       'regenerate': (e, el) => bridge._sendToFlutter('onRegenerate', [el.dataset.messageId, el.dataset.mode || 'magic']),
       'toggle-guided': (e, el) => bridge._swipeHandler.toggleGuidedSwipe(el.dataset.messageId),
+      'rerun-cleaner': (e, el) => bridge._sendToFlutter('onRerunCleaner', [el.dataset.messageId]),
       'edit-save': (e, el) => bridge._editController.handleSave(el),
       'edit-cancel': (e, el) => bridge._editController.handleCancel(el),
       'open-actions': (e, el) => {

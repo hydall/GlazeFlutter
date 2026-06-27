@@ -544,4 +544,25 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       regenTargetId: regenTargetId,
     );
   }
+
+  /// Re-run POST-cleaner on an existing assistant message. Triggers a new
+  /// 'cleaned' blue sub-swipe appended to the target message, cleaning the
+  /// final (agentSwipes[0]) text. See [GenerationPipeline.rerunCleaner].
+  Future<void> rerunCleaner(String messageId) async {
+    if (!ref.mounted) return;
+    final current = state.value;
+    if (current == null || current.isGenerating) return;
+    final sessionId = current.session?.id;
+    if (sessionId == null) return;
+    final pipeline = GenerationPipeline(
+      ref: ref,
+      charId: arg,
+      abortHandler: _abortHandler,
+      setState: (s) {
+        state = s;
+      },
+      getState: () => state,
+    );
+    await pipeline.rerunCleaner(sessionId: sessionId, messageId: messageId);
+  }
 }

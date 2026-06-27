@@ -1073,6 +1073,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                             .read(memorySidecarPrewarmCacheProvider)
                             .invalidateSession(widget.state.session?.id ?? '');
                       },
+                      onRerunCleaner: (id) {
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .rerunCleaner(id);
+                      },
                       onToggleHidden: (id) {
                         final idx = widget.state.messages.indexWhere(
                           (m) => m.id == id,

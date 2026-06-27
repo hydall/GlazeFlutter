@@ -71,6 +71,10 @@ class ChatWebViewCallbacks {
     messageActions.onRegenerate?.call(id, mode);
   }
 
+  void onRerunCleaner(String id) {
+    messageActions.onRerunCleaner?.call(id);
+  }
+
   void onSelectionAction(String action, String text) {
     miscActions.onSelectionAction?.call(action, text);
   }

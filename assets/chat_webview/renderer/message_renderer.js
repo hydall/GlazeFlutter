@@ -457,6 +457,22 @@ if (messageData.isEditing) classes.push('editing');
       center.appendChild(this._createSwitcher(m.id, m.agentSwipeIndex || 0, m.agentSwipeTotal, 'agent-swipe'));
     }
 
+    // Rerun cleaner: re-runs POST-cleaner against the final (agentSwipes[0])
+    // text and appends a new 'cleaned' sub-swipe. Visible only on the last
+    // char message with ≥1 agent swipe (i.e. any message that was generated
+    // or has a 'final' swipe). Hidden while generating/editing to avoid
+    // overlapping with the streaming bubble or edit controls.
+    if (isChar && m.isLast && !m.isGenerating && !m.isEditing &&
+        m.agentSwipeTotal && m.agentSwipeTotal >= 1) {
+      const rerun = document.createElement('div');
+      rerun.className = 'msg-rerun-cleaner';
+      rerun.dataset.action = 'rerun-cleaner';
+      rerun.dataset.messageId = m.id;
+      rerun.title = 'Re-run cleaner';
+      rerun.innerHTML = ICON.rerunCleaner;
+      center.appendChild(rerun);
+    }
+
     if (isChar && m.isLast && !m.isGenerating && !m.isEditing) {
       const guided = document.createElement('div');
       guided.className = 'msg-guided-swipe-btn';
