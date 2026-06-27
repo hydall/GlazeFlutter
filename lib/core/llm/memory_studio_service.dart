@@ -326,11 +326,14 @@ class MemoryStudioService {
       }
 
       return StudioPipelineResult(
-        status: 'ok',
+        status: mainResponse.trim().isEmpty ? 'error' : 'ok',
         response: mainResponse,
         reasoning: mainReasoning,
         rawResponseJson: rawResponseJson,
         stageBriefs: [...briefs, ...postBriefs],
+        error: mainResponse.trim().isEmpty
+            ? 'Final generator returned an empty response'
+            : null,
       );
     } on TimeoutException catch (e) {
       _log('tracker cycle timeout session=$sessionId error=${e.message}');

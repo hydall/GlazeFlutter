@@ -666,7 +666,18 @@ class GenerationPipeline {
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.postCleanerEnabled) return;
 
-      // Find the last assistant message.
+      // The cleaner must only rewrite the just-generated assistant message.
+      // If the trailing message is an error (e.g. Studio returned an empty
+      // response → writeError), there is nothing to clean — return early so
+      // we never accidentally rewrite a PREVIOUS valid assistant message.
+      final trailing = messages.isNotEmpty ? messages.last : null;
+      if (trailing == null ||
+          trailing.role != 'assistant' ||
+          trailing.isError) {
+        return;
+      }
+
+      // Find the last non-error, non-typing, non-empty assistant message.
       ChatMessage? lastAssistant;
       int lastAssistantIndex = -1;
       for (var i = messages.length - 1; i >= 0; i--) {
@@ -680,6 +691,10 @@ class GenerationPipeline {
         }
       }
       if (lastAssistant == null) return;
+
+      // Defensive: the found `lastAssistant` must be the trailing message
+      // (or its most recent swipe). If a later error message snuck in, abort.
+      if (lastAssistant.id != trailing.id) return;
 
       // Collect bounded recent chat history before the assistant response for
       // conservative local continuity checks. Uses configurable history window
