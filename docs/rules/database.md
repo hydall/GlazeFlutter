@@ -67,7 +67,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **46**
+Current version: **51**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -99,6 +99,8 @@ Migration history:
 - v44: added Studio `maxFinalHistoryMessages` INTEGER DEFAULT 15 — caps trailing chat messages sent to the final Studio generator (0 = unlimited); Studio trackers receive their own `StudioAgent.contextSize` (default 5, hard-cap 200) instead — see INV-ST1/INV-ST2 in `docs/INVARIANTS.md`
 - v45: added `tracker_rows` table — lightweight key-value trackers written by the post-turn write-loop and Studio trackers (e.g. 'mood: happy', 'inventory: chip in pocket'). Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades alongside `memory_book_rows`. Read live by `agentic_operations_log_dialog.dart` "Tracker values" tab and `studio_menu_dialog.dart` (current tracker value preview)
 - v46: added `studio_config_rows.routing_mode` TEXT DEFAULT `'verbatim'` — controls how preset blocks become agent instructions (`verbatim` = blocks concatenated дословно, no LLM call; `compiled` = legacy LLM digest). The decomposition service (`studio_decomposition_service.dart`) was restored after Phase 2: `decompose()` produces `StudioAgent`s (trackers + one final generator) that slot into `runTrackerCycle`; `routing_mode = 'compiled'` triggers the LLM builder, `'verbatim'` concatenates blocks directly.
+- v50: added `tracker_snapshots` table — per-agent-swipe immutable snapshots of all trackers (mirrors Marinara-Engine's `game_state_snapshots`). Composite PK `{sessionId, messageId, swipeId, agentSwipeId}`; columns `trackersJson` (JSON array of `Tracker.toJson`), `committed` (0/1), `createdAt` (epoch seconds). Three indexes on `(sessionId, committed, createdAt)` for fast `getLatestCommitted` lookups. The `TrackerSnapshotRepo` (299 lines) owns all access; `tracker_rows` is kept as the write-loop's internal mutable store (LLM upserts into it, then a snapshot is taken).
+- v51: data migration — aggregates `tracker_rows` per session into a baseline snapshot at the sentinel anchor `(messageId='', committed=1)`. Legacy sessions that had `tracker_rows` but no snapshots get a one-time baseline so the snapshot-first read path (Phase 3) finds data immediately. The sentinel anchor is never dropped by `deleteForMessage` (only by `deleteBySessionId` / `deleteByCharacterId`).
 
 ---
 
@@ -173,9 +175,10 @@ Schema: `{ entryId, sourceType, sourceId, vectorsBlob (BLOB), textHash, retrieva
 1. Gets session IDs for the character
 2. Deletes `MemoryBookRows` by session IDs
 3. Deletes `TrackerRows` by session IDs (agentic memory trackers)
-4. Deletes `ChatSummaries` by session IDs
-5. Deletes `ChatSessions` by character ID
-6. Deletes `Characters` by charId
+4. Deletes `TrackerSnapshots` by session IDs (Phase 1 tracker-snapshot rollback system — cascade alongside `TrackerRows` so legacy and snapshot stores are cleaned together)
+5. Deletes `ChatSummaries` by session IDs
+6. Deletes `ChatSessions` by character ID
+7. Deletes `Characters` by charId
 
 This path is used by direct repo callers (e.g. sync engine). It is idempotent.
 
@@ -188,8 +191,9 @@ This path is used by direct repo callers (e.g. sync engine). It is idempotent.
 Deletes in order:
 1. `MemoryBookRows` for all sessions of the character
 2. `TrackerRows` for all sessions of the character (agentic memory trackers)
-3. `ChatSummaries` for all sessions of the character
-4. `ChatSessions` for the character
+3. `TrackerSnapshots` for all sessions of the character (Phase 1 cascade — `trackerSnapshotRepoProvider.deleteBySessionId` per session)
+4. `ChatSummaries` for all sessions of the character
+5. `ChatSessions` for the character
 
 Returns the list of deleted session IDs (for sync-deletion tracking).
 
@@ -261,3 +265,92 @@ never touches `entriesJson`.
 values" tab that reads `trackerRepoProvider.getBySessionId` — live tracker
 state (scene, weather, inventory, ...) is NOT a MemoryBook entry and is NOT
 mixed with memory drafts. See INV-M6 in `docs/INVARIANTS.md`.
+
+---
+
+## Tracker snapshot rollback system (Phases 1-12)
+
+`tracker_snapshots` is an immutable per-agent-swipe snapshot of all
+trackers, written once after each generation's write-loop completes and
+never mutated. Rollback is **emergent**: deleting rows makes the previous
+committed snapshot become the new latest (no explicit "restore" code path).
+
+### Granularity
+
+Each snapshot is anchored at `(sessionId, messageId, swipeId, agentSwipeId)`:
+- `messageId` — the assistant message that triggered the write-loop.
+- `swipeId` — which swipe of that message (regen creates new swipes).
+- `agentSwipeId` — which agent sub-swipe (e.g. `'final'` vs `'cleaned'`).
+
+This per-agent-swipe granularity (chosen explicitly over per-message or
+per-session) lets the rollback system restore state at the exact level the
+user navigates: swiping back through agent sub-swipes restores the matching
+tracker state.
+
+### Sentinel anchor for legacy data
+
+Migrated `tracker_rows` (Phase 7 migration v51) become a baseline snapshot
+at the sentinel anchor `(messageId='', committed=1)`. This anchor is
+**never** dropped by `deleteForMessage` (only by `deleteBySessionId` /
+`deleteByCharacterId`), so legacy sessions always have a baseline until the
+session itself is deleted.
+
+### Write path
+
+`MemoryAgenticWriteService.runWriteLoop` accepts `messageId`/`swipeId`/
+`agentSwipeId` and, after the LLM writes to `tracker_rows`, re-reads the
+updated trackers and upserts an immutable snapshot at that anchor via
+`TrackerSnapshotRepo.upsertTrackers`. The snapshot is initially
+`committed=0`.
+
+`commitLatest` (Phase 6) is called by `ChatNotifier.sendMessage` just
+before the next generation starts — it marks the latest snapshot for the
+session as `committed=1`. Committed snapshots are what the read path
+surfaces; uncommitted snapshots are intermediate state from in-flight
+write-loops.
+
+`post_cleaner_service.applyCleanedText` (Phase 2) clones the parent
+message's snapshot into the new `'cleaned'` agent-swipe anchor so the
+cleaned sub-swipe inherits the parent's tracker state.
+
+### Read path (snapshot-first)
+
+The 3 call sites (`generation_pipeline.dart`, `studio_menu_dialog.dart`,
+`agentic_operations_log_dialog.dart`) call `getLatestCommitted` /
+`getLatest` and fall back to `trackerRepoProvider.getBySessionId` when no
+snapshot exists (legacy sessions that haven't been re-saved since Phase 1).
+
+### Rollback paths
+
+| User action | Repo method | Effect |
+|-------------|-------------|--------|
+| Delete a message | `ChatRepo.deleteMessage` → `trackerSnapshotRepo.deleteForMessage` | All snapshots at that `messageId` are dropped; the previous committed snapshot becomes the latest. |
+| Delete a session | `chat_history_provider.deleteSession` → `deleteBySessionId` + `SyncDeletionTracker.record('tracker_snapshot', sessionId)` | All snapshots for the session are dropped; cloud sync deletion is tracked. |
+| Clear chat | `chat_session_service.clearChat` → `deleteBySessionId` (both paths) | Same as delete-session. |
+| Delete by character | `chatRepo.deleteByCharacterId` → cascade `deleteBySessionId` per session | All snapshots for all of the character's sessions are dropped. |
+| Swipe removal | `trackerSnapshotRepo.shiftSwipeIdsAfterRemoval` | Re-keys snapshots whose `swipeId` > removed id, preserving continuity. |
+| Branch session | `chat_session_service.branchSession` → `copyForSessionBranch` | Copies snapshots for sliced message IDs to the new session ID. |
+
+### Cloud sync coverage (Phase 9)
+
+`tracker_snapshots` is in the backup whitelist (`backup_exporter.dart`,
+backup `_schemaVersion` 5) and has full cloud sync coverage via
+`SyncTrackerSnapshotStore` + `TrackerSnapshotSyncStore` adapter. Sync
+follows the InfoBlock per-session collection pattern: one entry per
+session, payload `{__trackerSnapshots:true, items:[...]}`. Deletes are
+tracked via `SyncDeletionTracker.record('tracker_snapshot', sessionId)`.
+
+### Never
+
+- **Never** read-modify-write a `ChatSession` / `Character` from outside
+  the dedicated atomic repo methods (this applies to the chat/character
+  variable scopes — see "Atomic read-mutate-write for JS variable scopes"
+  above). Tracker snapshots follow the same rule: use
+  `TrackerSnapshotRepo.upsertTrackers` / `deleteForMessage` /
+  `deleteBySessionId` etc. — never `getById → mutate → put`.
+- **Never** mutate an existing snapshot row. Snapshots are write-once; the
+  only allowed writes are `upsertTrackers` (insert-or-replace by PK),
+  `commit` / `commitLatest` (flip `committed` 0→1), and delete methods.
+- **Never** drop the sentinel anchor `(messageId='')` via
+  `deleteForMessage`. Only `deleteBySessionId` / `deleteByCharacterId`
+  may drop it.

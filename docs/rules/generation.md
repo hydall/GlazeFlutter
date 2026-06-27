@@ -156,6 +156,19 @@ Studio Mode (tracker-around-generator, Phase 5+):
   via `ChatRepo.appendAgentSwipe(kind: 'cleaned')`, preserving the original
   `'final'` as the parent. Hold mode (Marinara) is NOT implemented (Phase
   1.3 decision). See INV-ST4.
+- The Studio tracker-cycle is logged in the agentic operations log as a
+  `studioTracker` kind record (Phase 10). The record carries an aggregate
+  `AgentOperationAttempt` covering the whole cycle elapsed time; per-agent
+  breakdown (success / failure, agent names) goes into the `summary` text
+  since `StudioPipelineResult` does not expose per-agent LLM attempts as a
+  structured array. Records are emitted on the success path, on
+  `agent_errors` (partial failure), and on hard failure. Aborted / disabled
+  runs are not logged.
+- Live cycle status is surfaced to the chat UI via `studioCycleStateProvider`
+  (Phase 11) and rendered by `StudioStatusCard` (floating card at the top
+  of the chat). The cycle phases are:
+  `idle → running → writingFinal → done | agentErrors | error`. Aborted
+  runs reset to `idle`.
 
 ---
 

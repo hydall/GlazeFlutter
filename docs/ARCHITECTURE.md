@@ -508,6 +508,26 @@ renders an `agent-switcher` (blue) control when `agentSwipes.length > 1`,
 dispatching `agent-swipe-left/right` → `onAgentSwipe`. A full regeneration
 resets `agentSwipes` to a single fresh `'final'`.
 
+Tracker snapshots (Phase 1, INV-TS4) are anchored at the same per-agent-swipe
+granularity `(messageId, swipeId, agentSwipeId)` — so swiping between blue
+sub-swipes also restores the matching tracker state (the read path returns
+the snapshot for the current anchor).
+
+### Live Studio status card (Phase 11)
+
+While the Studio tracker-cycle runs, a floating `StudioStatusCard` appears
+at the top of the chat (below the POST-cleaner status card — they never
+overlap in time: Studio runs during generation, POST-cleaner after). It is
+driven by `studioCycleStateProvider` through phases:
+
+  idle → running → writingFinal → done | agentErrors | error
+
+`StreamGenerationService` sets `running` when Studio intercepts, transitions
+to `writingFinal` on the first `onFinalResponseUpdate` callback (trackers
+done, final generator now streaming), and the terminal phase after
+`runTrackerCycle` returns. The card auto-dismisses 2.5s after the cycle
+finishes.
+
 ### Prompt Ordering (invariant — do not reorder)
 
 1. Vector lorebook scan (async, in `PromptPayloadBuilder`, before isolate)
@@ -706,7 +726,7 @@ expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` ar
 
 **File:** `lib/core/db/app_db.dart` + `lib/core/db/repositories/`
 
-### Tables (18 total, schema v42)
+### Tables (22 total, schema v51)
 
 | Table | Repo | Notes |
 |-------|------|-------|
@@ -722,9 +742,12 @@ expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` ar
 | `ChatSummaries` | `summary_repo.dart` | v30: `enabled`; one per session |
 | `MemoryBookRows` | `memory_book_repo.dart` | |
 | `MemoryCatalogRows` | `memory_catalog_repo.dart` | v29; rebuildable per-session Memory Catalog state |
+| `MemoryGraph*` | `memory_*_repo.dart` | v35; 4 tables (`memory_entity_rows`, `memory_salience_rows`, `memory_cadence_rows`, `memory_consolidation_rows`) |
 | `ExtensionPresets` | `extension_presets_repository.dart` | v20 |
 | `InfoBlocks` | `info_blocks_repository.dart` | v20; v22 adds `status` TEXT (default `'done'`) + `order` INTEGER (default 0); v27 adds `swipe_id` |
-| `StudioConfigRows` | `studio_config_repo.dart` | v36; reusable Studio profiles, v42 adds `profileId`/`profileName` for session-to-profile binding |
+| `StudioConfigRows` | `studio_config_repo.dart` | v36; reusable Studio profiles, v42 adds `profileId`/`profileName` for session-to-profile binding, v43 `builderPromptTemplate`, v44 `maxFinalHistoryMessages`, v46 `routingMode` |
+| `TrackerRows` | `tracker_repo.dart` | v45; lightweight key-value trackers (e.g. 'mood: happy'). Composite PK `{sessionId, name}`. Write-loop's internal mutable store — LLM upserts into it, then a snapshot is taken. |
+| `TrackerSnapshots` | `tracker_snapshot_repo.dart` | v50; per-agent-swipe immutable snapshots of all trackers (mirrors Marinara-Engine's `game_state_snapshots`). Composite PK `{sessionId, messageId, swipeId, agentSwipeId}`; `trackersJson`, `committed`, `createdAt`. See INV-TS1–7 in `docs/INVARIANTS.md`. |
 
 ### Write Rule
 **Never** do `getChat → mutate → saveChat`. Use `patchChatData` to serialize reads.
@@ -755,7 +778,7 @@ All service implementations live under `lib/features/cloud_sync/services/`.
 - `widgets/sync_sheet.dart` — Sync UI sheet
 
 ### What Is Synced
-Characters, sessions, presets, API configs, personas, lorebooks, theme presets, Studio profiles, active preset, selected app settings, extension presets/settings, and info-block rows. **Not synced:** generation state, UI state, embedding vectors, debug traces.
+Characters, sessions, presets, API configs, personas, lorebooks, theme presets, Studio profiles, active preset, selected app settings, extension presets/settings, info-block rows, and tracker snapshots (Phase 9 — per-session collection pattern, same as info blocks). **Not synced:** generation state, UI state, embedding vectors, debug traces, `tracker_rows` (legacy mutable store, kept as write-loop internal).
 
 ---
 

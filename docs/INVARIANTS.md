@@ -278,6 +278,107 @@ OpenRouter `cache_control`) a long stable prefix to hit across turns.
 
 ---
 
+## 4c. Tracker Snapshot Rollback Invariants
+
+The tracker snapshot system (Phases 1-12) provides per-agent-swipe
+rollback for tracker state by writing immutable snapshots after each
+generation's write-loop completes.
+
+### INV-TS1: Snapshots are write-once; rollback is emergent ✅ ENFORCED (Phase 1-4)
+
+`tracker_snapshots` rows are never updated in place (other than the
+`committed` 0→1 flip via `commit` / `commitLatest`). The only allowed
+writes are:
+
+- `TrackerSnapshotRepo.upsertTrackers` — insert-or-replace by composite
+  PK `(sessionId, messageId, swipeId, agentSwipeId)` (write-loop, Phase 2).
+- `commit` / `commitLatest` — flip `committed` 0→1 (`ChatNotifier.sendMessage`,
+  Phase 6).
+- Delete methods (`deleteForMessage` / `deleteAnchor` / `deleteBySessionId`).
+
+Rollback is **emergent**: deleting the rows for a message makes the
+previous committed snapshot become the new latest — there is no explicit
+"restore" code path. `getLatestCommitted` / `getLatestCommittedExcludingMessage`
+return the highest-`createdAt` committed row, which naturally rolls back
+when newer rows are deleted.
+
+Code refs: `lib/core/db/repositories/tracker_snapshot_repo.dart`,
+`lib/core/llm/memory_agentic_write_service.dart` (write-loop + upsert),
+`lib/features/chat/chat_message_service.dart:deleteMessage` →
+`deleteForMessage`.
+
+### INV-TS2: Sentinel anchor survives per-message deletes ✅ ENFORCED (Phase 7)
+
+The migration-v51 baseline snapshot lives at the sentinel anchor
+`(messageId='', committed=1)`. `deleteForMessage(messageId)` only deletes
+rows with a non-empty `messageId` — it **must never** drop the sentinel
+anchor. Only `deleteBySessionId` and `deleteByCharacterId` (full-session /
+full-character cleanup) may drop it.
+
+This guarantees legacy sessions (migrated from `tracker_rows` in v51)
+always have a baseline snapshot until the session itself is deleted.
+
+Code ref: `lib/core/db/repositories/tracker_snapshot_repo.dart:deleteForMessage`
+— the `where` clause filters by `messageId.equals(messageId)` and the
+sentinel anchor has `messageId = ''`, so it is never matched.
+
+### INV-TS3: Read path is snapshot-first with `tracker_rows` fallback ✅ ENFORCED (Phase 3)
+
+The 3 read call sites (`generation_pipeline.dart`, `studio_menu_dialog.dart`,
+`agentic_operations_log_dialog.dart`) call `getLatestCommitted` /
+`getLatest` first and fall back to `trackerRepoProvider.getBySessionId`
+when no snapshot exists. This keeps legacy sessions (pre-Phase-1, not yet
+re-saved) working without a forced migration of every read.
+
+Code ref: `lib/features/chat/services/generation_pipeline.dart:_runAgenticWriteLoop`
+— `trackers = (await snapshotRepo.getLatestCommitted(sessionId: sessionId)) ??
+   await trackerRepo.getBySessionId(sessionId)`.
+
+### INV-TS4: Snapshot granularity is per-agent-swipe ✅ ENFORCED (Phase 1)
+
+Each snapshot is anchored at `(sessionId, messageId, swipeId, agentSwipeId)`
+— not per-message or per-session. This lets the rollback system restore
+state at the exact granularity the user navigates: swiping back through
+agent sub-swipes (e.g. `'final'` → `'cleaned'`) restores the matching
+tracker state, because each agent sub-swipe has its own snapshot row.
+
+### INV-TS5: POST-cleaner clones parent snapshot ✅ ENFORCED (Phase 2)
+
+`post_cleaner_service.applyCleanedText` clones the parent message's
+snapshot into the new `'cleaned'` agent-swipe anchor before applying the
+cleaned text. The cleaned sub-swipe inherits the parent's tracker state;
+the original `'final'` snapshot is preserved.
+
+Code ref: `lib/core/llm/post_cleaner_service.dart:applyCleanedText` —
+`snapshotRepo.upsertTrackers(...)` with the parent's `messageId`/`swipeId`
+and the new `agentSwipeId`.
+
+### INV-TS6: Branch copies snapshots for sliced messages ✅ ENFORCED (Phase 5)
+
+`chat_session_service.branchSession` calls
+`trackerSnapshotRepo.copyForSessionBranch` to copy snapshots for the
+sliced message IDs to the new session ID. Snapshots beyond the branch
+point are not copied (the branch starts fresh from the slice). The PK
+includes `sessionId` as a prefix, so branches don't alias even though
+messages are not re-id'd on branch.
+
+Code ref: `lib/core/db/repositories/tracker_snapshot_repo.dart:copyForSessionBranch`,
+`lib/features/chat/chat_session_service.dart:branchSession`.
+
+### INV-TS7: Snapshots are covered by backup + cloud sync ✅ ENFORCED (Phase 8, 9)
+
+`tracker_snapshots` is in the backup whitelist (`backup_exporter.dart`,
+backup `_schemaVersion` 5) and has full cloud sync coverage via
+`SyncTrackerSnapshotStore` + `TrackerSnapshotSyncStore` adapter (Phase 9).
+Session deletes record `SyncDeletionTracker.record('tracker_snapshot',
+sessionId)` so the cloud counterpart is deleted too.
+
+Code ref: `lib/core/services/backup/backup_exporter.dart:_knownTableNames`,
+`lib/features/cloud_sync/adapters/ext_blocks_sync_stores.dart:TrackerSnapshotSyncStore`,
+`lib/features/chat_history/chat_history_provider.dart:deleteSession`.
+
+---
+
 ## 5. Prompt Semantics Invariants
 
 ### INV-PS1: Prompt block order is determined by the preset's `blocks` array
