@@ -11,6 +11,7 @@ import '../models/character.dart';
 import '../models/persona.dart';
 import '../models/pipeline_settings.dart';
 import '../state/db_provider.dart';
+import '../utils/think_tags.dart';
 import '../../features/chat/chat_session_service.dart';
 import '../../features/chat_history/chat_history_provider.dart';
 import 'sidecar_llm_client.dart';
@@ -59,6 +60,14 @@ class PostCleanerService {
       return PostCleanerResult(status: 'disabled', cleanedText: assistantText);
     }
 
+    // Strip any hidden reasoning (`<think>…</think>` / `<thinking>…`) that the
+    // generator left inside the saved message content. If it reaches the
+    // cleaner prompt the model often echoes / re-expands it, blowing the
+    // output length past the safety ratio (→ silently skipped, no swipe). We
+    // clean the visible prose only and compare lengths against this stripped
+    // baseline, not the raw stored text.
+    assistantText = stripThinkTags(assistantText);
+
     final token = cancelToken ?? CancelToken();
     if (token.isCancelled) {
       return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
@@ -95,7 +104,10 @@ class PostCleanerService {
         );
       }
 
-      final cleaned = outcome.text;
+      // Also strip reasoning the cleaner model itself may have emitted in its
+      // reply (some sidecar models wrap output in raw `<think>` blocks).
+      final cleaned =
+          outcome.text == null ? null : stripThinkTags(outcome.text!);
       if (cleaned == null || cleaned.trim().isEmpty) {
         if (!outcome.isOk) {
           return PostCleanerResult(

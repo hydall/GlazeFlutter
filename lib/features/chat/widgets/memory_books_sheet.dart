@@ -62,6 +62,19 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // GlazeBottomSheet wraps `child` in a SingleChildScrollView, which gives
+    // an UNBOUNDED height constraint. This sheet uses a Column with an
+    // Expanded TabBarView, which needs a bounded height — without it the
+    // RenderFlex collapses and only the drag handle shows. Pin the sheet to a
+    // fraction of the screen so the tab content has a real height to lay out in.
+    final screenH = MediaQuery.of(context).size.height;
+    return SizedBox(
+      height: screenH * 0.82,
+      child: _buildBody(context),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     if (_ctrl.loading) {
       return const Center(child: CircularProgressIndicator());
     }

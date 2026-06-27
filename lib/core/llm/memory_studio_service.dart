@@ -403,8 +403,19 @@ class MemoryStudioService {
       perAgentTaskText: perAgentTask,
       roleText: roleText,
     );
+    // The batch instructions are the system prompt; we also send an explicit
+    // user turn that triggers the batched response. A system-only message list
+    // is rejected with HTTP 400 by several providers (e.g. z-ai/GLM), which
+    // require at least one user message — so this user turn is mandatory, not
+    // cosmetic. See docs/PLAN_AGENTIC_STUDIO.md Phase 5.
     final batchMessages = <Map<String, dynamic>>[
       {'role': 'system', 'content': systemPrompt},
+      {
+        'role': 'user',
+        'content':
+            'Produce the required <result> blocks now, one per agent_task '
+            'listed above, in order.',
+      },
     ];
     // Use a synthetic StudioAgent for the batch request: carry the group's
     // budget/temperature. The AgentRunner will resolve the API config from

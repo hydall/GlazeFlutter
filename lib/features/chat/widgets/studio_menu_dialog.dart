@@ -1,9 +1,11 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/api_config.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
+import '../../settings/api_list_provider.dart';
 import 'post_building_menu_dialog.dart';
 
 /// Lightweight Studio tracker dialog (Phase 7.1).
@@ -47,6 +49,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   Future<void> _load() async {
     final repo = ref.read(studioConfigRepoProvider);
     final trackerRepo = ref.read(trackerRepoProvider);
+    // Warm the API list so model suggestions are available when the user taps
+    // a tracker's model chip.
+    await ref.read(apiListProvider.future);
     final config = await repo.getBySessionId(widget.sessionId);
     final trackers = await trackerRepo.getBySessionId(widget.sessionId);
     if (!mounted) return;
@@ -73,6 +78,109 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     if (current == null) return;
     final agents = current.agents.map((a) {
       if (a.id == agent.id) return a.copyWith(enabled: enabled);
+      return a;
+    }).toList();
+    final updated = current.copyWith(agents: agents);
+    await repo.upsert(updated);
+    if (!mounted) return;
+    setState(() => _config = updated);
+  }
+
+  /// Edit a tracker's model override. Trackers run on the chat's resolved run
+  /// API; the override only swaps the model id (empty = use the chat model).
+  /// We surface the models from saved API configs as quick picks plus a free
+  /// text field for anything not in the list.
+  Future<void> _editAgentModel(StudioAgent agent) async {
+    final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    // Build a de-duplicated suggestion list from saved configs' models.
+    final suggestions = <String>{};
+    for (final c in apiConfigs) {
+      if (c.model.isNotEmpty) suggestions.add(c.model);
+    }
+    final controller = TextEditingController(text: agent.modelOverride);
+    final result = await showDialog<String?>(
+      context: context,
+      useRootNavigator: true,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text(
+            agent.name.isEmpty ? agent.id : agent.name,
+            style: Theme.of(ctx).textTheme.titleMedium,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Model override for this tracker. Leave empty to use the '
+                "chat's configured model.",
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'e.g. anthropic/claude-3.5-haiku',
+                  isDense: true,
+                ),
+              ),
+              if (suggestions.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'From your API configs:',
+                  style: Theme.of(ctx).textTheme.labelSmall,
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: suggestions
+                      .map(
+                        (m) => ActionChip(
+                          label: Text(
+                            m,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          onPressed: () => Navigator.of(ctx).pop(m),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('\u0000'), // sentinel: clear
+              child: const Text('Use chat model'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    if (result == null) return; // cancelled
+    final newOverride = result == '\u0000' ? '' : result;
+    await _setAgentModelOverride(agent, newOverride);
+  }
+
+  Future<void> _setAgentModelOverride(
+    StudioAgent agent,
+    String modelOverride,
+  ) async {
+    final repo = ref.read(studioConfigRepoProvider);
+    final current = _config;
+    if (current == null) return;
+    final agents = current.agents.map((a) {
+      if (a.id == agent.id) return a.copyWith(modelOverride: modelOverride);
       return a;
     }).toList();
     final updated = current.copyWith(agents: agents);
@@ -172,6 +280,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                           agent: a,
                           value: _trackerValueFor(a.name),
                           onToggle: (v) => _toggleAgent(a, v),
+                          onEditModel: () => _editAgentModel(a),
                         ),
                       ),
                     if (disabledAgents.isNotEmpty) ...[
@@ -188,6 +297,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                           agent: a,
                           value: _trackerValueFor(a.name),
                           onToggle: (v) => _toggleAgent(a, v),
+                          onEditModel: () => _editAgentModel(a),
                         ),
                       ),
                     ],
@@ -231,11 +341,13 @@ class _TrackerRow extends StatelessWidget {
   final StudioAgent agent;
   final String? value;
   final ValueChanged<bool> onToggle;
+  final VoidCallback onEditModel;
 
   const _TrackerRow({
     required this.agent,
     required this.value,
     required this.onToggle,
+    required this.onEditModel,
   });
 
   @override
@@ -246,8 +358,6 @@ class _TrackerRow extends StatelessWidget {
       _StatusChip(label: 'ctx:${agent.contextSize}'),
       if (agent.runInterval != 1)
         _StatusChip(label: 'every ${agent.runInterval}'),
-      if (agent.modelOverride.isNotEmpty)
-        _StatusChip(label: agent.modelOverride, emphasize: true),
       if (agent.runIndividually) _StatusChip(label: 'solo', emphasize: true),
     ];
     return Padding(
@@ -285,19 +395,22 @@ class _TrackerRow extends StatelessWidget {
                     ],
                   ],
                 ),
-                if (chips.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Wrap(
-                      spacing: 4,
-                      runSpacing: 0,
-                      children: chips
-                          .map(
-                            (c) => _chip(context, c.label, c.emphasize),
-                          )
-                          .toList(),
-                    ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      ...chips.map(
+                        (c) => _chip(context, c.label, c.emphasize),
+                      ),
+                      // Tappable model chip — the one piece of per-tracker
+                      // config the lightweight dialog edits inline.
+                      _modelChip(context),
+                    ],
                   ),
+                ),
                 if (value != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -315,6 +428,47 @@ class _TrackerRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _modelChip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasOverride = agent.modelOverride.isNotEmpty;
+    final label = hasOverride ? agent.modelOverride : 'chat model';
+    return InkWell(
+      onTap: onEditModel,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: hasOverride
+              ? cs.primaryContainer
+              : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: cs.primary.withValues(alpha: 0.4),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.edit,
+              size: 11,
+              color: hasOverride ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color:
+                    hasOverride ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

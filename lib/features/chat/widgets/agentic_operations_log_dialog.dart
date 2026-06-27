@@ -247,10 +247,15 @@ class _TrackerValuesTab extends ConsumerStatefulWidget {
 class _TrackerValuesTabState extends ConsumerState<_TrackerValuesTab> {
   List<Tracker>? _trackers;
   bool _loaded = false;
+  bool _didLoad = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Read the inherited `_SessionScope` here (NOT in initState — inherited
+    // widgets are not safe to depend on before the first didChangeDependencies).
+    if (_didLoad) return;
+    _didLoad = true;
     _load();
   }
 
