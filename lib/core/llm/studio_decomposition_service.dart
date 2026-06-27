@@ -11,6 +11,7 @@ import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../utils/time_helpers.dart';
 import 'reasoning_stripper.dart';
+import 'studio_block_classifier.dart';
 import 'studio_block_expander.dart';
 import 'studio_block_router.dart';
 import 'transport/chat_transport_request.dart';
@@ -642,50 +643,11 @@ $blocksSummary''';
     return map;
   }
 
-  /// True if a block carries a cross-cutting rule that must be broadcast to the
-  /// final responder and the POST-cleaner in addition to its primary agent:
-  /// output language/format rules and prose-quality guards (anti-loop /
-  /// anti-echo / anti-cliché / anti-slop / banlists). Public for testing.
+  /// Static delegator — see [StudioBlockClassifier.isBroadcastBlock]. Kept on
+  /// this class because tests reference `StudioDecompositionService.isBroadcastBlock`.
   @visibleForTesting
-  static bool isBroadcastBlock(PresetBlock block) {
-    if (isReasoningBlock(block)) return false;
-    final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();
-    const needles = [
-      // Output language / format rules.
-      'language',
-      'русск',
-      'russian',
-      'output_language',
-      // Response length / paragraph budget (cross-cutting: governs final
-      // reply AND POST-cleaner rewrite length).
-      'length:',
-      'length_rules',
-      'length_target',
-      'длинный ответ',
-      'короткий ответ',
-      'средний ответ',
-      // Prose-quality guards.
-      'anti-loop',
-      'anti loop',
-      'anti-echo',
-      'anti echo',
-      'anti-cliche',
-      'anti-clich',
-      'анти-клише',
-      'анти-луп',
-      'анти-эхо',
-      'anti-slop',
-      'slop',
-      'ban rus',
-      'banlist',
-      'forbidden words',
-    ];
-    return _containsAnyStatic(text, needles);
-  }
-
-  static bool _containsAnyStatic(String text, List<String> needles) {
-    return needles.any(text.contains);
-  }
+  static bool isBroadcastBlock(PresetBlock block) =>
+      StudioBlockClassifier.isBroadcastBlock(block);
 
   /// Runs the LLM block router over [blocks]. Maps the private controller specs
   /// to public [RouterBucket]s and delegates to [StudioBlockRouter]. Returns an
@@ -708,234 +670,14 @@ $blocksSummary''';
     );
   }
 
-  /// True if a block is a chain-of-thought / reasoning / thinking template.
-  /// Such blocks describe HOW to reason internally; the multi-agent pipeline
-  /// already externalizes reasoning, so they are dropped before routing rather
-  /// than assigned to an agent. Public for testing.
-  ///
-  /// This is the deterministic fallback used when the LLM router is unavailable.
-  /// It is intentionally conservative: a block that merely *mentions* a
-  /// `<think>` block (e.g. a language rule "everything after the closing think
-  /// tag must be Russian", or a meta block describing OOC behavior) is NOT
-  /// reasoning. Such false positives previously caused language/lore blocks to
-  /// be dropped silently. When in doubt, keep the block (return false) so the
-  /// router/keyword bucketing can still place it.
+  /// Static delegator — see [StudioBlockClassifier.isReasoningBlock]. Kept on
+  /// this class because tests reference `StudioDecompositionService.isReasoningBlock`.
   @visibleForTesting
-  static bool isReasoningBlock(PresetBlock block) {
-    final name = block.name.toLowerCase();
-    final id = block.id.toLowerCase();
+  static bool isReasoningBlock(PresetBlock block) =>
+      StudioBlockClassifier.isReasoningBlock(block);
 
-    // Strong name/id signals (cheap, high-precision).
-    const nameNeedles = [
-      'cot',
-      'chain of thought',
-      'chain-of-thought',
-      'reasoning',
-      'think template',
-      'thinking',
-      '<think>',
-    ];
-    for (final needle in nameNeedles) {
-      if (name.contains(needle) || id.contains(needle)) return true;
-    }
-
-    return _contentIsReasoningTemplate(block.content);
-  }
-
-  /// Content-based reasoning detection. Distinguishes a block that IS a
-  /// reasoning/CoT template from one that merely references `<think>`.
-  ///
-  /// Two positive signals:
-  /// 1. The block is *dominated* by think-tag content — most of the block lives
-  ///    inside the reasoning tags (a real CoT scaffold).
-  /// 2. The block actively *directs the model to produce* a think block (an
-  ///    action verb tied to the tag, e.g. `use`, `plan internally`, `before
-  ///    replying`). A passive description (the think block "stays English") is
-  ///    excluded.
-  static bool _contentIsReasoningTemplate(String content) {
-    if (content.isEmpty) return false;
-    final lower = content.toLowerCase();
-    if (!lower.contains('<think>')) return false;
-
-    // Signal 1: think tags dominate the block.
-    final insideThink = RegExp(
-      r'<think>([\s\S]*?)</think>',
-      caseSensitive: false,
-    );
-    var insideChars = 0;
-    for (final m in insideThink.allMatches(content)) {
-      insideChars += (m.group(1) ?? '').length;
-    }
-    final ratio = insideChars / content.length;
-    if (ratio >= _reasoningDominanceRatio) return true;
-
-    // Signal 2: an explicit directive to emit a <think> reasoning block. These
-    // patterns require an action verb tied to the tag, so passive mentions
-    // ("after </think>", "the <think> block remains English") do not match.
-    const directivePatterns = [
-      r'use\s+<think>',
-      r'<think>[^<]*</think>\s*(?:for|to)\b',
-      r'(?:plan|think|reason)\s+(?:internally|step[- ]by[- ]step)[^.]*<think>',
-      r'(?:before|prior to)\s+(?:replying|responding|answering)[^.]*<think>',
-      r'wrap\s+(?:your\s+)?(?:reasoning|planning|thinking)\s+in\s+<think>',
-    ];
-    for (final p in directivePatterns) {
-      if (RegExp(p, caseSensitive: false).hasMatch(lower)) return true;
-    }
-    return false;
-  }
-
-  /// Fraction of a block that must live inside `<think>...</think>` for the
-  /// block to count as a reasoning template via signal 1.
-  static const double _reasoningDominanceRatio = 0.4;
-
-  String _bucketForBlock(PresetBlock block) {
-    final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();
-    final id = block.id.toLowerCase();
-
-    if (_containsAny(text, const [
-      'lumia',
-      'ghost in the machine',
-      'meta-weaver',
-      'ooc interface',
-      'weaver',
-      'diagnostic',
-    ])) {
-      return 'meta';
-    }
-    if (_containsAny(text, const [
-      'never write for',
-      'user autonomy',
-      'human controls user',
-      'do not write {{user}}',
-      'sovereignty',
-    ])) {
-      return 'agency';
-    }
-    if (_containsAny(text, const [
-      'character autonomy',
-      'character foundation',
-      'behavioral realism',
-      'anti-deitism',
-      'character voice',
-      'emotional response realism',
-      'psychology',
-      'personality drives',
-    ])) {
-      return 'agency';
-    }
-    if (_containsAny(text, const [
-      'anti-loop',
-      'anti loop',
-      'anti-echo',
-      'anti echo',
-      'anti-cliche',
-      'anti-clich',
-      'anti-slop',
-      'ban rus',
-      'forbidden words',
-      'no tells',
-      'repetition repair',
-      'hard slop ban',
-    ])) {
-      return 'guard';
-    }
-    if (_containsAny(text, const [
-      'dialogue',
-      'monologue',
-      'speech',
-      'voice utility',
-      'interaction',
-      'pure-dialogue',
-      'let dialogue breathe',
-    ])) {
-      return 'dialogue';
-    }
-    if (_containsAny(text, const [
-      'npc',
-      'living world',
-      'world canvas',
-      'ambient',
-      'public spaces',
-      'offscreen',
-      'background activity',
-    ])) {
-      return 'world';
-    }
-    if (_containsAny(text, const [
-      'story mode',
-      'narrative',
-      'pacing',
-      'length',
-      'paragraph',
-      'word',
-      'sensory',
-      'pov',
-      'third person',
-      'style',
-      'poetic',
-      'flowing prose',
-      'writer style',
-      'ao3',
-      'tone',
-      'genre',
-      'romantic',
-      'fluff',
-      'slow-burn',
-      'difficulty',
-      'momentum',
-      'temporal',
-      'focus lock',
-    ])) {
-      return 'narrative';
-    }
-    if (_containsAny(text, const [
-          'scenario',
-          'persona',
-          'description',
-          'personality',
-          'memory',
-          'summary',
-          'lorebook',
-          'ground truth',
-          'continuity',
-          'who knows what',
-          'facts',
-        ]) ||
-        const {
-          'char_card',
-          'char_personality',
-          'user_persona',
-          'scenario',
-          'example_dialogue',
-          'summary',
-          'memory',
-        }.contains(id)) {
-      return 'continuity';
-    }
-    if (_containsAny(text, const [
-      'language',
-      'format',
-      'html',
-      'colored',
-      'relationship metrics',
-      'comics',
-      'nsfw',
-      'mature',
-      'explicit',
-      'professional context',
-      'test_mode',
-      'internal_test',
-      'content protocol',
-    ])) {
-      return 'final';
-    }
-    return 'final';
-  }
-
-  bool _containsAny(String text, List<String> needles) {
-    return needles.any(text.contains);
-  }
+  String _bucketForBlock(PresetBlock block) =>
+      StudioBlockClassifier.bucketForBlock(block);
 
   String _sourceBlockNames(List<PresetBlock> blocks) {
     final names = <String>[];
