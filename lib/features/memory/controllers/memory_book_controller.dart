@@ -1,24 +1,25 @@
-﻿import 'dart:async';
-
-import 'package:dio/dio.dart';
-import 'package:easy_localization/easy_localization.dart';
+﻿import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/lorebook_providers.dart';
-import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_injection_service.dart';
+import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/models/pipeline_settings.dart';
 import '../../../core/state/memory_book_ops_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/state/pipeline_settings_provider.dart';
 import '../../chat/chat_provider.dart';
-import '../../chat/memory_draft_generator.dart';
 import '../../settings/api_list_provider.dart';
-import '../state/memory_active_drafts_provider.dart';
+import 'memory_draft_generation_controller.dart';
 import 'memory_settings_mapper.dart';
 
 /// Controller for memory book operations, separating business logic from UI.
+///
+/// Thin orchestrator: owns the [MemoryBook] + entry/index CRUD + settings
+/// mapping + reindex, and delegates the draft-generation lifecycle (active
+/// set, cancel tokens, elapsed timer, INV-M3 mutex) to
+/// [MemoryDraftGenerationController].
 class MemoryBookController {
   final WidgetRef _ref;
   final String _sessionId;
@@ -27,20 +28,27 @@ class MemoryBookController {
   MemoryBook? _book;
   bool _loading = true;
   bool _isReindexing = false;
-  final Map<String, bool> _generatingDrafts = {};
-  final Set<String> _activeDraftIds = {};
-  final Map<String, DateTime> _genStartTimes = {};
-  final Map<String, CancelToken> _cancelTokens = {};
-  Timer? _genElapsedTimer;
   final MemorySettingsMapper _settingsMapper = const MemorySettingsMapper();
+  late final MemoryDraftGenerationController _draftGen =
+      MemoryDraftGenerationController(
+    ref: _ref,
+    charId: _charId,
+    sessionId: _sessionId,
+    settingsMapper: _settingsMapper,
+    bookGetter: () => _book,
+    persistAndSet: (book) async {
+      _book = book;
+      await save();
+    },
+  );
 
   MemoryBookController(this._ref, this._sessionId, this._charId);
 
   MemoryBook? get book => _book;
   bool get loading => _loading;
   bool get isReindexing => _isReindexing;
-  Map<String, bool> get generatingDrafts => Map.unmodifiable(_generatingDrafts);
-  Map<String, DateTime> get genStartTimes => Map.unmodifiable(_genStartTimes);
+  Map<String, bool> get generatingDrafts => _draftGen.generatingDrafts;
+  Map<String, DateTime> get genStartTimes => _draftGen.genStartTimes;
 
   MemoryGlobalSettings get globalSettings =>
       _ref.read(memoryGlobalSettingsProvider);
@@ -66,7 +74,6 @@ class MemoryBookController {
 
   MemoryBookSettings globalSettingsAsBookSettings() =>
       _settingsMapper.globalToBook(globalSettings);
-
 
   String get settingsSummary {
     if (_book == null) return '';
@@ -164,27 +171,7 @@ class MemoryBookController {
     return 'memory_books_drafts_created'.tr(args: ['${plan.drafts.length}']);
   }
 
-  void generateAllPending() {
-    if (_book == null) return;
-    final needsGen = _book!.pendingDrafts
-        .where(
-          (d) =>
-              d.content.isEmpty &&
-              (d.status == 'pending_generation' ||
-                  d.status == 'needs_regeneration') &&
-              !_activeDraftIds.contains(d.id),
-        )
-        .toList();
-
-    for (final draft in needsGen) {
-      generateDraft(
-        draft.id,
-        onStart: () {},
-        onComplete: () {},
-        onError: (e) {},
-      );
-    }
-  }
+  void generateAllPending() => _draftGen.generateAllPending();
 
   /// Generates a draft. Callbacks are for UI updates.
   Future<void> generateDraft(
@@ -192,125 +179,27 @@ class MemoryBookController {
     required void Function() onStart,
     required void Function() onComplete,
     required void Function(String error) onError,
-  }) async {
-    if (_book == null || _activeDraftIds.contains(draftId)) return;
-    final chatState = _ref.read(chatProvider(_charId));
-    if (chatState.value?.isGenerating == true) {
-      onError('memory_books_chat_generation_active'.tr());
-      return;
-    }
-    final draftIndex = _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
-    if (draftIndex < 0) return;
-
-    final session = chatState.value?.session;
-    if (session == null) return;
-
-    final draft = _book!.pendingDrafts[draftIndex];
-    final draftMessages = session.messages
-        .where((m) => draft.messageIds.contains(m.id))
-        .toList();
-    if (draftMessages.isEmpty) {
-      onError('memory_books_messages_not_found'.tr());
-      return;
-    }
-
-    final historyText = draftMessages
-        .map((m) => '${m.role}: ${m.content}')
-        .join('\n\n');
-    final cancelToken = CancelToken();
-    _cancelTokens[draftId] = cancelToken;
-
-    _activeDraftIds.add(draftId);
-    _generatingDrafts[draftId] = true;
-    _genStartTimes[draftId] = DateTime.now();
-    _startGenElapsedTimer();
-    _ref.read(memoryActiveDraftsProvider.notifier).markActive(_sessionId);
-    onStart();
-
-    try {
-      final generator = MemoryDraftGenerator(_ref);
-      final result = await generator.generate(
-        draft: draft,
-        settings: globalSettingsAsBookSettings(),
-        pipeline: globalPipelineAsPipeline(),
-        historyText: historyText,
-        cancelToken: cancelToken,
+  }) =>
+      _draftGen.generateDraft(
+        draftId,
+        onStart: onStart,
+        onComplete: onComplete,
+        onError: onError,
       );
 
-      final updatedDrafts = [..._book!.pendingDrafts];
-      updatedDrafts[draftIndex] = result;
-      _book = _book!.copyWith(pendingDrafts: updatedDrafts);
-      _activeDraftIds.remove(draftId);
-      _generatingDrafts.remove(draftId);
-      _genStartTimes.remove(draftId);
-      _stopGenElapsedTimer();
-      if (_generatingDrafts.isEmpty) {
-        _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
-      }
-      await save();
-      onComplete();
-    } catch (e) {
-      final updatedDrafts = [..._book!.pendingDrafts];
-      updatedDrafts[draftIndex] = updatedDrafts[draftIndex].copyWith(
-        status: 'needs_regeneration',
-        error: e.toString(),
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-      _book = _book!.copyWith(pendingDrafts: updatedDrafts);
-      _activeDraftIds.remove(draftId);
-      _generatingDrafts.remove(draftId);
-      _genStartTimes.remove(draftId);
-      _stopGenElapsedTimer();
-      if (_generatingDrafts.isEmpty) {
-        _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
-      }
-      await save();
-      onError(e.toString());
-    } finally {
-      _cancelTokens.remove(draftId);
-    }
-  }
-
-  void cancelDraftGeneration(String draftId) {
-    _cancelTokens[draftId]?.cancel();
-    _activeDraftIds.remove(draftId);
-    _generatingDrafts.remove(draftId);
-    if (_generatingDrafts.isEmpty) {
-      _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
-    }
-  }
+  void cancelDraftGeneration(String draftId) =>
+      _draftGen.cancelDraftGeneration(draftId);
 
   Future<void> batchGenerate({
     required void Function() onStart,
     required void Function() onComplete,
     required void Function(String error) onError,
-  }) async {
-    if (_book == null) return;
-    final needsGen = _book!.pendingDrafts
-        .where(
-          (d) =>
-              d.content.isEmpty &&
-              (d.status == 'pending_generation' ||
-                  d.status == 'needs_regeneration') &&
-              !_activeDraftIds.contains(d.id),
-        )
-        .toList();
-    final batchSize = globalSettings.batchSize;
-    final toGenerate = needsGen.take(batchSize).toList();
-    if (toGenerate.isEmpty) return;
-
-    await Future.wait(
-      toGenerate.map(
-        (draft) => generateDraft(
-          draft.id,
-          onStart: onStart,
-          onComplete: () {},
-          onError: onError,
-        ),
-      ),
-    );
-    onComplete();
-  }
+  }) =>
+      _draftGen.batchGenerate(
+        onStart: onStart,
+        onComplete: onComplete,
+        onError: onError,
+      );
 
   Future<void> approveDraft(String draftId) async {
     if (_book == null) return;
@@ -507,43 +396,17 @@ class MemoryBookController {
         );
   }
 
-  void _startGenElapsedTimer() {
-    _genElapsedTimer ??= Timer.periodic(
-      const Duration(milliseconds: 200),
-      (_) {},
-    );
-  }
-
-  void _stopGenElapsedTimer() {
-    if (_generatingDrafts.isEmpty) {
-      _genElapsedTimer?.cancel();
-      _genElapsedTimer = null;
-    }
-  }
-
-  void dispose() {
-    _genElapsedTimer?.cancel();
-  }
+  void dispose() => _draftGen.dispose();
 
   /// Updates the book state (called from UI when state changes).
   void updateBook(MemoryBook newBook) {
     _book = newBook;
   }
 
-  List<MemoryDraft> get draftsNeedingGeneration {
-    if (_book == null) return [];
-    return _book!.pendingDrafts
-        .where(
-          (d) =>
-              d.content.isEmpty &&
-              (d.status == 'pending_generation' ||
-                  d.status == 'needs_regeneration') &&
-              !_activeDraftIds.contains(d.id),
-        )
-        .toList();
-  }
+  List<MemoryDraft> get draftsNeedingGeneration =>
+      _draftGen.draftsNeedingGeneration;
 
-  bool get isGenerating => _generatingDrafts.values.any((v) => v);
+  bool get isGenerating => _draftGen.isGenerating;
 
   int get activeEntryCount =>
       _book?.entries.where((e) => e.status == 'active').length ?? 0;
