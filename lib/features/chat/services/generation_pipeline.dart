@@ -738,36 +738,55 @@ class GenerationPipeline {
       // Pass 0: Character/World Auditor (diagnostic, optional). Runs only when
       // characterCheckEnabled AND promptPayload is available (exact generation
       // snapshot). Returns null on failure → cleaner runs without audit notes.
+      //
+      // Parallelised with the cleaner (Marinara `mergePairedBuiltInRewriteAgents`
+      // adaptation for streaming UX): audit is non-streaming and short; the
+      // cleaner is streaming and long. We fire audit `unawaited`-style in a
+      // Future and `await` it with a SHORT timeout that races the cleaner's
+      // pre-create-swipe + first-chunk work. If audit wins → its issues are
+      // injected into the cleaner prompt as CHARACTER CONSISTENCY NOTES (same
+      // as the serial path). If audit loses the race → cleaner runs without
+      // audit notes this turn (graceful degradation; the audit Future is left
+      // running and its result is logged when it completes — it does NOT block
+      // cleanup). This trades 1 serial LLM call's latency for parallel
+      // execution: UX-feel is "blue swipe starts streaming immediately,
+      // audit badge appears later if it finished in time".
       List<String>? auditIssues;
+      Future<List<String>?>? auditFuture;
       if (pipeline.postCleanerCharacterCheckEnabled && promptPayload != null) {
-        try {
-          final loreContent = _assembleLorebooksContent(promptPayload);
-          auditIssues = await cleanerService.runCharacterAudit(
-            assistantText: lastAssistant.content,
-            character: promptPayload.character,
-            persona: promptPayload.persona,
-            lorebooksContent: loreContent,
-            memoryContent:
-                promptPayload.memoryContent ?? promptPayload.memoryMacroContent,
-            summaryContent: promptPayload.summaryContent,
-            arcContent: promptPayload.arcContent,
-            entitiesContent: promptPayload.entitiesContent,
-            recentMessages: recentMessages,
-            settings: pipeline,
-          );
-          if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
-            ref.read(postCleanerStateProvider.notifier).state =
-                const PostCleanerState.idle();
-            return;
-          }
-          debugPrint(
-            '[PostCleaner] audit session=$sessionId '
-            'issues=${auditIssues?.length ?? "null(skipped)"}',
-          );
-        } catch (e) {
-          debugPrint('[PostCleaner] audit failed session=$sessionId error=$e');
-          auditIssues = null;
-        }
+        final loreContent = _assembleLorebooksContent(promptPayload);
+        auditFuture = cleanerService
+            .runCharacterAudit(
+              assistantText: lastAssistant.content,
+              character: promptPayload.character,
+              persona: promptPayload.persona,
+              lorebooksContent: loreContent,
+              memoryContent:
+                  promptPayload.memoryContent ?? promptPayload.memoryMacroContent,
+              summaryContent: promptPayload.summaryContent,
+              arcContent: promptPayload.arcContent,
+              entitiesContent: promptPayload.entitiesContent,
+              recentMessages: recentMessages,
+              settings: pipeline,
+            )
+            .catchError((Object e) {
+              debugPrint('[PostCleaner] audit failed session=$sessionId error=$e');
+              return null;
+            });
+        // Log late-landing audit results (race-loser case): the Future
+        // keeps running after the 3s timeout below; when it completes we
+        // emit a debug line so the user can see "audit found N issues" even
+        // on a turn where the cleaner ran without them. Fire-and-forget.
+        unawaited(
+          auditFuture.then((r) {
+            if (r != null && r.isNotEmpty) {
+              debugPrint(
+                '[PostCleaner] audit late-landed session=$sessionId '
+                'issues=${r.length} (not applied this turn — race loser)',
+              );
+            }
+          }),
+        );
       }
 
       // ── Swipe-first: pre-create the blue 'cleaned' swipe NOW (Fix 1) ────────
@@ -843,6 +862,34 @@ class GenerationPipeline {
           '[PostCleaner] pre-create swipe failed session=$sessionId error=$e',
         );
         _preCreatedCleanerSwipeId = -1;
+      }
+
+      // Race the audit Future against a short budget (3s). If audit wins,
+      // its issues flow into the cleaner prompt as CHARACTER CONSISTENCY
+      // NOTES (same as the serial path). If it loses the race, the cleaner
+      // runs without audit notes this turn — graceful degradation. The
+      // audit Future keeps running in the background; we log its result
+      // when it lands (below, after the cleaner returns) so the user can
+      // still see "audit found N issues" even on a losing race.
+      if (auditFuture != null) {
+        try {
+          auditIssues = await auditFuture.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => null,
+          );
+          if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
+            ref.read(postCleanerStateProvider.notifier).state =
+                const PostCleanerState.idle();
+            return;
+          }
+          debugPrint(
+            '[PostCleaner] audit session=$sessionId '
+            'issues=${auditIssues?.length ?? "null(timeout/failed)"}',
+          );
+        } catch (e) {
+          debugPrint('[PostCleaner] audit await error=$e');
+          auditIssues = null;
+        }
       }
 
       final result = await cleanerService.runCleaner(
