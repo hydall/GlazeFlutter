@@ -238,17 +238,19 @@ class GenerationPipeline {
 
       await _autoCreateMemoryDrafts(result.session);
 
-      // Stage 2: Agentic write-loop — only on accepted (non-regen) turns.
-      // Suppressed on swipe/regen to avoid duplicate or contradictory writes
-      // (the user may swipe again). The regen branch above (regenOutcome !=
-      // null) returns early before reaching here, so this code only runs on
-      // the normal send-message path.
-      if (regenTargetId == null && result.session != null) {
+      // Stage 2: Agentic write-loop — runs on both normal send AND regen.
+      // On regen, SavedMessageWriter resets agentSwipes to a single fresh
+      // 'final' (agentSwipeId=0), so the write-loop anchors the new snapshot
+      // to (messageId, swipeId, 0) — mirroring Marinara's retry-agents which
+      // re-run the full agent cycle per swipe. The stale snapshot from the
+      // previous swipe is excluded via getLatestCommittedExcludingMessage.
+      if (result.session != null) {
         unawaited(
           _runAgenticWriteLoop(
             sessionId: result.session!.id,
             messages: result.session!.messages,
             genId: genId,
+            regenTargetId: regenTargetId,
           ),
         );
 
@@ -528,6 +530,7 @@ class GenerationPipeline {
     required String sessionId,
     required List<ChatMessage> messages,
     required int genId,
+    String? regenTargetId,
   }) async {
     if (!ref.mounted) return;
 
@@ -542,11 +545,17 @@ class GenerationPipeline {
       if (book == null || !pipeline.agenticWriteEnabled) return;
 
       // Read the current tracker state from snapshots (preferred) with a
-      // tracker_rows fallback for legacy sessions pre-migration. The write-loop
-      // runs on the non-regen path, so getLatestCommitted is the correct base.
+      // tracker_rows fallback for legacy sessions pre-migration. On regen,
+      // exclude the regenerating message's own stale snapshot so the base
+      // state does not read the pre-regen tracker values.
       final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
       final trackerRepo = ref.read(trackerRepoProvider);
-      final snapshot = await snapshotRepo.getLatestCommitted(sessionId);
+      final snapshot = regenTargetId != null
+          ? await snapshotRepo.getLatestCommittedExcludingMessage(
+              sessionId,
+              regenTargetId,
+            )
+          : await snapshotRepo.getLatestCommitted(sessionId);
       final trackers =
           snapshot?.trackers ?? await trackerRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
@@ -554,10 +563,10 @@ class GenerationPipeline {
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
       // Anchor for the tracker snapshot: the just-finished assistant turn.
-      // The write-loop only fires on the non-regen path (line 228), so the
-      // last message is the freshly-generated assistant reply with
-      // swipeId=0 and agentSwipeId=0 (SavedMessageWriter seeds a single
-      // 'final'). Guard against non-assistant trailing messages defensively.
+      // On both normal send and regen, SavedMessageWriter seeds a single
+      // 'final' agentSwipe (agentSwipeId=0), so the anchor is
+      // (messageId, swipeId, 0). Guard against non-assistant trailing
+      // messages defensively.
       final lastAssistant = messages.lastWhere(
         (m) => m.role == 'assistant',
         orElse: () => messages.last,
