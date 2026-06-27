@@ -32,15 +32,27 @@ class TrackerWriteRequest {
 }
 
 /// A single memory draft write requested by the agent.
+///
+/// `existingEntryId` distinguishes two write modes (patch #4):
+/// - empty → CREATE a new MemoryEntry with the given title/content/keys.
+/// - non-empty → APPEND `content` as newFacts to the existing entry with
+///   that id. The pipeline looks up the existing entry, appends `\n\n`
+///   + this request's content to its `content`, and updates it via the
+///   repo. Title/keys from this request are merged into the existing
+///   entry's keys (case-insensitive dedup). The existing entry is NOT
+///   rewritten — only appended to (Marinara append-only newFacts
+///   semantics). See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
 class MemoryWriteRequest {
   final String title;
   final String content;
   final List<String> keys;
+  final String existingEntryId;
 
   const MemoryWriteRequest({
     required this.title,
     required this.content,
     this.keys = const [],
+    this.existingEntryId = '',
   });
 
   factory MemoryWriteRequest.fromJson(Map<String, dynamic> json) {
@@ -51,6 +63,7 @@ class MemoryWriteRequest {
       keys: rawKeys is List
           ? rawKeys.map((e) => e.toString()).toList()
           : <String>[],
+      existingEntryId: (json['existingEntryId'] as String?) ?? '',
     );
   }
 
@@ -58,6 +71,7 @@ class MemoryWriteRequest {
         'title': title,
         'content': content,
         'keys': keys,
+        if (existingEntryId.isNotEmpty) 'existingEntryId': existingEntryId,
       };
 }
 

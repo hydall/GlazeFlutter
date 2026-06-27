@@ -188,6 +188,45 @@ void main() {
       });
       expect(req.keys, isEmpty);
     });
+
+    // NEW (patch #4): existingEntryId field for append-only updates.
+    test('parses existingEntryId for append-only update', () {
+      final req = MemoryWriteRequest.fromJson({
+        'title': 'Lucy plan update',
+        'content': 'new fact: she has a knife',
+        'keys': ['Lucy'],
+        'existingEntryId': 'mem_abc123',
+      });
+      expect(req.existingEntryId, 'mem_abc123');
+      expect(req.content, 'new fact: she has a knife');
+    });
+
+    test('defaults existingEntryId to empty (create new entry)', () {
+      final req = MemoryWriteRequest.fromJson({
+        'title': 'Test',
+        'content': 'Content',
+      });
+      expect(req.existingEntryId, isEmpty);
+    });
+
+    test('toJson omits existingEntryId when empty', () {
+      const req = MemoryWriteRequest(
+        title: 'Test',
+        content: 'Content',
+      );
+      final json = req.toJson();
+      expect(json.containsKey('existingEntryId'), isFalse);
+    });
+
+    test('toJson includes existingEntryId when set', () {
+      const req = MemoryWriteRequest(
+        title: 'Test',
+        content: 'Content',
+        existingEntryId: 'mem_xyz',
+      );
+      final json = req.toJson();
+      expect(json['existingEntryId'], 'mem_xyz');
+    });
   });
 
   group('TrackerRepo — write integration', () {

@@ -64,12 +64,32 @@ class MemoryAgenticWriteService {
         return const MemoryWriteLoopResult(status: 'aborted');
       }
 
+      // NEW (patch #4): pass existing MemoryBook entries to the LLM so it
+      // can avoid duplicates and write append-only newFacts to existing
+      // entries instead of rewriting them. Mirrors Marinara's
+      // `<existing_entries>` prompt block. See
+      // docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+      List<MemoryEntry> existingMemories = const [];
+      try {
+        final book = await _ref.read(memoryBookRepoProvider).getBySessionId(
+          sessionId,
+        );
+        if (book != null) {
+          existingMemories = book.entries;
+        }
+      } catch (e) {
+        debugPrint(
+          '[AgenticWrite] failed to load existing entries for prompt: $e',
+        );
+      }
+
       final llmOutcome = await _parser.askLlmForWrites(
         config: config,
         settings: settings,
         recentHistoryText: recentHistoryText,
         currentTrackers: currentTrackers,
         cancelToken: token,
+        existingMemories: existingMemories,
       );
 
       if (token.isCancelled || isStillCurrent?.call() == false) {
@@ -239,12 +259,14 @@ class MemoryAgenticWriteService {
     var denied = 0;
     final errors = <String>[];
 
-    // Auto-approve: agent writes land directly as MemoryEntry (kind='agent',
-    // source='agentic') instead of pending drafts. The user can still edit
-    // or delete them afterwards via the MemoryBook UI. messageIds is set to
-    // [messageId] so deleting the source assistant message drops the entry
-    // via MemoryBookRepo.deleteForMessage.
-    final entries = <MemoryEntry>[];
+    // Two write paths (patch #4):
+    // - existingEntryId empty → CREATE a new MemoryEntry (kind='agent',
+    //   source='agentic') and batch-append via appendApprovedEntries.
+    // - existingEntryId non-empty → APPEND-only newFacts to the existing
+    //   entry via appendFactsToEntry (atomic RMW, Marinara append-only
+    //   semantics). The existing entry is NOT rewritten.
+    final newEntries = <MemoryEntry>[];
+    final appendRequests = <MemoryWriteRequest>[];
     for (final req in requests) {
       if (shouldAbort()) break;
       final decision = policy.canUse(MemoryAgenticTool.writeMemory);
@@ -253,25 +275,67 @@ class MemoryAgenticWriteService {
         errors.add('Denied "${req.title}": ${decision.reason}');
         continue;
       }
-      entries.add(
-        MemoryEntry(
-          id: generateId().replaceAll('draft_', 'mem_'),
-          title: req.title,
-          content: req.content,
-          keys: req.keys,
-          messageIds: [messageId],
-          status: 'active',
-          createdAt: DateTime.now().millisecondsSinceEpoch,
-          source: 'agentic',
-          kind: 'agent',
-        ),
-      );
-      written++;
+      if (req.existingEntryId.isNotEmpty) {
+        appendRequests.add(req);
+      } else {
+        newEntries.add(
+          MemoryEntry(
+            id: generateId().replaceAll('draft_', 'mem_'),
+            title: req.title,
+            content: req.content,
+            keys: req.keys,
+            messageIds: [messageId],
+            status: 'active',
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+            source: 'agentic',
+            kind: 'agent',
+          ),
+        );
+        written++;
+      }
     }
 
-    if (entries.isNotEmpty && !shouldAbort()) {
+    // Append-only updates to existing entries (atomic per-entry RMW).
+    for (final req in appendRequests) {
+      if (shouldAbort()) break;
       try {
-        await repo.appendApprovedEntries(sessionId, entries);
+        final updated = await repo.appendFactsToEntry(
+          sessionId: sessionId,
+          entryId: req.existingEntryId,
+          newFacts: req.content,
+          newKeys: req.keys,
+        );
+        if (updated) {
+          written++;
+        } else {
+          // Entry was deleted between the LLM call and this write —
+          // fall back to creating a new entry so the fact is not lost.
+          newEntries.add(
+            MemoryEntry(
+              id: generateId().replaceAll('draft_', 'mem_'),
+              title: req.title,
+              content: req.content,
+              keys: req.keys,
+              messageIds: [messageId],
+              status: 'active',
+              createdAt: DateTime.now().millisecondsSinceEpoch,
+              source: 'agentic',
+              kind: 'agent',
+            ),
+          );
+          written++;
+        }
+      } catch (e) {
+        debugPrint(
+          '[MemoryAgenticWriteService] appendFactsToEntry failed: $e',
+        );
+        errors.add('Append error on "${req.title}": $e');
+      }
+    }
+
+    if (newEntries.isNotEmpty && !shouldAbort()) {
+      try {
+        await repo.appendApprovedEntries(sessionId, newEntries);
       } catch (e) {
         debugPrint('[MemoryAgenticWriteService] appendApprovedEntries failed: $e');
         errors.add('Batch write error: $e');

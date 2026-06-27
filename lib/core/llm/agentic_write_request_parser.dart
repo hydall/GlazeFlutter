@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../models/agent_operation_record.dart';
+import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
 import '../models/tracker.dart';
 import 'memory_agentic_tools.dart';
@@ -32,10 +33,27 @@ class AgenticWriteRequestParser {
     required String recentHistoryText,
     required List<Tracker> currentTrackers,
     required CancelToken cancelToken,
+    List<MemoryEntry> existingMemories = const [],
   }) async {
     final trackersBlock = currentTrackers.isEmpty
         ? '(no active trackers)'
         : currentTrackers.map((t) => '- ${t.name}: ${t.value}').join('\n');
+
+    // NEW (patch #4): surface existing memory entries to the LLM so it can
+    // avoid duplicates and append newFacts to existing entries instead of
+    // rewriting them. Title + keys only — content is omitted to keep the
+    // prompt lean (mirrors Marinara's `<existing_entries>` block, which
+    // also omits full content). See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+    final existingBlock = existingMemories.isEmpty
+        ? '(no existing memory entries)'
+        : existingMemories
+            .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
+            .map((e) {
+              final keysStr =
+                  e.keys.isEmpty ? '' : ' [keys: ${e.keys.join(', ')}]';
+              return '- ${e.title.isNotEmpty ? e.title : e.id}$keysStr';
+            })
+            .join('\n');
 
     final prompt =
         '''You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.
@@ -45,6 +63,9 @@ $recentHistoryText
 
 Current trackers:
 $trackersBlock
+
+Existing memory entries already in the MemoryBook:
+$existingBlock
 
 Decide what to write. You have two tools:
 
@@ -58,13 +79,16 @@ Respond with ONLY a JSON object (no markdown, no explanation):
     {"name": "location", "value": "tavern"}
   ],
   "memories": [
-    {"title": "Lucy reveals the chip", "content": "...", "keys": ["Lucy", "chip"]}
+    {"title": "Lucy reveals the chip", "content": "...", "keys": ["Lucy", "chip"]},
+    {"existingEntryId": "mem_abc123", "title": "Lucy's plan", "content": "new fact only", "keys": ["Lucy"]}
   ]
 }
 
 Rules:
 - Only write trackers that CHANGED or are NEW. Don't repeat unchanged trackers.
 - Only create memory drafts for SIGNIFICANT events (not every turn).
+- If an event merely ADDS detail to an existing memory entry, write a memory request whose `existingEntryId` is the id of the existing entry and whose `content` contains only the NEW facts — do not restate or rewrite the existing entry. The pipeline will append your newFacts to the existing entry verbatim.
+- Do NOT create a new memory entry (no existingEntryId) that duplicates an existing entry's title/keys. Instead, write an append-only update with existingEntryId set.
 - If nothing is worth persisting, return: {"trackers": [], "memories": []}
 - Keep tracker values short (1-5 words).
 - Memory content should be 1-3 sentences describing what happened and why it matters.''';

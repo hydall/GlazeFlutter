@@ -154,6 +154,70 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Atomically appends [newFacts] to the `content` of the existing entry
+  /// with [entryId] in the memory book for [sessionId], and merges [newKeys]
+  /// into that entry's `keys` (case-insensitive dedup). Wraps the
+  /// read-modify-write in a transaction (database.md Rule 3).
+  ///
+  /// Append-only semantics (patch #4 — Marinara analog): the existing
+  /// entry's content is NEVER rewritten — only appended to. This preserves
+  /// prior agent writes and protects against regen-time fact loss (the
+  /// agentic write-loop at regen sees the existing entry via
+  /// `<existing_memory_entries>` in its prompt and only appends new facts).
+  ///
+  /// Returns true if the entry was found and updated, false if no entry
+  /// with [entryId] exists in the book (caller may fall back to creating
+  /// a new entry via [appendApprovedEntries]).
+  ///
+  /// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #4) and §2.2.
+  Future<bool> appendFactsToEntry({
+    required String sessionId,
+    required String entryId,
+    required String newFacts,
+    List<String> newKeys = const [],
+  }) async {
+    if (newFacts.trim().isEmpty) return false;
+    await transaction(() async {
+      final existing = await getBySessionId(sessionId);
+      if (existing == null) return;
+      final idx = existing.entries.indexWhere((e) => e.id == entryId);
+      if (idx < 0) return;
+      final entry = existing.entries[idx];
+      final appendedContent = entry.content.isEmpty
+          ? newFacts
+          : '${entry.content}\n\n$newFacts';
+      // Case-insensitive key merge — preserves existing keys and adds new
+      // ones without duplicates.
+      final existingLower = entry.keys
+          .map((k) => k.toLowerCase())
+          .toSet();
+      final mergedKeys = <String>[...entry.keys];
+      for (final k in newKeys) {
+        if (k.isEmpty) continue;
+        if (existingLower.add(k.toLowerCase())) {
+          mergedKeys.add(k);
+        }
+      }
+      final updatedEntry = entry.copyWith(
+        content: appendedContent,
+        keys: mergedKeys,
+        // Append the new messageId linkage is the caller's responsibility
+        // (the agentic write service passes [messageId] separately and
+        // sets it on the request). Here we only merge text + keys.
+      );
+      final updatedEntries = List<MemoryEntry>.from(existing.entries);
+      updatedEntries[idx] = updatedEntry;
+      await put(existing.copyWith(entries: updatedEntries));
+    });
+    // Re-read to confirm the update landed — the transaction returns
+    // true if the index lookup succeeded, false otherwise. We can't
+    // return that from inside the transaction closure cleanly, so we
+    // check the outcome here.
+    final after = await getBySessionId(sessionId);
+    if (after == null) return false;
+    return after.entries.any((e) => e.id == entryId);
+  }
+
   /// Atomically removes all `MemoryEntry` and `MemoryDraft` items whose
   /// `messageIds` contain [messageId] from the memory book for [sessionId].
   /// Wraps the read-modify-write in a transaction (database.md Rule 3).
