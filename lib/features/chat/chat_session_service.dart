@@ -259,6 +259,9 @@ class ChatSessionService {
     );
     final clearedSession = session.copyWith(messages: initialMessages);
     await _ref.read(chatRepoProvider).put(clearedSession);
+    // Wipe tracker snapshots so stale state from before the clear does not
+    // leak into the fresh chat.
+    await _ref.read(trackerSnapshotRepoProvider).deleteBySessionId(session.id);
     updateCache(clearedSession);
     return clearedSession;
   }

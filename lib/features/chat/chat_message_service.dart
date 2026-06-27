@@ -90,8 +90,16 @@ class ChatMessageService {
 
   ChatSession deleteMessage(ChatSession session, int index) {
     if (index < 0 || index >= session.messages.length) return session;
+    final messageId = session.messages[index].id;
     final newMessages = List<ChatMessage>.from(session.messages)
       ..removeAt(index);
+    // Drop tracker snapshots for the deleted message so the read path
+    // (getLatestCommitted) falls back to the previous message's committed
+    // snapshot — rollback is emergent, no explicit restore needed.
+    _ref
+        .read(trackerSnapshotRepoProvider)
+        .deleteForMessage(session.id, messageId)
+        .catchError((Object _) {});
     return _persist(session, newMessages);
   }
 
