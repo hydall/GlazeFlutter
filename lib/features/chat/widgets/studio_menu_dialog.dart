@@ -1,19 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/studio_api_config_resolver.dart';
-import '../../../core/llm/studio_decomposition_service.dart';
-import '../../../core/llm/transport/transport_factory.dart';
-import '../../../core/models/api_config.dart';
 import '../../../core/models/studio_config.dart';
-import '../../../core/models/tracker.dart';
-import '../../../core/state/db_provider.dart';
-import '../../../core/state/memory_agent_providers.dart';
-import '../../../core/state/preset_resolution.dart';
-import '../../../core/utils/time_helpers.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
-import '../../settings/api_list_provider.dart';
+import '../controllers/studio_menu_controller.dart';
 import 'post_building_menu_dialog.dart';
 
 /// Lightweight Studio tracker dialog (Phase 7.1).
@@ -29,6 +20,12 @@ import 'post_building_menu_dialog.dart';
 /// (POST-cleaner, write-loop sidecar, model selectors) — those stay in
 /// [PostBuildingMenuDialog]. This dialog only surfaces tracker state and
 /// quick toggles.
+///
+/// Business logic (config load, read-modify-write, build/regenerate pipeline,
+/// API-config resolution) lives in [StudioMenuController]. The widget keeps
+/// `build`, the private `_TrackerRow`/`_StatusChip` widgets, and the
+/// bottom-sheet / dialog interactions (`_editAgentModel`, `_editAgentShard`,
+/// `_openAdvanced`).
 class StudioMenuDialog extends ConsumerStatefulWidget {
   final String charId;
   final String sessionId;
@@ -44,181 +41,31 @@ class StudioMenuDialog extends ConsumerStatefulWidget {
 }
 
 class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
-  StudioConfig? _config;
-  List<Tracker> _trackers = const [];
-  bool _loading = true;
-  bool _loadingModels = false;
-  bool _building = false;
-  final Set<String> _regeneratingAgentIds = {};
+  late final StudioMenuController _ctrl;
 
   @override
   void initState() {
     super.initState();
+    _ctrl = StudioMenuController(ref, widget.sessionId, widget.charId);
     _load();
   }
 
   Future<void> _load() async {
-    final repo = ref.read(studioConfigRepoProvider);
-    final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
-    final trackerRepo = ref.read(trackerRepoProvider);
-    // Warm the API list so model suggestions are available when the user taps
-    // a tracker's model chip.
-    await ref.read(apiListProvider.future);
-    final config = await repo.getBySessionId(widget.sessionId);
-    // Read tracker state from snapshots (preferred) with a tracker_rows
-    // fallback for legacy sessions. Use getLatest (not just committed) so the
-    // user sees the most recent state even if not yet committed.
-    final snapshot = await snapshotRepo.getLatest(widget.sessionId);
-    final trackers =
-        snapshot?.trackers ??
-        await trackerRepo.getBySessionId(widget.sessionId);
+    await _ctrl.load();
     if (!mounted) return;
-    setState(() {
-      _config = config;
-      _trackers = trackers;
-      _loading = false;
-    });
+    setState(() {});
   }
 
   Future<void> _toggleEnabled(bool enabled) async {
-    final repo = ref.read(studioConfigRepoProvider);
-    final current = _config;
-    if (current == null) return;
-    final updated = current.copyWith(enabled: enabled);
-    await repo.upsert(updated);
+    await _ctrl.toggleEnabled(enabled);
     if (!mounted) return;
-    setState(() => _config = updated);
+    setState(() {});
   }
 
   Future<void> _toggleAgent(StudioAgent agent, bool enabled) async {
-    final repo = ref.read(studioConfigRepoProvider);
-    final current = _config;
-    if (current == null) return;
-    final agents = current.agents.map((a) {
-      if (a.id == agent.id) return a.copyWith(enabled: enabled);
-      return a;
-    }).toList();
-    final updated = current.copyWith(agents: agents);
-    await repo.upsert(updated);
+    await _ctrl.toggleAgent(agent, enabled);
     if (!mounted) return;
-    setState(() => _config = updated);
-  }
-
-  /// Resolve the [ApiConfig] a tracker runs against, mirroring
-  /// [AgentRunner]'s resolution: the Studio's `runApiConfigId` if set,
-  /// otherwise the chat's active API config. Trackers reuse this config's
-  /// provider/endpoint/key — only the model id is overridden per agent — so
-  /// the model list must come from this exact provider.
-  ApiConfig? _resolveTrackerApiConfig() {
-    return StudioApiConfigResolver(
-      apiConfigs: ref.read(apiListProvider).value ?? const <ApiConfig>[],
-      activeConfig: ref.read(activeApiConfigProvider),
-    ).resolveRunConfig(_config?.runApiConfigId ?? '');
-  }
-
-  /// Resolve the [ApiConfig] used for the one-shot build-time decomposition
-  /// LLM call. Mirrors the old `_loadContextInfo.buildApiConfig` resolution:
-  /// the Studio's `buildApiConfigId` if set, otherwise the chat's active API
-  /// config. The Studio's `buildModelOverride` is applied on top when set so
-  /// the user can run the builder on a different model than chat.
-  ApiConfig? _resolveBuildApiConfig() {
-    return StudioApiConfigResolver(
-      apiConfigs: ref.read(apiListProvider).value ?? const <ApiConfig>[],
-      activeConfig: ref.read(activeApiConfigProvider),
-    ).resolveBuildConfig(
-      _config?.buildApiConfigId ?? '',
-      _config?.buildModelOverride ?? '',
-    );
-  }
-
-  /// Build Studio trackers from the chat's effective preset (auto
-  /// decomposition). Runs the [StudioDecompositionService] against the
-  /// resolved build API, then persists the resulting agents + broadcast
-  /// blocks + preset hash. The last agent (highest order) is the generator;
-  /// all earlier agents are pre-generation trackers — the exact shape
-  /// [MemoryStudioService.runTrackerCycle] consumes.
-  Future<void> _buildStudio() async {
-    final preset = ref.read(
-      effectivePresetForChatProvider((
-        charId: widget.charId,
-        sessionId: widget.sessionId,
-      )),
-    );
-    if (preset == null) {
-      GlazeToast.show(
-        context,
-        'No preset available. Create or select a preset first.',
-      );
-      return;
-    }
-    final apiConfig = _resolveBuildApiConfig();
-    if (apiConfig == null) {
-      GlazeToast.show(
-        context,
-        'No API configured. Set one up in API settings first.',
-      );
-      return;
-    }
-
-    setState(() => _building = true);
-    try {
-      final decompositionService = ref.read(studioDecompositionServiceProvider);
-      final routingMode = (_config?.routingMode.isNotEmpty ?? false)
-          ? _config!.routingMode
-          : 'verbatim';
-      final agents = await decompositionService.decompose(
-        preset: preset,
-        sessionId: widget.sessionId,
-        apiConfig: apiConfig,
-        builderPromptTemplate: _config?.builderPromptTemplate ?? '',
-        routingMode: routingMode,
-      );
-      if (agents.isEmpty) {
-        throw Exception('Decomposition returned no agents');
-      }
-
-      // Capture cross-cutting "broadcast" blocks (output language + prose
-      // guards) verbatim so the POST-cleaner can apply the user's own rules.
-      final broadcastBlocks = decompositionService
-          .collectBroadcastBlocks(preset)
-          .map((b) {
-            final name = b.name.isNotEmpty ? b.name : b.id;
-            return '[Block: $name]\n${b.content.trim()}';
-          })
-          .where((s) => s.trim().isNotEmpty)
-          .toList();
-
-      final now = currentTimestampSeconds();
-      final existing = _config;
-      final newConfig = (existing ?? StudioConfig(sessionId: widget.sessionId))
-          .copyWith(
-            agents: agents,
-            enabled: true,
-            sourcePresetId: preset.id,
-            sourcePresetHash: StudioDecompositionService.computePresetHash(
-              preset.blocks.where((b) => b.enabled).toList(),
-            ),
-            buildApiConfigId: apiConfig.id,
-            broadcastBlocks: broadcastBlocks,
-            updatedAt: now,
-            createdAt: existing?.createdAt ?? now,
-          );
-
-      await ref.read(studioConfigRepoProvider).upsert(newConfig);
-      if (!mounted) return;
-      setState(() {
-        _config = newConfig;
-        _building = false;
-      });
-      GlazeToast.show(
-        context,
-        'Studio built: ${agents.length} agents from "${preset.name}".',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _building = false);
-      GlazeToast.show(context, 'Build failed: $e');
-    }
+    setState(() {});
   }
 
   /// Edit a tracker's model override by picking from the provider's live model
@@ -227,7 +74,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   /// from that provider's `/models` endpoint, exactly like the API settings
   /// screen, and present them in a bottom sheet.
   Future<void> _editAgentModel(StudioAgent agent) async {
-    final apiConfig = _resolveTrackerApiConfig();
+    final apiConfig = _ctrl.resolveTrackerApiConfig();
     if (apiConfig == null) {
       GlazeToast.show(
         context,
@@ -235,27 +82,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       );
       return;
     }
-    final endpoint = apiConfig.endpoint.trim();
-    final apiKey = apiConfig.apiKey.trim();
 
-    // Fetch the live model list from the provider behind a blocking spinner.
-    setState(() => _loadingModels = true);
-    List<String> models;
-    try {
-      final fetched = await pickChatTransport(
-        apiConfig.protocol,
-      ).fetchModels(endpoint: endpoint, apiKey: apiKey);
-      models =
-          fetched
-              .map((m) => (m['id'] ?? '').toString())
-              .where((id) => id.isNotEmpty)
-              .toList()
-            ..sort();
-    } catch (_) {
-      models = const [];
-    }
+    final models = await _ctrl.fetchModelsForTrackerConfig();
     if (!mounted) return;
-    setState(() => _loadingModels = false);
+    setState(() {});
 
     if (models.isEmpty) {
       GlazeToast.show(
@@ -311,17 +141,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     StudioAgent agent,
     String modelOverride,
   ) async {
-    final repo = ref.read(studioConfigRepoProvider);
-    final current = _config;
-    if (current == null) return;
-    final agents = current.agents.map((a) {
-      if (a.id == agent.id) return a.copyWith(modelOverride: modelOverride);
-      return a;
-    }).toList();
-    final updated = current.copyWith(agents: agents);
-    await repo.upsert(updated);
+    await _ctrl.setAgentModelOverride(agent, modelOverride);
     if (!mounted) return;
-    setState(() => _config = updated);
+    setState(() {});
   }
 
   /// Open a multi-line editor for one tracker's `promptShard` (manual shard
@@ -369,20 +191,16 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   }
 
   Future<void> _setAgentPromptShard(StudioAgent agent, String shard) async {
-    final repo = ref.read(studioConfigRepoProvider);
-    final current = _config;
-    if (current == null) return;
-    final agents = current.agents.map((a) {
-      if (a.id == agent.id) return a.copyWith(promptShard: shard);
-      return a;
-    }).toList();
-    final updated = current.copyWith(
-      agents: agents,
-      updatedAt: currentTimestampSeconds(),
-    );
-    await repo.upsert(updated);
+    await _ctrl.setAgentPromptShard(agent, shard);
     if (!mounted) return;
-    setState(() => _config = updated);
+    setState(() {});
+  }
+
+  Future<void> _buildStudio() async {
+    final message = await _ctrl.buildStudio();
+    if (!mounted) return;
+    setState(() {});
+    if (message.isNotEmpty) GlazeToast.show(context, message);
   }
 
   /// Regenerate one tracker's `promptShard` from its source preset blocks via
@@ -391,69 +209,10 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   /// deterministic keyword bucketing (no LLM router call); the build-time LLM
   /// map only matters for a full decompose.
   Future<void> _regenerateAgentInstruction(StudioAgent agent) async {
-    final current = _config;
-    if (current == null || _regeneratingAgentIds.contains(agent.id)) return;
-    final preset = ref.read(
-      effectivePresetForChatProvider((
-        charId: widget.charId,
-        sessionId: widget.sessionId,
-      )),
-    );
-    if (preset == null) {
-      GlazeToast.show(
-        context,
-        'No preset available. Cannot regenerate instruction.',
-      );
-      return;
-    }
-    final apiConfig = _resolveBuildApiConfig();
-    if (apiConfig == null) {
-      GlazeToast.show(
-        context,
-        'No API configured. Set one up in API settings first.',
-      );
-      return;
-    }
-
-    setState(() => _regeneratingAgentIds.add(agent.id));
-    try {
-      final decompositionService = ref.read(studioDecompositionServiceProvider);
-      final routingMode = current.routingMode.isNotEmpty
-          ? current.routingMode
-          : 'verbatim';
-      final updatedAgent = await decompositionService
-          .regenerateAgentInstruction(
-            preset: preset,
-            agent: agent,
-            apiConfig: apiConfig,
-            builderPromptTemplate: current.builderPromptTemplate,
-            routingMode: routingMode,
-          );
-      if (!mounted || _config == null) return;
-      final agents = current.agents.map((a) {
-        return a.id == agent.id ? updatedAgent.copyWith(order: a.order) : a;
-      }).toList();
-      final updatedConfig = current.copyWith(
-        agents: agents,
-        sourcePresetHash: StudioDecompositionService.computePresetHash(
-          preset.blocks.where((b) => b.enabled).toList(),
-        ),
-        buildApiConfigId: apiConfig.id,
-        updatedAt: currentTimestampSeconds(),
-      );
-      await ref.read(studioConfigRepoProvider).upsert(updatedConfig);
-      if (!mounted) return;
-      setState(() => _config = updatedConfig);
-      GlazeToast.show(
-        context,
-        'Instruction regenerated for "${agent.name.isEmpty ? agent.id : agent.name}".',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      GlazeToast.show(context, 'Regenerate failed: $e');
-    } finally {
-      if (mounted) setState(() => _regeneratingAgentIds.remove(agent.id));
-    }
+    final message = await _ctrl.regenerateAgentInstruction(agent);
+    if (!mounted) return;
+    setState(() {});
+    if (message.isNotEmpty) GlazeToast.show(context, message);
   }
 
   Future<void> _openAdvanced() async {
@@ -472,7 +231,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final agents = _config?.agents ?? const <StudioAgent>[];
+    final agents = _ctrl.config?.agents ?? const <StudioAgent>[];
     final activeAgents = agents.where((a) => a.enabled).toList()
       ..sort((a, b) => a.order.compareTo(b.order));
     final disabledAgents = agents.where((a) => !a.enabled).toList()
@@ -503,7 +262,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    if (_loading)
+                    if (_ctrl.loading)
                       const Center(child: CircularProgressIndicator())
                     else ...[
                       SwitchListTile(
@@ -516,7 +275,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                             color: cs.onSurfaceVariant,
                           ),
                         ),
-                        value: _config?.enabled ?? false,
+                        value: _ctrl.config?.enabled ?? false,
                         onChanged: (v) => _toggleEnabled(v),
                       ),
                       const SizedBox(height: 12),
@@ -548,13 +307,13 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                           ...activeAgents.map(
                             (a) => _TrackerRow(
                               agent: a,
-                              value: _trackerValueFor(a.name),
+                              value: _ctrl.trackerValueFor(a.name),
                               onToggle: (v) => _toggleAgent(a, v),
                               onEditModel: () => _editAgentModel(a),
                               onEditShard: () => _editAgentShard(a),
                               onRegenerate: () =>
                                   _regenerateAgentInstruction(a),
-                              regenerating: _regeneratingAgentIds.contains(
+                              regenerating: _ctrl.regeneratingAgentIds.contains(
                                 a.id,
                               ),
                             ),
@@ -571,13 +330,13 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                           ...disabledAgents.map(
                             (a) => _TrackerRow(
                               agent: a,
-                              value: _trackerValueFor(a.name),
+                              value: _ctrl.trackerValueFor(a.name),
                               onToggle: (v) => _toggleAgent(a, v),
                               onEditModel: () => _editAgentModel(a),
                               onEditShard: () => _editAgentShard(a),
                               onRegenerate: () =>
                                   _regenerateAgentInstruction(a),
-                              regenerating: _regeneratingAgentIds.contains(
+                              regenerating: _ctrl.regeneratingAgentIds.contains(
                                 a.id,
                               ),
                             ),
@@ -588,7 +347,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       Row(
                         children: [
                           FilledButton.tonalIcon(
-                            onPressed: _building ? null : _buildStudio,
+                            onPressed: _ctrl.building ? null : _buildStudio,
                             icon: const Icon(Icons.auto_fix_high, size: 16),
                             label: const Text('Build Studio'),
                           ),
@@ -606,12 +365,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               ),
             ),
             // Blocking overlay while models are fetched or Studio is built.
-            if (_loadingModels || _building)
+            if (_ctrl.loadingModels || _ctrl.building)
               Positioned.fill(
                 child: ColoredBox(
                   color: cs.scrim.withValues(alpha: 0.4),
                   child: Center(
-                    child: _building
+                    child: _ctrl.building
                         ? const Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -628,18 +387,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
         ),
       ),
     );
-  }
-
-  /// Find the current [Tracker.value] for [name], truncated for display.
-  /// Returns `null` if no tracker with this name exists for the session —
-  /// the agent may be configured but not yet have run.
-  String? _trackerValueFor(String name) {
-    final match = _trackers.where((t) => t.name == name).toList();
-    if (match.isEmpty) return null;
-    final value = match.first.value.trim();
-    if (value.isEmpty) return null;
-    if (value.length <= 80) return value;
-    return '${value.substring(0, 77)}...';
   }
 }
 
