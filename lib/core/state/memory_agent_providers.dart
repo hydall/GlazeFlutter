@@ -14,6 +14,7 @@ import '../llm/memory_consolidation_service.dart';
 import '../llm/memory_agentic_service.dart';
 import '../llm/memory_agentic_write_service.dart';
 import '../llm/memory_studio_service.dart';
+import '../llm/studio_decomposition_service.dart';
 import '../llm/post_cleaner_service.dart';
 import 'memory_settings_provider.dart';
 
@@ -95,6 +96,15 @@ final memoryAgenticWriteServiceProvider =
 /// Studio Mode pipeline service. Tracker-around-generator model.
 final memoryStudioServiceProvider = Provider<MemoryStudioService>((ref) {
   return MemoryStudioService(ref);
+});
+
+/// Build-time preset decomposition service. Turns a user preset into a list of
+/// [StudioAgent]s (trackers + one final generator) that slot into
+/// [MemoryStudioService.runTrackerCycle]. Last enabled agent (highest order) is
+/// the generator; all earlier agents are pre-generation trackers.
+final studioDecompositionServiceProvider =
+    Provider<StudioDecompositionService>((ref) {
+  return StudioDecompositionService(ref);
 });
 
 /// POST-cleaner service (Stage 4). Rewrites the final assistant message

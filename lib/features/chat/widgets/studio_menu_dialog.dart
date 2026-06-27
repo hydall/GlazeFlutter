@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/memory_agent_providers.dart';
+import '../../../core/state/preset_resolution.dart';
+import '../../../core/utils/time_helpers.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../settings/api_list_provider.dart';
@@ -43,6 +47,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   List<Tracker> _trackers = const [];
   bool _loading = true;
   bool _loadingModels = false;
+  bool _building = false;
 
   @override
   void initState() {
@@ -103,6 +108,117 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
       if (byRunId != null) return byRunId;
     }
     return ref.read(activeApiConfigProvider);
+  }
+
+  /// Resolve the [ApiConfig] used for the one-shot build-time decomposition
+  /// LLM call. Mirrors the old `_loadContextInfo.buildApiConfig` resolution:
+  /// the Studio's `buildApiConfigId` if set, otherwise the chat's active API
+  /// config. The Studio's `buildModelOverride` is applied on top when set so
+  /// the user can run the builder on a different model than chat.
+  ApiConfig? _resolveBuildApiConfig() {
+    final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    final buildId = _config?.buildApiConfigId ?? '';
+    final override = _config?.buildModelOverride ?? '';
+    if (buildId.isNotEmpty) {
+      final byBuildId = apiConfigs.where((c) => c.id == buildId).firstOrNull;
+      if (byBuildId != null) {
+        return override.isNotEmpty
+            ? byBuildId.copyWith(model: override)
+            : byBuildId;
+      }
+    }
+    final active = ref.read(activeApiConfigProvider);
+    if (active == null) return null;
+    return override.isNotEmpty ? active.copyWith(model: override) : active;
+  }
+
+  /// Build Studio trackers from the chat's effective preset (auto
+  /// decomposition). Runs the [StudioDecompositionService] against the
+  /// resolved build API, then persists the resulting agents + broadcast
+  /// blocks + preset hash. The last agent (highest order) is the generator;
+  /// all earlier agents are pre-generation trackers — the exact shape
+  /// [MemoryStudioService.runTrackerCycle] consumes.
+  Future<void> _buildStudio() async {
+    final preset = ref.read(
+      effectivePresetForChatProvider(
+        (charId: widget.charId, sessionId: widget.sessionId),
+      ),
+    );
+    if (preset == null) {
+      GlazeToast.show(
+        context,
+        'No preset available. Create or select a preset first.',
+      );
+      return;
+    }
+    final apiConfig = _resolveBuildApiConfig();
+    if (apiConfig == null) {
+      GlazeToast.show(
+        context,
+        'No API configured. Set one up in API settings first.',
+      );
+      return;
+    }
+
+    setState(() => _building = true);
+    try {
+      final decompositionService = ref.read(studioDecompositionServiceProvider);
+      final routingMode = (_config?.routingMode.isNotEmpty ?? false)
+          ? _config!.routingMode
+          : 'verbatim';
+      final agents = await decompositionService.decompose(
+        preset: preset,
+        sessionId: widget.sessionId,
+        apiConfig: apiConfig,
+        builderPromptTemplate: _config?.builderPromptTemplate ?? '',
+        routingMode: routingMode,
+      );
+      if (agents.isEmpty) {
+        throw Exception('Decomposition returned no agents');
+      }
+
+      // Capture cross-cutting "broadcast" blocks (output language + prose
+      // guards) verbatim so the POST-cleaner can apply the user's own rules.
+      final broadcastBlocks = decompositionService
+          .collectBroadcastBlocks(preset)
+          .map((b) {
+            final name = b.name.isNotEmpty ? b.name : b.id;
+            return '[Block: $name]\n${b.content.trim()}';
+          })
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
+
+      final now = currentTimestampSeconds();
+      final existing = _config;
+      final newConfig = (existing ?? StudioConfig(sessionId: widget.sessionId))
+          .copyWith(
+            agents: agents,
+            enabled: true,
+            sourcePresetId: preset.id,
+            sourcePresetHash: StudioDecompositionService.computePresetHash(
+              preset.blocks.where((b) => b.enabled).toList(),
+            ),
+            buildApiConfigId: apiConfig.id,
+            broadcastBlocks: broadcastBlocks,
+            updatedAt: now,
+            createdAt: existing?.createdAt ?? now,
+          );
+
+      await ref.read(studioConfigRepoProvider).upsert(newConfig);
+      if (!mounted) return;
+      setState(() {
+        _config = newConfig;
+        _building = false;
+      });
+      GlazeToast.show(
+        context,
+        'Studio built: ${agents.length} agents from "${preset.name}".',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _building = false);
+      GlazeToast.show(context, 'Build failed: $e');
+    }
   }
 
   /// Edit a tracker's model override by picking from the provider's live model
@@ -274,8 +390,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       const SizedBox(height: 12),
                       if (activeAgents.isEmpty && disabledAgents.isEmpty)
                         Text(
-                          'No trackers configured. Add agents in the Post-Building '
-                          'menu under the write-loop / generation sections.',
+                          'No trackers configured. Tap "Build Studio" to '
+                          'decompose the active preset into trackers, or add '
+                          'agents in the Post-Building menu.',
                           style: tt.bodySmall?.copyWith(
                             color: cs.onSurfaceVariant,
                           ),
@@ -324,25 +441,43 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                         ],
                       ],
                       const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: _openAdvanced,
-                          icon: const Icon(Icons.open_in_new, size: 16),
-                          label: const Text('Advanced / POST-building config'),
-                        ),
+                      Row(
+                        children: [
+                          FilledButton.tonalIcon(
+                            onPressed: _building ? null : _buildStudio,
+                            icon: const Icon(Icons.auto_fix_high, size: 16),
+                            label: const Text('Build Studio'),
+                          ),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: _openAdvanced,
+                            icon: const Icon(Icons.open_in_new, size: 16),
+                            label: const Text('Advanced'),
+                          ),
+                        ],
                       ),
                     ],
                   ],
                 ),
               ),
             ),
-            // Blocking overlay while the provider model list is fetched.
-            if (_loadingModels)
+            // Blocking overlay while models are fetched or Studio is built.
+            if (_loadingModels || _building)
               Positioned.fill(
                 child: ColoredBox(
                   color: cs.scrim.withValues(alpha: 0.4),
-                  child: const Center(child: CircularProgressIndicator()),
+                  child: Center(
+                    child: _building
+                        ? const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 12),
+                              Text('Building Studio…'),
+                            ],
+                          )
+                        : const CircularProgressIndicator(),
+                  ),
                 ),
               ),
           ],
