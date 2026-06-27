@@ -187,7 +187,16 @@ class TrackerBatcher {
         apiConfig,
         sessionId,
       );
-      final key = '${resolved.protocol}|${resolved.model}';
+      // Feature 6 — postProcessingDataKey: the grouping key now includes
+      // the agent's `phase`. A pre-generation tracker and a post-processing
+      // tracker on the same `(provider, model)` must NOT be batched together:
+      // the post-processing one receives the generator's `mainResponse` in
+      // its context, while the pre-gen one does not — batching them would
+      // produce a single shared prompt that is wrong for at least one of
+      // them. All pre-gen agents share the `|pre_generation` suffix (uniform,
+      // so they group exactly as before); all post-gen agents share
+      // `|post_processing`. Port of Marinara `postProcessingDataKey`.
+      final key = '${resolved.protocol}|${resolved.model}|${agent.phase}';
       groups.putIfAbsent(key, () => []).add(agent);
       resolvedByKey[key] = resolved;
     }

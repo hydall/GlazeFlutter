@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'studio_config.freezed.dart';
@@ -176,8 +177,37 @@ abstract class StudioAgent with _$StudioAgent {
     /// Default 5 (matches `DEFAULT_AGENT_CONTEXT_SIZE`). 0 = scan the
     /// entire available history (not recommended — expensive and stale).
     @Default(5) int activationScanDepth,
+
+    /// Which phase this agent runs in. `pre_generation` (default) = runs
+    /// before the final generator, produces a brief that feeds into the
+    /// generator's prompt. `post_processing` = runs after the generator
+    /// produces its response, receives the response as `mainResponse`, and
+    /// can produce an edited/rewritten version. Port of Marinara
+    /// `AgentPhase`. The final generator (last enabled agent with
+    /// `phase: 'pre_generation'`) always runs. Post-processing agents run
+    /// after, in their own batch group (the `postProcessingDataKey` —
+    /// pre-gen and post-gen agents on the same `(provider, model)` do NOT
+    /// batch together, because the post-gen one needs `mainResponse` in
+    /// its context). See docs/PLAN_AGENTIC_STUDIO.md §5.7.1 + Feature 6.
+    @Default('pre_generation') String phase,
   }) = _StudioAgent;
 
   factory StudioAgent.fromJson(Map<String, dynamic> json) =>
       _$StudioAgentFromJson(json);
+
+  /// Forces certain agent types to a specific phase regardless of user
+  /// config. Port of Marinara `normalizeAgentPhaseForType`. Currently a
+  /// no-op stub: GlazeFlutter agents are arbitrary user-defined (no
+  /// built-in typed controllers like Marinara's `prose-guardian` /
+  /// `continuity`), so the user's configured [configuredPhase] is always
+  /// respected. When built-in typed agents are added in the future, this
+  /// is where `prose-guardian` and `continuity` would be forced to
+  /// `post_processing`. Kept as a named, documented seam so the future
+  /// change is localized to this method.
+  static String normalizeAgentPhaseForType(
+    String agentId,
+    String configuredPhase,
+  ) {
+    return configuredPhase;
+  }
 }

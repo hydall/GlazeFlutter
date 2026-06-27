@@ -30,6 +30,7 @@ class _ControllerSpec {
   final int maxTokens;
   final int timeoutMs;
   final bool isFinal;
+  final String phase;
 
   const _ControllerSpec({
     required this.id,
@@ -43,6 +44,15 @@ class _ControllerSpec {
     required this.maxTokens,
     required this.timeoutMs,
     this.isFinal = false,
+    // Feature 6 — which phase this controller's agent runs in. Default
+    // `pre_generation` (runs before the final generator, produces a brief).
+    // `post_processing` = runs after the generator, receives its response.
+    // No built-in post-processing specs exist yet (the user's preset blocks
+    // route to pre-gen trackers; post-processing is a future expansion), but
+    // the field is here so the decomposition engine CAN produce
+    // post-processing agents when such specs are added without touching the
+    // spec class again. See docs/PLAN_AGENTIC_STUDIO.md §5.7.1 + Feature 6.
+    this.phase = 'pre_generation',
   });
 }
 
@@ -462,6 +472,7 @@ class StudioDecompositionService {
       sourceBlockNames: _sourceBlockNames(blocks),
       refreshPolicy: spec.refreshPolicy,
       invalidationSignals: spec.invalidationSignals,
+      phase: spec.phase,
     );
   }
 

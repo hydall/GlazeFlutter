@@ -80,8 +80,28 @@ class MemoryStudioService {
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
-      final finalAgent = agents.last;
-      final allTrackers = agents.sublist(0, agents.length - 1);
+      // Feature 6 — 3-phase split. Agents are partitioned by their `phase`
+      // field (normalized via `StudioAgent.normalizeAgentPhaseForType`):
+      //   - pre-gen trackers: `phase == 'pre_generation'` and NOT the final
+      //     generator. Run first (batched), produce briefs → feed the generator.
+      //   - the final generator: the LAST enabled pre-gen agent. Extends the
+      //     old "last enabled agent = generator" rule to "last enabled
+      //     PRE-GEN agent = generator" — post-gen agents are excluded from
+      //     generator selection.
+      //   - post-gen trackers: `phase == 'post_processing'`. Run AFTER the
+      //     generator, receive its `mainResponse` in their context, and can
+      //     produce an edited/rewritten version. The final post-gen tracker's
+      //     non-empty output replaces the generator's response.
+      // Fallback: if NO pre-gen agent is marked (e.g. all are post-processing),
+      // the last enabled agent is treated as the generator regardless of
+      // phase, so the pipeline never loses its writer. Documented + tested.
+      final split = splitAgentsByPhase(agents);
+      final finalAgent = split.finalAgent;
+      if (finalAgent == null) {
+        return const StudioPipelineResult(status: 'disabled', response: '');
+      }
+      final preGenTrackers = split.preGenTrackers;
+      final postGenTrackers = split.postGenTrackers;
 
       final sceneKey = _sceneCacheKey(promptPayload);
       final turnIndex = _assistantTurnCount(promptPayload);
@@ -96,7 +116,7 @@ class MemoryStudioService {
           .where((m) => m.isHistory)
           .map((m) => m.content)
           .toList();
-      final dueTrackers = allTrackers.where((a) {
+      final dueTrackers = preGenTrackers.where((a) {
         final interval = a.runInterval <= 0 ? 1 : a.runInterval;
         if (turnIndex % interval != 0) return false;
         if (a.activationKeywords.isEmpty) return true;
@@ -193,7 +213,7 @@ class MemoryStudioService {
       }
 
       // Re-assemble briefs in the original pipeline order (cached + fetched),
-      // matching `allTrackers` order. Trackers skipped by runInterval are
+      // matching `preGenTrackers` order. Trackers skipped by runInterval are
       // omitted entirely — the final generator sees only the due briefs.
       final briefs = <StudioStageBrief>[];
       for (final agent in dueTrackers) {
@@ -225,12 +245,67 @@ class MemoryStudioService {
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
+      // The generator's response. Post-processing trackers (Feature 6) may
+      // rewrite this.
+      var mainResponse = agentResult.text;
+      var mainReasoning = agentResult.reasoning;
+      final rawResponseJson = agentResult.rawResponseJson;
+
+      // Feature 6 — post-processing phase. Post-gen trackers run AFTER the
+      // generator, receive `mainResponse` in their context, and can produce
+      // an edited/rewritten version. They run sequentially in `order`, each
+      // receiving the current `mainResponse` (the output of the previous
+      // post-gen tracker, or the generator's response for the first one). The
+      // final post-gen tracker's non-empty output replaces `mainResponse`. If
+      // a post-gen tracker fails or produces empty output, `mainResponse`
+      // stands unchanged for that step. Post-gen trackers do NOT stream to
+      // the UI — they run after the generator completes, and only their final
+      // result (if it replaces the response) is returned. Port of Marinara
+      // `prose-guardian` / `continuity` post-processing model.
+      final postBriefs = <StudioStageBrief>[];
+      for (final agent in postGenTrackers) {
+        if (token.isCancelled) {
+          return const StudioPipelineResult(status: 'aborted', response: '');
+        }
+        // runInterval / activationKeywords apply to post-gen trackers too —
+        // a post-gen tracker can be gated the same way as a pre-gen one.
+        final interval = agent.runInterval <= 0 ? 1 : agent.runInterval;
+        if (turnIndex % interval != 0) continue;
+        if (agent.activationKeywords.isNotEmpty &&
+            !matchesActivationKeywords(
+              agent.activationKeywords,
+              historyForScan,
+              agent.activationScanDepth,
+            )) {
+          continue;
+        }
+        final result = await _runPostProcessingTracker(
+          agent: agent,
+          mainResponse: mainResponse,
+          promptResult: promptResult,
+          promptPayload: promptPayload,
+          apiConfig: apiConfig,
+          config: config,
+          sessionId: sessionId,
+          cancelToken: token,
+        );
+        postBriefs.add(result);
+        if (result.status == 'ok' && result.brief.trim().isNotEmpty) {
+          // This post-gen tracker produced a rewrite — it becomes the new
+          // `mainResponse` for the next post-gen tracker (chained rewrites)
+          // and for the final returned response. Reasoning is dropped: the
+          // rewrite is the user-visible output, not a reasoning trace.
+          mainResponse = result.brief.trim();
+          mainReasoning = '';
+        }
+      }
+
       return StudioPipelineResult(
         status: 'ok',
-        response: agentResult.text,
-        reasoning: agentResult.reasoning,
-        rawResponseJson: agentResult.rawResponseJson,
-        stageBriefs: briefs,
+        response: mainResponse,
+        reasoning: mainReasoning,
+        rawResponseJson: rawResponseJson,
+        stageBriefs: [...briefs, ...postBriefs],
       );
     } on TimeoutException catch (e) {
       _log('tracker cycle timeout session=$sessionId error=${e.message}');
@@ -376,7 +451,73 @@ class MemoryStudioService {
     }
   }
 
-  /// Run one batch group: build the shared messages (trimmed to
+  /// Feature 6 — run ONE post-processing tracker. The tracker receives the
+  /// generator's [mainResponse] in its context (as an extra
+  /// `<assistant_response>` block appended to its `dynamic_context`) and
+  /// can produce an edited/rewritten version. Its raw output is returned as
+  /// a `StudioStageBrief` whose `brief` field is the rewritten text (NOT
+  /// sanitized through the brief-shape contract — a post-gen tracker IS
+  /// allowed to produce prose, since its job is to rewrite the response).
+  /// The caller decides whether the rewrite replaces `mainResponse`.
+  ///
+  /// Failure isolation: a post-gen tracker failure (timeout, transport) is
+  /// caught and returned as a failed brief so the pipeline keeps going with
+  /// the previous `mainResponse` intact. This mirrors the pre-gen tracker
+  /// failure isolation (Phase 5.7.5), since a single post-gen tracker
+  /// crashing should not lose the generator's already-good response.
+  Future<StudioStageBrief> _runPostProcessingTracker({
+    required StudioAgent agent,
+    required String mainResponse,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required StudioConfig config,
+    required String sessionId,
+    required CancelToken cancelToken,
+  }) async {
+    try {
+      final messages = _buildAgentMessages(
+        agent: agent,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        config: config,
+        priorBriefs: const [],
+        isFinalResponse: false,
+        mainResponse: mainResponse,
+      );
+      final runner = _ref.read(agentRunnerProvider);
+      final result = await runner.runAgent(
+        agent: agent,
+        messages: messages,
+        apiConfig: apiConfig,
+        sessionId: sessionId,
+        isFinalResponse: false,
+        cancelToken: cancelToken,
+        onIntermediateUpdate: null,
+      );
+      // Post-gen trackers produce prose (a rewrite), NOT a brief — skip the
+      // brief-shape sanitization that pre-gen trackers go through. Empty
+      // output means "no edit needed" → caller keeps `mainResponse`.
+      final text = result.text.trim();
+      return StudioStageBrief(
+        agentId: agent.id,
+        agentName: agent.name,
+        brief: text,
+        status: text.isNotEmpty ? 'ok' : 'error',
+        error: text.isEmpty ? 'post-processing tracker produced empty output' : null,
+      );
+    } on AgentRunFailedException catch (e) {
+      return StudioStageBrief(
+        agentId: e.agentId,
+        agentName: e.agentName,
+        brief: '',
+        status: 'error',
+        error: e.reason,
+      );
+    }
+  }
+
+
   /// [batchContextSize] = max contextSize across the group), per-agent task
   /// text, the batched system prompt, fire a single LLM request, parse the
   /// `<result>` blocks, and run the in-batch invalid-JSON retry (Phase 5.1
@@ -775,6 +916,11 @@ class MemoryStudioService {
     required StudioConfig config,
     required List<StudioStageBrief> priorBriefs,
     required bool isFinalResponse,
+    // Feature 6 — when non-empty, this is a post-processing tracker. The
+    // generator's response is appended as an `<assistant_response>` block at
+    // the END of the message list so the tracker can rewrite it. Pre-gen
+    // trackers and the generator pass this empty (default).
+    String mainResponse = '',
   }) {
     final studioPreset = studioRequestPresetById(
       isFinalResponse ? config.finalStudioPresetId : config.agentStudioPresetId,
@@ -884,6 +1030,27 @@ class MemoryStudioService {
             });
           }
       }
+    }
+
+    // Feature 6 — post-processing trackers receive the generator's response
+    // as an `<assistant_response>` block appended at the END of the message
+    // list. This is the Marinara `context.mainResponse` injection: the
+    // tracker's prompt shard instructs it to rewrite/edit the response, and
+    // the response itself is provided here as read-only source material. We
+    // append rather than prepend so the tracker's instructions (earlier
+    // blocks) come first and the response-to-edit is the last thing the
+    // model sees before generating.
+    if (mainResponse.trim().isNotEmpty) {
+      messages.add({
+        'role': 'user',
+        'content':
+            '<assistant_response>\n${mainResponse.trim()}\n</assistant_response>\n\n'
+            'The text above inside <assistant_response> is the generator\'s '
+            'current reply. Edit, rewrite, or fix it according to your '
+            'instructions. Output ONLY the final rewritten reply (no '
+            'explanations, no <assistant_response> wrapper, no markdown '
+            'fences). If no edit is needed, output the text verbatim.',
+      });
     }
 
     return messages;
@@ -1954,6 +2121,74 @@ Rules:
     return false;
   }
 
+  /// Feature 6 — split a sorted (by `order`) list of enabled agents into the
+  /// three pipeline phases. Exposed `@visibleForTesting` so the splitting
+  /// logic is unit-testable without a live `runTrackerCycle`.
+  /// (`runTrackerCycle`'s 3-phase split is too entangled with caching /
+  /// batcher / AgentRunner to mock cleanly; the split itself is pure.)
+  ///
+  /// Rules:
+  /// - Each agent's `phase` is first normalized via
+  ///   [StudioAgent.normalizeAgentPhaseForType] (currently a no-op).
+  /// - `postGenTrackers` = agents whose normalized phase is
+  ///   `'post_processing'`, in `order`.
+  /// - `preGenTrackers` = agents whose normalized phase is
+  ///   `'pre_generation'`, EXCLUDING the final generator, in `order`.
+  /// - `finalAgent` = the LAST enabled pre-gen agent (the generator). This
+  ///   extends the old "last enabled agent = generator" rule to "last enabled
+  ///   PRE-GEN agent = generator" — post-gen agents are excluded from
+  ///   generator selection.
+  /// - Fallback: if NO pre-gen agent exists (e.g. all are post-processing),
+  ///   the last enabled agent overall is treated as the generator regardless
+  ///   of its phase, so the pipeline never loses its writer. In that fallback
+  ///   the chosen generator is also removed from `postGenTrackers` (it
+  ///   cannot be both generator and post-gen tracker).
+  @visibleForTesting
+  static AgentPhaseSplit splitAgentsByPhase(List<StudioAgent> agents) {
+    if (agents.isEmpty) {
+      return const AgentPhaseSplit(
+        preGenTrackers: [],
+        postGenTrackers: [],
+        finalAgent: null,
+      );
+    }
+    final normalized = agents.map((a) {
+      final phase = StudioAgent.normalizeAgentPhaseForType(a.id, a.phase);
+      return (agent: a, phase: phase);
+    }).toList();
+
+    final preGen = normalized
+        .where((e) => e.phase == 'pre_generation')
+        .map((e) => e.agent)
+        .toList();
+    final postGen = normalized
+        .where((e) => e.phase == 'post_processing')
+        .map((e) => e.agent)
+        .toList();
+
+    if (preGen.isNotEmpty) {
+      // Last pre-gen agent = generator; the rest are pre-gen trackers.
+      final finalAgent = preGen.last;
+      final preGenTrackers = preGen.sublist(0, preGen.length - 1);
+      return AgentPhaseSplit(
+        preGenTrackers: preGenTrackers,
+        postGenTrackers: postGen,
+        finalAgent: finalAgent,
+      );
+    }
+
+    // Fallback: no pre-gen agent at all. Use the last enabled agent overall
+    // as the generator, regardless of phase, and remove it from the post-gen
+    // list so it isn't run twice.
+    final finalAgent = agents.last;
+    final filteredPostGen = postGen.where((a) => a.id != finalAgent.id).toList();
+    return AgentPhaseSplit(
+      preGenTrackers: const [],
+      postGenTrackers: filteredPostGen,
+      finalAgent: finalAgent,
+    );
+  }
+
   void _log(String message) {
     debugPrint('[Studio] $message');
   }
@@ -2105,4 +2340,19 @@ class _ControllerScope {
   final String skip;
 
   const _ControllerScope({required this.owns, required this.skip});
+}
+
+/// Feature 6 — the 3-phase split of a sorted list of enabled agents. Produced
+/// by [MemoryStudioService.splitAgentsByPhase]. Exposed for unit testing the
+/// split logic without a live `runTrackerCycle`.
+class AgentPhaseSplit {
+  final List<StudioAgent> preGenTrackers;
+  final List<StudioAgent> postGenTrackers;
+  final StudioAgent? finalAgent;
+
+  const AgentPhaseSplit({
+    required this.preGenTrackers,
+    required this.postGenTrackers,
+    required this.finalAgent,
+  });
 }
