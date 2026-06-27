@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -15,179 +15,7 @@ import 'studio_block_classifier.dart';
 import 'studio_block_expander.dart';
 import 'studio_block_router.dart';
 import 'studio_build_llm_client.dart';
-
-class _ControllerSpec {
-  final String id;
-  final String name;
-  final String purpose;
-  final String outputContract;
-  final String fallbackPrompt;
-  final String refreshPolicy;
-  final List<String> invalidationSignals;
-  final double temperature;
-  final int maxTokens;
-  final int timeoutMs;
-  final bool isFinal;
-  final String phase;
-
-  const _ControllerSpec({
-    required this.id,
-    required this.name,
-    required this.purpose,
-    required this.outputContract,
-    required this.fallbackPrompt,
-    required this.refreshPolicy,
-    required this.invalidationSignals,
-    required this.temperature,
-    required this.maxTokens,
-    required this.timeoutMs,
-    this.isFinal = false,
-    // Feature 6 — which phase this controller's agent runs in. Default
-    // `pre_generation` (runs before the final generator, produces a brief).
-    // `post_processing` = runs after the generator, receives its response.
-    // No built-in post-processing specs exist yet (the user's preset blocks
-    // route to pre-gen trackers; post-processing is a future expansion), but
-    // the field is here so the decomposition engine CAN produce
-    // post-processing agents when such specs are added without touching the
-    // spec class again. See docs/PLAN_AGENTIC_STUDIO.md §5.7.1 + Feature 6.
-    // ignore: unused_element_parameter
-    this.phase = 'pre_generation',
-  });
-}
-
-const _controllerSpecs = <_ControllerSpec>[
-  _ControllerSpec(
-    id: 'continuity',
-    name: 'Continuity Controller',
-    purpose:
-        'Track source-of-truth facts, recent chat state, unresolved threads, who knows what, and contradictions to avoid.',
-    outputContract:
-        'At chat time, output a compact continuity brief only: facts, constraints, risks, and next-turn continuity notes. No scene prose.',
-    fallbackPrompt:
-        'Review character, persona, scenario, memory, summary, lore, and recent chat. Produce a compact continuity brief with established facts, who knows what, active constraints, unresolved threads, and contradictions to avoid. Do not write scene prose or dialogue.',
-    refreshPolicy: 'turn',
-    invalidationSignals: ['last_user_message_changed', 'memory_changed'],
-    temperature: 0.3,
-    maxTokens: 1600,
-    timeoutMs: 60000,
-  ),
-  _ControllerSpec(
-    id: 'agency',
-    name: 'Agency & Character Controller',
-    purpose:
-        'Enforce user sovereignty, character autonomy, character psychology, subjective knowledge, and believable behavior.',
-    outputContract:
-        'At chat time, output actionable constraints for user agency and character behavior. No scene prose, no drafted actions, no dialogue. You may add an optional "Options" list of 1-3 branchable character-behavior approaches the final writer can pick from (describe the approach only, e.g. "let the character deflect" vs "let a crack of honesty show"); never write ready-made lines or actions.',
-    fallbackPrompt:
-        'Enforce user autonomy and character authenticity. Never write the user\'s dialogue, actions, thoughts, feelings, intentions, or decisions. Characters act only from established knowledge, psychology, history, physical limits, and current pressure. Produce constraints only, not prose.',
-    refreshPolicy: 'scene',
-    invalidationSignals: ['active_cast_changed', 'relationship_state_changed'],
-    temperature: 0.3,
-    maxTokens: 1400,
-    timeoutMs: 60000,
-  ),
-  _ControllerSpec(
-    id: 'narrative',
-    name: 'Narrative / Pacing / Style Controller',
-    purpose:
-        'Convert narrative mode, style, length, POV, pacing, sensory budget, tone, and genre rules into a controllable response contract. Set response length adaptively to scene tempo: the default target is 6-8 paragraphs; shorten in fast, dynamic, action, or rapid back-and-forth dialogue scenes so the user can react sooner; lengthen toward and beyond the default in slow, descriptive, introspective, or transitional scenes.',
-    outputContract:
-        'At chat time, output a brief with target length, paragraph budget, POV/camera, style mode, sensory budget, beat structure, dialogue/action balance, opening constraint, and stopping point. No scene prose. Choose the paragraph budget by reading the current scene tempo: default 6-8 paragraphs; fewer (around 2-4) in fast/dynamic/action/quick-dialogue beats to hand the turn back to the user; more (8+) in slow, atmospheric, or descriptive beats. Always state both the chosen number and why this tempo warrants it in one short note. You may add an optional "Options" list of 1-3 branchable structural/style approaches the final writer can pick from (describe the approach only, e.g. "open on a physical action" vs "open on a single line of dialogue"); never write ready-made prose.',
-    fallbackPrompt:
-        'Extract narrative mode, pacing, style, length, POV, tone, genre, and sensory budget into a concise response contract. Set length adaptively to scene tempo: default target 6-8 paragraphs; shorten to about 2-4 in fast, dynamic, action, or rapid-dialogue scenes so the user can react; lengthen to 8+ in slow, descriptive, or introspective scenes. Include dialogue/action balance and where the response should stop. Do not draft the reply.',
-    refreshPolicy: 'scene',
-    invalidationSignals: ['scene_changed', 'tone_changed', 'pacing_changed'],
-    temperature: 0.3,
-    maxTokens: 1600,
-    timeoutMs: 60000,
-  ),
-  _ControllerSpec(
-    id: 'dialogue',
-    name: 'Dialogue Controller',
-    purpose:
-        'Control dialogue cadence, speech texture, monologue segmentation, interaction balance, and when silence is appropriate.',
-    outputContract:
-        'At chat time, output dialogue guidance only: who may plausibly speak, desired dialogue ratio, speech constraints, and silence constraints. No drafted lines. You may add an optional "Options" list of 1-3 branchable dialogue approaches the final writer can pick from (describe the approach only, e.g. "answer with silence and a gesture" vs "give one clipped deflecting line"); never write the actual dialogue.',
-    fallbackPrompt:
-        'Guide dialogue cadence and interaction. Prefer purposeful speech when characters can plausibly speak; segment monologues naturally; preserve character voice and subtext. Do not draft dialogue.',
-    refreshPolicy: 'turn',
-    invalidationSignals: [
-      'last_user_message_changed',
-      'active_speaker_changed',
-    ],
-    temperature: 0.3,
-    maxTokens: 1200,
-    timeoutMs: 60000,
-  ),
-  _ControllerSpec(
-    id: 'guard',
-    name: 'Anti-Loop & Prose Guard',
-    purpose:
-        'Enforce anti-loop, anti-echo, banlists, anti-cliche, anti-slop, no-tells, and stable prose quality rules.',
-    outputContract:
-        'At chat time, output a compact guard checklist and forbidden items for this turn. No rewritten scene prose.',
-    fallbackPrompt:
-        'Check the last user message and recent assistant replies for repetition risks. Enforce anti-echo, anti-loop, banlists, forbidden cliches, and prose quality constraints. Produce a guard brief only.',
-    refreshPolicy: 'turn',
-    invalidationSignals: [
-      'last_3_replies_changed',
-      'last_user_message_changed',
-    ],
-    temperature: 0.2,
-    maxTokens: 1400,
-    timeoutMs: 60000,
-  ),
-  _ControllerSpec(
-    id: 'world',
-    name: 'World / NPC Controller',
-    purpose:
-        'Control living-world texture, NPC ecology, offscreen pressure, public-space activity, and background consequences without stealing focus.',
-    outputContract:
-        'At chat time, output world/NPC guidance only: active NPCs, off-focus thread, environmental pressure, and what not to add. No prose. You may add an optional "Options" list of 1-3 branchable world-texture approaches the final writer can pick from (describe the approach only, e.g. "let an offscreen sound intrude" vs "keep the world still and pressureless"); never write ready-made prose.',
-    fallbackPrompt:
-        'Guide living-world and NPC activity. NPCs should act only when the scene supports it and should affect the scene without stealing focus. Produce practical world-state guidance only.',
-    refreshPolicy: 'scene',
-    invalidationSignals: [
-      'scene_changed',
-      'location_changed',
-      'active_cast_changed',
-    ],
-    temperature: 0.3,
-    maxTokens: 1200,
-    timeoutMs: 60000,
-  ),
-  _ControllerSpec(
-    id: 'meta',
-    name: 'Meta-Weaver / Lumia Policy',
-    purpose:
-        'Preserve Lumia/meta-weaver/OOC behavior as silent policy and OOC interface rules, not as a scene-writing agent.',
-    outputContract:
-        'At chat time, output only meta-policy constraints if needed. Never write in-scene prose. Lumia remains silent during normal RP unless explicitly addressed OOC.',
-    fallbackPrompt:
-        'Apply configured meta-weaver or OOC persona rules silently during normal RP when such a persona exists. Do not expose hidden reasoning or write meta-persona scene prose. If no meta/OOC persona is configured, this controller should remain inert and may be disabled by the user.',
-    refreshPolicy: 'static',
-    invalidationSignals: ['preset_changed'],
-    temperature: 0.2,
-    maxTokens: 1200,
-    timeoutMs: 60000,
-  ),
-  _ControllerSpec(
-    id: 'final',
-    name: 'Main Responder',
-    purpose:
-        'Write the final visible RP response using the full prompt and the prior controller briefs.',
-    outputContract:
-        'At chat time, output only the final visible RP response. Obey all controller briefs and final formatting/content constraints.',
-    fallbackPrompt:
-        'Write the final RP response using the assembled chat prompt, character/scenario/persona instructions, memory, and prior Studio controller briefs. Obey user agency, character truth, dialogue, pacing, style, formatting, and guard constraints. Output only the final visible reply.',
-    refreshPolicy: 'turn',
-    invalidationSignals: ['last_user_message_changed'],
-    temperature: 0.8,
-    maxTokens: 8000,
-    timeoutMs: 90000,
-    isFinal: true,
-  ),
-];
+import 'studio_controller_ontology.dart';
 
 /// LLM-powered preset decomposition service for Studio Mode.
 ///
@@ -272,7 +100,7 @@ class StudioDecompositionService {
     final now = currentTimestampSeconds();
     final assignments = _assignBlocks(enabledBlocks, routingMapResult);
     final agents = <StudioAgent>[];
-    for (final spec in _controllerSpecs) {
+    for (final spec in StudioControllerOntology.specs) {
       final blocks = assignments[spec.id] ?? const <PresetBlock>[];
       agents.add(
         await _buildAgentForSpec(
@@ -356,7 +184,7 @@ class StudioDecompositionService {
     final expandedBlocks = expandBlocksForRouting(allEnabled)
         .where((b) => !isReasoningBlock(b))
         .toList();
-    final spec = _specForAgent(agent);
+    final spec = StudioControllerOntology.specForAgent(agent);
     // Single-agent regen reuses deterministic bucketing (no LLM router call);
     // the build-time LLM map only matters for a full decompose().
     final assignments = _assignBlocks(expandedBlocks, BlockRoutingMap.empty);
@@ -383,7 +211,7 @@ class StudioDecompositionService {
   }
 
   Future<StudioAgent> _buildAgentForSpec({
-    required _ControllerSpec spec,
+    required StudioControllerSpec spec,
     required List<PresetBlock> blocks,
     required String sessionId,
     required int index,
@@ -420,7 +248,7 @@ class StudioDecompositionService {
   }
 
   Future<String> _synthesizePromptShard({
-    required _ControllerSpec spec,
+    required StudioControllerSpec spec,
     required List<PresetBlock> blocks,
     ApiConfig? apiConfig,
     String builderPromptTemplate = '',
@@ -475,7 +303,7 @@ class StudioDecompositionService {
   /// intermediary LLM distorts the user's instructions. See
   /// docs/PLAN_AGENTIC_STUDIO.md §11.
   String _synthesizeRoutedShard({
-    required _ControllerSpec spec,
+    required StudioControllerSpec spec,
     required List<PresetBlock> blocks,
   }) {
     final parts = <String>[];
@@ -498,7 +326,7 @@ class StudioDecompositionService {
   }
 
   String _buildControllerPrompt({
-    required _ControllerSpec spec,
+    required StudioControllerSpec spec,
     required List<PresetBlock> blocks,
     String builderPromptTemplate = '',
   }) {
@@ -591,17 +419,6 @@ $blocksSummary''';
     return '${text.substring(0, limit)}...';
   }
 
-  _ControllerSpec _specForAgent(StudioAgent agent) {
-    final text = '${agent.id}\n${agent.name}'.toLowerCase();
-    return _controllerSpecs.firstWhere(
-      (spec) =>
-          text.contains(spec.id) || text.contains(spec.name.toLowerCase()),
-      orElse: () => agent.order >= _controllerSpecs.length - 1
-          ? _controllerSpecs.last
-          : _controllerSpecs[agent.order.clamp(0, _controllerSpecs.length - 1)],
-    );
-  }
-
   /// Assigns blocks to controller buckets. Prefers the LLM [routing] map when
   /// it provides a valid bucket for a block; otherwise falls back per-block to
   /// the deterministic keyword bucketing. This keeps Studio building even if
@@ -620,8 +437,8 @@ $blocksSummary''';
     List<PresetBlock> blocks,
     BlockRoutingMap routing,
   ) {
-    final validIds = _controllerSpecs.map((s) => s.id).toSet();
-    final map = {for (final spec in _controllerSpecs) spec.id: <PresetBlock>[]};
+    final validIds = StudioControllerOntology.specs.map((s) => s.id).toSet();
+    final map = {for (final spec in StudioControllerOntology.specs) spec.id: <PresetBlock>[]};
     for (final block in blocks) {
       // Honor an explicit LLM drop decision (reasoning/CoT template).
       if (routing.isDropped(block.id)) continue;
@@ -655,7 +472,7 @@ $blocksSummary''';
     CancelToken? cancelToken,
   }) async {
     final buckets = [
-      for (final spec in _controllerSpecs)
+      for (final spec in StudioControllerOntology.specs)
         RouterBucket(id: spec.id, name: spec.name, purpose: spec.purpose),
     ];
     final router = StudioBlockRouter(_callLlm);
@@ -796,3 +613,4 @@ Assigned preset blocks:
     debugPrint('[StudioBuild] $message');
   }
 }
+
