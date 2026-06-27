@@ -152,9 +152,10 @@ Studio Mode (tracker-around-generator, Phase 5+):
   bound to multiple chat sessions. Do not treat Studio config as purely
   session-local state.
 - POST-processing is separate from the tracker pipeline: the POST-cleaner
-  runs after the full reply, produces a green swipe diff via
-  `appendCleanerSwipe`, without hold mode. Do NOT add hold mode (Phase 1.3
-  decision).
+  runs after the full reply and writes a blue `'cleaned'` agent sub-swipe
+  via `ChatRepo.appendAgentSwipe(kind: 'cleaned')`, preserving the original
+  `'final'` as the parent. Hold mode (Marinara) is NOT implemented (Phase
+  1.3 decision). See INV-ST4.
 
 ---
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import 'post_cleaner_line_diff.dart';
@@ -8,16 +9,14 @@ import 'post_cleaner_line_diff.dart';
 /// Side-by-side diff viewer for POST-cleaner results.
 ///
 /// Loads the message from the DB by [sessionId]/[messageId], extracts the
-/// current and previous green swipes, and renders them in two parallel
+/// `final` and `cleaned` agent swipes, and renders them in two parallel
 /// scrollable columns with per-line diff highlighting:
 /// - red background + `−` prefix: line removed (left side) or changed
 /// - green background + `+` prefix: line added (right side) or changed
 /// - no highlight: unchanged lines (shown on both sides)
 ///
 /// Opened from the Agentic Operations Log when the user taps "View Diff" on a
-/// postCleaner operation. The "cleaned" text is the current green swipe
-/// (the last one appended by `appendCleanerSwipe`); the "original" text is
-/// the previous green swipe.
+/// postCleaner operation.
 class PostCleanerDiffDialog extends ConsumerStatefulWidget {
   final String sessionId;
   final String messageId;
@@ -48,8 +47,8 @@ class PostCleanerDiffDialog extends ConsumerStatefulWidget {
 class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
   bool _loading = true;
   String? _error;
-  String? _originalText;
-  String? _cleanedText;
+  AgentSwipe? _original;
+  AgentSwipe? _cleaned;
   DiffResult _diff = const DiffResult.empty();
   final ScrollController _leftController = ScrollController();
   final ScrollController _rightController = ScrollController();
@@ -69,7 +68,9 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
 
   Future<void> _loadMessage() async {
     try {
-      final session = await ref.read(chatRepoProvider).getById(widget.sessionId);
+      final session = await ref
+          .read(chatRepoProvider)
+          .getById(widget.sessionId);
       if (session == null) {
         if (!mounted) return;
         setState(() {
@@ -78,7 +79,9 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         });
         return;
       }
-      final msg = session.messages.where((m) => m.id == widget.messageId).firstOrNull;
+      final msg = session.messages
+          .where((m) => m.id == widget.messageId)
+          .firstOrNull;
       if (msg == null) {
         if (!mounted) return;
         setState(() {
@@ -88,30 +91,63 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         return;
       }
 
-      // The POST-cleaner appends the cleaned text as a NEW green swipe via
-      // `appendCleanerSwipe`. So the "cleaned" text is the current swipe
-      // (msg.swipes[msg.swipeId]) and the "original" is the previous swipe
-      // (msg.swipes[msg.swipeId - 1]). If there's only one swipe (or the
-      // current is at index 0), there's no diff to show.
-      String? original;
-      String? cleaned;
-      if (msg.swipeId > 0 &&
-          msg.swipes.length > msg.swipeId &&
-          msg.swipes[msg.swipeId].isNotEmpty) {
-        cleaned = msg.swipes[msg.swipeId];
-        if (msg.swipeId - 1 < msg.swipes.length &&
-            msg.swipes[msg.swipeId - 1].isNotEmpty) {
-          original = msg.swipes[msg.swipeId - 1];
+      // Search agentSwipes across ALL green swipes, not just the active one.
+      // msg.agentSwipes reflects only the current swipeId — other green
+      // swipes keep their blue swipes in swipesMeta[swipeId].
+      AgentSwipe? original;
+      AgentSwipe? cleaned;
+
+      // First: check the active agentSwipes on the message itself.
+      final activeSwipes = msg.agentSwipes;
+      for (final s in activeSwipes) {
+        if (s.kind == 'cleaned') {
+          cleaned = s;
+          final parentId = s.parentSwipeId;
+          if (parentId != null && parentId < activeSwipes.length) {
+            original = activeSwipes[parentId];
+          }
+        }
+      }
+      if (original == null && cleaned != null && activeSwipes.isNotEmpty) {
+        original = activeSwipes.where((s) => s.kind == 'final').lastOrNull;
+      }
+
+      // Second: if not found in active swipes, search swipesMeta for any
+      // green swipe that has a 'cleaned' agent swipe.
+      if (cleaned == null) {
+        for (var si = 0; si < msg.swipesMeta.length; si++) {
+          final meta = msg.swipesMeta[si];
+          final raw = meta['agentSwipes'];
+          if (raw is! List) continue;
+          final swipes = raw
+              .whereType<Map<dynamic, dynamic>>()
+              .map((m) => AgentSwipe.fromJson(Map<String, dynamic>.from(m)))
+              .toList();
+          for (final s in swipes) {
+            if (s.kind == 'cleaned') {
+              cleaned = s;
+              final parentId = s.parentSwipeId;
+              if (parentId != null && parentId < swipes.length) {
+                original = swipes[parentId];
+              }
+              break;
+            }
+          }
+          if (cleaned != null) break;
+        }
+        if (original == null && cleaned != null) {
+          // Fallback: use the message content as the original.
+          original = AgentSwipe(content: msg.content, kind: 'final');
         }
       }
 
       if (!mounted) return;
       setState(() {
-        _originalText = original;
-        _cleanedText = cleaned;
+        _original = original;
+        _cleaned = cleaned;
         _loading = false;
         if (original != null && cleaned != null) {
-          _diff = computeLineDiff(original, cleaned);
+          _diff = computeLineDiff(original.content, cleaned.content);
         }
       });
     } catch (e) {
@@ -139,7 +175,10 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
                 children: [
                   Icon(Icons.compare_arrows, color: cs.primary),
                   const SizedBox(width: 8),
-                  Text('Cleaner Diff', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Cleaner Diff',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(width: 8),
                   if (_diff.removedLines > 0 || _diff.addedLines > 0)
                     Text(
@@ -179,7 +218,7 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         ),
       );
     }
-    if (_originalText == null || _cleanedText == null) {
+    if (_original == null || _cleaned == null) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
@@ -254,7 +293,9 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
                 controller: controller,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: lines.map((line) => _buildDiffLine(context, line)).toList(),
+                  children: lines
+                      .map((line) => _buildDiffLine(context, line))
+                      .toList(),
                 ),
               ),
             ),
@@ -287,65 +328,65 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         : Colors.green.withValues(alpha: 0.35);
 
     final spans = <TextSpan>[];
-    spans.add(TextSpan(
-      text: prefix,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.bold,
-        color: fg.withValues(alpha: 0.5),
-        fontFamily: 'monospace',
+    spans.add(
+      TextSpan(
+        text: prefix,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: fg.withValues(alpha: 0.5),
+          fontFamily: 'monospace',
+        ),
       ),
-    ));
+    );
 
     if (line.words != null && line.words!.isNotEmpty) {
       for (var wi = 0; wi < line.words!.length; wi++) {
         final w = line.words![wi];
         // Add space between words (except before the first).
         if (wi > 0) {
-          spans.add(TextSpan(
-            text: ' ',
-            style: TextStyle(fontSize: 13, height: 1.4, color: fg),
-          ));
+          spans.add(
+            TextSpan(
+              text: ' ',
+              style: TextStyle(fontSize: 13, height: 1.4, color: fg),
+            ),
+          );
         }
         if (w.isChanged) {
-          spans.add(TextSpan(
-            text: w.text.isEmpty ? '\u200B' : w.text,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: fg,
-              backgroundColor: changedWordBg,
+          spans.add(
+            TextSpan(
+              text: w.text.isEmpty ? '\u200B' : w.text,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: fg,
+                backgroundColor: changedWordBg,
+              ),
             ),
-          ));
+          );
         } else {
-          spans.add(TextSpan(
-            text: w.text,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: fg,
+          spans.add(
+            TextSpan(
+              text: w.text,
+              style: TextStyle(fontSize: 13, height: 1.4, color: fg),
             ),
-          ));
+          );
         }
       }
     } else {
-      spans.add(TextSpan(
-        text: line.text,
-        style: TextStyle(
-          fontSize: 13,
-          height: 1.4,
-          color: fg,
+      spans.add(
+        TextSpan(
+          text: line.text,
+          style: TextStyle(fontSize: 13, height: 1.4, color: fg),
         ),
-      ));
+      );
     }
 
     return Container(
       width: double.infinity,
       color: bg,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      child: SelectableText.rich(
-        TextSpan(children: spans),
-      ),
+      child: SelectableText.rich(TextSpan(children: spans)),
     );
   }
 }

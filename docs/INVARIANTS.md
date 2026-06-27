@@ -218,13 +218,25 @@ the batch and run as individual requests. There is no `postProcessingDataKey`
 grouping (yet) — all trackers are pre-generation; the POST-cleaner is a separate
 post-gen rewrite pass, not a tracker.
 
-### INV-ST4: AgentSwipe / nested-swipe re-run removed ✅ ENFORCED (Phase 2)
+### INV-ST4: Nested agentSwipes (cleaned / final) ✅ ENFORCED
 
-The `AgentSwipe` / `agentSwipes` / `agentSwipeId` fields are deleted from
-`ChatMessage`. `studioFinalOnly` re-run branch is removed from
-`stream_generation_service.dart`. There is no second swipe dimension for
-re-running a single intermediate. POST-cleaner uses `appendCleanerSwipe` (a
-green swipe, not a sub-swipe) and does NOT implement hold mode.
+The `AgentSwipe` class and `agentSwipes` / `agentSwipeId` / `studioOutputs`
+fields live on `ChatMessage`. The POST-cleaner writes a blue `'cleaned'`
+sub-swipe via `ChatRepo.appendAgentSwipe(kind: 'cleaned')`, preserving the
+original `'final'` as the parent (lazy-migrated on first clean). Blue
+sub-swipe navigation goes through `ChatMessageService.setAgentSwipe` /
+`changeAgentSwipe`; the WebView renders an `agent-switcher` (blue) control
+when `agentSwipes.length > 1`. `appendAgentSwipe` syncs
+`agentSwipes`+`agentSwipeId` into `swipesMeta[swipeId]` so green-swipe
+round-trips preserve the nested swipes.
+
+A full regeneration (`SavedMessageWriter.writeAssistant` with
+`regenTargetId`) resets `agentSwipes` to a single fresh `'final'` pointing
+at the new text — the old `'cleaned'` sub-swipe (which applied to the
+previous content) is dropped. The `studioFinalOnly` re-run branch (append a
+`'final'` without touching green swipes) is NOT restored: it depended on
+the removed 8-controller `regenerateIntermediateAgent` orchestration.
+Hold mode (Marinara) is not implemented.
 
 ### INV-ST5: Single tracker failure does not abort the rest ✅ ENFORCED (Phase 5.7.5)
 

@@ -1,14 +1,14 @@
 # PLAN: Nested Swipes — агентский под-слой свайпов
 
-> **STATUS: SUPERSEDED / CLOSED.** План замещён `docs/PLAN_AGENTIC_STUDIO.md`
-> Phase 2 (commit `0a9e6cd`): поля `AgentSwipe` / `agentSwipes` / `agentSwipeId`
-> удалены из `ChatMessage`, ветка `studioFinalOnly` re-run удалена из
-> `stream_generation_service.dart`. второго измерения swipe-ов для ре-рана
-> одного intermediate больше нет — intermediates удалены в пользу
-> tracker-around-generator модели. POST-cleaner использует `appendCleanerSwipe`
-> (зелёный swipe, не sub-swipe) — см. INV-ST4 в `docs/INVARIANTS.md`.
+> **STATUS: RESTORED.** Nested agentSwipes were re-implemented in
+> `docs/PLAN_RESTORE_DECOMP_AND_SWIPES.md` (Phases C-D). `AgentSwipe` /
+> `agentSwipes` / `agentSwipeId` live on `ChatMessage` again; the POST-cleaner
+> writes a blue `'cleaned'` sub-swipe via `appendAgentSwipe(kind: 'cleaned')`.
+> The `studioFinalOnly` re-run branch is NOT restored (it depended on the
+> removed 8-controller orchestration); full regen resets `agentSwipes` to a
+> single `'final'`. See INV-ST4 in `docs/INVARIANTS.md`.
 >
-> Содержимое ниже сохранено для исторической справки; НЕ реализовывать.
+> Содержимое ниже сохранено для исторической справки.
 
 Статус: **DRAFT / RFC**. Ждёт решения владельца перед реализацией.
 

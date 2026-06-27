@@ -1,6 +1,8 @@
 # PLAN: Restore Studio decomposition (auto + manual) and full agentSwipes hierarchy
 
-STATUS: NOT STARTED
+STATUS: DONE — Phases A-E implemented on branch `plan/continuity-post-cleaner`
+(commits b877e48, 90e1710, beb756a, 3623629, + Phase E). All `flutter
+analyze` 0 errors, `flutter test` 1330 passed.
 BRANCH: continue on `plan/continuity-post-cleaner` (or branch `feat/restore-decomp-swipes` off it)
 PR TARGET: `hydall/GlazeFlutter:master`
 

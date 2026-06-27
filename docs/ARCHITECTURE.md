@@ -472,8 +472,41 @@ Per-tracker model override (`StudioAgent.modelSource = 'custom'` picks an
 conservative defaults for desktop).
 
 POST-processing (Phase 1.3) stays separate from the tracker pipeline: the
-POST-cleaner runs after the full reply, produces a green swipe diff via
-`appendCleanerSwipe` (`post_cleaner_service.dart`), without hold mode.
+POST-cleaner runs after the full reply and writes a blue `'cleaned'` agent
+sub-swipe via `ChatRepo.appendAgentSwipe(kind: 'cleaned')`
+(`post_cleaner_service.dart`), preserving the original `'final'` as the
+parent. Hold mode (Marinara) is not implemented. See INV-ST4.
+
+### Preset decomposition (auto + manual)
+
+`StudioDecompositionService.decompose()` builds the `StudioAgent` list from
+the chat's effective preset: enabled blocks are macro-expanded, reasoning
+blocks dropped, then routed (LLM router with keyword fallback) to stable
+controller lanes (continuity / agency / narrative / dialogue / guard / world
+/ meta / final). The last lane (`Main Responder`, `isFinal`) is the
+generator; all earlier lanes are trackers — the exact shape
+`runTrackerCycle` consumes. `routingMode = 'verbatim'` concatenates each
+agent's assigned blocks дословно (no LLM call); `'compiled'` asks the build
+LLM to synthesize a shard. `collectBroadcastBlocks` surfaces cross-cutting
+rules (output language, prose guards) for the POST-cleaner;
+`computePresetHash` detects preset changes.
+
+Manual editing: `studio_menu_dialog.dart` exposes a "Build Studio" button
+(auto decompose), a per-tracker prompt-shard editor (multi-line TextField),
+and a per-tracker "Regenerate instruction" button
+(`StudioDecompositionService.regenerateAgentInstruction`, single-agent,
+deterministic bucketing). Edits persist via `studioConfigRepo.upsert`.
+
+### Nested swipes (agentSwipes)
+
+`ChatMessage.agentSwipes` holds blue sub-swipes (`AgentSwipe` with `kind`:
+`'final'` | `'cleaned'`, `parentSwipeId` linking a cleaned swipe to its
+parent final). `ChatMessageService.setSwipe` saves/loads agentSwipes through
+`swipesMeta[swipeId]` so green-swipe round-trips preserve them;
+`setAgentSwipe` / `changeAgentSwipe` navigate blue sub-swipes. The WebView
+renders an `agent-switcher` (blue) control when `agentSwipes.length > 1`,
+dispatching `agent-swipe-left/right` → `onAgentSwipe`. A full regeneration
+resets `agentSwipes` to a single fresh `'final'`.
 
 ### Prompt Ordering (invariant — do not reorder)
 

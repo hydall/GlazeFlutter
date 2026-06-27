@@ -108,6 +108,31 @@ class SavedMessageWriter {
       if (idx >= 0) {
         final existing = currentSession.messages[idx];
 
+        // Nested swipes: full regen replaces agentSwipes with a fresh
+        // single 'final' pointing at the new text (the old 'cleaned'
+        // sub-swipe applied to the previous content and is dropped).
+        final agentSwipes = [
+          AgentSwipe(
+            content: text,
+            kind: 'final',
+            reasoning: reasoning,
+            genTime: genTime,
+            tokens: tokens,
+          ),
+        ];
+        const agentSwipeId = 0;
+        // Sync agentSwipes into swipesMeta[swipeId] so green-swipe
+        // round-trips (setSwipe) restore the correct blue swipes.
+        var syncedSwipesMeta = swipesMeta;
+        if (swipeId >= 0 && swipeId < swipesMeta.length) {
+          syncedSwipesMeta = List<Map<String, dynamic>>.from(swipesMeta);
+          syncedSwipesMeta[swipeId] = {
+            ...syncedSwipesMeta[swipeId],
+            'agentSwipes': agentSwipes.map((e) => e.toJson()).toList(),
+            'agentSwipeId': agentSwipeId,
+          };
+        }
+
         final updated = existing.copyWith(
           content: text,
           reasoning: reasoning,
@@ -118,11 +143,13 @@ class SavedMessageWriter {
           tokens: tokens,
           swipes: swipes,
           swipeId: swipeId,
-          swipesMeta: swipesMeta,
+          swipesMeta: syncedSwipesMeta,
           swipeDirection: 'right',
           memoryCoverage: persistedMemoryCoverage,
           triggeredLorebooks: triggeredLorebooks,
           triggeredMemories: triggeredMemories,
+          agentSwipes: agentSwipes,
+          agentSwipeId: agentSwipeId,
         );
         final updatedMessages = [...currentSession.messages];
         updatedMessages[idx] = updated;
@@ -148,6 +175,17 @@ class SavedMessageWriter {
       );
     }
 
+    // New message: seed agentSwipes with a single 'final' pointing at the
+    // new text so the blue sub-swipe model is consistent from creation.
+    final newAgentSwipes = [
+      AgentSwipe(
+        content: text,
+        kind: 'final',
+        reasoning: reasoning,
+        genTime: genTime,
+        tokens: tokens,
+      ),
+    ];
     final assistantMsg = ChatMessage(
       id: generateId(),
       role: 'assistant',
@@ -163,6 +201,8 @@ class SavedMessageWriter {
       memoryCoverage: persistedMemoryCoverage,
       triggeredLorebooks: triggeredLorebooks,
       triggeredMemories: triggeredMemories,
+      agentSwipes: newAgentSwipes,
+      agentSwipeId: 0,
     );
     final finalMessages = [...currentSession.messages, assistantMsg];
     final now = currentTimestampSeconds();

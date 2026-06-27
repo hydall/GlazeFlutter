@@ -43,7 +43,10 @@ await db.transaction(() async {
 ```
 
 Prefer adding a dedicated repo method (e.g. `appendMessage`) that encapsulates
-the transaction rather than doing it ad hoc in a service.
+the transaction rather than doing it ad hoc in a service. Dedicated atomic
+methods on `ChatRepo` include `appendSwipeToMessage`,
+`appendAgentSwipe({kind: 'cleaned' | 'final'})` (nested blue sub-swipe +
+`_syncAgentSwipesToMeta`), and the chat/character variable-scope methods.
 
 ---
 
@@ -95,7 +98,7 @@ Migration history:
 - v43: added Studio `builderPromptTemplate` override for editable Studio rebuild prompts
 - v44: added Studio `maxFinalHistoryMessages` INTEGER DEFAULT 15 — caps trailing chat messages sent to the final Studio generator (0 = unlimited); Studio trackers receive their own `StudioAgent.contextSize` (default 5, hard-cap 200) instead — see INV-ST1/INV-ST2 in `docs/INVARIANTS.md`
 - v45: added `tracker_rows` table — lightweight key-value trackers written by the post-turn write-loop and Studio trackers (e.g. 'mood: happy', 'inventory: chip in pocket'). Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades alongside `memory_book_rows`. Read live by `agentic_operations_log_dialog.dart` "Tracker values" tab and `studio_menu_dialog.dart` (current tracker value preview)
-- v46: added `studio_config_rows.routing_mode` TEXT DEFAULT `'verbatim'` — controls how preset blocks become agent instructions (`verbatim` = blocks concatenated дословно, no LLM call; `compiled` = legacy LLM digest, deprecated). The 8-slot decomposition service (`studio_decomposition_service.dart`) was DELETED in Phase 2 of `docs/PLAN_AGENTIC_STUDIO.md`; only `verbatim_shard_assembler.dart` (20-line util) remains. `routing_mode = 'compiled'` is preserved for legacy JSON compatibility but no longer triggers an LLM call.
+- v46: added `studio_config_rows.routing_mode` TEXT DEFAULT `'verbatim'` — controls how preset blocks become agent instructions (`verbatim` = blocks concatenated дословно, no LLM call; `compiled` = legacy LLM digest). The decomposition service (`studio_decomposition_service.dart`) was restored after Phase 2: `decompose()` produces `StudioAgent`s (trackers + one final generator) that slot into `runTrackerCycle`; `routing_mode = 'compiled'` triggers the LLM builder, `'verbatim'` concatenates blocks directly.
 
 ---
 
