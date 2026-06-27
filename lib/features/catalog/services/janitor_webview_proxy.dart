@@ -6,6 +6,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../chat/bridge/chat_webview_environment.dart';
 import 'cf_challenge_service.dart';
+import 'janitor_separate.dart';
 
 void _log(String m) => debugPrint('[CF-proxy] $m');
 
@@ -83,6 +84,130 @@ const String _findTokenJs = r'''
     } catch (e) {}
     return null;
   };
+''';
+
+/// Document-start user script installed before navigating to a chat page when
+/// capturing a `generateAlpha` payload. It does two things, mirroring the
+/// SillyTavern `janitor-lorebook` plugin's Playwright capture:
+///
+/// 1. **Intercepts** the assembled prompt. JanitorAI's frontend, in proxy/API
+///    mode, calls `…/generateAlpha` and the *response* is the fully-assembled
+///    `{messages:[{role:"system", …}]}` — the system message contains the
+///    hidden card + the triggered (closed) lorebook entries. We wrap both
+///    `fetch` and `XMLHttpRequest` (the site may use either) and stash the last
+///    matching payload on `window.__glazeAlpha`.
+/// 2. Exposes **`window.__glazeSend(text)`** which types [text] into the chat
+///    input and submits — the trigger that makes the server assemble + return
+///    the prompt. Ported from `capture.cjs` `_send`/`_autoTrigger`, including
+///    the React controlled-input trick (native value setter + `input` event;
+///    a plain `el.value = …` leaves React's state empty and the send no-ops).
+///
+/// Injected at document start so it hooks the network *before* page scripts
+/// capture their own `fetch` reference. **Brittle by nature:** the input/send
+/// selectors track JanitorAI's chat DOM, exactly like the plugin's Playwright
+/// selectors — tune [_captureUserScript] if the site changes.
+const String _captureUserScript = r'''
+  (function () {
+    if (window.__glazeHooked) return;
+    window.__glazeHooked = true;
+    window.__glazeAlpha = null;
+
+    const looksLikePayload = (o) =>
+      o && Array.isArray(o.messages) &&
+      o.messages.some((m) => m && m.role === 'system' && typeof m.content === 'string');
+
+    // --- fetch hook ---
+    const origFetch = window.fetch ? window.fetch.bind(window) : null;
+    if (origFetch) {
+      window.fetch = async function (...args) {
+        const res = await origFetch(...args);
+        try {
+          const a0 = args[0];
+          const url = (a0 && a0.url) ? a0.url : (typeof a0 === 'string' ? a0 : '');
+          if (typeof url === 'string' && url.indexOf('/generateAlpha') >= 0) {
+            res.clone().json().then((j) => {
+              if (looksLikePayload(j)) window.__glazeAlpha = j;
+            }).catch(() => {});
+          }
+        } catch (e) {}
+        return res;
+      };
+    }
+
+    // --- XMLHttpRequest hook ---
+    const OrigXHR = window.XMLHttpRequest;
+    if (OrigXHR) {
+      const open = OrigXHR.prototype.open;
+      OrigXHR.prototype.open = function (method, url) {
+        this.__glazeUrl = url;
+        return open.apply(this, arguments);
+      };
+      OrigXHR.prototype.addEventListener &&
+        (function () {
+          const send = OrigXHR.prototype.send;
+          OrigXHR.prototype.send = function () {
+            this.addEventListener('load', function () {
+              try {
+                if (typeof this.__glazeUrl === 'string' &&
+                    this.__glazeUrl.indexOf('/generateAlpha') >= 0) {
+                  const j = JSON.parse(this.responseText);
+                  if (looksLikePayload(j)) window.__glazeAlpha = j;
+                }
+              } catch (e) {}
+            });
+            return send.apply(this, arguments);
+          };
+        })();
+    }
+
+    // --- chat input + send ---
+    const SEL = ['textarea[placeholder]', 'form textarea', 'textarea', 'div[contenteditable="true"]'];
+    const findInput = () => {
+      for (const s of SEL) {
+        const els = document.querySelectorAll(s);
+        for (let i = els.length - 1; i >= 0; i--) {
+          const el = els[i];
+          if (el && el.offsetParent !== null) return el;
+        }
+      }
+      return null;
+    };
+    const setReactValue = (el, val) => {
+      if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+        const proto = el.tagName === 'TEXTAREA'
+          ? window.HTMLTextAreaElement.prototype
+          : window.HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+        setter.call(el, val);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      } else {
+        el.focus();
+        el.textContent = val;
+        el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      }
+    };
+    const pressEnter = (el) => {
+      for (const type of ['keydown', 'keypress', 'keyup']) {
+        el.dispatchEvent(new KeyboardEvent(type, {
+          key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
+          bubbles: true, cancelable: true,
+        }));
+      }
+    };
+    window.__glazeSend = async (text) => {
+      const el = findInput();
+      if (!el) return { ok: false, reason: 'no-input' };
+      el.focus();
+      setReactValue(el, text);
+      await new Promise((r) => setTimeout(r, 150));
+      const btn = document.querySelector(
+        'button[type="submit"]:not([disabled]), ' +
+        'form button[aria-label*="send" i]:not([disabled]), ' +
+        'button[aria-label*="send" i]:not([disabled])');
+      if (btn) { btn.click(); } else { pressEnter(el); }
+      return { ok: true };
+    };
+  })();
 ''';
 
 /// Thrown when the proxy could not obtain a CF-cleared response.
@@ -173,6 +298,150 @@ class JanitorWebViewProxy {
       }
     });
     return completer.future;
+  }
+
+  /// Captures the assembled `generateAlpha` payload for [characterId] — the
+  /// fully-built system prompt containing the hidden character card and the
+  /// triggered (closed) lorebook entries. Port of the SillyTavern
+  /// `janitor-lorebook` plugin's `runFromUrl`/`_autoTrigger`.
+  ///
+  /// Pipeline (serialized through [_gate]): create a fresh chat, navigate the
+  /// offscreen WebView to it with [_captureUserScript] installed, send `"."` to
+  /// surface the card, then re-send the card text (+ optional [triggerText],
+  /// e.g. the first message) to maximise lorebook keyword matches, and return
+  /// the captured payload. Throws on timeout / login / CF failure.
+  Future<Map<String, dynamic>> captureGenerateAlpha({
+    required String characterId,
+    String triggerText = '',
+    void Function(String phase)? onPhase,
+  }) {
+    final completer = Completer<Map<String, dynamic>>();
+    _gate = _gate.then((_) async {
+      try {
+        completer.complete(
+            await _captureLocked(characterId, triggerText, onPhase));
+      } catch (e, st) {
+        completer.completeError(e, st);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<Map<String, dynamic>> _captureLocked(
+    String characterId,
+    String triggerText,
+    void Function(String phase)? onPhase,
+  ) async {
+    void phase(String p) {
+      _log('capture phase: $p');
+      onPhase?.call(p);
+    }
+
+    phase('starting');
+    await _ensureStarted();
+
+    if (!await isLoggedIn()) {
+      throw Exception('Not logged into JanitorAI — log in first (Menu → JanitorAI).');
+    }
+
+    // 1) Create a fresh chat for this character.
+    phase('creating chat');
+    final chatBody = await _fetchLocked(
+      'https://janitorai.com/hampter/chats',
+      method: 'POST',
+      body: jsonEncode({'character_id': characterId}),
+    );
+    final chatJson = jsonDecode(chatBody);
+    final chatId = (chatJson is Map ? chatJson['id'] : null)?.toString();
+    if (chatId == null || chatId.isEmpty) {
+      throw Exception('Could not create chat (no id in response).');
+    }
+
+    final controller = _controller;
+    if (controller == null) throw Exception('WebView not available.');
+
+    // 2) Install the capture hook at document start, then open the chat.
+    phase('opening chat');
+    await controller.removeAllUserScripts();
+    await controller.addUserScript(
+      userScript: UserScript(
+        source: _captureUserScript,
+        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+      ),
+    );
+    try {
+      _loadStop = Completer<void>();
+      await controller.loadUrl(
+        urlRequest: URLRequest(
+          url: WebUri('https://janitorai.com/chats/$chatId'),
+        ),
+      );
+      await _awaitLoad();
+      await _waitForClearance();
+      // Give the React chat app time to hydrate before driving the input.
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+
+      // 3) Send "." → capture the card.
+      phase('triggering (card)');
+      final dot = await _captureOneSend('.', const Duration(seconds: 60));
+      final card = dot != null ? extractCard(dot) : '';
+
+      // 4) Send card (+ first message) → maximise lorebook triggers.
+      final parts = <String>[
+        if (card.isNotEmpty) card,
+        if (triggerText.trim().isNotEmpty) triggerText.trim(),
+      ];
+      final trigger = parts.isEmpty ? '.' : parts.join('\n\n');
+      phase('triggering (lorebook)');
+      await _resetCapture();
+      final full = await _captureOneSend(trigger, const Duration(seconds: 120));
+      final result = full ?? dot;
+      if (result == null) {
+        throw Exception('Timed out waiting for a generateAlpha capture.');
+      }
+      phase('captured');
+      return result;
+    } finally {
+      try {
+        await controller.removeAllUserScripts();
+      } catch (_) {}
+    }
+  }
+
+  /// Clears the last captured payload so the next send's capture is unambiguous.
+  Future<void> _resetCapture() async {
+    try {
+      await _controller?.evaluateJavascript(source: 'window.__glazeAlpha = null;');
+    } catch (_) {}
+  }
+
+  /// Drives one `__glazeSend(text)` and polls `window.__glazeAlpha` until a
+  /// payload appears or [timeout] elapses. Returns null on timeout.
+  Future<Map<String, dynamic>?> _captureOneSend(String text, Duration timeout) async {
+    final controller = _controller;
+    if (controller == null) return null;
+    try {
+      await controller.callAsyncJavaScript(
+        functionBody: 'return await window.__glazeSend(${jsonEncode(text)});',
+      );
+    } catch (e) {
+      _log('send error: $e');
+    }
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      try {
+        final res = await controller.evaluateJavascript(
+          source: 'window.__glazeAlpha ? JSON.stringify(window.__glazeAlpha) : null',
+        );
+        if (res is String && res.isNotEmpty && res != 'null') {
+          final decoded = jsonDecode(res);
+          if (decoded is Map<String, dynamic>) return decoded;
+          if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 
   /// Whether a JanitorAI account session is present (a JWT lives in the shared

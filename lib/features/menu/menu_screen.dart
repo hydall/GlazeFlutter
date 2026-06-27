@@ -13,6 +13,7 @@ import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
 import '../catalog/janitor_account_provider.dart';
+import '../catalog/widgets/janitor_extract_sheet.dart';
 import '../catalog/widgets/janitor_login_sheet.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
@@ -124,6 +125,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                           builder: (_) => const MenuGroupDemoScreen(),
                         )),
+                      ),
+                      MenuItem(
+                        icon: Icons.auto_stories_outlined,
+                        label: 'Janitor: extract card + lorebook',
+                        onTap: () => showJanitorExtractSheet(context),
                       ),
                       MenuItem(
                         icon: Icons.bookmarks_outlined,
