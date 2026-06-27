@@ -144,8 +144,7 @@ class _MemoryGenerationSettingsSheetState
     }
   }
 
-  bool get _needsSidecar =>
-      _memoryMode == 'deep' || _memoryMode == 'agentic';
+  bool get _needsSidecar => _memoryMode == 'deep';
 
   bool get _sidecarReady =>
       _pipeline != null && _pipeline!.sidecarEnabled;
@@ -544,11 +543,6 @@ class _MemoryGenerationSettingsSheetState
               label: Text('memory_mode_deep'.tr()),
               icon: Icon(Icons.manage_search_rounded),
             ),
-            ButtonSegment(
-              value: 'agentic',
-              label: Text('memory_mode_agentic'.tr()),
-              icon: Icon(Icons.smart_toy_outlined),
-            ),
           ],
           selected: {_memoryMode},
           onSelectionChanged: (s) => setState(() => _memoryMode = s.first),
@@ -562,8 +556,6 @@ class _MemoryGenerationSettingsSheetState
               ? 'memory_mode_balanced_desc'.tr()
               : _memoryMode == 'deep'
               ? 'memory_mode_deep_desc'.tr()
-              : _memoryMode == 'agentic'
-              ? 'memory_mode_agentic_desc'.tr()
               : 'memory_mode_fast_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
@@ -1086,7 +1078,10 @@ String _migrateInjectionTarget(String raw) {
 String _normalizeMemoryMode(String raw) {
   if (raw == 'deep') return 'deep';
   if (raw == 'legacy') return 'legacy';
-  if (raw == 'agentic') return 'agentic';
+  // `agentic` was removed in Phase 4 — migrate to `deep` (closest
+  // backward-compatible retrieval depth; the LLM sidecar layer is now
+  // a separate tracker concern).
+  if (raw == 'agentic') return 'deep';
   return raw == 'balanced' ? 'balanced' : 'fast';
 }
 

@@ -58,10 +58,10 @@ class _PostBuildingMenuDialogState
         setState(() {
           _pipeline = pipeline;
           _memoryMode = mode;
-          // Deep/Agentic memory modes require the sidecar. If the user has
-          // selected one of these modes in Memory Books, force the sidecar
+          // Deep memory mode requires the sidecar. If the user has
+          // selected deep mode in Memory Books, force the sidecar
           // toggle ON here so the pipeline doesn't silently degrade to fast.
-          if ((mode == 'deep' || mode == 'agentic') && !_pipeline.sidecarEnabled) {
+          if (mode == 'deep' && !_pipeline.sidecarEnabled) {
             _pipeline = _pipeline.copyWith(sidecarEnabled: true);
             ref.read(pipelineSettingsRepoProvider).updateSettings(
               widget.sessionId,
@@ -77,8 +77,7 @@ class _PostBuildingMenuDialogState
     }
   }
 
-  bool get _sidecarLocked =>
-      _memoryMode == 'deep' || _memoryMode == 'agentic';
+  bool get _sidecarLocked => _memoryMode == 'deep';
 
   Future<void> _savePipeline(
     PipelineSettings Function(PipelineSettings) mutator,

@@ -114,15 +114,25 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
 /// (pre-{{memory}}-split) to `hard_block` / `macro` in-place. The old
 /// values were misleadingly named because the "summary" prefix was
 /// about *where* memory goes, not about the summary feature itself.
+///
+/// Also migrates the removed `agentic` retrieval mode to `deep`. The
+/// `agentic` mode mixed retrieval depth with an LLM sidecar layer; the
+/// sidecar is now a separate tracker concern (see
+/// docs/PLAN_AGENTIC_STUDIO.md Phase 4). Old MemoryBook JSON with
+/// `memoryMode: "agentic"` reads as `deep` so users keep deep rerank
+/// without silent LLM calls.
 Map<String, dynamic> _migrateInjectionTargetInPlace(Map<String, dynamic> json) {
-  final raw = json['injectionTarget'];
-  if (raw == 'summary_block') {
-    return {...json, 'injectionTarget': 'hard_block'};
+  var result = json;
+  final injectionTarget = result['injectionTarget'];
+  if (injectionTarget == 'summary_block') {
+    result = {...result, 'injectionTarget': 'hard_block'};
+  } else if (injectionTarget == 'summary_macro') {
+    result = {...result, 'injectionTarget': 'macro'};
   }
-  if (raw == 'summary_macro') {
-    return {...json, 'injectionTarget': 'macro'};
+  if (result['memoryMode'] == 'agentic') {
+    result = {...result, 'memoryMode': 'deep'};
   }
-  return json;
+  return result;
 }
 
 /// Coerces new optional fields into safe defaults when reading older JSON

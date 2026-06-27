@@ -409,23 +409,11 @@ class MemoryInjectionService {
       }
     }
 
-    // Agentic mode: searchMemory tool (Phase 10)
-    if (book.settings.memoryMode == 'agentic' &&
-        _agenticService != null) {
-      agenticResult = await _agenticService.runAgentic(
-        settings: book.settings,
-        pipeline: pipeline,
-        entries: activeEntries,
-        currentText: currentText,
-        visibleMessageIds: visibleMessageIds,
-        fallbackSelection: finalSelection,
-        cancelToken: cancelToken,
-      );
-      if (shouldAbort?.call() == true) {
-        return finish(finalSelection, budget: budget, settings: book.settings);
-      }
-      finalSelection = agenticResult.selection;
-    }
+    // Agentic read (searchMemory tool) was previously gated by
+    // `memoryMode == 'agentic'`, but that mode was removed in Phase 4 of
+    // docs/PLAN_AGENTIC_STUDIO.md. Agentic read will be wired as a
+    // pre-generation memory tracker in a later phase; until then it is
+    // disabled.
 
     return finish(
       finalSelection,

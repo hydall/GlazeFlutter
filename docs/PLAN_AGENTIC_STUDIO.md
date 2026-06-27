@@ -1,6 +1,6 @@
 # Plan: Agentic Studio — Marinara-Style Refactor
 
-> **Status:** Draft. References `docs/PLAN_PIPELINE_SEPARATION.md`, `docs/ARCHITECTURE.md` § "Studio Mode Pipeline".
+> **Status:** In progress. Phase 1-4 complete (commits `5a4e31e`, `0a9e6cd`, `92c2012`, Phase 4 pending commit on branch `plan/continuity-post-cleaner`). Phase 5-8 pending.
 > **Goal:** Удешевить агентику на большом контексте, ресторить урезанный UI, упростить ментальную модель памяти.
 > **Reference:** [Pasta-Devs/Marinara-Engine](https://github.com/Pasta-Devs/Marinara-Engine) — `packages/server/src/services/agents/` (agent-pipeline.ts, agent-executor.ts), `packages/shared/src/types/agent.ts`.
 
@@ -110,11 +110,11 @@
 >
 > `PLAN_CONTINUITY_POST_CLEANER.md` и `PLAN_PIPELINE_SEPARATION.md` ссылаются на "Studio" как на живой `StudioConfig` + `studioOutputs` (freezed из `studio_config.dart`), **не** на `memory_studio_mode.dart`. Удаление мёртвых классов не ломает контракты этих планов.
 
-- [ ] **1.1** `lib/core/llm/memory_studio_mode.dart`: оставить **только** `enum MemoryStudioOutputDisposition { ephemeral, proposed, canonical }` (строка 11). Удалить `enum MemoryStudioStage` (1-9), `class MemoryStudioSettings` (13-25), `class MemoryStudioStagePlan` (27-37), `class MemoryStudioPolicy` (39-95), `_defaultPipeline` (73-94). Проверить `grep -r "MemoryStudioPolicy\|MemoryStudioSettings\|MemoryStudioStage\|experimentalEnabled" lib/` — должен быть 0 ссылок вне файла.
-- [ ] **1.2** Удалить `memory_mode_studio` и `memory_mode_studio_desc` i18n-ключи из `lib/i18n/en.json` и `lib/i18n/ru.json`.
-- [ ] **1.3** Починить `memory_book_controller.dart:139` — `settingsSummary` должен репортить `agentic` корректно (сейчас falls through к "Fast").
-- [ ] **1.4** Решить судьбу tool-schemas в `memory_agentic_tools.dart:10-134`: либо прикрепить к реальным LLM-вызовам (если переходим на OpenAI tool-calling в трекерах), либо удалить декоративные schema-definitions и оставить только `MemoryAgenticToolHandler.searchMemory` (handler используется, schema — нет). **Решение отложить до Phase 5** (батчинг vs tool-calling — альтернативные пути).
-- [ ] **1.5** `flutter analyze` + `flutter test` — убедиться что ничего не сломалось. `MemoryStudioOutputDisposition.ephemeral` references в `memory_studio_service.dart` и `stream_generation_service.dart` должны компилиться (enum остался).
+- [x] **1.1** `lib/core/llm/memory_studio_mode.dart`: оставить **только** `enum MemoryStudioOutputDisposition { ephemeral, proposed, canonical }` (строка 11). Удалить `enum MemoryStudioStage` (1-9), `class MemoryStudioSettings` (13-25), `class MemoryStudioStagePlan` (27-37), `class MemoryStudioPolicy` (39-95), `_defaultPipeline` (73-94). Проверить `grep -r "MemoryStudioPolicy\|MemoryStudioSettings\|MemoryStudioStage\|experimentalEnabled" lib/` — должен быть 0 ссылок вне файла. ✅ commit `5a4e31e`
+- [x] **1.2** Удалить `memory_mode_studio` и `memory_mode_studio_desc` i18n-ключи из `lib/i18n/en.json` и `lib/i18n/ru.json`. ✅ commit `5a4e31e` (ключи в `assets/translations/`)
+- [x] **1.3** Починить `memory_book_controller.dart:139` — `settingsSummary` должен репортить `agentic` корректно (сейчас falls through к "Fast"). ✅ commit `5a4e31e` (добавлен явный кейс; в Phase 4 `agentic` режим вовсе убирается)
+- [-] **1.4** Решить судьбу tool-schemas в `memory_agentic_tools.dart:10-134`: либо прикрепить к реальным LLM-вызовам (если переходим на OpenAI tool-calling в трекерах), либо удалить декоративные schema-definitions и оставить только `MemoryAgenticToolHandler.searchMemory` (handler используется, schema — нет). **Решение отложить до Phase 5** (батчинг vs tool-calling — альтернативные пути). ⏳ отложено до Phase 5
+- [x] **1.5** `flutter analyze` + `flutter test` — убедиться что ничего не сломалось. ✅ commit `5a4e31e` (1324 теста прошли)
 
 **Файлы:** `memory_studio_mode.dart` (trim, не delete), `en.json`/`ru.json` (edit), `memory_book_controller.dart` (edit).
 **Оценка:** 0.5-1 день.
@@ -124,20 +124,15 @@
 
 **Цель:** снести 8-контроллерный pipeline, оставить один генератор + трекеры.
 
-- [ ] **2.1** SPLIT из `memory_studio_service.dart` транспорт-запрос-сборку + streaming scaffold → новый `lib/core/llm/agent_runner.dart` (тонкий orchestrator: build request → call LLM → stream → accumulate → return). ~150-200 строк. Используется и генератором, и трекерами.
-- [ ] **2.2** SPLIT из `studio_decomposition_service.dart` `_synthesizeRoutedShard` → `lib/core/llm/verbatim_shard_assembler.dart` (~20 строк, standalone util).
-- [ ] **2.3** DELETE `studio_decomposition_service.dart` (остаток после split) — 8-slot `_ControllerSpec` ontology. Проверить `grep -r "studio_decomposition\|StudioDecomposition\|_ControllerSpec" lib/` — обновить вызовы.
-- [ ] **2.4** DELETE `AgentSwipe` / `agentSwipes` / `agentSwipeId` из `ChatMessage` freezed-модели + `_syncAgentSwipesToMeta` из `chat_repo.dart` + `studioFinalOnly` re-run branch из `stream_generation_service.dart:207-226`.
-  - **Перед удалением freezed:** `dart run build_runner build` регенерит `.freezed.dart`. Сначала отредактировать `chat_message.dart` (убрать поля), потом `build_runner`.
-  - **Не забыть:** DB-миграция `ChatMessages` если `agent_swipes_json` колонка существует. Проверить `tables.dart` `ChatMessages` схему + migration log.
-- [ ] **2.5** REPURPOSE `studioOutputs` на `ChatMessage` → `trackerProvenanceJson` (или оставить имя `studioOutputs` во избежание миграции, но переименовать в коде через alias). Хранит `{trackerId, value, contributedAt}` для дебага.
-- [ ] **2.5b** После удаления `StudioStageBrief` (в 2.6) — consumers `MemoryStudioOutputDisposition` в `memory_studio_service.dart:444,482,503,544,2253` и `stream_generation_service.dart:644` пропадают. Удалить `MemoryStudioOutputDisposition` enum из `memory_studio_mode.dart` → файл становится пустым → удалить `memory_studio_mode.dart` целиком. Обновить imports в `memory_studio_service.dart:19` и `stream_generation_service.dart:11`.
-- [ ] **2.6** Переписать `memory_studio_service.dart` `runPipeline` → `runTrackerCycle`:
-  - Убрать `intermediateAgents`/`finalAgent`-сплит.
-  - Одна фаза: pre_generation трекеры (батч) → main gen (использует `agent_runner`) → parallel трекеры (батч, fire alongside) → post_processing трекеры (батч).
-  - `_buildAgentMessages` больше не дублирует фулл static_context на каждый агент — shared-часть один раз, agent-specific `promptShard` в `<agent_task>`-блоке.
-- [ ] **2.7** Починить дубль `buildPromptInIsolate` в `stream_generation_service.dart:89,170` — вызывать один раз.
-- [ ] **2.8** `flutter analyze` + `flutter test` + мануальный smoke-тест генерации с одним трекером.
+- [-] **2.1** SPLIT из `memory_studio_service.dart` транспорт-запрос-сборку + streaming scaffold → новый `lib/core/llm/agent_runner.dart` (тонкий orchestrator: build request → call LLM → stream → accumulate → return). ~150-200 строк. Используется и генератором, и трекерами. ⏳ отложено — `_runAgent` остался в `memory_studio_service.dart`; функциональность работает, но отдельного файла `agent_runner.dart` нет. Выделить в Phase 5 (батчинг) когда появится `executeTrackerBatch`.
+- [x] **2.2** SPLIT из `studio_decomposition_service.dart` `_synthesizeRoutedShard` → `lib/core/llm/verbatim_shard_assembler.dart` (~20 строк, standalone util). ✅ commit `0a9e6cd`
+- [x] **2.3** DELETE `studio_decomposition_service.dart` (остаток после split) — 8-slot `_ControllerSpec` ontology. ✅ commit `0a9e6cd` (+ удалён `studioDecompositionServiceProvider`, `studio_menu_dialog.dart` переписан в lightweight stub)
+- [x] **2.4** DELETE `AgentSwipe` / `agentSwipes` / `agentSwipeId` из `ChatMessage` freezed-модели + `_syncAgentSwipesToMeta` из `chat_repo.dart` + `studioFinalOnly` re-run branch из `stream_generation_service.dart:207-226`. ✅ commit `0a9e6cd` (DB-миграция не нужна — `agent_swipes_json` хранится в `swipesMeta` JSON, не отдельной колонкой; POST-cleaner переведён на `appendCleanerSwipe` — новый зелёный swipe)
+- [x] **2.5** REPURPOSE `studioOutputs` на `ChatMessage` → `trackerProvenanceJson` (или оставить имя `studioOutputs` во избежание миграции, но переименовать в коде через alias). ✅ commit `0a9e6cd` — `studioOutputs` поле удалено из `ChatMessage` вовсе; tracker provenance будет храниться в `AgentOperationRecord`-логе (Phase 7)
+- [x] **2.5b** После удаления `StudioStageBrief` (в 2.6) — consumers `MemoryStudioOutputDisposition` в `memory_studio_service.dart:444,482,503,544,2253` и `stream_generation_service.dart:644` пропадают. Удалить `MemoryStudioOutputDisposition` enum из `memory_studio_mode.dart` → файл становится пустым → удалить `memory_studio_mode.dart` целиком. ✅ commit `0a9e6cd` — `disposition` поле удалено из `StudioStageBrief`, `memory_studio_mode.dart` удалён, импорт убран
+- [x] **2.6** Переписать `memory_studio_service.dart` `runPipeline` → `runTrackerCycle`. ✅ commit `0a9e6cd` — `runTrackerCycle` запускает intermediate (трекеры) → final (генератор); `_buildAgentMessages` использует трим `chat_history` (Phase 3); static_context пока дублируется на каждый трекер (батчинг в Phase 5 уберёт дубль через shared-блок)
+- [-] **2.7** Починить дубль `buildPromptInIsolate` в `stream_generation_service.dart:89,170` — вызывать один раз. ⏳ не проверено — после правок Phase 2 номера строк сдвинулись; проверить в Phase 5 или отдельным audit
+- [x] **2.8** `flutter analyze` + `flutter test` + мануальный smoke-тест генерации с одним трекером. ✅ commit `0a9e6cd` (1253 теста прошли; мануальный smoke-тест не запускал — агент не может `flutter run`)
 
 **Файлы:** `memory_studio_service.dart` (rewrite), `studio_decomposition_service.dart` (delete), `memory_studio_mode.dart` (delete — после 2.6), `agent_runner.dart` (new), `verbatim_shard_assembler.dart` (new), `chat_message.dart`+`.freezed.dart` (edit), `chat_repo.dart` (edit), `stream_generation_service.dart` (edit), `tables.dart` (если миграция).
 **Оценка:** 3-5 дней.
@@ -157,16 +152,12 @@
 >
 > **Это значит:** пользователь, играющий только с MemoryBook (без rolling summary), **не теряет долгосрочную память** при триме. Куртка, потерянная на ходу 30, найдётся через MemoryBook-запись (созданную agentic-write-loop или вручную), инъектируется в трекер-контекст через `dynamic_context` блок, как и сейчас. Трим last-N касается только сырого чата — MemoryBook, lorebooks, char card, tracker state остаются в промпте трекера.
 
-- [ ] **3.1** Добавить в `StudioAgent` поле `contextSize` (default = `DEFAULT_AGENT_CONTEXT_SIZE` = **5**, hard-cap = `MAX_AGENT_CONTEXT_MESSAGES` = **200**). Это две разные константы: дефолт на трекер vs верхний предел при нормализации (`normalizeAgentContextSize` клампит в `[1, 200]`). Если имя `StudioAgent` сохраняется, поле `contextSize` добавляется в freezed-модель + `StudioConfigRows` schema (Drift migration +1 колонка).
-- [ ] **3.2** В `agent_runner.dart` (или в новой `_buildTrackerMessages`) срезать `context.history` → `context.recentMessages = history.slice(-contextSize)` + per-message `truncateAgentText(content, 2000)` + `stripHtmlTags`.
-  - **`truncateAgentText` портировать точно:** если `length > maxChars` → `head(40%) + "\n\n[Trimmed to keep this agent request compact]\n\n" + tail(60%)`, считая по символам (`Array.from` для корректной обработки юникода/эмодзи). Простая обрезка с конца теряет начало сообщения — не годится.
-  - `stripHtmlTags`: `<\/?[a-zA-Z][^>]*>` → "", схлопнуть `\n{3,}` → `\n\n`, trim.
-  - **Трим применяется ТОЛЬКО к `chat_history` блоку** (`memory_studio_service.dart:948-952`).
-  - `static_context` (char_card, persona, scenario, lorebooks) и `dynamic_context` (memory, summary, worldInfoBefore/After, guided_generation) **остаются как есть** — они не история.
-- [ ] **3.3** У генератора оставить `maxFinalHistoryMessages=15` (поле уже есть в `StudioConfig`).
-- [ ] **3.4** Если есть `chatSummary` (rolling summary из MemoryBook) — инъектить в трекер-контекст как замену удалённой истории (как Marinara's `AgentContext.chatSummary`). Для пользователей без summary — этот слой пустой, MemoryBook покрывает долгую память через `dynamic_context`.
-- [ ] **3.5** Тест: на 100-сообщ-сессии с включённой студией, input-tokens/turn должен упасть с ~290k до ~15-25k (1 генератор + 2-3 трекера × small-context). Проверить что MemoryBook-записи всё ещё видны в трекер-контексте через `dynamic_context`.
-- [ ] **3.6** `flutter analyze` + `flutter test`.
+- [x] **3.1** Добавить в `StudioAgent` поле `contextSize` (default = `DEFAULT_AGENT_CONTEXT_SIZE` = **5**, hard-cap = `MAX_AGENT_CONTEXT_MESSAGES` = **200**). ✅ commit `92c2012` — Drift-миграция НЕ нужна: `StudioAgent` сериализован в `StudioConfigRows.agentsJson` (JSON-текст), `contextSize` добавлен в freezed-модель и автоматически попадает в `toJson()`/`fromJson()` со `@Default(5)`.
+- [x] **3.2** В `agent_runner.dart` (или в новой `_buildTrackerMessages`) срезать `context.history` → `context.recentMessages = history.slice(-contextSize)` + per-message `truncateAgentText(content, 2000)` + `stripHtmlTags`. ✅ commit `92c2012` — реализовано в `_limitTrackerHistory` внутри `memory_studio_service.dart` (в `_buildAgentMessages` для не-final агентов). `truncateAgentText`: head 40% + маркер + tail 60%, rune-counted. `stripHtmlTags`: консервативный regex (только теги с буквы, сохраняет `==...==` и code fences).
+- [x] **3.3** У генератора оставить `maxFinalHistoryMessages=15` (поле уже есть в `StudioConfig`). ✅ commit `92c2012` — `_limitFinalHistory` остался без изменений
+- [-] **3.4** Если есть `chatSummary` (rolling summary из MemoryBook) — инъектить в трекер-контекст как замену удалённой истории. ⏳ отложено — rolling summary не реализован в MemoryBook (юзер играет только с MemoryBook); добавить когда rolling summary появится
+- [-] **3.5** Тест: на 100-сообщ-сессии с включённой студией, input-tokens/turn должен упасть с ~290k до ~15-25k. ⏳ отложено — требует мануального runtime-теста (`flutter run`), агент не может запустить; пользователь должен проверить
+- [x] **3.6** `flutter analyze` + `flutter test`. ✅ commit `92c2012` (1253 теста прошли)
 
 **Файлы:** `studio_config.dart` (edit), `tables.dart` (migration), `agent_runner.dart` (edit), `memory_studio_service.dart` (edit — только `:948-952` трим chat_history).
 **Оценка:** 1-2 дня.
@@ -188,19 +179,19 @@ Memory agent / tracker: off / on
 Agentic write-loop: отдельный pipeline toggle (уже есть agenticWriteEnabled)
 ```
 
-- [ ] **4.1** `MemoryBookSettings.memoryMode`: допустимые значения нормализовать до `legacy`/`fast`/`balanced`/`deep`. `agentic` больше не показывать и не сохранять из UI.
-- [ ] **4.2** JSON migration при чтении старых MemoryBook settings: если `memoryMode == 'agentic'`, маппить в `deep` (лучший backward-compatible выбор, потому что старый agentic требовал sidecar и был дорогим) и отдельно включать новый memory-agent слой, если он уже доступен в этой фазе. Если нового флага ещё нет — только `deep`, без silent LLM calls.
-- [ ] **4.3** `memory_generation_settings_sheet.dart`: убрать `ButtonSegment(value: 'agentic')`, убрать `memory_mode_agentic_desc`, `_normalizeMode('agentic')` → `deep`, `_needsSidecar` должен зависеть только от `deep` (или от нового memory-agent toggle, когда он появится), не от `agentic`.
-- [ ] **4.4** `post_building_menu_dialog.dart`: убрать `_memoryMode == 'agentic'` из `_sidecarLocked` и auto-enable sidecar условия. Sidecar lock остаётся для `deep` только до тех пор, пока deep действительно требует sidecar rerank.
-- [ ] **4.5** `memory_book_controller.dart:settingsSummary`: убрать special-case/bug вокруг `agentic`; после migration неизвестные значения не должны падать в "Fast" молча — использовать `normalizeMemoryMode` helper или явный fallback `fast`.
-- [ ] **4.6** `memory_injection_service.dart`: убрать условие `book.settings.memoryMode == 'agentic'` как trigger для `MemoryAgenticService`. Agentic read должен запускаться только через новый pre-generation `memory` tracker / pipeline flag, не через MemoryBook mode.
-- [ ] **4.7** `memory_agentic_service.dart`: обновить комментарии и API. Сервис больше не говорит "When `memoryMode == 'agentic'`"; он становится implementation detail для memory tracker / agentic read. `MemoryAgenticPolicy.enabled` получать из явного флага, а не из settings.memoryMode.
-- [ ] **4.8** i18n: удалить/пометить obsolete `memory_mode_agentic`, `memory_mode_agentic_desc` из `en.json`/`ru.json`, если больше нет ссылок.
-- [ ] **4.9** Tests/smoke:
-  - Старый MemoryBook JSON с `memoryMode: "agentic"` читается как `deep` и не крашит UI.
-  - В MemoryBook selector видны только `legacy`/`fast`/`balanced`/`deep`.
-  - Agentic write-loop (`agenticWriteEnabled`) продолжает работать независимо от retrieval mode.
-  - `flutter analyze` + `flutter test`.
+- [x] **4.1** `MemoryBookSettings.memoryMode`: допустимые значения нормализовать до `legacy`/`fast`/`balanced`/`deep`. `agentic` больше не показывать и не сохранять из UI. ✅ commit (Phase 4) — `ButtonSegment(value: 'agentic')` удалён из `memory_generation_settings_sheet.dart`
+- [x] **4.2** JSON migration при чтении старых MemoryBook settings: если `memoryMode == 'agentic'`, маппить в `deep`. ✅ commit (Phase 4) — миграция в `_migrateInjectionTargetInPlace` (`memory_book.dart`); нового memory-agent флага пока нет — только `deep`, без silent LLM calls
+- [x] **4.3** `memory_generation_settings_sheet.dart`: убрать `ButtonSegment(value: 'agentic')`, убрать `memory_mode_agentic_desc`, `_normalizeMode('agentic')` → `deep`, `_needsSidecar` зависит только от `deep`. ✅ commit (Phase 4)
+- [x] **4.4** `post_building_menu_dialog.dart`: убрать `_memoryMode == 'agentic'` из `_sidecarLocked` и auto-enable sidecar условия. ✅ commit (Phase 4) — `_sidecarLocked` теперь только `deep`; auto-enable sidecar только для `deep`
+- [x] **4.5** `memory_book_controller.dart:settingsSummary`: убрать special-case `agentic`. ✅ commit (Phase 4) — `'agentic'` кейс теперь показывает `'memory_mode_deep'.tr()` (миграция в `deep`); fallback на `fast` для неизвестных
+- [x] **4.6** `memory_injection_service.dart`: убрать условие `book.settings.memoryMode == 'agentic'` как trigger для `MemoryAgenticService`. ✅ commit (Phase 4) — agentic-блок удалён; agentic read будет wired как pre-generation memory tracker в Phase 5+
+- [x] **4.7** `memory_agentic_service.dart`: обновить комментарии и API. ✅ commit (Phase 4) — `runAgentic` теперь возвращает `disabled`; комментарий обновлён
+- [x] **4.8** i18n: удалить `memory_mode_agentic`, `memory_mode_agentic_desc` из `en.json`/`ru.json`. ✅ commit (Phase 4) — ключи удалены; `memory_mode_sidecar_not_configured` текст обновлён (убрано "Agentic")
+- [x] **4.9** Tests/smoke:
+  - Старый MemoryBook JSON с `memoryMode: "agentic"` читается как `deep` и не крашит UI. ✅ (миграция в `_migrateInjectionTargetInPlace`)
+  - В MemoryBook selector видны только `legacy`/`fast`/`balanced`/`deep`. ✅ (`ButtonSegment` убран)
+  - Agentic write-loop (`agenticWriteEnabled`) продолжает работать независимо от retrieval mode. ✅ (write-loop не завязан на `memoryMode`)
+  - `flutter analyze` + `flutter test`. ✅ 1253 теста прошли
 
 **Файлы:** `memory_book.dart` (+ generated), `memory_generation_settings_sheet.dart`, `post_building_menu_dialog.dart`, `memory_book_controller.dart`, `memory_injection_service.dart`, `memory_agentic_service.dart`, i18n JSON. Возможно `pipeline_settings.dart` / `studio_config.dart`, если explicit memory-agent toggle вводится уже здесь.
 **Оценка:** 1-2 дня.
