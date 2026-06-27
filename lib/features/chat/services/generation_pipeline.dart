@@ -517,7 +517,9 @@ class GenerationPipeline {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      final pipeline = await ref.read(pipelineSettingsProvider(sessionId).future);
+      final pipeline = await ref.read(
+        pipelineSettingsProvider(sessionId).future,
+      );
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.agenticWriteEnabled) return;
 
@@ -526,6 +528,16 @@ class GenerationPipeline {
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
+
+      // Anchor for the tracker snapshot: the just-finished assistant turn.
+      // The write-loop only fires on the non-regen path (line 228), so the
+      // last message is the freshly-generated assistant reply with
+      // swipeId=0 and agentSwipeId=0 (SavedMessageWriter seeds a single
+      // 'final'). Guard against non-assistant trailing messages defensively.
+      final lastAssistant = messages.lastWhere(
+        (m) => m.role == 'assistant',
+        orElse: () => messages.last,
+      );
 
       debugPrint(
         '[AgenticWrite] starting write-loop session=$sessionId '
@@ -541,6 +553,9 @@ class GenerationPipeline {
         settings: pipeline,
         recentHistoryText: recentHistory,
         currentTrackers: trackers,
+        messageId: lastAssistant.id,
+        swipeId: lastAssistant.swipeId,
+        agentSwipeId: lastAssistant.agentSwipeId,
         isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
       );
 
@@ -561,8 +576,7 @@ class GenerationPipeline {
             .read(agentOperationsLogProvider)
             .append(
               AgentOperationRecord(
-                id:
-                    'agentic-write-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+                id: 'agentic-write-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
                 kind: AgentOperationKind.agenticWrite,
                 status: status,
                 sessionId: sessionId,
@@ -574,11 +588,12 @@ class GenerationPipeline {
                     : pipeline.sidecarModel,
                 summary: status == AgentOperationStatus.ok
                     ? (totalWritten > 0
-                        ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
-                        : 'no changes')
+                          ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
+                          : 'no changes')
                     : result.status,
                 startedAtMs: result.attempts.first.startedAtMs,
-                finishedAtMs: result.attempts.last.startedAtMs +
+                finishedAtMs:
+                    result.attempts.last.startedAtMs +
                     result.attempts.last.elapsedMs,
                 canRegenerate: status.isFailure,
               ),
@@ -610,7 +625,9 @@ class GenerationPipeline {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      final pipeline = await ref.read(pipelineSettingsProvider(sessionId).future);
+      final pipeline = await ref.read(
+        pipelineSettingsProvider(sessionId).future,
+      );
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.postCleanerEnabled) return;
 
@@ -637,8 +654,10 @@ class GenerationPipeline {
           : 0;
       final recentMessages = <ChatMessage>[];
       if (maxHistory > 0 && lastAssistantIndex > 0) {
-        final start =
-            (lastAssistantIndex - maxHistory).clamp(0, lastAssistantIndex);
+        final start = (lastAssistantIndex - maxHistory).clamp(
+          0,
+          lastAssistantIndex,
+        );
         for (var i = start; i < lastAssistantIndex; i++) {
           final m = messages[i];
           if (m.content.trim().isEmpty || m.isError) continue;
@@ -656,7 +675,9 @@ class GenerationPipeline {
             .getBySessionId(sessionId);
         broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
       } catch (e) {
-        debugPrint('[PostCleaner] broadcast load failed session=$sessionId error=$e');
+        debugPrint(
+          '[PostCleaner] broadcast load failed session=$sessionId error=$e',
+        );
       }
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
@@ -671,7 +692,9 @@ class GenerationPipeline {
         'charCheck=${pipeline.postCleanerCharacterCheckEnabled}',
       );
 
-      ref.read(postCleanerStateProvider.notifier).state = PostCleanerState.running(
+      ref
+          .read(postCleanerStateProvider.notifier)
+          .state = PostCleanerState.running(
         sessionId: sessionId,
         messageId: lastAssistant.id,
         originalChars: lastAssistant.content.length,
@@ -683,8 +706,7 @@ class GenerationPipeline {
       // characterCheckEnabled AND promptPayload is available (exact generation
       // snapshot). Returns null on failure → cleaner runs without audit notes.
       List<String>? auditIssues;
-      if (pipeline.postCleanerCharacterCheckEnabled &&
-          promptPayload != null) {
+      if (pipeline.postCleanerCharacterCheckEnabled && promptPayload != null) {
         try {
           final loreContent = _assembleLorebooksContent(promptPayload);
           auditIssues = await cleanerService.runCharacterAudit(
@@ -692,8 +714,8 @@ class GenerationPipeline {
             character: promptPayload.character,
             persona: promptPayload.persona,
             lorebooksContent: loreContent,
-            memoryContent: promptPayload.memoryContent ??
-                promptPayload.memoryMacroContent,
+            memoryContent:
+                promptPayload.memoryContent ?? promptPayload.memoryMacroContent,
             summaryContent: promptPayload.summaryContent,
             arcContent: promptPayload.arcContent,
             entitiesContent: promptPayload.entitiesContent,
@@ -758,11 +780,11 @@ class GenerationPipeline {
               cleanedChars: result.cleanedText.length,
             )
           : (result.status == 'ok' || result.status == 'disabled')
-              ? const PostCleanerState.idle()
-              : PostCleanerState.error(
-                  sessionId: sessionId,
-                  messageId: lastAssistant.id,
-                );
+          ? const PostCleanerState.idle()
+          : PostCleanerState.error(
+              sessionId: sessionId,
+              messageId: lastAssistant.id,
+            );
 
       // Record the operation in the agentic operations log so the user can
       // inspect retries (502 → 200, etc.) from the dedicated UI.
@@ -770,8 +792,7 @@ class GenerationPipeline {
           .read(agentOperationsLogProvider)
           .append(
             AgentOperationRecord(
-              id:
-                  'cleaner-${lastAssistant.id}-${DateTime.now().microsecondsSinceEpoch}',
+              id: 'cleaner-${lastAssistant.id}-${DateTime.now().microsecondsSinceEpoch}',
               kind: AgentOperationKind.postCleaner,
               status: _cleanerStatusToOp(result.status),
               sessionId: sessionId,
@@ -839,10 +860,7 @@ class GenerationPipeline {
           if (current != null) {
             setState(
               AsyncData(
-                current.copyWith(
-                  session: refreshed,
-                  isGenerating: false,
-                ),
+                current.copyWith(session: refreshed, isGenerating: false),
               ),
             );
           }

@@ -29,8 +29,7 @@ class MemoryAgenticWriteService {
   final Ref _ref;
   final SidecarLlmClient _llm;
 
-  MemoryAgenticWriteService(this._ref)
-      : _llm = SidecarLlmClient(_ref);
+  MemoryAgenticWriteService(this._ref) : _llm = SidecarLlmClient(_ref);
 
   /// Run the agentic write-loop after a turn is finalized.
   ///
@@ -41,6 +40,9 @@ class MemoryAgenticWriteService {
     required PipelineSettings settings,
     required String recentHistoryText,
     required List<Tracker> currentTrackers,
+    required String messageId,
+    required int swipeId,
+    required int agentSwipeId,
     CancelToken? cancelToken,
     bool Function()? isStillCurrent,
   }) async {
@@ -54,7 +56,10 @@ class MemoryAgenticWriteService {
     }
 
     try {
-      final config = await _llm.resolveConfig(settings, errorLabel: 'agentic write-loop');
+      final config = await _llm.resolveConfig(
+        settings,
+        errorLabel: 'agentic write-loop',
+      );
       if (token.isCancelled) {
         return const MemoryWriteLoopResult(status: 'aborted');
       }
@@ -93,12 +98,14 @@ class MemoryAgenticWriteService {
         '(model=${config.model})',
       );
 
-      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
-        enabled: true,
-        readOnly: false,
-        writeToolsEnabled: true,
-        requireExplicitDiffApproval: false,
-      ));
+      final policy = MemoryAgenticPolicy(
+        const MemoryAgenticSettings(
+          enabled: true,
+          readOnly: false,
+          writeToolsEnabled: true,
+          requireExplicitDiffApproval: false,
+        ),
+      );
 
       if (token.isCancelled || isStillCurrent?.call() == false) {
         return MemoryWriteLoopResult(
@@ -115,6 +122,30 @@ class MemoryAgenticWriteService {
         provenance: 'memory_agent',
         shouldAbort: () => token.isCancelled || isStillCurrent?.call() == false,
       );
+
+      // Snapshot the post-write tracker state at the anchor
+      // (messageId, swipeId, agentSwipeId) so delete/swipe/regen rollback is
+      // emergent. `committed` stays false until the user sends a follow-up
+      // (Phase 6). Re-read the full tracker list from the repo to capture the
+      // merged state (pre-existing + newly written).
+      if (!token.isCancelled && isStillCurrent?.call() != false) {
+        try {
+          final updatedTrackers = await _ref
+              .read(trackerRepoProvider)
+              .getBySessionId(sessionId);
+          await _ref
+              .read(trackerSnapshotRepoProvider)
+              .upsertTrackers(
+                sessionId: sessionId,
+                messageId: messageId,
+                swipeId: swipeId,
+                agentSwipeId: agentSwipeId,
+                trackers: updatedTrackers,
+              );
+        } catch (e) {
+          debugPrint('[AgenticWrite] snapshot write failed: $e');
+        }
+      }
 
       if (token.isCancelled || isStillCurrent?.call() == false) {
         return MemoryWriteLoopResult(
@@ -142,8 +173,7 @@ class MemoryAgenticWriteService {
     } on TimeoutException {
       return const MemoryWriteLoopResult(status: 'timeout');
     } catch (e) {
-      if (token.isCancelled ||
-          (e is DioException && CancelToken.isCancel(e))) {
+      if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
         return const MemoryWriteLoopResult(status: 'aborted');
       }
       return MemoryWriteLoopResult(status: 'error', error: '$e');
@@ -161,7 +191,8 @@ class MemoryAgenticWriteService {
         ? '(no active trackers)'
         : currentTrackers.map((t) => '- ${t.name}: ${t.value}').join('\n');
 
-    final prompt = '''You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.
+    final prompt =
+        '''You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.
 
 Recent conversation:
 $recentHistoryText
@@ -320,15 +351,17 @@ Rules:
         errors.add('Denied "${req.title}": ${decision.reason}');
         continue;
       }
-      drafts.add(MemoryDraft(
-        id: generateId(),
-        title: req.title,
-        content: req.content,
-        keys: req.keys,
-        status: 'pending_generation',
-        source: 'agentic',
-        createdAt: currentTimestampSeconds(),
-      ));
+      drafts.add(
+        MemoryDraft(
+          id: generateId(),
+          title: req.title,
+          content: req.content,
+          keys: req.keys,
+          status: 'pending_generation',
+          source: 'agentic',
+          createdAt: currentTimestampSeconds(),
+        ),
+      );
       written++;
     }
 

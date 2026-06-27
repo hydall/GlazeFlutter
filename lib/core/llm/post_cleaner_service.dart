@@ -383,6 +383,10 @@ class PostCleanerService {
   /// swipe carrying [cleanedText] to the last assistant message via
   /// [ChatRepo.appendAgentSwipe]. The original 'final' text remains available
   /// as the parent swipe and is lazy-migrated on first clean.
+  ///
+  /// After the append, clones the parent agent-swipe's tracker snapshot into
+  /// the new 'cleaned' anchor so navigating to the blue sub-swipe restores the
+  /// correct tracker state (the cleaner rewrites prose, not trackers).
   Future<void> applyCleanedText({
     required String sessionId,
     required String messageId,
@@ -403,6 +407,35 @@ class PostCleanerService {
       ChatSessionService.updateCache(session);
     }
     _ref.invalidate(chatHistoryProvider);
+
+    // Clone the parent agent-swipe's tracker snapshot into the new 'cleaned'
+    // anchor. The cleaner rewrites prose — tracker state is unchanged, so the
+    // 'cleaned' sub-swipe inherits the parent 'final's trackers. Read the
+    // post-append message to get the exact swipeId + new agentSwipeId (handles
+    // lazy-backfill for legacy messages).
+    try {
+      final msg = session?.messages.where((m) => m.id == messageId).firstOrNull;
+      if (msg == null || msg.agentSwipeId <= 0) return;
+      final parentAgentSwipeId = msg.agentSwipeId - 1;
+      final snapshotRepo = _ref.read(trackerSnapshotRepoProvider);
+      final parent = await snapshotRepo.getByAnchor(
+        sessionId: sessionId,
+        messageId: messageId,
+        swipeId: msg.swipeId,
+        agentSwipeId: parentAgentSwipeId,
+      );
+      if (parent != null) {
+        await snapshotRepo.upsertTrackers(
+          sessionId: sessionId,
+          messageId: messageId,
+          swipeId: msg.swipeId,
+          agentSwipeId: msg.agentSwipeId,
+          trackers: parent.trackers,
+        );
+      }
+    } catch (e) {
+      debugPrint('[PostCleaner] snapshot clone failed: $e');
+    }
   }
 
   /// Pass 0: Character/World Auditor.
