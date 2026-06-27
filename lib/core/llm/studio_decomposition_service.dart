@@ -14,11 +14,7 @@ import 'reasoning_stripper.dart';
 import 'studio_block_classifier.dart';
 import 'studio_block_expander.dart';
 import 'studio_block_router.dart';
-import 'transport/chat_transport_request.dart';
-import 'transport/llm_protocol.dart';
-import 'transport/transport_factory.dart';
-import '../state/pipeline_settings_provider.dart';
-import '../../features/settings/api_list_provider.dart';
+import 'studio_build_llm_client.dart';
 
 class _ControllerSpec {
   final String id;
@@ -207,9 +203,10 @@ const _controllerSpecs = <_ControllerSpec>[
 /// The decomposition is cached per-session and only re-run when the preset
 /// changes (detected via sourcePresetHash).
 class StudioDecompositionService {
-  final Ref _ref;
+  final StudioBuildLlmClient _buildLlm;
 
-  StudioDecompositionService(this._ref);
+  StudioDecompositionService(Ref ref)
+      : _buildLlm = StudioBuildLlmClient(ref);
 
   /// Decompose a preset into build-time Studio controller agents.
   /// Returns a list of [StudioAgent]s ordered by pipeline execution order.
@@ -792,73 +789,8 @@ Assigned preset blocks:
     String prompt, {
     ApiConfig? apiConfig,
     CancelToken? cancelToken,
-  }) async {
-    final settings = _ref.read(pipelineSettingsProvider);
-    final isCustom = settings.sidecarSource == 'custom';
-    String endpoint;
-    String apiKey;
-    String model;
-    String protocol;
-
-    if (apiConfig != null) {
-      endpoint = apiConfig.endpoint;
-      apiKey = apiConfig.apiKey;
-      model = apiConfig.model;
-      protocol = apiConfig.protocol;
-    } else if (isCustom) {
-      endpoint = settings.sidecarEndpoint;
-      apiKey = settings.sidecarApiKey;
-      model = settings.sidecarModel;
-      protocol = LlmProtocol.openai;
-    } else {
-      await _ref.read(apiListProvider.future);
-      final chatConfig = _ref.read(activeApiConfigProvider);
-      if (chatConfig == null) {
-        throw Exception(
-          'No chat API config available for studio decomposition',
-        );
-      }
-      endpoint = chatConfig.endpoint;
-      apiKey = chatConfig.apiKey;
-      model = settings.sidecarModel.isNotEmpty
-          ? settings.sidecarModel
-          : chatConfig.model;
-      protocol = chatConfig.protocol;
-    }
-
-    if (endpoint.isEmpty || model.isEmpty) {
-      throw Exception('Studio decomposition API not configured');
-    }
-
-    final completer = Completer<String>();
-    final transport = pickChatTransport(protocol);
-
-    unawaited(
-      transport.stream(
-        request: ChatTransportRequest(
-          endpoint: endpoint,
-          apiKey: apiKey,
-          model: model,
-          messages: [
-            {'role': 'user', 'content': prompt},
-          ],
-          maxTokens: 4000,
-          temperature: 0.3,
-          topP: 1.0,
-          stream: false,
-        ),
-        cancelToken: cancelToken,
-        onComplete: (text, _, {rawResponseJson}) {
-          if (!completer.isCompleted) completer.complete(text);
-        },
-        onError: (error) {
-          if (!completer.isCompleted) completer.completeError(error);
-        },
-      ),
-    );
-
-    return completer.future.timeout(const Duration(seconds: 90));
-  }
+  }) =>
+      _buildLlm.call(prompt, apiConfig: apiConfig, cancelToken: cancelToken);
 
   void _log(String message) {
     debugPrint('[StudioBuild] $message');
