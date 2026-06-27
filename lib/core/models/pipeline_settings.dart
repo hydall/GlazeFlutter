@@ -54,6 +54,17 @@ abstract class PipelineSettings with _$PipelineSettings {
     // 1 = every turn (legacy behavior). Higher values reduce LLM cost / latency
     // at the cost of slower memory propagation on long chats.
     @Default(8) int runAgenticEveryN,
+    // When true, agent writes land in `pendingDrafts` for manual user
+    // approval instead of being auto-approved as `MemoryEntry`. The user
+    // reviews drafts in the existing MemoryBook UI ("Pending drafts"
+    // section) and promotes or rejects them. Append-only updates to
+    // existing entries are also deferred — the newFacts are written as a
+    // new draft whose content is the appended text, NOT merged into the
+    // existing entry until the user approves. Mirrors Marinara's
+    // `agentWriteApprovalRequired` per-chat flag. Default false = legacy
+    // auto-approve behavior.
+    // See docs/plans/PLAN_MEMORY_CONTINUITY.md §4 (agentWriteApprovalRequired).
+    @Default(false) bool agentWriteApprovalRequired,
     // Enable raw-message recall (cosine search over chat_message embeddings).
     // Pairs with `ChatMessageEmbeddingService` + `MessageRecallService` as the
     // lossless backstop for the lossy MemoryBook compression. Auto-disables

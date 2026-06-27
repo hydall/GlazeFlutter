@@ -182,6 +182,7 @@ class MemoryAgenticWriteService {
         messageId: messageId,
         requests: response.memoryRequests,
         shouldAbort: () => token.isCancelled || isStillCurrent?.call() == false,
+        requireApproval: settings.agentWriteApprovalRequired,
       );
 
       return MemoryWriteLoopResult(
@@ -251,6 +252,7 @@ class MemoryAgenticWriteService {
     required String messageId,
     required List<MemoryWriteRequest> requests,
     required bool Function() shouldAbort,
+    bool requireApproval = false,
   }) async {
     if (requests.isEmpty) return const MemoryWriteResult();
 
@@ -259,12 +261,63 @@ class MemoryAgenticWriteService {
     var denied = 0;
     final errors = <String>[];
 
-    // Two write paths (patch #4):
+    // Three write paths (patch #4 + follow-up):
+    // - requireApproval=true → ALL requests become MemoryDrafts in
+    //   pendingDrafts for manual user review (Marinara
+    //   agentWriteApprovalRequired analog). Append-only updates to
+    //   existing entries are also deferred: the newFacts are written as
+    //   a draft whose content is the appended text, NOT merged into the
+    //   existing entry until the user approves. See
+    //   docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
     // - existingEntryId empty → CREATE a new MemoryEntry (kind='agent',
     //   source='agentic') and batch-append via appendApprovedEntries.
     // - existingEntryId non-empty → APPEND-only newFacts to the existing
     //   entry via appendFactsToEntry (atomic RMW, Marinara append-only
     //   semantics). The existing entry is NOT rewritten.
+    if (requireApproval) {
+      final drafts = <MemoryDraft>[];
+      for (final req in requests) {
+        if (shouldAbort()) break;
+        final decision = policy.canUse(MemoryAgenticTool.writeMemory);
+        if (!decision.allowed) {
+          denied++;
+          errors.add('Denied "${req.title}": ${decision.reason}');
+          continue;
+        }
+        drafts.add(
+          MemoryDraft(
+            id: generateId(),
+            title: req.title,
+            content: req.content,
+            keys: req.keys,
+            messageIds: [messageId],
+            status: 'pending_generation',
+            source: 'agentic',
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+            updatedAt: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+        written++;
+      }
+      if (drafts.isNotEmpty && !shouldAbort()) {
+        try {
+          await repo.appendDrafts(sessionId, drafts);
+        } catch (e) {
+          debugPrint(
+            '[MemoryAgenticWriteService] appendDrafts (approval) failed: $e',
+          );
+          errors.add('Batch write error: $e');
+          written = 0;
+        }
+      }
+      return MemoryWriteResult(
+        written: written,
+        denied: denied,
+        errors: errors,
+        requests: requests,
+      );
+    }
+
     final newEntries = <MemoryEntry>[];
     final appendRequests = <MemoryWriteRequest>[];
     for (final req in requests) {
