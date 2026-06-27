@@ -17,7 +17,8 @@ class BackupExporter {
   //         personas, lorebooks, embeddings, chat_summaries, memory_book_rows)
   //   3 — added extension_presets and info_blocks tables
   //   4 — added studio_config_rows (Studio agent profiles/settings)
-  static const int _schemaVersion = 4;
+  //   5 — added tracker_snapshots (per-message tracker state for rollback)
+  static const int _schemaVersion = 5;
 
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
@@ -182,6 +183,7 @@ class BackupExporter {
       'extension_presets',
       'info_blocks',
       'studio_config_rows',
+      'tracker_snapshots',
     ];
   }
 }
