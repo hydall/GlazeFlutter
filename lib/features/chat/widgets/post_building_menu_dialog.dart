@@ -982,41 +982,44 @@ class _SectionCard extends StatelessWidget {
           color: context.cs.outlineVariant.withValues(alpha: 0.4),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: context.cs.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      titleKey.tr(),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: context.cs.onSurface,
-                      ),
-                    ),
-                    if (subtitleKey != null)
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: context.cs.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        subtitleKey!.tr(),
+                        titleKey.tr(),
                         style: TextStyle(
-                          fontSize: 11,
-                          color: context.cs.onSurfaceVariant,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.cs.onSurface,
                         ),
                       ),
-                  ],
+                      if (subtitleKey != null)
+                        Text(
+                          subtitleKey!.tr(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          ...children,
-        ],
+              ],
+            ),
+            const SizedBox(height: 4),
+            ...children,
+          ],
+        ),
       ),
     );
   }

@@ -8,6 +8,7 @@ import '../../core/services/generation_notification_service.dart';
 import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import 'chat_provider.dart' show streamingStateProvider;
+import 'state/studio_cycle_state_provider.dart';
 import 'chat_session_service.dart';
 import 'chat_state.dart';
 
@@ -78,6 +79,16 @@ class AbortHandler {
         const StreamingState();
   }
 
+  void clearStudioCycle() {
+    if (!_ref.mounted) return;
+    final cur = _ref.read(studioCycleStateProvider);
+    if (cur.phase == StudioCyclePhase.running ||
+        cur.phase == StudioCyclePhase.writingFinal) {
+      _ref.read(studioCycleStateProvider.notifier).state =
+          const StudioCycleState.idle();
+    }
+  }
+
   void abortGeneration() {
     if (!_ref.mounted) return;
     _activeGenId++;
@@ -87,6 +98,7 @@ class AbortHandler {
     _imgGenCancelToken?.cancel();
     _imgGenCancelToken = null;
     clearStreaming();
+    clearStudioCycle();
 
     final current = _getState().value;
     if (current != null && current.isGenerating) {
