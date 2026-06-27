@@ -624,7 +624,17 @@ class GenerationPipeline {
           snapshot?.trackers ?? await trackerRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
-      final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
+      final recentHistory = extractRecentHistoryText(
+        messages,
+        maxMessages: 10,
+        // Historical replay (Marinara `buildHistoricalLorebookKeeperContext`
+        // analog): at regen, slice messages up to AND INCLUDING the regen
+        // target so the write-loop sees the same context the original
+        // turn saw, not the current post-regen state. Without this, regen
+        // would produce different entries than the original turn.
+        // See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2.
+        upToMessageId: regenTargetId,
+      );
 
       // Anchor for the tracker snapshot: the just-finished assistant turn.
       // On both normal send and regen, SavedMessageWriter seeds a single
@@ -1504,11 +1514,27 @@ class GenerationPipeline {
 String extractRecentHistoryText(
   List<ChatMessage> messages, {
   int maxMessages = 10,
+  /// If non-null, only messages up to AND INCLUDING the one with this id
+  /// are considered. Messages after it are dropped — used at regen time
+  /// so the agentic write-loop replays against the historical slice that
+  /// existed when the original turn was generated, not the current
+  /// (post-regen) state. Mirrors Marinara's
+  /// `buildHistoricalLorebookKeeperContext`. See
+  /// docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2 (follow-up).
+  String? upToMessageId,
 }) {
-  final start = messages.length > maxMessages
-      ? messages.length - maxMessages
+  // Truncate to the historical slice first if requested.
+  List<ChatMessage> source = messages;
+  if (upToMessageId != null) {
+    final idx = messages.indexWhere((m) => m.id == upToMessageId);
+    if (idx >= 0) {
+      source = messages.sublist(0, idx + 1);
+    }
+  }
+  final start = source.length > maxMessages
+      ? source.length - maxMessages
       : 0;
-  final recent = messages.sublist(start);
+  final recent = source.sublist(start);
   final lines = <String>[];
   for (final msg in recent) {
     if (msg.isError || msg.isTyping) continue;

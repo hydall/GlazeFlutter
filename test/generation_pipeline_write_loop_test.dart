@@ -99,6 +99,79 @@ void main() {
       expect(result.contains('Msg 0'), isTrue);
       expect(result.contains('Msg 9'), isTrue);
     });
+
+    // NEW (patch #4 follow-up): historical replay — at regen, slice
+    // messages up to AND INCLUDING the regen target so the write-loop
+    // sees the same context the original turn saw. Mirrors Marinara's
+    // `buildHistoricalLorebookKeeperContext`. See
+    // docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2.
+    test('upToMessageId truncates messages after the target (inclusive)',
+        () {
+      final messages = List.generate(
+        20,
+        (i) => _msg(id: 'm$i', role: 'user', content: 'Msg $i'),
+      );
+      final result = extractRecentHistoryText(
+        messages,
+        maxMessages: 10,
+        upToMessageId: 'm9',
+      );
+      // Only messages m0..m9 are considered. With maxMessages: 10, all 10
+      // are taken (no truncation by max).
+      expect(result.contains('Msg 9'), isTrue);
+      // Messages after m9 are dropped — these would be the post-regen
+      // state that should NOT be visible to the write-loop at regen time.
+      expect(result.contains('Msg 10'), isFalse);
+      expect(result.contains('Msg 19'), isFalse);
+    });
+
+    test('upToMessageId with maxMessages takes the last N of the slice', () {
+      final messages = List.generate(
+        20,
+        (i) => _msg(id: 'm$i', role: 'user', content: 'Msg $i'),
+      );
+      final result = extractRecentHistoryText(
+        messages,
+        maxMessages: 5,
+        upToMessageId: 'm9',
+      );
+      // Slice m0..m9 (10 messages), then take last 5 → m5..m9.
+      expect(result.contains('Msg 5'), isTrue);
+      expect(result.contains('Msg 9'), isTrue);
+      expect(result.contains('Msg 4'), isFalse);
+      expect(result.contains('Msg 10'), isFalse);
+    });
+
+    test('upToMessageId with unknown id returns the full slice (no truncation)',
+        () {
+      final messages = List.generate(
+        5,
+        (i) => _msg(id: 'm$i', role: 'user', content: 'Msg $i'),
+      );
+      final result = extractRecentHistoryText(
+        messages,
+        maxMessages: 10,
+        upToMessageId: 'm_nonexistent',
+      );
+      // Unknown id → no truncation, behaves like upToMessageId=null.
+      expect(result.contains('Msg 0'), isTrue);
+      expect(result.contains('Msg 4'), isTrue);
+    });
+
+    test('upToMessageId null returns the full recent history (legacy)', () {
+      final messages = List.generate(
+        15,
+        (i) => _msg(id: 'm$i', role: 'user', content: 'Msg $i'),
+      );
+      final result = extractRecentHistoryText(
+        messages,
+        maxMessages: 10,
+        upToMessageId: null,
+      );
+      expect(result.contains('Msg 5'), isTrue);
+      expect(result.contains('Msg 14'), isTrue);
+      expect(result.contains('Msg 4'), isFalse);
+    });
   });
 
   group('Stage 2 trigger suppression logic', () {
