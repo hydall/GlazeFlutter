@@ -156,6 +156,19 @@ Studio Mode (tracker-around-generator, Phase 5+):
   via `ChatRepo.appendAgentSwipe(kind: 'cleaned')`, preserving the original
   `'final'` as the parent. Hold mode (Marinara) is NOT implemented (Phase
   1.3 decision). See INV-ST4.
+- **Swipe-first streaming (UX phase):** the `'cleaned'` swipe is pre-created
+  at cleaner start (empty content, parent snapshot cloned) so the blue
+  switcher is visible immediately while the rewrite streams into the chat
+  bubble. On completion the swipe is filled in place via
+  `ChatRepo.updateAgentSwipeContent`; on failure with partial text the
+  truncated text is preserved; on failure with no text the swipe is removed
+  via `ChatRepo.removeAgentSwipe`. Each swipe carries its own `genTime`
+  (cleaner elapsed) + `tokens` (estimateTokens) so the per-swipe badge
+  persists.
+- **Separate audit model (UX phase):** `PipelineSettings.postCleanerAuditModel`
+  overrides only the model for the character/world audit; endpoint/key/source/
+  protocol are inherited from the cleaner config. Falls back to the
+  cleaner-resolved model when empty (`SidecarLlmClient.resolveConfigForAudit`).
 - The Studio tracker-cycle is logged in the agentic operations log as a
   `studioTracker` kind record (Phase 10). The record carries an aggregate
   `AgentOperationAttempt` covering the whole cycle elapsed time; per-agent

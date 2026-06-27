@@ -159,3 +159,18 @@ Independent of 1/3/4.
 
 ## Suggested order
 Phase 1 (badge metadata) → Phase 3 (audit model — independent, easy) → Phase 2 (swipe-first + partial save — biggest) → Phase 4 (docs). Phase 1 before 2 because 2 reuses the genTime/tokens wiring. Phase 3 can slot anywhere.
+
+---
+
+## Execution log (commits on `plan/continuity-post-cleaner`)
+
+- `06e5486` — docs: plan committed.
+- `df5901a` — **Phase 1**: `applyCleanedText` forwards `genTime` + `tokens` into `ChatRepo.appendAgentSwipe`; `generation_pipeline` computes them at the call site (`genTime = '${(totalElapsedMs/1000).toStringAsFixed(1)}s'`, `tokens = estimateTokens(cleanedText)`). Tokenizer import added to pipeline. Tests: 92 post-cleaner + pipeline tests pass.
+- `38fe5a4` — **Phase 3**: new `PipelineSettings.postCleanerAuditModel` field (freezed regenerated); `SidecarLlmClient.resolveConfigForAudit` (reuses cleaner resolver, swaps model); `runCharacterAudit` switched to it; UI text-field under the audit toggle; ru/en translation keys.
+- `121d736` — **Phase 2**: swipe-first streaming + partial-text preservation. Pre-create empty `'cleaned'` swipe at cleaner start (snapshot cloned); `_lastStreamedText` captured in `onCleanedChunk`; finalize via `ChatRepo.updateAgentSwipeContent` / `removeAgentSwipe` (new atomic methods); abort + hard-failure paths remove the pre-created swipe; legacy `applyCleanedText` fallback when pre-create failed. Full suite 1339 tests pass.
+- (this commit) — **Phase 4**: docs (ARCHITECTURE / rules/generation / INVARIANTS INV-ST4 + INV-TS5 / rules/database) updated; this execution log appended.
+
+## Known gaps (NOT introduced by this work — pre-existing)
+
+- **`pipeline_settings_rows` is NOT in the backup whitelist** (`backup_exporter.dart:_knownTableNames`) and has **no cloud-sync adapter**. This means the entire `PipelineSettings` object (including the new `postCleanerAuditModel` and every other cleaner/sidecar/consolidation field) is not exported or synced. This is a pre-existing gap affecting all pipeline settings fields, not just the one added in Phase 3. Follow-up: add `pipeline_settings_rows` to the backup whitelist (bump `_schemaVersion` to 6) and a cloud-sync store mirroring `TrackerSnapshotSyncStore`.
+- The new `ChatRepo.updateAgentSwipeContent` / `removeAgentSwipe` methods have no dedicated unit tests (the existing `ChatRepo` tests require a full Drift harness; the post_cleaner characterization tests cover model serialization, not the repo). Verified via the full 1339-test suite (no regressions) + `flutter analyze` (0 errors).

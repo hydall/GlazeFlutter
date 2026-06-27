@@ -473,9 +473,43 @@ conservative defaults for desktop).
 
 POST-processing (Phase 1.3) stays separate from the tracker pipeline: the
 POST-cleaner runs after the full reply and writes a blue `'cleaned'` agent
-sub-swipe via `ChatRepo.appendAgentSwipe(kind: 'cleaned')`
-(`post_cleaner_service.dart`), preserving the original `'final'` as the
-parent. Hold mode (Marinara) is not implemented. See INV-ST4.
+sub-swipe (`post_cleaner_service.dart`, `generation_pipeline.dart`),
+preserving the original `'final'` as the parent. Hold mode (Marinara) is not
+implemented. See INV-ST4.
+
+#### POST-cleaner swipe lifecycle (UX phase, "swipe-first streaming")
+
+The cleaned swipe is **pre-created at cleaner start** (empty content, tracker
+snapshot cloned from the parent `'final'`) so the blue sub-swipe switcher is
+visible immediately while the rewrite streams into the chat bubble for live
+preview (`generation_pipeline._runPostCleaner`). The cleaner's `onCleanedChunk`
+callback tracks the latest accumulated chunk in
+`GenerationPipeline._lastStreamedText` — `SidecarCallOutcome.text` is null on
+any failure, so partial text the user saw live is only reachable via the
+callback.
+
+On cleaner completion (`generation_pipeline.dart`):
+- `wasCleaned==true` → `ChatRepo.updateAgentSwipeContent` fills the pre-created
+  swipe with the cleaned text + per-swipe `genTime` (cleaner's own elapsed)
+  + `tokens` (estimateTokens of the cleaned text) — keeps the badge visible on
+  the blue sub-swipe.
+- `wasCleaned==false` AND partial text was streamed → keep the partial
+  (truncated) text in the swipe so the user doesn't lose what they saw live
+  (ops log summary marks `partialSaved (N chars)`).
+- `wasCleaned==false` AND nothing streamed → `ChatRepo.removeAgentSwipe`
+  deletes the pre-created empty swipe and reverts active to the parent
+  `'final'`.
+- Abort mid-cleaner → remove the pre-created empty swipe (no partial save on
+  abort by default).
+- Hard pipeline failure → best-effort remove + revert in the catch block.
+- Pre-create failed earlier → fall back to the legacy
+  `applyCleanedText` (append) path so the user still gets a `'cleaned'` swipe.
+
+`ChatRepo.updateAgentSwipeContent` / `removeAgentSwipe` are the atomic
+(transaction-wrapped) methods for in-place swipe edits; `appendAgentSwipe`
+remains the legacy append path. The character/world audit can use a
+**separate model** from the cleaner rewrite (`PipelineSettings.postCleanerAuditModel`,
+inheriting endpoint/key/source/protocol from the cleaner config — Fix 2).
 
 ### Preset decomposition (auto + manual)
 

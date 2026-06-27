@@ -46,7 +46,9 @@ Prefer adding a dedicated repo method (e.g. `appendMessage`) that encapsulates
 the transaction rather than doing it ad hoc in a service. Dedicated atomic
 methods on `ChatRepo` include `appendSwipeToMessage`,
 `appendAgentSwipe({kind: 'cleaned' | 'final'})` (nested blue sub-swipe +
-`_syncAgentSwipesToMeta`), and the chat/character variable-scope methods.
+`_syncAgentSwipesToMeta`), `updateAgentSwipeContent` / `removeAgentSwipe`
+(in-place swipe editers used by the swipe-first cleaner flow — re-sync
+`swipesMeta` the same way), and the chat/character variable-scope methods.
 
 ---
 

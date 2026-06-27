@@ -228,7 +228,10 @@ sub-swipe navigation goes through `ChatMessageService.setAgentSwipe` /
 `changeAgentSwipe`; the WebView renders an `agent-switcher` (blue) control
 when `agentSwipes.length > 1`. `appendAgentSwipe` syncs
 `agentSwipes`+`agentSwipeId` into `swipesMeta[swipeId]` so green-swipe
-round-trips preserve the nested swipes.
+round-trips preserve the nested swipes. `ChatRepo.updateAgentSwipeContent`
+and `ChatRepo.removeAgentSwipe` are the atomic in-place swipe editers
+(used by the swipe-first cleaner flow — see below); they re-sync
+`swipesMeta` the same way.
 
 A full regeneration (`SavedMessageWriter.writeAssistant` with
 `regenTargetId`) resets `agentSwipes` to a single fresh `'final'` pointing
@@ -237,6 +240,26 @@ previous content) is dropped. The `studioFinalOnly` re-run branch (append a
 `'final'` without touching green swipes) is NOT restored: it depended on
 the removed 8-controller `regenerateIntermediateAgent` orchestration.
 Hold mode (Marinara) is not implemented.
+
+#### Swipe-first cleaner lifecycle (UX phase) ✅ ENFORCED
+
+`generation_pipeline._runPostCleaner` pre-creates an empty `'cleaned'`
+swipe at cleaner start and finalizes it based on the outcome:
+- `wasCleaned==true` → `updateAgentSwipeContent` fills it with the cleaned
+  text + `genTime` (cleaner elapsed) + `tokens` (estimateTokens).
+- `wasCleaned==false` AND `_lastStreamedText` non-empty → keep the partial
+  (truncated) text in the swipe (ops log marks `partialSaved`).
+- `wasCleaned==false` AND nothing streamed → `removeAgentSwipe` reverts
+  active to the parent `'final'`.
+- Abort mid-cleaner → `removeAgentSwipe` (no partial save on abort).
+- Hard pipeline failure → best-effort `removeAgentSwipe` in the catch
+  block; pre-create failure → fall back to the legacy `applyCleanedText`
+  append path.
+
+`GenerationPipeline._lastStreamedText` /
+`_preCreatedCleanerSwipeId` / `_preCreatedMessageId` are instance fields,
+reset in the `_runPostCleaner` finally block so state never leaks across
+runs.
 
 ### INV-ST5: Single tracker failure does not abort the rest ✅ ENFORCED (Phase 5.7.5)
 
@@ -344,14 +367,22 @@ tracker state, because each agent sub-swipe has its own snapshot row.
 
 ### INV-TS5: POST-cleaner clones parent snapshot ✅ ENFORCED (Phase 2)
 
-`post_cleaner_service.applyCleanedText` clones the parent message's
-snapshot into the new `'cleaned'` agent-swipe anchor before applying the
-cleaned text. The cleaned sub-swipe inherits the parent's tracker state;
-the original `'final'` snapshot is preserved.
+The POST-cleaner clones the parent message's snapshot into the new `'cleaned'`
+agent-swipe anchor so the cleaned sub-swipe inherits the parent's tracker
+state; the original `'final'` snapshot is preserved. Two paths:
 
-Code ref: `lib/core/llm/post_cleaner_service.dart:applyCleanedText` —
-`snapshotRepo.upsertTrackers(...)` with the parent's `messageId`/`swipeId`
-and the new `agentSwipeId`.
+- **Swipe-first flow (UX phase, `generation_pipeline._runPostCleaner`):**
+  the snapshot is cloned at pre-create time (right after
+  `appendAgentSwipe(kind: 'cleaned', content: '')`), before the cleaner
+  runs. So even if the cleaner crashes the pre-created swipe already has a
+  valid snapshot anchor.
+- **Legacy fallback (`post_cleaner_service.applyCleanedText`):** used when
+  pre-create failed earlier; clones after the append inside `applyCleanedText`.
+
+Code ref: `lib/features/chat/services/generation_pipeline.dart` (pre-create
+snapshot clone) and `lib/core/llm/post_cleaner_service.dart:applyCleanedText`
+(fallback) — both call `snapshotRepo.upsertTrackers(...)` with the parent's
+`messageId`/`swipeId` and the new `agentSwipeId`.
 
 ### INV-TS6: Branch copies snapshots for sliced messages ✅ ENFORCED (Phase 5)
 
