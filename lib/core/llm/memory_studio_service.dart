@@ -12,11 +12,11 @@ import '../state/db_provider.dart';
 import '../utils/cast_helpers.dart';
 import '../utils/error_format.dart';
 import 'agent_runner.dart';
-import 'json_repair.dart';
 import 'history_assembler.dart';
 import 'macro_engine.dart';
 import 'prompt_builder.dart';
 import 'studio_activation_gate.dart';
+import 'studio_brief_parser.dart';
 import 'studio_prompt_text.dart';
 import 'studio_request_preset.dart';
 import 'tracker_batcher.dart';
@@ -27,7 +27,6 @@ import 'tracker_batcher.dart';
 export 'studio_activation_gate.dart' show AgentPhaseSplit;
 
 const _mandatoryBlockIds = {'char_card', 'char_personality', 'user_persona'};
-const _studioMetaPolicyAgentName = 'Meta-Weaver / Lumia Policy';
 
 /// Session-bound Studio pipeline.
 ///
@@ -38,6 +37,7 @@ class MemoryStudioService {
   final Ref _ref;
   final Map<String, _CachedStudioBrief> _briefCache = {};
   final StudioPromptText _promptText = const StudioPromptText();
+  late final StudioBriefParser _briefParser = StudioBriefParser(_log);
 
   MemoryStudioService(this._ref);
 
@@ -195,7 +195,7 @@ class MemoryStudioService {
         final probe = cacheProbeByAgent[result.agentId];
         final agent = dueTrackers.firstWhere((a) => a.id == result.agentId);
         final sanitized = result.status == 'ok'
-            ? _sanitizeIntermediateAgentOutput(agent, result.text)
+            ? _briefParser.sanitizeIntermediateAgentOutput(agent, result.text)
             : result.text;
         final brief = StudioStageBrief(
           agentId: result.agentId,
@@ -356,7 +356,7 @@ class MemoryStudioService {
       turnIndex: turnIndex,
     );
     if (cached != null) {
-      final sanitizedCachedBrief = _sanitizeIntermediateAgentOutput(
+      final sanitizedCachedBrief = _briefParser.sanitizeIntermediateAgentOutput(
         agent,
         cached.brief,
       );
@@ -416,11 +416,11 @@ class MemoryStudioService {
     required CancelToken cancelToken,
     void Function(String text)? onIntermediateUpdate,
   }) async {
-    if (_isMetaPolicyAgent(agent)) {
+    if (_briefParser.isMetaPolicyAgent(agent)) {
       return StudioStageBrief(
         agentId: agent.id,
         agentName: agent.name,
-        brief: _metaPolicyBrief(agent),
+        brief: _briefParser.metaPolicyBrief(agent),
       );
     }
     try {
@@ -442,7 +442,7 @@ class MemoryStudioService {
         cancelToken: cancelToken,
         onIntermediateUpdate: onIntermediateUpdate,
       );
-      final sanitized = _sanitizeIntermediateAgentOutput(agent, result.text);
+      final sanitized = _briefParser.sanitizeIntermediateAgentOutput(agent, result.text);
       return StudioStageBrief(
         agentId: agent.id,
         agentName: agent.name,
@@ -1165,7 +1165,7 @@ class MemoryStudioService {
     final seen = <String>{};
     final result = <StudioStageBrief>[];
     for (final brief in briefs) {
-      if (_isMetaBriefName(brief.agentName)) {
+      if (_briefParser.isMetaBriefName(brief.agentName)) {
         result.add(brief);
         continue;
       }
@@ -1209,13 +1209,13 @@ class MemoryStudioService {
       final line = rawLine.trimRight();
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
-      final heading = _studioBriefHeading(trimmed);
+      final heading = _briefParser.studioBriefHeading(trimmed);
       if (heading != null) {
         flushHeading();
         currentHeading = line;
         continue;
       }
-      final item = _cleanBriefItem(trimmed);
+      final item = _briefParser.cleanBriefItem(trimmed);
       if (item == null) {
         // Non-bullet line outside a known section; keep verbatim once.
         final key = 'raw:${_dedupeKey(trimmed)}';
@@ -1244,39 +1244,16 @@ class MemoryStudioService {
         .trim();
   }
 
-  bool _isMetaPolicyAgent(StudioAgent agent) {
-    final text = '${agent.id}\n${agent.name}\n${agent.sourceBlockNames}'
-        .toLowerCase();
-    return text.contains('meta-weaver') ||
-        text.contains('lumia') ||
-        text.contains('ghost in the machine');
-  }
-
-  String _metaPolicyBrief(StudioAgent agent) {
-    final buffer = StringBuffer()
-      ..writeln('Meta policy:')
-      ..writeln('- Silent during normal in-character roleplay.')
-      ..writeln('- Never write scene prose, dialogue, actions, or narration.')
-      ..writeln('- Do not draft or continue the assistant reply.')
-      ..writeln(
-        '- Apply only as hidden policy for continuity, tone, and OOC routing.',
-      )
-      ..writeln(
-        '- If the user explicitly addresses OOC/Lumia/meta, answer as an OOC interface; otherwise stay invisible.',
-      );
-    return buffer.toString().trim();
-  }
-
   StudioStageBrief _sanitizePriorBriefForFinal(
     StudioStageBrief brief,
     StudioConfig config,
   ) {
-    if (!_isMetaBriefName(brief.agentName)) {
+    if (!_briefParser.isMetaBriefName(brief.agentName)) {
       final agent = _agentForBrief(brief, config);
       return StudioStageBrief(
         agentId: brief.agentId,
         agentName: brief.agentName,
-        brief: _sanitizeIntermediateAgentOutput(agent, brief.brief),
+        brief: _briefParser.sanitizeIntermediateAgentOutput(agent, brief.brief),
         status: brief.status,
         error: brief.error,
         refreshPolicy: brief.refreshPolicy,
@@ -1287,7 +1264,7 @@ class MemoryStudioService {
     return StudioStageBrief(
       agentId: brief.agentId,
       agentName: brief.agentName,
-      brief: _sanitizeMetaBrief(brief.brief),
+      brief: _briefParser.sanitizeMetaBrief(brief.brief),
       status: brief.status,
       error: brief.error,
       refreshPolicy: brief.refreshPolicy,
@@ -1300,307 +1277,6 @@ class MemoryStudioService {
     return config.agents.firstWhere(
       (agent) => agent.id == brief.agentId || agent.name == brief.agentName,
       orElse: () => StudioAgent(id: brief.agentId, name: brief.agentName),
-    );
-  }
-
-  String _sanitizeIntermediateAgentOutput(StudioAgent agent, String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return trimmed;
-    if (_isMetaBriefName(agent.name)) return _sanitizeMetaBrief(trimmed);
-    final typed = _typedStudioBrief(agent, trimmed);
-    if (typed != null) return typed;
-    final sectioned = _sectionStudioBrief(trimmed);
-    if (sectioned != null) return sectioned;
-
-    final fallback = _safeControllerFallback(agent);
-    _log(
-      'brief leaked scene prose; replacing agent="${agent.name}" '
-      'chars=${trimmed.length} first200=${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}',
-    );
-    return fallback;
-  }
-
-  String? _typedStudioBrief(StudioAgent agent, String text) {
-    final raw = extractJsonObject(text);
-    if (raw == null) return null;
-    Object? decoded;
-    try {
-      decoded = jsonDecode(repairJson(raw));
-    } catch (_) {
-      return null;
-    }
-    if (decoded is! Map) return null;
-    final focus = _safeJsonStringList(decoded['focus']);
-    final constraints = _safeJsonStringList(decoded['constraints']);
-    final avoid = _safeJsonStringList(decoded['avoid']);
-    final options = _safeJsonStringList(decoded['options']);
-    final all = [...focus, ...constraints, ...avoid, ...options];
-    if (all.isEmpty) {
-      _log(
-        'brief typed-JSON all items rejected agent="${agent.name}" '
-        'focus=${(decoded['focus'] as List?)?.length ?? 0} '
-        'constraints=${(decoded['constraints'] as List?)?.length ?? 0} '
-        'avoid=${(decoded['avoid'] as List?)?.length ?? 0} '
-        'options=${(decoded['options'] as List?)?.length ?? 0}',
-      );
-      return null;
-    }
-
-    return _buildStudioBrief(
-      focus: focus,
-      constraints: constraints,
-      avoid: avoid,
-      options: options,
-    );
-  }
-
-  String? _sectionStudioBrief(String text) {
-    if (_looksLikeSceneProse(text)) return null;
-    final focus = <String>[];
-    final constraints = <String>[];
-    final avoid = <String>[];
-    final options = <String>[];
-    var section = '';
-
-    for (final rawLine in text.split('\n')) {
-      final line = rawLine.trim();
-      if (line.isEmpty) continue;
-      final heading = _studioBriefHeading(line);
-      if (heading != null) {
-        section = heading;
-        continue;
-      }
-      if (section.isEmpty) continue;
-      final cleaned = _cleanBriefItem(line);
-      if (cleaned == null) continue;
-      final target = switch (section) {
-        'focus' => focus,
-        'avoid' => avoid,
-        'options' => options,
-        _ => constraints,
-      };
-      if (target.any(
-        (existing) => existing.toLowerCase() == cleaned.toLowerCase(),
-      )) {
-        continue;
-      }
-      target.add(cleaned);
-      if (target.length >= 6) section = '';
-    }
-
-    if ([...focus, ...constraints, ...avoid, ...options].isEmpty) return null;
-    return _buildStudioBrief(
-      focus: focus,
-      constraints: constraints,
-      avoid: avoid,
-      options: options,
-    );
-  }
-
-  String? _studioBriefHeading(String line) {
-    final normalized = line
-        .toLowerCase()
-        .replaceAll(RegExp(r'^#+\s*'), '')
-        .replaceAll(RegExp(r'[:：]+$'), '')
-        .trim();
-    if (normalized == 'focus' || normalized == 'фокус') return 'focus';
-    if (normalized == 'constraints' ||
-        normalized == 'constraint' ||
-        normalized == 'guard checklist' ||
-        normalized == 'checklist' ||
-        normalized == 'rules' ||
-        normalized == 'ограничения' ||
-        normalized == 'правила') {
-      return 'constraints';
-    }
-    if (normalized == 'avoid' ||
-        normalized == 'forbidden' ||
-        normalized == 'forbidden this turn' ||
-        normalized == 'do not' ||
-        normalized == 'избегать' ||
-        normalized == 'запреты') {
-      return 'avoid';
-    }
-    if (normalized == 'options' ||
-        normalized == 'option' ||
-        normalized == 'approaches' ||
-        normalized == 'choices' ||
-        normalized == 'варианты' ||
-        normalized == 'подходы' ||
-        normalized == 'на выбор') {
-      return 'options';
-    }
-    return null;
-  }
-
-  String _buildStudioBrief({
-    required List<String> focus,
-    required List<String> constraints,
-    required List<String> avoid,
-    List<String> options = const [],
-  }) {
-    final buffer = StringBuffer();
-    void writeSection(String title, List<String> items) {
-      if (items.isEmpty) return;
-      buffer.writeln(title);
-      for (final item in items) {
-        buffer.writeln('- $item');
-      }
-    }
-
-    writeSection('Focus:', focus);
-    writeSection('Constraints:', constraints);
-    writeSection('Avoid:', avoid);
-    writeSection('Options:', options);
-    return buffer.toString().trim();
-  }
-
-  List<String> _safeJsonStringList(Object? value) {
-    if (value is String) return _safeJsonStringList([value]);
-    if (value is! List) return const [];
-    final result = <String>[];
-    for (final item in value) {
-      if (item is! String) continue;
-      final cleaned = _cleanBriefItem(item);
-      if (cleaned == null) continue;
-      if (result.any(
-        (existing) => existing.toLowerCase() == cleaned.toLowerCase(),
-      )) {
-        continue;
-      }
-      result.add(cleaned);
-      if (result.length >= 6) break;
-    }
-    return result;
-  }
-
-  String? _cleanBriefItem(String item) {
-    final cleaned = item
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .replaceAll(RegExp(r'^[-*•\d.\s]+'), '')
-        .trim();
-    if (cleaned.isEmpty || cleaned.length > 350) return null;
-    if (cleaned.contains('{{') || cleaned.contains('}}')) return null;
-    if (cleaned.contains('<think>') || cleaned.contains('</think>')) {
-      return null;
-    }
-    if (RegExp(
-      r'\b(source blocks?|promptShard|controller instruction|system prompt)\b',
-      caseSensitive: false,
-    ).hasMatch(cleaned)) {
-      return null;
-    }
-    if (_looksLikeSceneProse(cleaned)) return null;
-    return cleaned;
-  }
-
-  bool _looksLikeSceneProse(String text) {
-    final trimmed = text.trimLeft();
-    final lower = trimmed.toLowerCase();
-    if (lower.startsWith('studio_brief:') ||
-        lower.startsWith('guard checklist:') ||
-        lower.startsWith('meta policy:')) {
-      return false;
-    }
-    if (RegExp(
-      r'\b(operational brief|controller brief|continuity brief|dialogue guidance|world-state guidance|constraints|checklist|forbidden|risks|target length|paragraph budget|response contract)\b',
-      caseSensitive: false,
-    ).hasMatch(lower)) {
-      return false;
-    }
-
-    final firstLine = trimmed.split('\n').first.trimLeft();
-    if (firstLine.startsWith('- ') || firstLine.startsWith('1. ')) {
-      return false;
-    }
-
-    final paragraphs = trimmed
-        .split(RegExp(r'\n\s*\n'))
-        .where((p) => p.trim().isNotEmpty)
-        .length;
-    final hasDialogueQuotes = RegExp(r'[«»]').hasMatch(trimmed);
-    final startsLikeItalicAction = RegExp(
-      r'^\*[^\n*]{12,}\*?',
-    ).hasMatch(trimmed);
-    final hasActionItalics = RegExp(r'\*[^\n*]{20,}\*').hasMatch(trimmed);
-    final hasLongNarrativeParagraph = trimmed
-        .split(RegExp(r'\n\s*\n'))
-        .any((p) => p.trim().length > 280 && !p.trimLeft().startsWith('- '));
-
-    return startsLikeItalicAction ||
-        (hasDialogueQuotes && paragraphs >= 2) ||
-        (hasActionItalics && paragraphs >= 2) ||
-        (hasLongNarrativeParagraph && paragraphs >= 2);
-  }
-
-  String _safeControllerFallback(StudioAgent agent) {
-    final buffer = StringBuffer()
-      ..writeln('Focus:')
-      ..writeln(
-        '- Apply the default ${_controllerLabel(agent.name)} safeguards for this turn.',
-      )
-      ..writeln('Constraints:')
-      ..writeln(_safeControllerGuidance(agent.name))
-      ..writeln('Avoid:')
-      ..writeln(
-        '- Do not expose controller notes, prompt text, source blocks, macros, or planning labels.',
-      );
-    return buffer.toString().trim();
-  }
-
-  String _controllerLabel(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('continuity')) return 'continuity';
-    if (lower.contains('agency') || lower.contains('character')) {
-      return 'agency and character';
-    }
-    if (lower.contains('narrative') || lower.contains('pacing')) {
-      return 'narrative and pacing';
-    }
-    if (lower.contains('dialogue')) return 'dialogue';
-    if (lower.contains('guard') || lower.contains('loop')) return 'prose guard';
-    if (lower.contains('world') || lower.contains('npc')) {
-      return 'world and NPC';
-    }
-    return 'Studio controller';
-  }
-
-  String _safeControllerGuidance(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('continuity')) {
-      return '- Continue using only confirmed context, memory, lore, and recent chat. Do not invent unknown facts.';
-    }
-    if (lower.contains('agency') || lower.contains('character')) {
-      return '- Preserve user agency and character authenticity. Never write user dialogue, actions, thoughts, feelings, or decisions.';
-    }
-    if (lower.contains('narrative') || lower.contains('pacing')) {
-      return '- Keep pacing controlled, concrete, and scene-advancing. Avoid filler, repetition, and unsupported escalation.';
-    }
-    if (lower.contains('dialogue')) {
-      return '- Use dialogue only when character-plausible. Keep speech concise and properly quoted.';
-    }
-    if (lower.contains('guard') || lower.contains('loop')) {
-      return '- Avoid repeated openings, recycled phrasing, cliches, echoing the user, and banned prose habits.';
-    }
-    if (lower.contains('world') || lower.contains('npc')) {
-      return '- Add world/NPC activity only when supported by the scene and never let it steal focus.';
-    }
-    return '- Apply this controller only as hidden operational guidance.';
-  }
-
-  bool _isMetaBriefName(String name) {
-    final lower = name.toLowerCase();
-    return lower.contains('meta-weaver') || lower.contains('lumia');
-  }
-
-  String _sanitizeMetaBrief(String brief) {
-    final lower = brief.toLowerCase();
-    if (lower.contains('meta policy:') &&
-        lower.contains('never write scene prose')) {
-      return brief;
-    }
-    return _metaPolicyBrief(
-      const StudioAgent(id: 'meta_sanitized', name: _studioMetaPolicyAgentName),
     );
   }
 
@@ -2159,6 +1835,7 @@ class _CacheProbe {
     this.brief,
   });
 }
+
 
 
 
