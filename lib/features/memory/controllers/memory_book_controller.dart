@@ -394,6 +394,11 @@ class MemoryBookController {
       messageRange: draft.messageRange,
       status: 'active',
       createdAt: DateTime.now().millisecondsSinceEpoch,
+      // Phase 7: preserve the draft's provenance marker so the MemoryBook
+      // UI can tab agent-sourced entries ('agentic') separately from scan
+      // drafts ('scan_chat') and curated entries ('').
+      source: draft.source,
+      kind: draft.source == 'agentic' ? 'agent' : 'curated',
     );
 
     _book = _book!.copyWith(

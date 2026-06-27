@@ -52,6 +52,13 @@ abstract class MemoryEntry with _$MemoryEntry {
     @Default('') String arc,
     @Default('curated') String kind,
     @Default('') String sourceHash,
+    /// Provenance marker for UI filtering (Phase 7). Empty for entries
+    /// created before the source field existed or for manual/curated
+    /// entries. Set to `'scan_chat'` when promoted from a scan draft, or
+    /// `'agentic'` when promoted from an agent write-loop draft. Lets the
+    /// MemoryBook UI tab agent-sourced entries separately from curated
+    /// ones (see `memory_books_sheet.dart` "Agent memories" tab).
+    @Default('') String source,
   }) = _MemoryEntry;
 
   factory MemoryEntry.fromJson(Map<String, dynamic> json) =>
@@ -162,6 +169,9 @@ Map<String, dynamic> _migrateEntryInPlace(Map<String, dynamic> json) {
   }
   if (out['sourceHash'] is! String) {
     out = {...out, 'sourceHash': ''};
+  }
+  if (out['source'] is! String) {
+    out = {...out, 'source': ''};
   }
   return out;
 }

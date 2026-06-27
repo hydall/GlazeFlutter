@@ -12,15 +12,21 @@ import '../../../core/state/memory_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import 'custom_prompt_manager_sheet.dart';
+import 'post_building_menu_dialog.dart';
 
 class MemoryGenerationSettingsSheet extends ConsumerStatefulWidget {
   final MemoryBookSettings settings;
   final String? sessionId;
+  /// Phase 7.3 — needed to launch [PostBuildingMenuDialog] from the
+  /// "LLM config →" link. When null, the link is hidden (preserves backward
+  /// compatibility for any caller that doesn't have a charId handy).
+  final String? charId;
 
   const MemoryGenerationSettingsSheet({
     super.key,
     required this.settings,
     this.sessionId,
+    this.charId,
   });
 
   @override
@@ -589,7 +595,35 @@ class _MemoryGenerationSettingsSheetState
             ],
           ),
         ],
+        // Phase 7.3 — "LLM config →" link to the Post-Building menu. This
+        // sheet is retrieval-only; the actual LLM endpoint/model/key for the
+        // sidecar, classifier, and consolidation live in [PostBuildingMenuDialog].
+        // The link replaces the LLM fields that used to be inlined here before
+        // the Phase 1/4 UI refactor.
+        if (widget.charId != null && widget.sessionId != null) ...[
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _openPostBuildingMenu,
+              icon: const Icon(Icons.open_in_new, size: 14),
+              label: Text('memory_settings_llm_config_link'.tr()),
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  void _openPostBuildingMenu() {
+    Navigator.of(context).pop();
+    showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      builder: (_) => PostBuildingMenuDialog(
+        charId: widget.charId!,
+        sessionId: widget.sessionId!,
+      ),
     );
   }
 

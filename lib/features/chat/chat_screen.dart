@@ -19,7 +19,6 @@ import 'editing_message_provider.dart';
 
 import '../../core/state/character_provider.dart';
 import '../../core/llm/regex_service.dart';
-import '../../core/llm/memory_studio_service.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/memory_settings_provider.dart';
 import '../../core/state/memory_agent_providers.dart';

@@ -70,33 +70,159 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     final book = _ctrl.book!;
     final entries = book.entries;
     final pendingDrafts = book.pendingDrafts;
-    final activeCount = _ctrl.book!.entries.where((e) => e.status == 'active').length;
-    final needsRebuildCount = _ctrl.book!.entries.where((e) => e.status == 'needs_rebuild').length;
+    final activeCount = entries.where((e) => e.status == 'active').length;
+    final needsRebuildCount = entries.where((e) => e.status == 'needs_rebuild').length;
     final draftsNeedingGen = _ctrl.draftsNeedingGeneration;
     final isGenerating = _ctrl.isGenerating;
 
+    // Phase 7.2 — split drafts by source for tabbed display. Agent-sourced
+    // drafts (source == 'agentic', written by the post-turn write-loop) are
+    // shown in their own "Agent memories" tab so they don't mix with bulk
+    // scan drafts (source == 'scan_chat' or empty).
+    final scanDrafts = pendingDrafts
+        .where((d) => d.source != 'agentic')
+        .toList();
+    final agentDrafts = pendingDrafts
+        .where((d) => d.source == 'agentic')
+        .toList();
+    // Approved entries are also source-aware (Phase 7.4): entries promoted
+    // from agent drafts keep `source == 'agentic'` and `kind == 'agent'`,
+    // letting the "Agent memories" tab show approved agent memories next
+    // to pending agent drafts.
+    final agentEntries = entries.where((e) => e.source == 'agentic').toList();
+    final curatedEntries = entries.where((e) => e.source != 'agentic').toList();
+
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          // ── Static header (overview + status + actions) ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildOverview(settings),
+                const SizedBox(height: 12),
+                _buildSearchTypeSelector(settings),
+                const SizedBox(height: 12),
+                _buildStatusSummary(activeCount, needsRebuildCount, pendingDrafts.length),
+                const SizedBox(height: 12),
+                _buildActionButtons(),
+                if (draftsNeedingGen.isNotEmpty || isGenerating) ...[
+                  const SizedBox(height: 12),
+                  _buildBatchActions(draftsNeedingGen, isGenerating),
+                ],
+              ],
+            ),
+          ),
+          // ── Tab bar (Phase 7.2) ──
+          TabBar(
+            tabs: [
+              Tab(text: 'memory_books_tab_approved'.tr(args: [curatedEntries.length.toString()])),
+              Tab(text: 'memory_books_tab_scan_drafts'.tr(args: [scanDrafts.length.toString()])),
+              Tab(text: 'memory_books_tab_agent_memories'.tr(args: [(agentDrafts.length + agentEntries.length).toString()])),
+            ],
+            tabAlignment: TabAlignment.fill,
+          ),
+          // ── Tab content ──
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildApprovedTab(curatedEntries),
+                _buildScanDraftsTab(scanDrafts),
+                _buildAgentMemoriesTab(agentDrafts, agentEntries),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildApprovedTab(List<MemoryEntry> curatedEntries) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildOverview(settings),
-          const SizedBox(height: 12),
-          _buildSearchTypeSelector(settings),
-          const SizedBox(height: 12),
-          _buildStatusSummary(activeCount, needsRebuildCount, pendingDrafts.length),
-          const SizedBox(height: 12),
-          _buildActionButtons(),
-          if (draftsNeedingGen.isNotEmpty || isGenerating) ...[
-            const SizedBox(height: 12),
-            _buildBatchActions(draftsNeedingGen, isGenerating),
+          if (curatedEntries.isEmpty)
+            Text(
+              'memory_books_empty_approved'.tr(),
+              style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
+            )
+          else
+            _buildApprovedSection(curatedEntries),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScanDraftsTab(List<MemoryDraft> scanDrafts) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (scanDrafts.isEmpty)
+            Text(
+              'memory_books_empty_scan_drafts'.tr(),
+              style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
+            )
+          else ...[
+            _buildPendingDraftsSection(scanDrafts),
           ],
-          const SizedBox(height: 16),
-          if (pendingDrafts.isNotEmpty) ...[
-            _buildPendingDraftsSection(pendingDrafts),
-            const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  /// "Agent memories" tab (Phase 7.2): pending agent-sourced drafts (awaiting
+  /// approval) + approved agent-sourced entries (auto-approved or promoted
+  /// manually). Both share the `source == 'agentic'` marker so the user can
+  /// see everything the write-loop / memory tracker produced in one place,
+  /// separate from bulk scan drafts and curated entries.
+  Widget _buildAgentMemoriesTab(
+    List<MemoryDraft> agentDrafts,
+    List<MemoryEntry> agentEntries,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (agentDrafts.isEmpty && agentEntries.isEmpty)
+            Text(
+              'memory_books_empty_agent_memories'.tr(),
+              style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
+            )
+          else ...[
+            if (agentDrafts.isNotEmpty) ...[
+              Text(
+                'memory_books_section_agent_drafts'.tr(),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: context.cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...agentDrafts.map((draft) => _buildDraftCard(draft)),
+              const SizedBox(height: 12),
+            ],
+            if (agentEntries.isNotEmpty) ...[
+              Text(
+                'memory_books_section_agent_approved'.tr(),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: context.cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...agentEntries.map((entry) => _buildEntryCard(entry)),
+            ],
           ],
-          _buildApprovedSection(entries),
         ],
       ),
     );
@@ -689,6 +815,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       child: MemoryGenerationSettingsSheet(
         settings: currentSettings,
         sessionId: widget.sessionId,
+        charId: widget.charId,
       ),
     );
     if (newResult != null && mounted) {
