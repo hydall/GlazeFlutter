@@ -9,7 +9,6 @@ import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/models/pipeline_settings.dart';
-import '../../../core/models/pipeline_global_settings.dart';
 import '../../../core/state/memory_book_ops_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/state/pipeline_settings_provider.dart';
@@ -44,46 +43,14 @@ class MemoryBookController {
   MemoryGlobalSettings get globalSettings =>
       _ref.read(memoryGlobalSettingsProvider);
 
-  PipelineGlobalSettings get pipelineGlobalSettings =>
-      _ref.read(pipelineGlobalSettingsProvider);
+  /// Global pipeline LLM settings (singleton, SharedPreferences-backed).
+  PipelineSettings get pipelineSettings =>
+      _ref.read(pipelineSettingsProvider);
 
-  /// Builds a per-session [PipelineSettings] from the global pipeline defaults.
-  /// Used when generating memory drafts (no per-session pipeline row exists in
-  /// the controller flow — drafts use the global pipeline config).
-  PipelineSettings globalPipelineAsPipeline() {
-    final g = pipelineGlobalSettings;
-    return PipelineSettings(
-      generationSource: g.generationSource,
-      generationModel: g.generationModel,
-      generationEndpoint: g.generationEndpoint,
-      generationApiKey: g.generationApiKey,
-      generationTemperature: g.generationTemperature,
-      generationMaxTokens: g.generationMaxTokens,
-      classifierEnabled: g.classifierEnabled,
-      classifierSource: g.classifierSource,
-      classifierModel: g.classifierModel,
-      classifierEndpoint: g.classifierEndpoint,
-      classifierApiKey: g.classifierApiKey,
-      classifierTimeoutMs: g.classifierTimeoutMs,
-      sidecarEnabled: g.sidecarEnabled,
-      sidecarSource: g.sidecarSource,
-      sidecarModel: g.sidecarModel,
-      sidecarEndpoint: g.sidecarEndpoint,
-      sidecarApiKey: g.sidecarApiKey,
-      sidecarTimeoutMs: g.sidecarTimeoutMs,
-      agenticWriteEnabled: g.agenticWriteEnabled,
-      postCleanerEnabled: g.postCleanerEnabled,
-      postCleanerTemperature: g.postCleanerTemperature,
-      postCleanerMaxTokens: g.postCleanerMaxTokens,
-      consolidationEnabled: g.consolidationEnabled,
-      consolidationThreshold: g.consolidationThreshold,
-      consolidationSource: g.consolidationSource,
-      consolidationModel: g.consolidationModel,
-      consolidationEndpoint: g.consolidationEndpoint,
-      consolidationApiKey: g.consolidationApiKey,
-      consolidationTimeoutMs: g.consolidationTimeoutMs,
-    );
-  }
+  /// Returns the global [PipelineSettings]. Kept as a method for call-site
+  /// compatibility — pipeline settings are now a singleton global, so this
+  /// is just [pipelineSettings].
+  PipelineSettings globalPipelineAsPipeline() => pipelineSettings;
 
   Future<void> load() async {
     _book = await _ref.read(memoryBookOpsProvider).ensureForSession(_sessionId);
@@ -168,7 +135,7 @@ class MemoryBookController {
         ? 'memory_books_summary_auto_out'.tr()
         : '${s.maxInjectedTokens} memory tokens';
     final batchSize = s.batchSize;
-    final pg = pipelineGlobalSettings;
+    final pg = pipelineSettings;
     final outTokens =
         (pg.generationMaxTokens != null && pg.generationMaxTokens! > 0)
         ? '${pg.generationMaxTokens} out'
@@ -177,7 +144,7 @@ class MemoryBookController {
   }
 
   String get searchModelLabel {
-    final pg = pipelineGlobalSettings;
+    final pg = pipelineSettings;
     return pg.generationModel.isNotEmpty
         ? pg.generationModel
         : 'memory_books_current_llm_model'.tr();

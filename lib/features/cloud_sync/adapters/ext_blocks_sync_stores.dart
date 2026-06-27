@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/db/repositories/extension_presets_repository.dart';
 import '../../../core/db/repositories/info_blocks_repository.dart';
-import '../../../core/db/repositories/pipeline_settings_repo.dart';
 import '../../../core/db/repositories/tracker_snapshot_repo.dart';
 import '../../../core/models/tracker_snapshot.dart';
 import '../../extensions/models/extension_preset.dart';
@@ -117,33 +116,4 @@ class TrackerSnapshotSyncStore implements SyncTrackerSnapshotStore {
   Future<void> insertRaw(Map<String, dynamic> snapshot) async {
     await _repo.upsert(TrackerSnapshot.fromJson(snapshot));
   }
-}
-
-// ---------------------------------------------------------------------------
-// PipelineSettingsSyncStore
-// ---------------------------------------------------------------------------
-
-/// Adapter wrapping [PipelineSettingsRepo] for cloud sync. Per-session
-/// collection (one row per chat session), exchanged as raw
-/// `{sessionId, settings, updatedAt}` maps so the wire format is decoupled
-/// from the freezed `PipelineSettings` shape. Closes the pre-existing backup
-/// + cloud-sync gap for `pipeline_settings_rows`.
-class PipelineSettingsSyncStore implements SyncPipelineSettingsStore {
-  final PipelineSettingsRepo _repo;
-
-  PipelineSettingsSyncStore(this._repo);
-
-  @override
-  Future<List<Map<String, dynamic>>> getAll() => _repo.getAllRaw();
-
-  @override
-  Future<Map<String, dynamic>?> getBySessionId(String sessionId) =>
-      _repo.getRawBySessionId(sessionId);
-
-  @override
-  Future<void> putRaw(Map<String, dynamic> entry) => _repo.putRaw(entry);
-
-  @override
-  Future<void> deleteBySessionId(String sessionId) =>
-      _repo.deleteBySession(sessionId);
 }

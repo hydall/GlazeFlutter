@@ -24,7 +24,6 @@ part 'app_db.g.dart';
     Embeddings,
     ChatSummaries,
     MemoryBookRows,
-    PipelineSettingsRows,
     MemoryCatalogRows,
     MemoryEntityRows,
     MemorySalienceRows,
@@ -43,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 51;
+  int get schemaVersion => 52;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -579,12 +578,24 @@ class AppDatabase extends _$AppDatabase {
         // the memory book. Additive only — old JSON keys are left in
         // memory_book_rows.settings_json and silently ignored by the updated
         // MemoryBookSettings.fromJson (unknown keys are dropped by freezed).
+        //
+        // NOTE: the pipeline_settings_rows table was dropped in schema v52
+        // (pipeline settings are now a singleton global in SharedPreferences).
+        // This v48 migration is retained so users upgrading from <48 → >=52
+        // still create the table transiently before the v52 step drops it.
+        // The CREATE TABLE uses raw SQL (not m.createTable) because the Drift
+        // table definition was removed when the table was dropped.
         final tables = await customSelect(
           "SELECT name FROM sqlite_master WHERE type = 'table'",
         ).get();
         final tableNames = tables.map((r) => r.read<String>('name')).toSet();
         if (!tableNames.contains('pipeline_settings_rows')) {
-          await m.createTable(pipelineSettingsRows);
+          await customStatement(
+            'CREATE TABLE IF NOT EXISTS pipeline_settings_rows ('
+            'session_id TEXT NOT NULL PRIMARY KEY, '
+            "settings_json TEXT NOT NULL DEFAULT '{}', "
+            'updated_at INTEGER NOT NULL DEFAULT 0)',
+          );
         }
         // Migrate existing per-session pipeline settings out of memory books.
         // Done in Dart (not SQL) because the field set is large and typed.
@@ -744,6 +755,16 @@ class AppDatabase extends _$AppDatabase {
             );
           }
         }
+      }
+      if (from < 52) {
+        // Pipeline settings are now a singleton global stored in
+        // SharedPreferences (key 'pipelineSettings'), not per-session Drift
+        // rows. Drop the table — per-session overrides are abandoned by
+        // explicit user choice (pipeline config is set once via Build Studio
+        // and applied uniformly across all chats). The SharedPreferences
+        // payload is unaffected; PipelineSettings.fromJson reads the same
+        // fields, with new cleaner fields defaulting to their @Default values.
+        await m.deleteTable('pipeline_settings_rows');
       }
     },
   );

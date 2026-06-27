@@ -121,19 +121,6 @@ class MemoryBookRows extends Table {
   Set<Column> get primaryKey => {sessionId};
 }
 
-@DataClassName('PipelineSettingsRow')
-class PipelineSettingsRows extends Table {
-  @override
-  String get tableName => 'pipeline_settings_rows';
-
-  TextColumn get sessionId => text()();
-  TextColumn get settingsJson => text().withDefault(const Constant('{}'))();
-  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
-
-  @override
-  Set<Column> get primaryKey => {sessionId};
-}
-
 @DataClassName('MemoryCatalogRow')
 @TableIndex(
   name: 'idx_memory_catalog_session_entry',

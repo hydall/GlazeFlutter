@@ -49,7 +49,6 @@ class SyncEngine {
   final SyncInfoBlockStore _infoBlockStore;
   final SyncTrackerSnapshotStore _trackerSnapshotStore;
   final SyncStudioConfigStore _studioConfigStore;
-  final SyncPipelineSettingsStore _pipelineSettingsStore;
   final SyncQueue _queue = SyncQueue();
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
   late final SyncBinaryAssetSyncer _binarySyncer;
@@ -73,7 +72,6 @@ class SyncEngine {
     this._infoBlockStore,
     this._trackerSnapshotStore,
     this._studioConfigStore,
-    this._pipelineSettingsStore,
     this._saveLorebookActivations,
   ) {
     _binarySyncer = SyncBinaryAssetSyncer(
@@ -99,7 +97,6 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/info_blocks');
     await _adapter.ensureFolder('$cloudBase/tracker_snapshots');
     await _adapter.ensureFolder('$cloudBase/studio_configs');
-    await _adapter.ensureFolder('$cloudBase/pipeline_settings');
 
     onProgress(const SyncProgress(message: 'Building sync manifest...'));
     final localManifest = await _manifestBuilder.buildLocalManifest();
@@ -747,9 +744,6 @@ class SyncEngine {
         case 'studio_config':
           final config = await _studioConfigStore.getById(id);
           return config?.toJson();
-        case 'pipeline_settings':
-          final entry = await _pipelineSettingsStore.getBySessionId(id);
-          return entry;
         default:
           return null;
       }
@@ -813,14 +807,6 @@ class SyncEngine {
           break;
         case 'studio_config':
           await _studioConfigStore.put(StudioConfig.fromJson(data));
-          break;
-        case 'pipeline_settings':
-          // Cloud payload is the raw entry map ({sessionId, settings,
-          // updatedAt}) verbatim from _readLocalEntity. Ensure sessionId is
-          // set (older pushes may have omitted it; fall back to entry id).
-          await _pipelineSettingsStore.putRaw(
-            Map<String, dynamic>.from(data)..putIfAbsent('sessionId', () => id),
-          );
           break;
       }
     } catch (_) {}
@@ -1105,9 +1091,6 @@ class SyncEngine {
           break;
         case 'studio_config':
           await _studioConfigStore.delete(id);
-          break;
-        case 'pipeline_settings':
-          await _pipelineSettingsStore.deleteBySessionId(id);
           break;
         // extensions_settings has no meaningful "delete" — it's always present.
       }

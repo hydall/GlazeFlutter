@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'pipeline_settings.freezed.dart';
 part 'pipeline_settings.g.dart';
 
-/// Generation-pipeline LLM settings, separated from [MemoryBookSettings].
+/// Global generation-pipeline LLM settings, separated from [MemoryBookSettings].
 ///
 /// These fields configure LLM sidecars and post-generation passes that have
 /// nothing to do with memory retrieval:
@@ -14,15 +14,18 @@ part 'pipeline_settings.g.dart';
 /// - POST-cleaner (anti-cliche rewrite + continuity audit)
 /// - Consolidation LLM (merges memory entries)
 ///
-/// Per-session, stored in `pipeline_settings_rows`. Global defaults mirror a
-/// subset via [PipelineGlobalSettings] (SharedPreferences) and merge in
-/// `pipeline_settings_repo.dart`.
+/// Singleton global, persisted in SharedPreferences under the 'pipelineSettings'
+/// key (see `pipeline_settings_provider.dart`). Previously per-session in the
+/// `pipeline_settings_rows` Drift table; that table was dropped in schema v52
+/// because pipeline settings are configured once via Build Studio and applied
+/// uniformly across all chats.
 @freezed
 abstract class PipelineSettings with _$PipelineSettings {
   const factory PipelineSettings({
     // ── Memory generation LLM ──────────────────────────────────────────────
     @Default('current') String generationSource,
     @Default('') String generationModel,
+    @Default(false) bool generationUseCurrentModelOverride,
     @Default('') String generationEndpoint,
     @Default('') String generationApiKey,
     @Default(null) double? generationTemperature,

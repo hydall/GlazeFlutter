@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
-import 'package:glaze_flutter/core/models/pipeline_global_settings.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 import 'package:glaze_flutter/core/state/db_provider.dart';
 import 'package:glaze_flutter/core/state/memory_settings_provider.dart';
 import 'package:glaze_flutter/core/state/pipeline_settings_provider.dart';
@@ -88,9 +88,9 @@ void main() {
         );
 
     await container
-        .read(pipelineGlobalSettingsProvider.notifier)
+        .read(pipelineSettingsProvider.notifier)
         .save(
-          const PipelineGlobalSettings(
+          const PipelineSettings(
             classifierEnabled: true,
             classifierSource: 'custom',
             classifierModel: 'classifier-mini',
@@ -170,9 +170,9 @@ void main() {
         );
 
     await container
-        .read(pipelineGlobalSettingsProvider.notifier)
+        .read(pipelineSettingsProvider.notifier)
         .save(
-          const PipelineGlobalSettings(
+          const PipelineSettings(
             classifierEnabled: true,
             classifierModel: 'classifier-mini',
             classifierTimeoutMs: 3500,
@@ -198,9 +198,9 @@ void main() {
     expect(book.settings.queryRecentTurns, 3);
     expect(book.settings.queryMaxChars, 900);
 
-    // Pipeline settings inherit from the global defaults.
-    final pipelineRepo = container.read(pipelineSettingsRepoProvider);
-    final pipeline = await pipelineRepo.ensureForSession('session_advanced');
+    // Pipeline settings are now a singleton global — the same instance is
+    // returned by the StateNotifierProvider for every session.
+    final pipeline = container.read(pipelineSettingsProvider);
     expect(pipeline.classifierEnabled, true);
     expect(pipeline.classifierModel, 'classifier-mini');
     expect(pipeline.classifierTimeoutMs, 3500);

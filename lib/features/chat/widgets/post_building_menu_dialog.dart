@@ -48,8 +48,7 @@ class _PostBuildingMenuDialogState
 
   Future<void> _loadSettings() async {
     try {
-      final pipeline = await ref
-          .read(pipelineSettingsProvider(widget.sessionId).future);
+      final pipeline = ref.read(pipelineSettingsProvider);
       final book = await ref
           .read(memoryBookRepoProvider)
           .getBySessionId(widget.sessionId);
@@ -63,11 +62,7 @@ class _PostBuildingMenuDialogState
           // toggle ON here so the pipeline doesn't silently degrade to fast.
           if (mode == 'deep' && !_pipeline.sidecarEnabled) {
             _pipeline = _pipeline.copyWith(sidecarEnabled: true);
-            ref.read(pipelineSettingsRepoProvider).updateSettings(
-              widget.sessionId,
-              _pipeline,
-            );
-            ref.invalidate(pipelineSettingsProvider(widget.sessionId));
+            ref.read(pipelineSettingsProvider.notifier).save(_pipeline);
           }
           _loading = false;
         });
@@ -82,10 +77,8 @@ class _PostBuildingMenuDialogState
   Future<void> _savePipeline(
     PipelineSettings Function(PipelineSettings) mutator,
   ) async {
-    final repo = ref.read(pipelineSettingsRepoProvider);
     final updated = mutator(_pipeline);
-    await repo.updateSettings(widget.sessionId, updated);
-    ref.invalidate(pipelineSettingsProvider(widget.sessionId));
+    await ref.read(pipelineSettingsProvider.notifier).save(updated);
     if (mounted) setState(() => _pipeline = updated);
   }
 

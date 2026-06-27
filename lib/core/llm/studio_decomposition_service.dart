@@ -1118,7 +1118,7 @@ Assigned preset blocks:
     ApiConfig? apiConfig,
     CancelToken? cancelToken,
   }) async {
-    final settings = _ref.read(pipelineGlobalSettingsProvider);
+    final settings = _ref.read(pipelineSettingsProvider);
     final isCustom = settings.sidecarSource == 'custom';
     String endpoint;
     String apiKey;

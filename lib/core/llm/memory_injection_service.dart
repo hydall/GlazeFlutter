@@ -11,11 +11,11 @@ import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/memory_catalog_repo.dart';
 import '../db/repositories/memory_salience_repo.dart';
 import '../db/repositories/memory_entity_repo.dart';
-import '../db/repositories/pipeline_settings_repo.dart';
 import '../models/chat_message.dart';
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/memory_graph.dart';
+import '../models/pipeline_settings.dart';
 import '../state/db_provider.dart';
 import '../state/memory_settings_provider.dart';
 import '../state/memory_agent_providers.dart';
@@ -77,7 +77,7 @@ class MemoryCandidateBuildResult {
 
 class MemoryInjectionService {
   final MemoryBookRepo _repo;
-  final PipelineSettingsRepo _pipelineRepo;
+  final PipelineSettings Function() _readPipelineSettings;
   final EmbeddingRepo _embeddingRepo;
   final MemoryCatalogRepo _catalogRepo;
   final MemorySalienceRepo? _salienceRepo;
@@ -91,7 +91,7 @@ class MemoryInjectionService {
 
   MemoryInjectionService(
     this._repo,
-    this._pipelineRepo,
+    this._readPipelineSettings,
     this._embeddingRepo,
     this._catalogRepo,
     this._embeddingService,
@@ -202,7 +202,7 @@ class MemoryInjectionService {
       return finish(const MemorySelection());
     }
 
-    final pipeline = await _pipelineRepo.ensureForSession(sessionId);
+    final pipeline = _readPipelineSettings();
     if (shouldAbort?.call() == true) {
       return finish(const MemorySelection());
     }
@@ -855,7 +855,7 @@ class _CatalogMatchResult {
 final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
   return MemoryInjectionService(
     ref.watch(memoryBookRepoProvider),
-    ref.watch(pipelineSettingsRepoProvider),
+    () => ref.read(pipelineSettingsProvider),
     ref.watch(embeddingRepoProvider),
     ref.watch(memoryCatalogRepoProvider),
     EmbeddingService(),

@@ -31,7 +31,6 @@ class SyncService {
   final SyncInfoBlockStore _infoBlockStore;
   final SyncTrackerSnapshotStore _trackerSnapshotStore;
   final SyncStudioConfigStore _studioConfigStore;
-  final SyncPipelineSettingsStore _pipelineSettingsStore;
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
 
   SyncProvider _provider = SyncProvider.dropbox;
@@ -93,7 +92,6 @@ class SyncService {
     required this._infoBlockStore,
     required this._trackerSnapshotStore,
     required this._studioConfigStore,
-    required this._pipelineSettingsStore,
     required Future<void> Function(LorebookActivations) saveLorebookActivations,
     // ignore: prefer_initializing_formals
   }) : _saveLorebookActivations = saveLorebookActivations;
@@ -121,7 +119,6 @@ class SyncService {
     infoBlockStore: _infoBlockStore,
     trackerSnapshotStore: _trackerSnapshotStore,
     studioConfigStore: _studioConfigStore,
-    pipelineSettingsStore: _pipelineSettingsStore,
     imageStore: _imageStorage,
   );
 
@@ -143,7 +140,6 @@ class SyncService {
     _infoBlockStore,
     _trackerSnapshotStore,
     _studioConfigStore,
-    _pipelineSettingsStore,
     _saveLorebookActivations,
   );
 

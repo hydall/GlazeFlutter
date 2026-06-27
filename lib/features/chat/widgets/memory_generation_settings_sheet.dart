@@ -130,23 +130,15 @@ class _MemoryGenerationSettingsSheetState
   }
 
   Future<void> _loadPipeline() async {
-    final sid = widget.sessionId;
-    if (sid == null || sid.isEmpty) {
-      if (mounted) setState(() => _pipelineLoaded = true);
-      return;
-    }
-    try {
-      final pipeline = await ref.read(
-        pipelineSettingsProvider(sid).future,
-      );
-      if (mounted) {
-        setState(() {
-          _pipeline = pipeline;
-          _pipelineLoaded = true;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _pipelineLoaded = true);
+    // Pipeline settings are a singleton global (SharedPreferences). Read is
+    // synchronous via the StateNotifierProvider; we still gate the setState on
+    // mounted to keep the async signature for callers that await this.
+    final pipeline = ref.read(pipelineSettingsProvider);
+    if (mounted) {
+      setState(() {
+        _pipeline = pipeline;
+        _pipelineLoaded = true;
+      });
     }
   }
 

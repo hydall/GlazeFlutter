@@ -267,29 +267,6 @@ class FakeStudioConfigStore implements SyncStudioConfigStore {
   }
 }
 
-class FakePipelineSettingsStore implements SyncPipelineSettingsStore {
-  // sessionId → entry ({sessionId, settings, updatedAt})
-  final Map<String, Map<String, dynamic>> data = {};
-
-  @override
-  Future<List<Map<String, dynamic>>> getAll() async => data.values.toList();
-
-  @override
-  Future<Map<String, dynamic>?> getBySessionId(String sessionId) async =>
-      data[sessionId];
-
-  @override
-  Future<void> putRaw(Map<String, dynamic> entry) async {
-    final sid = entry['sessionId'] as String?;
-    if (sid != null && sid.isNotEmpty) data[sid] = entry;
-  }
-
-  @override
-  Future<void> deleteBySessionId(String sessionId) async {
-    data.remove(sessionId);
-  }
-}
-
 // ─── Cloud adapter (in-memory) ───────────────────────────────────────
 
 class FakeCloudAdapter implements CloudAdapter {
@@ -366,7 +343,6 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     required SyncInfoBlockStore infoBlockStore,
     required SyncTrackerSnapshotStore trackerSnapshotStore,
     required SyncStudioConfigStore studioConfigStore,
-    required SyncPipelineSettingsStore pipelineSettingsStore,
   }) : _builder = SyncManifestBuilder(
           characterRepo: characterRepo,
           chatRepo: chatRepo,
@@ -381,7 +357,6 @@ class InMemoryManifestProvider implements SyncManifestProvider {
           infoBlockStore: infoBlockStore,
           trackerSnapshotStore: trackerSnapshotStore,
           studioConfigStore: studioConfigStore,
-          pipelineSettingsStore: pipelineSettingsStore,
         );
 
   @override
@@ -441,7 +416,6 @@ class SyncWorld {
   final FakeInfoBlockStore infoBlocks = FakeInfoBlockStore();
   final FakeTrackerSnapshotStore trackerSnapshots = FakeTrackerSnapshotStore();
   final FakeStudioConfigStore studioConfigs = FakeStudioConfigStore();
-  final FakePipelineSettingsStore pipelineSettings = FakePipelineSettingsStore();
   late final InMemoryManifestProvider manifestProvider;
 
   SyncWorld() {
@@ -459,7 +433,6 @@ class SyncWorld {
       infoBlockStore: infoBlocks,
       trackerSnapshotStore: trackerSnapshots,
       studioConfigStore: studioConfigs,
-      pipelineSettingsStore: pipelineSettings,
     );
   }
 
@@ -481,7 +454,6 @@ class SyncWorld {
     infoBlocks,
     trackerSnapshots,
     studioConfigs,
-    pipelineSettings,
     (_) async {},
   );
 }

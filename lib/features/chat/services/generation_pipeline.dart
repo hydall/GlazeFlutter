@@ -538,9 +538,7 @@ class GenerationPipeline {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      final pipeline = await ref.read(
-        pipelineSettingsProvider(sessionId).future,
-      );
+      final pipeline = ref.read(pipelineSettingsProvider);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.agenticWriteEnabled) return;
 
@@ -658,9 +656,7 @@ class GenerationPipeline {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      final pipeline = await ref.read(
-        pipelineSettingsProvider(sessionId).future,
-      );
+      final pipeline = ref.read(pipelineSettingsProvider);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.postCleanerEnabled) return;
 
