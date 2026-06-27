@@ -1,10 +1,10 @@
 # Plan: Studio / Agent Subsystem Decomposition
 
 > **Status:** ✅ CORE DONE — shared specialists (§1), decomposition (§3),
-> TrackerBatcher (§4), MemoryStudioService pure/leaf specialists + brief cache
-> (§2, 6/9), StudioMenuController (§5), MemorySettingsMapper +
-> MemoryDraftGenerationController (§6). Deeply-coupled stateful clusters
-> deferred as follow-up (see §2/§7 notes). §6 complete.
+> TrackerBatcher (§4), MemoryStudioService fully decomposed (§2, 9/9),
+> StudioMenuController (§5), MemorySettingsMapper +
+> MemoryDraftGenerationController (§6). §7 lower-priority items remaining
+> (see §10). §2 + §6 complete.
 > **Goal:** Break up the studio/agent god objects into thin orchestrators + injected
 > specialists per `docs/CODE_STYLE.md` (one class = one job, ~250 lines). No behavior
 > change — pure structural refactor, gated by the existing test suite.
@@ -210,9 +210,9 @@ commit. After every commit, analyze + test must be green before the next.
 2. ✅ **`StudioDecompositionService`** (§3) — biggest single win; classifiers already
    have characterization tests.
 3. ✅ **`TrackerBatcher`** (§4) — fully test-covered, safe split.
-4. ⚠️ **`MemoryStudioService`** (§2) — pure/leaf specialists + brief cache done (6/9:
-   ActivationGate, PromptText, BriefParser, ContextBucketizer, BriefDeduper,
-   BriefCache); message builder + executors + batch coordinator deferred (see §10).
+4. ✅ **`MemoryStudioService`** (§2) — all 9 specialists extracted
+   (ActivationGate, PromptText, BriefParser, ContextBucketizer, BriefDeduper,
+   BriefCache, MessageBuilder, AgentExecutor, BatchCoordinator).
 5. ✅ **`studio_menu_dialog`** (§5) — `StudioMenuController` extracted; removes the 3rd
    config-resolver copy.
 6. ✅ **`MemoryBookController`** (§6) — `MemorySettingsMapper` +
@@ -234,25 +234,36 @@ commit. After every commit, analyze + test must be green before the next.
 
 ## 10. Deferred follow-up (stateful clusters)
 
-The remaining extractions share mutable host state (`_ref`, `_log`, `_briefCache`,
+~~The remaining extractions share mutable host state (`_ref`, `_log`, `_briefCache`,
 `_book` + `save()`/`updateBook()`) across multiple methods. Extracting them under the
 "no behavior change" mandate would require threading that state through a fragile
 callback/interface with no net readability win at the current size. They are deferred
 to a follow-up that can pair the extraction with the necessary interface design (and
-optionally characterization tests for the moved cluster).
+optionally characterization tests for the moved cluster).~~
 
-### §2 — MemoryStudioService (chat-time), 3 remaining specialists
-- ✅ `StudioBriefCache` (owns `_briefCache`, cache probe/persist + refresh-policy) — DONE.
-- `StudioMessageBuilder` (agent/batch/per-agent message assembly, history limits,
-  macro expansion).
-- `StudioAgentExecutor` (single-agent + post-gen + individual + final run adapters).
-- `StudioBatchCoordinator` (batch group exec + 2-layer retry/fallback).
-The remaining three are glued through `runTrackerCycle` + the shared `_ref`/`_log`,
-and extracting them materially restructures the orchestrator (not just moving
-isolated helpers, as the cache was). They are deferred to a follow-up that can pair
-the extraction with interface design + streaming behavior characterization tests.
-`MemoryStudioService` is now ~1222 lines (from ~2346, a 48% reduction from the 6
-completed specialists).
+**§2 fully complete** — the three remaining specialists were extracted by injecting
+the host's `_ref` + the previously-extracted specialists + a `_log` callback into the
+new specialists. No behavior change, no interface redesign needed: the orchestrator's
+`runTrackerCycle` now delegates to `_messageBuilder` / `_executor` / `_batchCoordinator`
+and is a thin coordinator.
+
+### §2 — MemoryStudioService (chat-time) ✅ COMPLETE (9/9 specialists)
+- ✅ `StudioActivationGate` (matchesActivationKeywords + splitAgentsByPhase).
+- ✅ `StudioPromptText` (the big prompt-text constants).
+- ✅ `StudioBriefParser` (JSON/section parse, cleaning, prose-detection, fallbacks).
+- ✅ `StudioContextBucketizer` (PromptResult -> static/dynamic/history buckets).
+- ✅ `StudioBriefDeduper` (cross-brief dedup + meta-policy brief sanitization).
+- ✅ `StudioBriefCache` (owns `_briefCache`, cache probe/persist + refresh-policy).
+- ✅ `StudioMessageBuilder` (agent/batch/per-agent message assembly, history limits,
+  macro expansion, role/text utils, post-gen `<assistant_response>` injection).
+- ✅ `StudioAgentExecutor` (single-agent + post-gen + individual + final run adapters;
+  per-agent failure isolation; `StudioFinalRunResult` public DTO).
+- ✅ `StudioBatchCoordinator` (batch group exec + 2-layer retry/fallback + `_allOk`;
+  `_log` injected as a callback).
+`MemoryStudioService` is now 428 lines (from ~2346, an 82% reduction) — a thin
+orchestrator: `runTrackerCycle` + the 3-phase gate + cache-aware brief reassembly +
+the final-generator / post-gen delegation. The `agent_runner` / `error_format`
+imports dropped out of the host (now owned by the executor + batch coordinator).
 
 ### §6 — MemoryBookController ✅ COMPLETE
 - ✅ `MemorySettingsMapper` (pure bidirectional settings mapper) — DONE.
