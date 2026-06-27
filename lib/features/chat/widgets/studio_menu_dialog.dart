@@ -58,12 +58,19 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 
   Future<void> _load() async {
     final repo = ref.read(studioConfigRepoProvider);
+    final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
     final trackerRepo = ref.read(trackerRepoProvider);
     // Warm the API list so model suggestions are available when the user taps
     // a tracker's model chip.
     await ref.read(apiListProvider.future);
     final config = await repo.getBySessionId(widget.sessionId);
-    final trackers = await trackerRepo.getBySessionId(widget.sessionId);
+    // Read tracker state from snapshots (preferred) with a tracker_rows
+    // fallback for legacy sessions. Use getLatest (not just committed) so the
+    // user sees the most recent state even if not yet committed.
+    final snapshot = await snapshotRepo.getLatest(widget.sessionId);
+    final trackers =
+        snapshot?.trackers ??
+        await trackerRepo.getBySessionId(widget.sessionId);
     if (!mounted) return;
     setState(() {
       _config = config;

@@ -32,7 +32,6 @@ class AgenticOperationsLogDialog extends ConsumerStatefulWidget {
 
 class _AgenticOperationsLogDialogState
     extends ConsumerState<AgenticOperationsLogDialog> {
-
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -64,8 +63,14 @@ class _AgenticOperationsLogDialogState
               ),
               const TabBar(
                 tabs: [
-                  Tab(icon: Icon(Icons.history_outlined, size: 16), text: 'Operations'),
-                  Tab(icon: Icon(Icons.track_changes_outlined, size: 16), text: 'Tracker values'),
+                  Tab(
+                    icon: Icon(Icons.history_outlined, size: 16),
+                    text: 'Operations',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.track_changes_outlined, size: 16),
+                    text: 'Tracker values',
+                  ),
                 ],
                 tabAlignment: TabAlignment.fill,
               ),
@@ -73,10 +78,7 @@ class _AgenticOperationsLogDialogState
                 child: _SessionScope(
                   sessionId: widget.sessionId,
                   child: const TabBarView(
-                    children: [
-                      _OperationsTab(),
-                      _TrackerValuesTab(),
-                    ],
+                    children: [_OperationsTab(), _TrackerValuesTab()],
                   ),
                 ),
               ),
@@ -113,8 +115,7 @@ class _OperationsTabState extends ConsumerState<_OperationsTab> {
     final filtered = switch (_filter) {
       _LogFilter.all => allRecords,
       _LogFilter.failed => allRecords.where((r) => r.status.isFailure).toList(),
-      _LogFilter.success =>
-        allRecords.where((r) => r.status.isOk).toList(),
+      _LogFilter.success => allRecords.where((r) => r.status.isOk).toList(),
     };
     filtered.sort((a, b) => b.finishedAtMs.compareTo(a.finishedAtMs));
 
@@ -182,11 +183,8 @@ class _OperationsTabState extends ConsumerState<_OperationsTab> {
               : ListView.separated(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   itemCount: filtered.length,
-                  separatorBuilder: (_, _) => const Divider(
-                    height: 1,
-                    indent: 12,
-                    endIndent: 12,
-                  ),
+                  separatorBuilder: (_, _) =>
+                      const Divider(height: 1, indent: 12, endIndent: 12),
                   itemBuilder: (context, i) =>
                       _OperationTile(record: filtered[i]),
                 ),
@@ -265,8 +263,11 @@ class _TrackerValuesTabState extends ConsumerState<_TrackerValuesTab> {
       if (mounted) setState(() => _loaded = true);
       return;
     }
+    final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
+    final trackerRepo = ref.read(trackerRepoProvider);
+    final snapshot = await snapshotRepo.getLatest(sessionId);
     final trackers =
-        await ref.read(trackerRepoProvider).getBySessionId(sessionId);
+        snapshot?.trackers ?? await trackerRepo.getBySessionId(sessionId);
     if (!mounted) return;
     setState(() {
       _trackers = trackers;
@@ -303,7 +304,8 @@ class _TrackerValuesTabState extends ConsumerState<_TrackerValuesTab> {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       itemCount: trackers.length,
-      separatorBuilder: (_, _) => const Divider(height: 1, indent: 12, endIndent: 12),
+      separatorBuilder: (_, _) =>
+          const Divider(height: 1, indent: 12, endIndent: 12),
       itemBuilder: (context, i) => _TrackerTile(tracker: trackers[i]),
     );
   }
@@ -521,10 +523,7 @@ class _OperationTile extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: 11,
-                color: context.cs.onSurface,
-              ),
+              style: TextStyle(fontSize: 11, color: context.cs.onSurface),
             ),
           ),
         ],

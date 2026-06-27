@@ -523,8 +523,14 @@ class GenerationPipeline {
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.agenticWriteEnabled) return;
 
+      // Read the current tracker state from snapshots (preferred) with a
+      // tracker_rows fallback for legacy sessions pre-migration. The write-loop
+      // runs on the non-regen path, so getLatestCommitted is the correct base.
+      final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
       final trackerRepo = ref.read(trackerRepoProvider);
-      final trackers = await trackerRepo.getBySessionId(sessionId);
+      final snapshot = await snapshotRepo.getLatestCommitted(sessionId);
+      final trackers =
+          snapshot?.trackers ?? await trackerRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
