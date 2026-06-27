@@ -1,7 +1,9 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/studio_config.dart';
+import '../../../core/state/db_provider.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../controllers/studio_menu_controller.dart';
@@ -346,6 +348,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                         ],
                       ],
                       const SizedBox(height: 12),
+                      const _StudioTimeoutTile(),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           FilledButton.tonalIcon(
@@ -610,4 +614,89 @@ class _StatusChip {
   final String label;
   final bool emphasize;
   const _StatusChip({required this.label, this.emphasize = false});
+}
+
+/// Idle timeout for Studio agents (pre-gen trackers + final generator).
+/// Reads/writes `PipelineSettings.studioTimeoutMs`. The timer fires only
+/// before the first chunk (text or reasoning) arrives — once any chunk
+/// arrives it is cancelled entirely (see AgentStreamRunner).
+class _StudioTimeoutTile extends ConsumerWidget {
+  const _StudioTimeoutTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final valueText = pipeline.studioTimeoutMs == 0
+        ? 'post_building_default_seconds'.tr(namedArgs: {'arg0': '90'})
+        : 'post_building_seconds_count'.tr(namedArgs: {
+            'arg0': (pipeline.studioTimeoutMs / 1000).toStringAsFixed(0),
+          });
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.timer_outlined, size: 20, color: cs.onSurfaceVariant),
+      title: Text(
+        'post_building_studio_timeout'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        '$valueText — ${'post_building_studio_timeout_desc'.tr()}',
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final current = (pipeline.studioTimeoutMs / 1000).round();
+        final controller = TextEditingController(text: '$current');
+        final v = await showDialog<int>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('post_building_studio_timeout'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'post_building_seconds_min'.tr(namedArgs: {'arg0': '0'}),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    suffixText: 'post_building_seconds_suffix'.tr(),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: Text('common_cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final s = int.tryParse(controller.text.trim());
+                  if (s == null || s < 0) {
+                    Navigator.of(c).pop();
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: Text('common_save'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (v != null) {
+          final updated = pipeline.copyWith(studioTimeoutMs: v * 1000);
+          await ref.read(pipelineSettingsProvider.notifier).save(updated);
+        }
+      },
+    );
+  }
 }
