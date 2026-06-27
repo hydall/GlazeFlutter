@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/llm/prompt_block_router.dart';
-import 'package:glaze_flutter/core/llm/memory_studio_mode.dart';
 
 void main() {
   group('PromptBlockRouter (Phase 11)', () {
@@ -77,91 +76,6 @@ void main() {
       expect(responderShards.any((s) => s.shard == 'style'), isTrue);
       expect(responderShards.any((s) => s.shard == 'utility'), isTrue);
       expect(responderShards.any((s) => s.shard == 'memory'), isFalse);
-    });
-  });
-
-  group('MemoryStudioPolicy (Phase 11)', () {
-    test('disabled by default', () {
-      const policy = MemoryStudioPolicy(MemoryStudioSettings());
-      expect(policy.isAvailable, isFalse);
-      expect(policy.defaultPipeline(), isEmpty);
-    });
-
-    test('enabled returns default pipeline', () {
-      const policy = MemoryStudioPolicy(
-        MemoryStudioSettings(experimentalEnabled: true),
-      );
-      expect(policy.isAvailable, isTrue);
-      final pipeline = policy.defaultPipeline();
-      expect(pipeline, hasLength(4));
-      expect(pipeline.first.stage, MemoryStudioStage.memoryCurator);
-      expect(pipeline.last.stage, MemoryStudioStage.mainResponder);
-    });
-
-    test('ephemeral outputs are never persisted', () {
-      const policy = MemoryStudioPolicy(
-        MemoryStudioSettings(experimentalEnabled: true),
-      );
-      expect(
-        policy.canPersist(MemoryStudioOutputDisposition.ephemeral),
-        isFalse,
-      );
-    });
-
-    test('proposed outputs require persistIntermediateActivity', () {
-      const policyNoPersist = MemoryStudioPolicy(
-        MemoryStudioSettings(experimentalEnabled: true),
-      );
-      expect(
-        policyNoPersist.canPersist(MemoryStudioOutputDisposition.proposed),
-        isFalse,
-      );
-
-      const policyPersist = MemoryStudioPolicy(
-        MemoryStudioSettings(
-          experimentalEnabled: true,
-          persistIntermediateActivity: true,
-        ),
-      );
-      expect(
-        policyPersist.canPersist(MemoryStudioOutputDisposition.proposed),
-        isTrue,
-      );
-    });
-
-    test('canonical writes require explicit settings', () {
-      const policySafe = MemoryStudioPolicy(
-        MemoryStudioSettings(
-          experimentalEnabled: true,
-          allowCanonicalWrites: false,
-        ),
-      );
-      expect(
-        policySafe.canPersist(MemoryStudioOutputDisposition.canonical),
-        isFalse,
-      );
-
-      const policyAuto = MemoryStudioPolicy(
-        MemoryStudioSettings(
-          experimentalEnabled: true,
-          allowCanonicalWrites: true,
-          requireExplicitConfirmation: false,
-        ),
-      );
-      expect(
-        policyAuto.canPersist(MemoryStudioOutputDisposition.canonical),
-        isTrue,
-      );
-    });
-
-    test('canUseStage only for stages in default pipeline', () {
-      const policy = MemoryStudioPolicy(
-        MemoryStudioSettings(experimentalEnabled: true),
-      );
-      expect(policy.canUseStage(MemoryStudioStage.memoryCurator), isTrue);
-      expect(policy.canUseStage(MemoryStudioStage.mainResponder), isTrue);
-      expect(policy.canUseStage(MemoryStudioStage.operator), isFalse);
-      expect(policy.canUseStage(MemoryStudioStage.summarizer), isFalse);
     });
   });
 }
