@@ -1,9 +1,10 @@
 # Plan: Studio / Agent Subsystem Decomposition
 
 > **Status:** ✅ CORE DONE — shared specialists (§1), decomposition (§3),
-> TrackerBatcher (§4), MemoryStudioService pure/leaf specialists (§2, 5/9),
-> StudioMenuController (§5), MemorySettingsMapper (§6, partial). Deeply-coupled
-> stateful clusters deferred as follow-up (see §2/§6 notes).
+> TrackerBatcher (§4), MemoryStudioService pure/leaf specialists + brief cache
+> (§2, 6/9), StudioMenuController (§5), MemorySettingsMapper +
+> MemoryDraftGenerationController (§6). Deeply-coupled stateful clusters
+> deferred as follow-up (see §2/§7 notes). §6 complete.
 > **Goal:** Break up the studio/agent god objects into thin orchestrators + injected
 > specialists per `docs/CODE_STYLE.md` (one class = one job, ~250 lines). No behavior
 > change — pure structural refactor, gated by the existing test suite.
@@ -209,13 +210,13 @@ commit. After every commit, analyze + test must be green before the next.
 2. ✅ **`StudioDecompositionService`** (§3) — biggest single win; classifiers already
    have characterization tests.
 3. ✅ **`TrackerBatcher`** (§4) — fully test-covered, safe split.
-4. ⚠️ **`MemoryStudioService`** (§2) — pure/leaf specialists done (5/9: ActivationGate,
-   PromptText, BriefParser, ContextBucketizer, BriefDeduper); deeply-coupled stateful
-   cluster deferred (see §10).
+4. ⚠️ **`MemoryStudioService`** (§2) — pure/leaf specialists + brief cache done (6/9:
+   ActivationGate, PromptText, BriefParser, ContextBucketizer, BriefDeduper,
+   BriefCache); message builder + executors + batch coordinator deferred (see §10).
 5. ✅ **`studio_menu_dialog`** (§5) — `StudioMenuController` extracted; removes the 3rd
    config-resolver copy.
-6. ⚠️ **`MemoryBookController`** (§6) — `MemorySettingsMapper` extracted (pure mapper);
-   `MemoryDraftGenerationController` deferred (see §10). §7 items not done.
+6. ✅ **`MemoryBookController`** (§6) — `MemorySettingsMapper` +
+   `MemoryDraftGenerationController` extracted. §7 items not done.
 
 ## 9. Guardrails
 
@@ -240,23 +241,28 @@ callback/interface with no net readability win at the current size. They are def
 to a follow-up that can pair the extraction with the necessary interface design (and
 optionally characterization tests for the moved cluster).
 
-### §2 — MemoryStudioService (chat-time), 4 remaining specialists
-- `StudioBriefCache` (owns `_briefCache`, cache probe/persist + refresh-policy).
+### §2 — MemoryStudioService (chat-time), 3 remaining specialists
+- ✅ `StudioBriefCache` (owns `_briefCache`, cache probe/persist + refresh-policy) — DONE.
 - `StudioMessageBuilder` (agent/batch/per-agent message assembly, history limits,
   macro expansion).
 - `StudioAgentExecutor` (single-agent + post-gen + individual + final run adapters).
 - `StudioBatchCoordinator` (batch group exec + 2-layer retry/fallback).
-All four are glued through `runTrackerCycle` + the shared `_ref`/`_log`/`_briefCache`.
-`MemoryStudioService` is now ~1500 lines (from ~2346, a 36% reduction from the 5
+The remaining three are glued through `runTrackerCycle` + the shared `_ref`/`_log`,
+and extracting them materially restructures the orchestrator (not just moving
+isolated helpers, as the cache was). They are deferred to a follow-up that can pair
+the extraction with interface design + streaming behavior characterization tests.
+`MemoryStudioService` is now ~1222 lines (from ~2346, a 48% reduction from the 6
 completed specialists).
 
-### §6 — MemoryBookController, 1 remaining specialist
-- `MemoryDraftGenerationController` (draft-generation lifecycle: timers, cancel tokens,
-  active/generating sets, `generateDraft`/`batchGenerate`/`cancelDraftGeneration`).
-  INV-M3 mutex is pinned by `test/characterization/memory_draft_mutex_test.dart`, which
-  tests the shared `memoryActiveDraftsProvider` contract (not the controller directly),
-  so the extraction is safe — just needs the `_book` reads + `save()`/`updateBook()`
-  writes threaded through. `MemoryBookController` is now 552 lines (from 619).
+### §6 — MemoryBookController ✅ COMPLETE
+- ✅ `MemorySettingsMapper` (pure bidirectional settings mapper) — DONE.
+- ✅ `MemoryDraftGenerationController` (draft-generation lifecycle: timers, cancel
+  tokens, active/generating sets, `generateDraft`/`batchGenerate`/`cancelDraftGeneration`)
+  — DONE. INV-M3 mutex pinned by `test/characterization/memory_draft_mutex_test.dart`
+  (tests the shared `memoryActiveDraftsProvider` contract, not the controller directly).
+  The `_book` reads + `save()`/`updateBook()` writes threaded through injected
+  `bookGetter`/`persistAndSet` closures. `MemoryBookController` is now 322 lines (from
+  619, a 48% reduction) — a thin orchestrator.
 
 ### §7 — lower-priority items
 - `agent_runner.dart`: `AgentStreamRunner` extraction (streaming state machine).
