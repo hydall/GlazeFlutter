@@ -27,10 +27,11 @@ class ChatRepo implements SyncChatStore {
   /// full [getByCharacterId] decodes all messages and is noticeably slower for
   /// characters with large histories.
   Future<List<SessionMetadata>> getMetadataByCharacterId(String charId) async {
-    final rows = await (_db.select(_db.chatSessions)
-          ..where((t) => t.characterId.equals(charId))
-          ..orderBy([(t) => OrderingTerm(expression: t.sessionIndex)]))
-        .get();
+    final rows =
+        await (_db.select(_db.chatSessions)
+              ..where((t) => t.characterId.equals(charId))
+              ..orderBy([(t) => OrderingTerm(expression: t.sessionIndex)]))
+            .get();
     return rows.map(_toMetadata).toList();
   }
 
@@ -104,11 +105,13 @@ class ChatRepo implements SyncChatStore {
 
       final current = _decodeJsonMap(row.sessionVarsJson);
       final updated = update(Map<String, dynamic>.from(current));
-      await (_db.update(_db.chatSessions)
-            ..where((t) => t.sessionId.equals(sessionId)))
-          .write(
+      await (_db.update(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).write(
         ChatSessionsCompanion(
-          sessionVarsJson: Value(updated.isNotEmpty ? jsonEncode(updated) : null),
+          sessionVarsJson: Value(
+            updated.isNotEmpty ? jsonEncode(updated) : null,
+          ),
         ),
       );
       return updated;
@@ -139,9 +142,9 @@ class ChatRepo implements SyncChatStore {
     required String previousContent,
   }) async {
     return _db.transaction(() async {
-      final row = await (_db.select(_db.chatSessions)
-            ..where((t) => t.sessionId.equals(sessionId)))
-          .getSingleOrNull();
+      final row = await (_db.select(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
       if (row == null) return false;
 
       final messages = (jsonDecode(row.messagesJson) as List<dynamic>)
@@ -170,12 +173,13 @@ class ChatRepo implements SyncChatStore {
 
       if (!found) return false;
 
-      await (_db.update(_db.chatSessions)
-            ..where((t) => t.sessionId.equals(sessionId)))
-          .write(
+      await (_db.update(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).write(
         ChatSessionsCompanion(
-          messagesJson:
-              Value(jsonEncode(messages.map((e) => e.toJson()).toList())),
+          messagesJson: Value(
+            jsonEncode(messages.map((e) => e.toJson()).toList()),
+          ),
         ),
       );
       return true;
@@ -195,9 +199,9 @@ class ChatRepo implements SyncChatStore {
     required String cleanedText,
   }) async {
     return _db.transaction(() async {
-      final row = await (_db.select(_db.chatSessions)
-            ..where((t) => t.sessionId.equals(sessionId)))
-          .getSingleOrNull();
+      final row = await (_db.select(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
       if (row == null) return false;
 
       final messages = (jsonDecode(row.messagesJson) as List<dynamic>)
@@ -235,40 +239,173 @@ class ChatRepo implements SyncChatStore {
 
       if (!found) return false;
 
-      await (_db.update(_db.chatSessions)
-            ..where((t) => t.sessionId.equals(sessionId)))
-          .write(
+      await (_db.update(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).write(
         ChatSessionsCompanion(
-          messagesJson:
-              Value(jsonEncode(messages.map((e) => e.toJson()).toList())),
+          messagesJson: Value(
+            jsonEncode(messages.map((e) => e.toJson()).toList()),
+          ),
         ),
       );
       return true;
     });
   }
 
+  /// Atomically appends a nested agent swipe ([kind]: 'cleaned' | 'final') to
+  /// a message and sets it as the active agent swipe. Used by the POST-cleaner
+  /// to write a blue 'cleaned' sub-swipe (preserving the original 'final' as
+  /// the parent) and by Studio final-regen to write a new 'final' sub-swipe.
+  ///
+  /// Lazy-migrates a 'final' from the current content when the first 'cleaned'
+  /// swipe is added to a message that predates the agentSwipes model. Inherits
+  /// `studioOutputs` from the parent 'final' so the Studio regen button stays
+  /// visible on the cleaned swipe. Wraps the read-modify-write in a
+  /// transaction (database.md Rule 3).
+  ///
+  /// Returns `true` if the message was found and updated.
+  Future<bool> appendAgentSwipe({
+    required String sessionId,
+    required String messageId,
+    required String content,
+    required String kind,
+    String? reasoning,
+    String? genTime,
+    int? tokens,
+    List<Map<String, dynamic>> studioOutputs = const [],
+  }) async {
+    return _db.transaction(() async {
+      final row = await (_db.select(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
+      if (row == null) return false;
+
+      final messages = (jsonDecode(row.messagesJson) as List<dynamic>)
+          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      var found = false;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].id == messageId) {
+          final msg = messages[i];
+          final agentSwipes = List<AgentSwipe>.from(msg.agentSwipes);
+
+          // Lazy migration: if agentSwipes is empty and we're adding a
+          // 'cleaned' swipe, backfill a 'final' from the current content.
+          if (agentSwipes.isEmpty && kind == 'cleaned') {
+            agentSwipes.add(
+              AgentSwipe(
+                content: msg.content,
+                kind: 'final',
+                reasoning: msg.reasoning,
+                genTime: msg.genTime,
+                tokens: msg.tokens,
+                studioOutputs: msg.studioOutputs,
+              ),
+            );
+          }
+
+          final parentSwipeId = kind == 'cleaned' && agentSwipes.isNotEmpty
+              ? agentSwipes.length - 1
+              : null;
+
+          // Inherit studioOutputs from the parent 'final' swipe so that
+          // switching to the 'cleaned' blue swipe keeps the Studio regen
+          // button visible (showStudioFinalRegen depends on studioOutputs).
+          final effectiveStudioOutputs = studioOutputs.isNotEmpty
+              ? studioOutputs
+              : (kind == 'cleaned' && parentSwipeId != null
+                    ? agentSwipes[parentSwipeId].studioOutputs
+                    : const <Map<String, dynamic>>[]);
+
+          agentSwipes.add(
+            AgentSwipe(
+              content: content,
+              kind: kind,
+              reasoning: reasoning,
+              genTime: genTime,
+              tokens: tokens,
+              studioOutputs: effectiveStudioOutputs,
+              parentSwipeId: parentSwipeId,
+            ),
+          );
+
+          messages[i] = msg.copyWith(
+            content: content,
+            agentSwipes: agentSwipes,
+            agentSwipeId: agentSwipes.length - 1,
+            swipesMeta: _syncAgentSwipesToMeta(
+              msg.swipesMeta,
+              msg.swipeId,
+              agentSwipes,
+              agentSwipes.length - 1,
+            ),
+          );
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) return false;
+
+      await (_db.update(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).write(
+        ChatSessionsCompanion(
+          messagesJson: Value(
+            jsonEncode(messages.map((e) => e.toJson()).toList()),
+          ),
+        ),
+      );
+      return true;
+    });
+  }
+
+  /// Sync [agentSwipes] + [agentSwipeId] into `swipesMeta[swipeId]` so that
+  /// green-swipe round-trips preserve agent swipes even without an explicit
+  /// `setSwipe` navigation-away. This eliminates the dual-storage mismatch
+  /// where `appendAgentSwipe` wrote only the top-level field.
+  static List<Map<String, dynamic>> _syncAgentSwipesToMeta(
+    List<Map<String, dynamic>> swipesMeta,
+    int swipeId,
+    List<AgentSwipe> agentSwipes,
+    int agentSwipeId,
+  ) {
+    if (swipeId < 0) return swipesMeta;
+    final meta = List<Map<String, dynamic>>.from(swipesMeta);
+    while (meta.length <= swipeId) {
+      meta.add(<String, dynamic>{});
+    }
+    meta[swipeId] = {
+      ...meta[swipeId],
+      'agentSwipes': agentSwipes.map((e) => e.toJson()).toList(),
+      'agentSwipeId': agentSwipeId,
+    };
+    return meta;
+  }
+
   /// Deletes all sessions belonging to [characterId], along with all per-session
   /// dependent data (memory books, summaries). Returns the deleted session IDs
   /// for sync-deletion tracking.
   Future<List<String>> deleteByCharacterId(String characterId) async {
-    final rows = await (_db.select(_db.chatSessions)
-          ..where((t) => t.characterId.equals(characterId)))
-        .get();
+    final rows = await (_db.select(
+      _db.chatSessions,
+    )..where((t) => t.characterId.equals(characterId))).get();
     final ids = rows.map((r) => r.sessionId).toList();
 
     if (ids.isNotEmpty) {
-      await (_db.delete(_db.memoryBookRows)
-            ..where((t) => t.sessionId.isIn(ids)))
-          .go();
-      await (_db.delete(_db.trackerRows)
-            ..where((t) => t.sessionId.isIn(ids)))
-          .go();
-      await (_db.delete(_db.chatSummaries)
-            ..where((t) => t.sessionId.isIn(ids)))
-          .go();
-      await (_db.delete(_db.chatSessions)
-            ..where((t) => t.characterId.equals(characterId)))
-          .go();
+      await (_db.delete(
+        _db.memoryBookRows,
+      )..where((t) => t.sessionId.isIn(ids))).go();
+      await (_db.delete(
+        _db.trackerRows,
+      )..where((t) => t.sessionId.isIn(ids))).go();
+      await (_db.delete(
+        _db.chatSummaries,
+      )..where((t) => t.sessionId.isIn(ids))).go();
+      await (_db.delete(
+        _db.chatSessions,
+      )..where((t) => t.characterId.equals(characterId))).go();
     }
     return ids;
   }
@@ -346,9 +483,9 @@ class ChatRepo implements SyncChatStore {
     for (int i = 0; i < json.length; i++) {
       final ch = json.codeUnitAt(i);
       if (inString) {
-        if (ch == 0x5C /* \ */) {
+        if (ch == 0x5C /* \ */ ) {
           i++; // skip escaped char
-        } else if (ch == 0x22 /* " */) {
+        } else if (ch == 0x22 /* " */ ) {
           inString = false;
         }
         continue;

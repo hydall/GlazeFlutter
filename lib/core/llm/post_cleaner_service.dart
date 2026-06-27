@@ -26,7 +26,7 @@ import 'sidecar_retry_runner.dart';
 /// still access it.
 ///
 /// Uses [SidecarLlmClient] for the sidecar LLM call and
-/// [ChatRepo.appendCleanerSwipe] for the atomic DB update.
+/// [ChatRepo.appendAgentSwipe] for the atomic DB update.
 /// Falls back to the original text on any error.
 class PostCleanerService {
   final Ref _ref;
@@ -78,8 +78,10 @@ class PostCleanerService {
     }
 
     try {
-      final config =
-          await _llm.resolveConfigForCleaner(settings, errorLabel: 'post-cleaner');
+      final config = await _llm.resolveConfigForCleaner(
+        settings,
+        errorLabel: 'post-cleaner',
+      );
       if (token.isCancelled) {
         return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
       }
@@ -106,8 +108,9 @@ class PostCleanerService {
 
       // Also strip reasoning the cleaner model itself may have emitted in its
       // reply (some sidecar models wrap output in raw `<think>` blocks).
-      final cleaned =
-          outcome.text == null ? null : stripThinkTags(outcome.text!);
+      final cleaned = outcome.text == null
+          ? null
+          : stripThinkTags(outcome.text!);
       if (cleaned == null || cleaned.trim().isEmpty) {
         if (!outcome.isOk) {
           return PostCleanerResult(
@@ -154,8 +157,7 @@ class PostCleanerService {
     } on TimeoutException {
       return PostCleanerResult(status: 'timeout', cleanedText: assistantText);
     } catch (e) {
-      if (token.isCancelled ||
-          (e is DioException && CancelToken.isCancel(e))) {
+      if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
         return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
       }
       debugPrint('[PostCleaner] error: $e');
@@ -377,20 +379,21 @@ class PostCleanerService {
     return buf.toString().trimRight();
   }
 
-  /// Applies the cleaned text to the session: appends a new green swipe
-  /// carrying [cleanedText] to the last assistant message via
-  /// [ChatRepo.appendCleanerSwipe]. The original text remains available as the
-  /// previous swipe.
+  /// Applies the cleaned text to the session: appends a blue 'cleaned' agent
+  /// swipe carrying [cleanedText] to the last assistant message via
+  /// [ChatRepo.appendAgentSwipe]. The original 'final' text remains available
+  /// as the parent swipe and is lazy-migrated on first clean.
   Future<void> applyCleanedText({
     required String sessionId,
     required String messageId,
     required String cleanedText,
   }) async {
     final chatRepo = _ref.read(chatRepoProvider);
-    final updated = await chatRepo.appendCleanerSwipe(
+    final updated = await chatRepo.appendAgentSwipe(
       sessionId: sessionId,
       messageId: messageId,
-      cleanedText: cleanedText,
+      content: cleanedText,
+      kind: 'cleaned',
     );
     if (!updated) return;
 
@@ -474,8 +477,7 @@ class PostCleanerService {
     } on TimeoutException {
       return null;
     } catch (e) {
-      if (token.isCancelled ||
-          (e is DioException && CancelToken.isCancel(e))) {
+      if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
         return null;
       }
       debugPrint('[PostCleanerAudit] error: $e');
