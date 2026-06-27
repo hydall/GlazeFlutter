@@ -453,6 +453,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     );
     bridge.onMessageContext = callbacks.onMessageContext;
     bridge.onSwipe = callbacks.onSwipe;
+    bridge.onAgentSwipe = callbacks.onAgentSwipe;
     bridge.onChangeGreeting = callbacks.onChangeGreeting;
     bridge.onHeaderScroll = callbacks.onHeaderScroll;
     bridge.onScrollToBottomVisibility = callbacks.onScrollToBottomVisibility;

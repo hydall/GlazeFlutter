@@ -211,6 +211,12 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     bool fromSwipe = false,
   }) => _swipeCtrl.changeSwipe(messageIndex, dir, fromSwipe: fromSwipe);
 
+  Future<void> changeAgentSwipe(
+    int messageIndex,
+    int dir, {
+    bool fromSwipe = false,
+  }) => _swipeCtrl.changeAgentSwipe(messageIndex, dir, fromSwipe: fromSwipe);
+
   Future<void> setGreeting(int messageIndex, int direction) =>
       _swipeCtrl.setGreeting(messageIndex, direction);
 
@@ -309,9 +315,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     }
   }
 
-  Future<void> regenerateLastAssistant({
-    String? guidanceText,
-  }) async {
+  Future<void> regenerateLastAssistant({String? guidanceText}) async {
     if (!ref.mounted) return;
     if (state.value?.isGenerating == true) {
       abortGeneration();

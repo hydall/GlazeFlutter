@@ -29,6 +29,7 @@ typedef SelectionChangeCallback = void Function(List<String> ids);
 class MessageActionsCallbacks {
   final MessageContextCallback? onMessageContext;
   final SwipeCallback? onSwipe;
+  final SwipeCallback? onAgentSwipe;
   final GreetingCallback? onChangeGreeting;
   final RegenerateCallback? onRegenerate;
   final ToggleHiddenCallback? onToggleHidden;
@@ -39,6 +40,7 @@ class MessageActionsCallbacks {
   const MessageActionsCallbacks({
     this.onMessageContext,
     this.onSwipe,
+    this.onAgentSwipe,
     this.onChangeGreeting,
     this.onRegenerate,
     this.onToggleHidden,

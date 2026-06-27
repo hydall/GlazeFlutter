@@ -585,6 +585,8 @@ void main() {
         'toggle-image-hidden',
         'swipe-left',
         'swipe-right',
+        'agent-swipe-left',
+        'agent-swipe-right',
         'greeting-prev',
         'greeting-next',
         'stop',

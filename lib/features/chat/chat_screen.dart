@@ -1046,6 +1046,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                             .read(memorySidecarPrewarmCacheProvider)
                             .invalidateSession(widget.state.session?.id ?? '');
                       },
+                      onAgentSwipe: (id, direction) {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == id,
+                        );
+                        if (idx < 0) return;
+                        final dir = direction == 'right' ? 1 : -1;
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .changeAgentSwipe(idx, dir, fromSwipe: true);
+                      },
                       onChangeGreeting: (id, dir) {
                         final idx = widget.state.messages.indexWhere(
                           (m) => m.id == id,
