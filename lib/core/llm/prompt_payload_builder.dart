@@ -7,6 +7,7 @@ import '../../shared/widgets/glaze_toast.dart' show GlazeToast, ToastPosition;
 import '../models/api_config.dart';
 import '../models/character.dart';
 import '../models/chat_message.dart';
+import '../utils/cast_helpers.dart';
 import '../models/lorebook.dart';
 import '../models/memory_book.dart';
 import '../models/persona.dart';
@@ -252,6 +253,25 @@ class PromptPayloadBuilder {
             )
             .toList();
       }
+      // NEW (patch #4 follow-up): chatSummaryFingerprint analog for
+      // prompt cache invalidation. Hash the canonical serialization of
+      // the selected memory entries (id + content) so the next generation
+      // can detect "memory changed since last turn" and invalidate
+      // Anthropic/DeepSeek prompt cache. Note: this is a simpler hash than
+      // the isolate-path's `computeHash(memoryContent)` because here we
+      // do not have the compiled memory injection content (it is built
+      // later in the prompt builder from the excerpt selection). The
+      // id+content hash is sufficient for cache invalidation — any
+      // change to the selected entries' content (append-only newFacts,
+      // user edits, agent writes) changes the fingerprint.
+      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.3.
+      final fingerprintBase = memorySelection.entries.isNotEmpty
+          ? memorySelection.entries.map((e) => '${e.id}:${e.content}').join('||')
+          : '';
+      final memoryInjectionFingerprint =
+          fingerprintBase.isNotEmpty ? computeHash(fingerprintBase) : '';
+      memoryCoverage['memoryInjectionFingerprint'] =
+          memoryInjectionFingerprint;
     }
 
     // Load {{arc}} and {{entities}} macro content from derived state repos.

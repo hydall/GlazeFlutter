@@ -114,6 +114,18 @@ class PromptPayload {
   /// message. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3).
   final String? recalledMessagesContent;
 
+  /// djb2-style hash of the compiled memory injection content for this
+  /// turn. Used by the next generation to detect "memory changed since
+  /// last turn" and invalidate prompt cache (Anthropic / DeepSeek prompt
+  /// caching). When this fingerprint matches the previous turn's, the
+  /// prompt cache is valid; when it differs, the cache misses — but
+  /// correctness is unaffected (the new memory content is sent). Mirrors
+  /// Marinara's `chatSummaryFingerprint` (djb2 on compiled summary). We
+  /// hash the MemoryBook injection content (MemoryBook is our summary
+  /// equivalent). Empty when no memory content was injected.
+  /// See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.3.
+  final String memoryInjectionFingerprint;
+
   const PromptPayload({
     required this.character,
     this.persona,
@@ -152,6 +164,7 @@ class PromptPayload {
     this.arcContent,
     this.entitiesContent,
     this.recalledMessagesContent,
+    this.memoryInjectionFingerprint = '',
   });
 }
 

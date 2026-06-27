@@ -54,6 +54,7 @@ Map<String, dynamic> serializePayload(PromptPayload p) => {
       'arcContent': p.arcContent,
       'entitiesContent': p.entitiesContent,
       'recalledMessagesContent': p.recalledMessagesContent,
+      'memoryInjectionFingerprint': p.memoryInjectionFingerprint,
     };
 
 PromptResult deserializeResult(Map<String, dynamic> json) {
@@ -154,6 +155,8 @@ PromptPayload deserializePayload(Map<String, dynamic> json) {
     arcContent: json['arcContent'] as String?,
     entitiesContent: json['entitiesContent'] as String?,
     recalledMessagesContent: json['recalledMessagesContent'] as String?,
+    memoryInjectionFingerprint:
+        json['memoryInjectionFingerprint'] as String? ?? '',
   );
 }
 
