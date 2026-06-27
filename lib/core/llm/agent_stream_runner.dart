@@ -78,6 +78,11 @@ class AgentStreamRunner {
     final reasoning = StringBuffer();
     Timer? idleTimer;
     CancelToken? agentCancelToken;
+    // Once the model emits its first chunk (text OR reasoning), cancel the
+    // idle timer entirely so a long (but progressing) generation is never
+    // cut off mid-stream. The stream's own onComplete/onError (or the outer
+    // pipeline cancelToken) is the only termination after that.
+    var streamStarted = false;
     void completeWithAccumulated(String reason) {
       if (completer.isCompleted) return;
       final text = output.toString().trim();
@@ -137,7 +142,14 @@ class AgentStreamRunner {
             }
           }
           if (delta.isNotEmpty || reasoningDelta?.isNotEmpty == true) {
-            resetAgentTimer();
+            // First chunk (text or reasoning): the model is producing
+            // output. Cancel the idle timer for good so a long generation
+            // is never cut off mid-stream. Only onComplete/onError or the
+            // outer pipeline cancel terminates the run after this.
+            if (!streamStarted) {
+              streamStarted = true;
+              idleTimer?.cancel();
+            }
           }
         },
         onComplete: (text, finalReasoning, {rawResponseJson}) {

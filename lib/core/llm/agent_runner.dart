@@ -156,13 +156,28 @@ class AgentRunner {
     return config?.runApiConfigId ?? '';
   }
 
-  /// Per-agent idle/total timeout. Final generator: 90s, trackers: 60s.
-  /// Anything ≤4000ms is treated as "unset" → fallback. Clamped to
-  /// [1000ms, 120000ms]. Ports Marinara `effectiveAgentTimeout`.
+  /// Per-agent idle timeout. The idle timer fires only if the model emits
+  /// NO chunks (text or reasoning) within the window — once any chunk
+  /// arrives the timer is cancelled entirely (see AgentStreamRunner). So
+  /// this is effectively a "first-byte" timeout, not a total-generation
+  /// timeout.
+  ///
+  /// Resolution order:
+  /// 1. [StudioAgent.timeoutMs] (>4000ms, clamped to [1000, 120000]) —
+  ///    per-agent override set at Studio build time.
+  /// 2. [PipelineSettings.studioTimeoutMs] (>0, clamped to [1000, 120000])
+  ///    — global user setting from the Post-Building menu.
+  /// 3. hardcoded fallback: final generator 90s, trackers 60s.
   int effectiveTimeoutMs(StudioAgent agent, bool isFinalResponse) {
     final fallback = isFinalResponse ? 90000 : 60000;
-    if (agent.timeoutMs <= 4000) return fallback;
-    return agent.timeoutMs.clamp(1000, 120000);
+    if (agent.timeoutMs > 4000) {
+      return agent.timeoutMs.clamp(1000, 120000);
+    }
+    final global = _ref.read(pipelineSettingsProvider).studioTimeoutMs;
+    if (global > 0) {
+      return global.clamp(1000, 120000);
+    }
+    return fallback;
   }
 
   /// Strip `<think>`/Plan-internally directives from a message before sending

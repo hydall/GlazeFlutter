@@ -127,6 +127,11 @@ class _PostBuildingMenuDialogState
                 onFetchModels: _fetchProviderModels,
               ),
               const SizedBox(height: 8),
+              _StudioSection(
+                pipeline: _pipeline,
+                onSaved: _savePipeline,
+              ),
+              const SizedBox(height: 8),
               _PipelineLlmSection(
                 titleKey: 'post_building_generation_llm',
                 icon: Icons.auto_fix_high_outlined,
@@ -595,6 +600,48 @@ class _WriteLoopSection extends StatelessWidget {
       titleKey: 'post_building_agentic_advanced',
       subtitleKey: 'post_building_agentic_advanced_desc',
       children: [c],
+    );
+  }
+}
+
+/// Studio agents section — idle timeout before the first chunk (text or
+/// reasoning) arrives from any Studio agent. Once any chunk arrives the
+/// timer is cancelled entirely, so this only guards the "model is silent"
+/// case (see AgentStreamRunner).
+class _StudioSection extends StatelessWidget {
+  final PipelineSettings pipeline;
+  final PipelineSaver onSaved;
+
+  const _StudioSection({required this.pipeline, required this.onSaved});
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      icon: Icons.groups_2_outlined,
+      titleKey: 'post_building_studio_section',
+      subtitleKey: 'post_building_studio_section_desc',
+      children: [
+        _NumberTile(
+          label: 'post_building_studio_timeout'.tr(),
+          valueText: pipeline.studioTimeoutMs == 0
+              ? 'post_building_default_seconds'.tr(namedArgs: {'arg0': '90'})
+              : 'post_building_seconds_count'.tr(namedArgs: {
+                  'arg0': (pipeline.studioTimeoutMs / 1000)
+                      .toStringAsFixed(0),
+                }),
+          subtitleKey: 'post_building_studio_timeout_desc',
+          onTap: (ctx) async {
+            final v = await _editIntSeconds(
+              ctx: ctx,
+              title: 'post_building_studio_timeout'.tr(),
+              valueSeconds: (pipeline.studioTimeoutMs / 1000).round(),
+            );
+            if (v != null) {
+              await onSaved((p) => p.copyWith(studioTimeoutMs: v * 1000));
+            }
+          },
+        ),
+      ],
     );
   }
 }

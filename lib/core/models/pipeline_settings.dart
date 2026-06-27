@@ -50,6 +50,13 @@ abstract class PipelineSettings with _$PipelineSettings {
     // ── Agentic write-loop ────────────────────────────────────────────────
     @Default(false) bool agenticWriteEnabled,
 
+    // ── Studio agents ────────────────────────────────────────────────────
+    // Per-agent idle timeout (ms) before the model emits its first chunk.
+    // Once any chunk (text or reasoning) arrives, the idle timer is
+    // cancelled entirely so a long generation is never cut off. 0 = use the
+    // per-agent fallback (final generator: 90s, trackers: 60s).
+    @Default(0) int studioTimeoutMs,
+
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,
     @Default(0.3) double postCleanerTemperature,
