@@ -1,10 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/api_config.dart';
 import '../models/studio_config.dart';
 import 'agent_runner.dart';
+import 'concurrency_limiter.dart';
+import 'tracker_batch_protocol.dart';
 
 /// Concurrency limits for the tracker phase (Phase 5.7.2).
 ///
@@ -135,6 +135,7 @@ class TrackerBatcher {
   /// parsing, [shouldRunIndividually], [normalizeMaxParallelJobs] and
   /// [splitGroupForParallelJobs] work without a runner (used by unit tests).
   final AgentRunner? _runner;
+  final TrackerBatchProtocol _protocol = const TrackerBatchProtocol();
 
   TrackerBatcher([this._runner]);
 
@@ -343,76 +344,13 @@ class TrackerBatcher {
     required List<Map<String, dynamic>> sharedMessages,
     required Map<String, String> perAgentTaskText,
     required String roleText,
-  }) {
-    final buf = StringBuffer();
-
-    // <role>
-    if (roleText.isNotEmpty) {
-      buf.writeln('<role>');
-      buf.writeln(_escapeXml(roleText));
-      buf.writeln('</role>');
-      buf.writeln();
-    }
-
-    // <lore> — shared context flattened
-    buf.writeln('<lore>');
-    for (final message in sharedMessages) {
-      final role = message['role'] ?? 'system';
-      final content = message['content'];
-      if (content is String && content.isNotEmpty) {
-        buf.writeln('[$role]');
-        buf.writeln(_escapeXml(content));
-        buf.writeln();
-      }
-    }
-    buf.writeln('</lore>');
-    buf.writeln();
-
-    // <agents>
-    buf.writeln('<agents>');
-    for (final agent in group.agents) {
-      final task = perAgentTaskText[agent.id] ?? '';
-      buf.writeln(
-        '  <agent_task id="${_escapeXmlAttr(agent.id)}" '
-        'name="${_escapeXmlAttr(agent.name)}">',
+  }) =>
+      _protocol.buildBatchSystemPrompt(
+        group: group,
+        sharedMessages: sharedMessages,
+        perAgentTaskText: perAgentTaskText,
+        roleText: roleText,
       );
-      if (task.isNotEmpty) {
-        buf.writeln(_escapeXml(task));
-      }
-      buf.writeln('  </agent_task>');
-    }
-    buf.writeln('</agents>');
-    buf.writeln();
-
-    // Required output format
-    buf.writeln('─── REQUIRED OUTPUT FORMAT ───');
-    buf.writeln(
-      'Respond with exactly one <result> block per agent_task, in the order '
-      'the agent_tasks appear above.',
-    );
-    for (final agent in group.agents) {
-      buf.writeln(
-        '<result agent="${_escapeXmlAttr(agent.id)}">'
-        '{${agent.name} output here}'
-        '</result>',
-      );
-    }
-    buf.writeln();
-    buf.writeln('CRITICAL:');
-    buf.writeln(
-      '- You MUST produce a <result> block for EVERY agent_task id listed '
-      'above, even if a task is empty or you have no guidance for it.',
-    );
-    buf.writeln(
-      '- Each <result> block must contain ONLY that agent\'s output, nothing '
-      'else.',
-    );
-    buf.writeln(
-      '- Do not add commentary, summaries, or explanations outside '
-      '<result> blocks.',
-    );
-    return buf.toString().trim();
-  }
 
   /// Parse a batched model response into one [TrackerBatchResult] per agent
   /// in [group]. (Phase 5.1.)
@@ -431,72 +369,8 @@ class TrackerBatcher {
   List<TrackerBatchResult> parseBatchResponse(
     String raw,
     TrackerBatchGroup group,
-  ) {
-    final results = <TrackerBatchResult>[];
-    for (final agent in group.agents) {
-      final text = _extractResultBlock(raw, agent.id) ??
-          _matchLegacyResultTag(raw, agent.id) ??
-          '';
-      final trimmed = text.trim();
-      results.add(TrackerBatchResult(
-        agentId: agent.id,
-        agentName: agent.name,
-        text: trimmed,
-        status: trimmed.isNotEmpty ? 'ok' : 'failed',
-        error: trimmed.isEmpty ? 'no <result> block in batch response' : null,
-      ));
-    }
-    return results;
-  }
-
-  /// Find `<result agent="ID">...</result>` for [agentId]. Tolerates missing
-  /// closing tag by taking up to the next `<result` opening.
-  String? _extractResultBlock(String raw, String agentId) {
-    final escapedId = RegExp.escape(agentId);
-    // Match `<result agent="ID">` (allow single/double quotes, optional
-    // whitespace). Capture body.
-    final openPattern = RegExp(
-      '<result\\s+agent\\s*=\\s*["\']?$escapedId["\']?\\s*>',
-      caseSensitive: false,
-    );
-    final openMatch = openPattern.firstMatch(raw);
-    if (openMatch == null) return null;
-    final bodyStart = openMatch.end;
-    final tail = raw.substring(bodyStart);
-    // Find the EARLIER of: the next `</result>` close OR the next `<result`
-    // opening. Whichever comes first is the boundary of this block. (Marinara
-    // `extractResultBlocks`: the model may forget a closing tag, in which
-    // case the next `<result` opening acts as the implicit boundary.)
-    final closePattern = RegExp('</result>', caseSensitive: false);
-    final nextOpenPattern = RegExp('<result\\b', caseSensitive: false);
-    final closeMatch = closePattern.firstMatch(tail);
-    final nextOpenMatch = nextOpenPattern.firstMatch(tail);
-    final int boundary;
-    if (closeMatch != null && nextOpenMatch != null) {
-      boundary = closeMatch.start < nextOpenMatch.start
-          ? closeMatch.start
-          : nextOpenMatch.start;
-    } else if (closeMatch != null) {
-      boundary = closeMatch.start;
-    } else if (nextOpenMatch != null) {
-      boundary = nextOpenMatch.start;
-    } else {
-      boundary = tail.length;
-    }
-    return tail.substring(0, boundary);
-  }
-
-  /// Legacy fallback: `<result_ID>...</result_ID>` (some models invent this
-  /// shape when they don't follow the `<result agent="...">` format).
-  String? _matchLegacyResultTag(String raw, String agentId) {
-    final escapedId = RegExp.escape(agentId);
-    final pattern = RegExp(
-      '<result_$escapedId>([\\s\\S]*?)</result_$escapedId>',
-      caseSensitive: false,
-    );
-    final match = pattern.firstMatch(raw);
-    return match?.group(1);
-  }
+  ) =>
+      _protocol.parseBatchResponse(raw, group);
 
   /// Run all batch groups + individual agents with a concurrency limit of
   /// [_maxConcurrentGroups] for batches. Individual agents run alongside,
@@ -540,20 +414,8 @@ class TrackerBatcher {
     required List<I> items,
     required int limit,
     required Future<R> Function(I item) run,
-  }) async {
-    if (items.length <= limit) {
-      return Future.wait(items.map(run));
-    }
-    final results = <R>[];
-    for (var i = 0; i < items.length; i += limit) {
-      final chunk = items.sublist(
-        i,
-        (i + limit).clamp(0, items.length),
-      );
-      results.addAll(await Future.wait(chunk.map(run)));
-    }
-    return results;
-  }
+  }) =>
+      ConcurrencyLimiter.settle(items: items, limit: limit, run: run);
 
   Future<List<TrackerBatchResult>> _settleWithConcurrencyLimit({
     required List<_PhaseJob> jobs,
@@ -561,38 +423,18 @@ class TrackerBatcher {
     required Future<List<TrackerBatchResult>> Function(TrackerBatchGroup) runBatch,
     required Future<TrackerBatchResult> Function(StudioAgent) runIndividual,
   }) async {
-    final results = <TrackerBatchResult>[];
-    for (var i = 0; i < jobs.length; i += limit) {
-      final chunk = jobs.sublist(i, (i + limit).clamp(0, jobs.length));
-      final chunkResults = await Future.wait(
-        chunk.map((job) async {
-          if (job.isBatch) {
-            return runBatch(job.batch!);
-          } else {
-            return [await runIndividual(job.agent!)];
-          }
-        }),
-      );
-      for (final list in chunkResults) {
-        results.addAll(list);
-      }
-    }
-    return results;
-  }
-
-  /// XML-escape text for use in element body. Escapes `&`, `<`, `>`.
-  String _escapeXml(String text) {
-    return text
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
-  }
-
-  /// XML-escape text for use in an attribute value. Also escapes `"` and `'`.
-  String _escapeXmlAttr(String text) {
-    return _escapeXml(text)
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&apos;');
+    final chunkResults = await ConcurrencyLimiter.settle<_PhaseJob,
+        List<TrackerBatchResult>>(
+      items: jobs,
+      limit: limit,
+      run: (job) async {
+        if (job.isBatch) {
+          return runBatch(job.batch!);
+        }
+        return [await runIndividual(job.agent!)];
+      },
+    );
+    return [for (final list in chunkResults) ...list];
   }
 }
 
