@@ -15,6 +15,7 @@ import 'history_assembler.dart';
 import 'macro_engine.dart';
 import 'prompt_builder.dart';
 import 'studio_activation_gate.dart';
+import 'studio_brief_deduper.dart';
 import 'studio_brief_parser.dart';
 import 'studio_context_bucketizer.dart';
 import 'studio_prompt_text.dart';
@@ -38,6 +39,7 @@ class MemoryStudioService {
   final StudioPromptText _promptText = const StudioPromptText();
   final StudioContextBucketizer _bucketizer = const StudioContextBucketizer();
   late final StudioBriefParser _briefParser = StudioBriefParser(_log);
+  late final StudioBriefDeduper _briefDeduper = StudioBriefDeduper(_briefParser);
 
   MemoryStudioService(this._ref);
 
@@ -994,9 +996,9 @@ class MemoryStudioService {
           if (!isFinalResponse) break;
           final sanitized = priorBriefs
               .where((b) => b.brief.trim().isNotEmpty)
-              .map((b) => _sanitizePriorBriefForFinal(b, config))
+              .map((b) => _briefDeduper.sanitizePriorBriefForFinal(b, config))
               .toList();
-          final deduped = _dedupePriorBriefs(sanitized);
+          final deduped = _briefDeduper.dedupePriorBriefs(sanitized);
           messages.addAll(
             deduped
                 .where((b) => b.brief.trim().isNotEmpty)
@@ -1154,130 +1156,6 @@ class MemoryStudioService {
     final stripped = text.replaceAll(_htmlTagRegex, '');
     final collapsed = stripped.replaceAll(_multiNewlineRegex, '\n\n');
     return collapsed.trim();
-  }
-
-  /// Remove cross-controller duplicate bullet points before sending briefs to
-  /// the final responder. The first controller to mention a point keeps it;
-  /// later controllers drop the duplicate so the final prompt does not repeat
-  /// the same instruction many times (which over-weights it and produces
-  /// repetitive replies). Meta briefs are passed through unchanged.
-  List<StudioStageBrief> _dedupePriorBriefs(List<StudioStageBrief> briefs) {
-    final seen = <String>{};
-    final result = <StudioStageBrief>[];
-    for (final brief in briefs) {
-      if (_briefParser.isMetaBriefName(brief.agentName)) {
-        result.add(brief);
-        continue;
-      }
-      final deduped = _dedupeBriefBody(brief.brief, seen);
-      result.add(
-        StudioStageBrief(
-          agentId: brief.agentId,
-          agentName: brief.agentName,
-          brief: deduped,
-          status: brief.status,
-          error: brief.error,
-          refreshPolicy: brief.refreshPolicy,
-          cacheKey: brief.cacheKey,
-          cacheHit: brief.cacheHit,
-        ),
-      );
-    }
-    return result;
-  }
-
-  /// Walk the Focus/Constraints/Avoid sections of one brief, dropping any
-  /// bullet whose normalized form was already emitted by an earlier brief.
-  /// Empty sections are removed. [seen] accumulates across briefs.
-  String _dedupeBriefBody(String brief, Set<String> seen) {
-    final lines = brief.split('\n');
-    final out = <String>[];
-    var currentHeading = '';
-    final pendingHeadingItems = <String>[];
-
-    void flushHeading() {
-      if (currentHeading.isEmpty) return;
-      if (pendingHeadingItems.isNotEmpty) {
-        out.add(currentHeading);
-        out.addAll(pendingHeadingItems);
-      }
-      currentHeading = '';
-      pendingHeadingItems.clear();
-    }
-
-    for (final rawLine in lines) {
-      final line = rawLine.trimRight();
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      final heading = _briefParser.studioBriefHeading(trimmed);
-      if (heading != null) {
-        flushHeading();
-        currentHeading = line;
-        continue;
-      }
-      final item = _briefParser.cleanBriefItem(trimmed);
-      if (item == null) {
-        // Non-bullet line outside a known section; keep verbatim once.
-        final key = 'raw:${_dedupeKey(trimmed)}';
-        if (seen.add(key)) {
-          if (currentHeading.isNotEmpty) {
-            pendingHeadingItems.add(line);
-          } else {
-            out.add(line);
-          }
-        }
-        continue;
-      }
-      final key = _dedupeKey(item);
-      if (!seen.add(key)) continue;
-      pendingHeadingItems.add('- $item');
-    }
-    flushHeading();
-    return out.join('\n').trim();
-  }
-
-  String _dedupeKey(String text) {
-    return text
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9а-яё ]', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-  }
-
-  StudioStageBrief _sanitizePriorBriefForFinal(
-    StudioStageBrief brief,
-    StudioConfig config,
-  ) {
-    if (!_briefParser.isMetaBriefName(brief.agentName)) {
-      final agent = _agentForBrief(brief, config);
-      return StudioStageBrief(
-        agentId: brief.agentId,
-        agentName: brief.agentName,
-        brief: _briefParser.sanitizeIntermediateAgentOutput(agent, brief.brief),
-        status: brief.status,
-        error: brief.error,
-        refreshPolicy: brief.refreshPolicy,
-        cacheKey: brief.cacheKey,
-        cacheHit: brief.cacheHit,
-      );
-    }
-    return StudioStageBrief(
-      agentId: brief.agentId,
-      agentName: brief.agentName,
-      brief: _briefParser.sanitizeMetaBrief(brief.brief),
-      status: brief.status,
-      error: brief.error,
-      refreshPolicy: brief.refreshPolicy,
-      cacheKey: brief.cacheKey,
-      cacheHit: brief.cacheHit,
-    );
-  }
-
-  StudioAgent _agentForBrief(StudioStageBrief brief, StudioConfig config) {
-    return config.agents.firstWhere(
-      (agent) => agent.id == brief.agentId || agent.name == brief.agentName,
-      orElse: () => StudioAgent(id: brief.agentId, name: brief.agentName),
-    );
   }
 
   String _expandStudioBlockContent(
