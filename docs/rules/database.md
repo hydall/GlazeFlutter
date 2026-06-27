@@ -93,9 +93,9 @@ Migration history:
 - v41: added Studio preset overrides JSON
 - v42: added Studio `profileId` / `profileName` for reusable session-bound profiles
 - v43: added Studio `builderPromptTemplate` override for editable Studio rebuild prompts
-- v44: added Studio `maxFinalHistoryMessages` INTEGER DEFAULT 15 — caps trailing chat messages sent to the final Studio agent (0 = unlimited); intermediate agents still see full history
-- v45: added `tracker_rows` table — agentic memory trackers (lightweight key-value state written by the memory agent, e.g. 'mood: happy', 'inventory: chip in pocket'). Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades alongside `memory_book_rows`
-- v46: added `studio_config_rows.routing_mode` TEXT DEFAULT `'verbatim'` — controls how preset blocks become agent instructions during decomposition (`verbatim` = blocks concatenated дословно, no LLM call; `compiled` = legacy LLM digest). See docs/PLAN_AGENTIC_STUDIO.md §11
+- v44: added Studio `maxFinalHistoryMessages` INTEGER DEFAULT 15 — caps trailing chat messages sent to the final Studio generator (0 = unlimited); Studio trackers receive their own `StudioAgent.contextSize` (default 5, hard-cap 200) instead — see INV-ST1/INV-ST2 in `docs/INVARIANTS.md`
+- v45: added `tracker_rows` table — lightweight key-value trackers written by the post-turn write-loop and Studio trackers (e.g. 'mood: happy', 'inventory: chip in pocket'). Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades alongside `memory_book_rows`. Read live by `agentic_operations_log_dialog.dart` "Tracker values" tab and `studio_menu_dialog.dart` (current tracker value preview)
+- v46: added `studio_config_rows.routing_mode` TEXT DEFAULT `'verbatim'` — controls how preset blocks become agent instructions (`verbatim` = blocks concatenated дословно, no LLM call; `compiled` = legacy LLM digest, deprecated). The 8-slot decomposition service (`studio_decomposition_service.dart`) was DELETED in Phase 2 of `docs/PLAN_AGENTIC_STUDIO.md`; only `verbatim_shard_assembler.dart` (20-line util) remains. `routing_mode = 'compiled'` is preserved for legacy JSON compatibility but no longer triggers an LLM call.
 
 ---
 
@@ -211,3 +211,50 @@ When adding a new table with per-character or per-session data, add its deletion
 
 For other tables that need reactive updates, add a `watch*` method to the repo.
 Do not poll; use Drift streams.
+
+---
+
+## MemoryBook agent-generated batches (Phase 7)
+
+`MemoryBookRows.entriesJson` and `pendingDraftsJson` are JSON TEXT blob
+columns — adding fields to `MemoryEntry` / `MemoryDraft` requires NO Drift
+schema migration, only a freezed regeneration (`dart run build_runner build`)
+plus an in-place migration in `fromJson` (see `_migrateEntryInPlace` and
+`_migrateInjectionTargetInPlace` in `lib/core/models/memory_book.dart`).
+
+### Source / kind markers
+
+- `MemoryDraft.source`: `'scan_chat'` (set by `MemoryBookController.scanChat`)
+  or `'agentic'` (set by `MemoryAgenticWriteService._executeMemoryWrites` post-turn
+  write-loop) or `''` (legacy / manual).
+- `MemoryEntry.source`: propagated from `draft.source` by
+  `MemoryBookController.approveDraft` (Phase 7). Defaults to `''` for legacy
+  entries; migrated in `_migrateEntryInPlace`.
+- `MemoryEntry.kind`: `'curated'` (default) or `'agent'` (set by `approveDraft`
+  when `draft.source == 'agentic'`).
+
+### Auto-approve policy
+
+Agent drafts that pass validation land in the MemoryBook UI "Agent memories"
+tab as pending drafts (visible alongside approved agent entries). They are
+NOT silently auto-promoted to `MemoryEntry` — the user explicitly approves or
+deletes them. Invalid/empty/duplicate agent drafts stay as pending drafts in
+the same tab until the user acts on them.
+
+The dedicated atomic repo path is `MemoryBookRepo.appendDrafts` (transactional
+read-modify-write of `pendingDraftsJson` inside `db.transaction()` per Rule 3
+above). There is NO read-modify-write of the MemoryBook outside the dedicated
+repo methods — `MemoryAgenticWriteService` calls `appendDrafts` directly and
+never touches `entriesJson`.
+
+### Display separation
+
+`memory_books_sheet.dart` (Phase 7.2) tabs drafts/entries by `source`:
+- **Approved** tab: `entry.source != 'agentic'` (curated + scan-promoted)
+- **Scan drafts** tab: `draft.source != 'agentic'` (bulk scan drafts)
+- **Agent memories** tab: `draft.source == 'agentic'` + `entry.source == 'agentic'`
+
+`agentic_operations_log_dialog.dart` (Phase 7.5) has a separate "Tracker
+values" tab that reads `trackerRepoProvider.getBySessionId` — live tracker
+state (scene, weather, inventory, ...) is NOT a MemoryBook entry and is NOT
+mixed with memory drafts. See INV-M6 in `docs/INVARIANTS.md`.

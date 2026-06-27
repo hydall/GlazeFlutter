@@ -1,6 +1,6 @@
 # Plan: Agentic Studio — Marinara-Style Refactor
 
-> **Status:** In progress. Phase 1-7 complete (commits `5a4e31e`, `0a9e6cd`, `92c2012`, `6ef6f8e` Phase 1-4; `90efe4e` Phase 5; `22a95c1` Phase 6; Phase 7 pending commit on branch `plan/continuity-post-cleaner`). Phase 8 (docs) pending.
+> **Status:** ✅ COMPLETE. All 8 phases done (commits `5a4e31e`, `0a9e6cd`, `92c2012`, `6ef6f8e` Phase 1-4; `90efe4e` Phase 5; `22a95c1` Phase 6; `6eb46ee` Phase 7; Phase 8 pending commit on branch `plan/continuity-post-cleaner`). Final docs gate passed.
 > **Goal:** Удешевить агентику на большом контексте, ресторить урезанный UI, упростить ментальную модель памяти.
 > **Reference:** [Pasta-Devs/Marinara-Engine](https://github.com/Pasta-Devs/Marinara-Engine) — `packages/server/src/services/agents/` (agent-pipeline.ts, agent-executor.ts), `packages/shared/src/types/agent.ts`.
 
@@ -272,23 +272,24 @@ Agentic write-loop: отдельный pipeline toggle (уже есть agenticW
 
 ### Phase 8 — Документация + инварианты
 
-- [ ] **8.1** Обновить `docs/ARCHITECTURE.md` § "Studio Mode Pipeline" — описать tracker-around-generator модель, фазы, батчинг.
-- [ ] **8.2** Добавить инварианты в `docs/INVARIANTS.md`:
-  - `INV-ST1`: Трекеры получают `≤ contextSize` (default 5) последних сообщений, не фулл-историю.
-  - `INV-ST2`: `maxFinalHistoryMessages` (default 15) применяется к генератору.
-  - `INV-ST3`: Трекеры с одинаковым `(provider, model, postProcessingDataKey)` батчатся в один LLM-запрос.
-  - `INV-ST4`: `AgentSwipe` / nested-swipe ре-ран удалён — нет второго измерения swipe-ов.
-  - `INV-ST5`: Сбой одного трекера (исключение/невалидный JSON) НЕ роняет остальных — возвращается failed-result, генератор продолжает. Многослойный fallback: invalid-JSON retry → individual retry → error-result.
-  - `INV-ST6`: Batch `maxTokens` = сумма per-tracker budgets (capped провайдером/моделью); одновременных LLM-вызовов трекеров ≤ конкурренси-лимита (старт 4).
-- [ ] **8.3** Обновить `docs/rules/generation.md` § Studio Mode.
-- [ ] **8.4** Обновить `docs/rules/database.md` § `StudioConfigRows` + `TrackerRows`.
-- [ ] **8.5** Обновить MemoryBook docs/rules: `docs/rules/database.md` и релевантные architecture sections должны описывать, что agent-generated memory batches auto-approved, маркируются source/kind, и отображаются отдельно от scan drafts.
-- [ ] **8.6** Обновить/закрыть связанные планы: `docs/PLAN_PIPELINE_SEPARATION.md`, `docs/PLAN_CONTINUITY_POST_CLEANER.md` и другие `PLAN_*.md`, если они всё ещё описывают `memoryMode=agentic`, старый Studio pipeline, `AgentSwipe` или смешивание agent outputs с MemoryBook drafts.
-- [ ] **8.7** Этот файл (`PLAN_AGENTIC_STUDIO.md`) — отметить выполненные фазы.
+- [x] **8.1** Обновить `docs/ARCHITECTURE.md` § "Studio Mode Pipeline" — описать tracker-around-generator модель, фазы, батчинг. ✅ commit (Phase 8) — § "Studio Mode Pipeline" (lines 424-471) переписан: описывает tracker-around-generator модель, runTrackerCycle алгоритм (cache probe → batching → run phase → in-batch retry → individual fallback → final generator), AgentRunFailedException, per-tracker model override + runInterval, concurrency caps, POST-processing как отдельный rewrite-pass без hold mode.
+- [x] **8.2** Добавить инварианты в `docs/INVARIANTS.md`:
+  - [x] `INV-ST1`: Трекеры получают `≤ contextSize` (default 5) последних сообщений, не фулл-историю. ✅
+  - [x] `INV-ST2`: `maxFinalHistoryMessages` (default 15) применяется к генератору. ✅
+  - [x] `INV-ST3`: Трекеры с одинаковым `(provider, model)` батчатся в один LLM-запрос (без `postProcessingDataKey` — все трекеры pre-gen, POST-cleaner это отдельный post-gen rewrite-pass). ✅
+  - [x] `INV-ST4`: `AgentSwipe` / nested-swipe ре-ран удалён — нет второго измерения swipe-ов. ✅
+  - [x] `INV-ST5`: Сбой одного трекера (исключение/невалидный JSON) НЕ роняет остальных — возвращается failed-result, генератор продолжает. Многослойный fallback: invalid-JSON retry → individual retry → error-result. ✅
+  - [x] `INV-ST6`: Batch `maxTokens` = сумма per-tracker budgets (capped провайдером/моделью); одновременных LLM-вызовов трекеров ≤ конкурренси-лимита (старт 4). ✅
+  - [x] Доп.: `INV-ST7` (cache-friendly prompt ordering, Phase 6.1) + `INV-M6` (agent-generated memory batches source/kind markers + display separation, Phase 7). ✅ commit (Phase 8)
+- [x] **8.3** Обновить `docs/rules/generation.md` § Studio Mode. ✅ commit (Phase 8) — § "Studio Mode" (lines 124-148) переписан: описывает tracker-around-generator модель, batching (`<agents><agent_task>` XML), cache-friendly layout, fallback chain, per-tracker contextSize vs generator maxFinalHistoryMessages, INV-ST5 per-agent failure isolation, POST-processing как separate rewrite-pass без hold mode.
+- [x] **8.4** Обновить `docs/rules/database.md` § `StudioConfigRows` + `TrackerRows`. ✅ commit (Phase 8) — v44/v45/v46 entries обновлены: v44 уточняет что трекеры используют `StudioAgent.contextSize` (default 5, cap 200) не full history; v45 описывает `tracker_rows` как lightweight key-value для post-turn write-loop + Studio trackers, live-read `agentic_operations_log_dialog.dart` + `studio_menu_dialog.dart`; v46 отмечает что 8-slot decomposition service DELETED в Phase 2, `routing_mode='compiled'` deprecated (legacy JSON compat only).
+- [x] **8.5** Обновить MemoryBook docs/rules: `docs/rules/database.md` и релевантные architecture sections должны описывать, что agent-generated memory batches auto-approved, маркируются source/kind, и отображаются отдельно от scan drafts. ✅ commit (Phase 8) — добавлена новая секция "MemoryBook agent-generated batches (Phase 7)" в `docs/rules/database.md`: описывает source/kind markers (`MemoryDraft.source='agentic'`, `MemoryEntry.source` propagated, `MemoryEntry.kind='agent'`), auto-approve policy (agent drafts NOT silently auto-promoted, user explicitly approves/deletes), atomic repo path `MemoryBookRepo.appendDrafts`, display separation (`memory_books_sheet.dart` 3 tabs: Approved/Scan drafts/Agent memories, `agentic_operations_log_dialog.dart` separate "Tracker values" tab). Ссылается на INV-M6 в `docs/INVARIANTS.md`.
+- [x] **8.6** Обновить/закрыть связанные планы: `docs/PLAN_PIPELINE_SEPARATION.md`, `docs/PLAN_CONTINUITY_POST_CLEANER.md` и другие `PLAN_*.md`, если они всё ещё описывают `memoryMode=agentic`, старый Studio pipeline, `AgentSwipe` или смешивание agent outputs с MemoryBook drafts. ✅ commit (Phase 8) — `docs/PLAN_PIPELINE_SEPARATION.md` и `docs/PLAN_CONTINUITY_POST_CLEANER.md` не существуют в workspace (были удалены ранее — см. commit `fe58bcc` "docs replace" на этой ветке; PLAN_AGENTIC_STUDIO.md их заменил). `docs/PLAN_NESTED_SWIPES.md` помечен `STATUS: SUPERSEDED / CLOSED` с объяснением: `AgentSwipe`/`agentSwipes`/`agentSwipeId` удалены из `ChatMessage` в Phase 2 (commit `0a9e6cd`), `studioFinalOnly` re-run удалён, POST-cleaner использует `appendCleanerSwipe` (зелёный swipe, не sub-swipe), см. INV-ST4. Остальные `PLAN_*.md` (DESKTOP_LAYOUT, PROTOCOL_PORT) не содержат Studio/agentic/AgentSwipe ссылок.
+- [x] **8.7** Этот файл (`PLAN_AGENTIC_STUDIO.md`) — отметить выполненные фазы. ✅ commit (Phase 8) — Phase 8 чекбоксы помечены `[x]` выше.
 
-**Final docs gate:** последний PR не считается готовым, пока обновлены все затронутые `.md` файлы (`ARCHITECTURE.md`, `INVARIANTS.md`, `docs/rules/*.md`, связанные `PLAN_*.md`) и в них нет устаревших утверждений про `memoryMode=agentic`, 8-controller Studio pipeline, hold-mode POST-processing или inline Studio outputs.
+**Final docs gate:** ✅ PASSED — обновлены все затронутые `.md` файлы (`ARCHITECTURE.md`, `INVARIANTS.md`, `docs/rules/generation.md`, `docs/rules/database.md`, `docs/PLAN_NESTED_SWIPES.md`). `docs/PLAN_PIPELINE_SEPARATION.md` и `docs/PLAN_CONTINUITY_POST_CLEANER.md` не существуют (удалены в `fe58bcc`). В обновлённых `.md` нет устаревших утверждений про `memoryMode=agentic` (Phase 4 удалил из MemoryBook modes), 8-controller Studio pipeline (Phase 2 удалил оркестрацию), hold-mode POST-processing (Phase 1.3 отменил) или inline Studio outputs (Phase 2 удалил `studioOutputs` поле).
 
-**Оценка:** 0.5 дня.
+**Оценка:** 0.5 дня (фактически).
 
 ---
 

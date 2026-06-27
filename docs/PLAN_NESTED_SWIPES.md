@@ -1,5 +1,15 @@
 # PLAN: Nested Swipes — агентский под-слой свайпов
 
+> **STATUS: SUPERSEDED / CLOSED.** План замещён `docs/PLAN_AGENTIC_STUDIO.md`
+> Phase 2 (commit `0a9e6cd`): поля `AgentSwipe` / `agentSwipes` / `agentSwipeId`
+> удалены из `ChatMessage`, ветка `studioFinalOnly` re-run удалена из
+> `stream_generation_service.dart`. второго измерения swipe-ов для ре-рана
+> одного intermediate больше нет — intermediates удалены в пользу
+> tracker-around-generator модели. POST-cleaner использует `appendCleanerSwipe`
+> (зелёный swipe, не sub-swipe) — см. INV-ST4 в `docs/INVARIANTS.md`.
+>
+> Содержимое ниже сохранено для исторической справки; НЕ реализовывать.
+
 Статус: **DRAFT / RFC**. Ждёт решения владельца перед реализацией.
 
 ## 1. Проблема

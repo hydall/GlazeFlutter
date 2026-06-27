@@ -415,26 +415,65 @@ provider-specific `reasoning: { exclude: true }` or similar body fields unless
 the target provider documents the exact field and we intentionally support that
 contract.
 
-Studio Mode follows the same policy for its final agent: intermediate agents
-force reasoning off/omitted; the final agent inherits the resolved `ApiConfig`
+Studio Mode follows the same policy for its final agent: trackers force
+reasoning off/omitted; the final generator inherits the resolved `ApiConfig`
 reasoning settings. Studio also strips prompt-level hidden-reasoning directives
-from final-agent instructions when reasoning is disabled/omitted, but cannot
-disable model-internal thinking if the upstream model always performs it.
+from final-generator instructions when reasoning is disabled/omitted, but
+cannot disable model-internal thinking if the upstream model always performs
+it.
 
 ### Studio Mode Pipeline
+
+Studio Mode is a tracker-around-generator model (Phase 5 refactor — see
+`docs/PLAN_AGENTIC_STUDIO.md`). One main LLM (the generator) writes the visible
+reply; lightweight trackers run as sidecars and contribute notes/injections
+that shape the next prompt, never duplicating the generator's output.
 
 Studio settings are stored as reusable Studio profiles in `studio_config_rows`.
 Sessions bind to a profile by `profileId`; starting a new session can reuse an
 existing profile without rebuilding agents. Rebuilding only changes the selected
 profile's agent prompts/settings.
 
-At generation time, all enabled intermediate agents run in parallel. Their
-outputs are ephemeral briefs shown under the assistant message and passed to the
-final agent as `previous_agents`. A failed intermediate agent is captured as a
-Studio output with `status: error` and does not abort the whole Studio pipeline;
-the final agent still runs with the successful briefs plus an error marker for
-the failed agent. The final enabled agent runs after all intermediate agents
-settle and produces the visible assistant response.
+At generation time `MemoryStudioService.runTrackerCycle` runs:
+
+1. **Cache probe** (`_probeCache`): each due tracker is checked against
+   `_briefCache` keyed by refresh policy (`turn` / `scene` / `static`).
+   Cache hits are excluded from the LLM round-trip.
+2. **Batching** (`TrackerBatcher.groupAgents`): trackers with the same
+   `(provider, model)` and `!runIndividually` are packed into one LLM request
+   via `<agents><agent_task>` XML with a single system prompt that orders shared
+   context first (`<role>` + `<lore>` = static + dynamic + trimmed history) and
+   per-agent instructions last (`<agents>`) — a prompt-cache-friendly layout
+   (Phase 6.1). Heavy trackers (`expression` / `illustrator` / `lorebook` name
+   match, or explicit `StudioAgent.runIndividually`) are pulled out of the batch
+   and run as their own request.
+3. **Run phase** (`TrackerBatcher.runPhase`, concurrency limit 4): batch groups
+   + individual agents fire in parallel, subject to the concurrency cap. Each
+   batch is one LLM call → `parseBatchResponse` (`<result agent="id">` with
+   missing-close-tag tolerance + `<result_ID>` legacy fallback).
+4. **In-batch retry (layer 1)**: if any agent in the batch comes back failed,
+   re-request the whole batch ONCE.
+5. **Individual fallback (layer 2, concurrency limit 2)**: any agent still
+   failed from both attempts is re-run as its own LLM request.
+6. **Final generator** (`_runFinalGenerator`): runs every turn after all
+   trackers settle, using `maxFinalHistoryMessages` (default 15) for the
+   trimmed history; trackers receive their own `contextSize` (default 5,
+   hard-cap 200) via `_limitTrackerHistory` + `truncateAgentText`
+   (head 40% + tail 60%) + `stripHtmlTags`.
+
+`AgentRunFailedException` (Phase 5.7.5) wraps tracker failures so the
+generator still runs with the successful briefs plus an error marker. The
+generator's own failure aborts the turn.
+
+Per-tracker model override (`StudioAgent.modelSource = 'custom'` picks an
+`ApiConfig` by `agent.model`; `modelOverride` applied on top) and
+`runInterval` (every-N-th-turn scheduling) are respected. Concurrency caps:
+`_maxConcurrentGroups = 4`, `_maxConcurrentFallback = 2` (Phase 5.7.2,
+conservative defaults for desktop).
+
+POST-processing (Phase 1.3) stays separate from the tracker pipeline: the
+POST-cleaner runs after the full reply, produces a green swipe diff via
+`appendCleanerSwipe` (`post_cleaner_service.dart`), without hold mode.
 
 ### Prompt Ordering (invariant — do not reorder)
 

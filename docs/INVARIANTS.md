@@ -157,6 +157,113 @@ range such as `91-105` are read with a `messageRange` backfill in
 `MemoryEntry.fromJson()`. This does not rewrite the stored JSON until the book
 is saved normally.
 
+### INV-M6: Agent-generated memory batches are marked and display-separated ✅ ENFORCED (Phase 7)
+
+`MemoryDraft.source = 'agentic'` is set by `MemoryAgenticWriteService._executeMemoryWrites`
+when the post-turn write-loop creates a draft. `MemoryBookController.approveDraft()`
+propagates `draft.source` to `entry.source` and sets `entry.kind = 'agent'` when
+`source == 'agentic'` (else `'curated'`). The MemoryBook UI
+(`memory_books_sheet.dart`) tabs drafts/entries by source so agent-sourced
+content is shown in a dedicated "Agent memories" tab, separate from bulk scan
+drafts (`source == 'scan_chat'` or empty) and curated entries.
+
+Auto-approve policy (Phase 7): agent drafts that pass validation land in the
+same "Agent memories" tab. Invalid/empty/duplicate agent drafts are NOT
+auto-approved — they stay as pending drafts in the same tab until the user
+approves or deletes them. The dedicated atomic repo path is
+`MemoryBookRepo.appendDrafts` (transactional); no read-modify-write of the
+MemoryBook happens outside the dedicated repo methods.
+
+Compatibility rule: `MemoryEntry.source` defaults to `''` and is migrated in
+`_migrateEntryInPlace` (`memory_book.dart`) — no Drift schema migration is
+needed because `MemoryBookRows.entriesJson` / `pendingDraftsJson` are JSON
+TEXT blob columns.
+
+---
+
+## 4b. Studio Tracker Invariants
+
+These cover the tracker-around-generator pipeline introduced in Phase 5
+(`docs/PLAN_AGENTIC_STUDIO.md`). See also `docs/rules/generation.md` § Studio
+Mode for the rules every contributor touching `MemoryStudioService` /
+`AgentRunner` / `TrackerBatcher` must follow.
+
+### INV-ST1: Trackers receive ≤ contextSize last messages, not full history ✅ ENFORCED (Phase 3)
+
+`MemoryStudioService._limitTrackerHistory(history, contextSize)` slices
+`history.slice(-contextSize)` before building tracker messages. Each message is
+run through `_truncateAgentText` (head 40% + `[Trimmed ...]` marker + tail 60%,
+rune-counted) and `_stripHtmlTags` (conservative tag regex preserving `==...==`
+markers and code fences). `StudioAgent.contextSize` default 5, hard-cap 200.
+
+The final generator does NOT use this trim — it uses
+`StudioConfig.maxFinalHistoryMessages` (default 15). MemoryBook injection
+(`dynamic_context` block: memory, summary, worldInfo) is NOT trimmed — only
+the `chat_history` block is. Users without rolling summary keep long-term memory
+via MemoryBook (static `dynamic_context` injection), not via chat history.
+
+### INV-ST2: maxFinalHistoryMessages applies to the generator ✅ ENFORCED
+
+`_limitFinalHistory` trims `chat_history` to the last
+`StudioConfig.maxFinalHistoryMessages` (default 15) messages for the final
+generator only (`_runFinalGenerator` → `_buildAgentMessages(isFinalResponse:
+true)`). Trackers are governed by INV-ST1 instead.
+
+### INV-ST3: Same-(provider, model) trackers batch into one LLM request ✅ ENFORCED (Phase 5)
+
+`TrackerBatcher.groupAgents` keys batch groups by `"${resolved.protocol}|${resolved.model}"`.
+Agents with `StudioAgent.runIndividually = true` (or whose name matches
+`expression` / `illustrator` / `lorebook`, case-insensitive) are pulled out of
+the batch and run as individual requests. There is no `postProcessingDataKey`
+grouping (yet) — all trackers are pre-generation; the POST-cleaner is a separate
+post-gen rewrite pass, not a tracker.
+
+### INV-ST4: AgentSwipe / nested-swipe re-run removed ✅ ENFORCED (Phase 2)
+
+The `AgentSwipe` / `agentSwipes` / `agentSwipeId` fields are deleted from
+`ChatMessage`. `studioFinalOnly` re-run branch is removed from
+`stream_generation_service.dart`. There is no second swipe dimension for
+re-running a single intermediate. POST-cleaner uses `appendCleanerSwipe` (a
+green swipe, not a sub-swipe) and does NOT implement hold mode.
+
+### INV-ST5: Single tracker failure does not abort the rest ✅ ENFORCED (Phase 5.7.5)
+
+`AgentRunner.runAgent` wraps any tracker exception (timeout, transport, idle,
+invalid output) in `AgentRunFailedException`. `MemoryStudioService._runTracker`
+catches it and emits a failed `StudioStageBrief` (`status: 'error'`,
+`error: reason`); the remaining trackers and the final generator continue.
+
+Fallback chain (Phase 5.1): in-batch invalid-JSON retry (re-request the whole
+batch once) → individual fallback (re-run each still-failed agent as its own
+request, concurrency limit 2) → error-result. The final generator rethrows —
+its failure aborts the turn.
+
+### INV-ST6: Batch budget and concurrency caps ✅ ENFORCED (Phase 5.7.2)
+
+Batch `maxTokens` = Σ per-tracker `maxTokens`, capped by `resolved.contextSize ~/ 2`
+(output ceiling = half the context window; the other half is input). Batch
+`temperature` = MIN across the group (low-temp wins for deterministic
+trackers). Batch `contextSize` = MAX across the group (the tracker that needs
+20 messages gets 20; the tracker that needs 5 sees more, which is safe).
+
+Concurrent in-flight tracker requests: `_maxConcurrentGroups = 4` for the
+phase, `_maxConcurrentFallback = 2` for the individual-fallback layer.
+Conservative defaults for desktop (Marinara runs 8/4 on a server; one user
+hitting one provider with 8 concurrent SSE streams is a real rate-limit risk).
+
+### INV-ST7: Studio cache-friendly prompt ordering ✅ ENFORCED (Phase 6.1)
+
+`TrackerBatcher.buildBatchSystemPrompt` orders the batch system prompt as
+`<role>` (shared role text) → `<lore>` (shared static + dynamic + trimmed
+history) → `<agents>` (per-agent `<agent_task>` XML) → required output format.
+Shared stable content sits at the prefix; per-agent volatile content sits at
+the tail. `MemoryStudioService._buildSharedBatchMessages` orders shared
+messages as `static_context` → `dynamic_context` → `chat_history` for the same
+reason. This gives the provider's prompt cache (Anthropic ephemeral /
+OpenRouter `cache_control`) a long stable prefix to hit across turns.
+`cacheControlTtl` / `cacheBreakpointMode` are wired through
+`ResolvedAgentConfig.fromApiConfig` → `ChatTransportRequest` → transport.
+
 ---
 
 ## 5. Prompt Semantics Invariants

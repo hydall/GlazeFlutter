@@ -121,17 +121,40 @@ Provider notes:
 - Gemini 3.x may still think internally by default and may report/bill thought tokens. Gemini 3.1 Pro documents thinking levels, not a guaranteed full off switch.
 - Avoid sending undocumented fields such as `reasoning: { exclude: true }` globally. Add provider-specific body fields only behind explicit protocol/provider support and tests.
 
-Studio Mode:
-- Intermediate Studio agents always force reasoning off/omitted.
-- The final Studio agent inherits the resolved `ApiConfig` reasoning settings.
-- Studio strips prompt-level hidden-reasoning directives from final-agent instructions when reasoning is disabled/omitted, but this only affects prompt text, not provider-internal thinking.
-- Intermediate Studio agents run in parallel. Individual intermediate failures
-  are stored as `status: error` Studio outputs and do not abort the final agent;
-  the final agent receives successful briefs plus error markers. Only final-agent
-  failure turns the chat generation into a generation error.
+Studio Mode (tracker-around-generator, Phase 5+):
+- Studio trackers (intermediate agents) always force reasoning off/omitted.
+- The final Studio generator inherits the resolved `ApiConfig` reasoning
+  settings. Studio also strips prompt-level hidden-reasoning directives from
+  final-generator instructions when reasoning is disabled/omitted, but this
+  only affects prompt text, not provider-internal thinking.
+- One main LLM (the generator) writes the visible reply; trackers run as
+  sidecars and contribute notes that shape the next prompt. Trackers do NOT
+  duplicate the generator's output. Failed trackers return a failed
+  `StudioStageBrief` (`status: 'error'`); the generator still runs with the
+  successful briefs plus an error marker. Only generator failure aborts the
+  turn. See INV-ST5 in `docs/INVARIANTS.md`.
+- Trackers with the same `(provider, model)` and `!runIndividually` are
+  batched into one LLM request via `<agents><agent_task>` XML. The batch
+  system prompt is cache-friendly: shared `<role>` + `<lore>` first, per-agent
+  `<agents>` tail (INV-ST3, INV-ST7). Heavy trackers
+  (`expression`/`illustrator`/`lorebook` name match, or explicit
+  `StudioAgent.runIndividually`) run as individual requests.
+- Fallback chain on batch failure: in-batch retry (re-request the whole batch
+  once) → individual fallback (re-run each still-failed agent, concurrency
+  limit 2) → error-result. Per-agent failure isolation via
+  `AgentRunFailedException` (Phase 5.7.5).
+- Trackers receive `StudioAgent.contextSize` (default 5, hard-cap 200) last
+  messages via `_limitTrackerHistory` + `truncateAgentText` (head 40% + tail
+  60%) + `stripHtmlTags`. The generator uses `maxFinalHistoryMessages`
+  (default 15) instead. MemoryBook injection in `dynamic_context` is NOT
+  trimmed — only `chat_history` is. See INV-ST1, INV-ST2.
 - Studio profiles are reusable prompt/agent presets stored in DB and can be
   bound to multiple chat sessions. Do not treat Studio config as purely
   session-local state.
+- POST-processing is separate from the tracker pipeline: the POST-cleaner
+  runs after the full reply, produces a green swipe diff via
+  `appendCleanerSwipe`, without hold mode. Do NOT add hold mode (Phase 1.3
+  decision).
 
 ---
 
