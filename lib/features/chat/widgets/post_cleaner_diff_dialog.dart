@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import 'post_cleaner_line_diff.dart';
@@ -9,14 +8,16 @@ import 'post_cleaner_line_diff.dart';
 /// Side-by-side diff viewer for POST-cleaner results.
 ///
 /// Loads the message from the DB by [sessionId]/[messageId], extracts the
-/// `final` and `cleaned` agent swipes, and renders them in two parallel
+/// current and previous green swipes, and renders them in two parallel
 /// scrollable columns with per-line diff highlighting:
 /// - red background + `−` prefix: line removed (left side) or changed
 /// - green background + `+` prefix: line added (right side) or changed
 /// - no highlight: unchanged lines (shown on both sides)
 ///
 /// Opened from the Agentic Operations Log when the user taps "View Diff" on a
-/// postCleaner operation.
+/// postCleaner operation. The "cleaned" text is the current green swipe
+/// (the last one appended by `appendCleanerSwipe`); the "original" text is
+/// the previous green swipe.
 class PostCleanerDiffDialog extends ConsumerStatefulWidget {
   final String sessionId;
   final String messageId;
@@ -47,8 +48,8 @@ class PostCleanerDiffDialog extends ConsumerStatefulWidget {
 class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
   bool _loading = true;
   String? _error;
-  AgentSwipe? _original;
-  AgentSwipe? _cleaned;
+  String? _originalText;
+  String? _cleanedText;
   DiffResult _diff = const DiffResult.empty();
   final ScrollController _leftController = ScrollController();
   final ScrollController _rightController = ScrollController();
@@ -87,66 +88,30 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         return;
       }
 
-      // Search agentSwipes across ALL green swipes, not just the active one.
-      // msg.agentSwipes reflects only the current swipeId — other green
-      // swipes keep their blue swipes in swipesMeta[swipeId].
-      AgentSwipe? original;
-      AgentSwipe? cleaned;
-
-      // First: check the active agentSwipes on the message itself.
-      final activeSwipes = msg.agentSwipes;
-      for (final s in activeSwipes) {
-        if (s.kind == 'cleaned') {
-          cleaned = s;
-          final parentId = s.parentSwipeId;
-          if (parentId != null && parentId < activeSwipes.length) {
-            original = activeSwipes[parentId];
-          }
-        }
-      }
-      if (original == null && cleaned != null && activeSwipes.isNotEmpty) {
-        original = activeSwipes.where((s) => s.kind == 'final').lastOrNull;
-      }
-
-      // Second: if not found in active swipes, search swipesMeta for any
-      // green swipe that has a 'cleaned' agent swipe.
-      if (cleaned == null) {
-        for (var si = 0; si < msg.swipesMeta.length; si++) {
-          final meta = msg.swipesMeta[si];
-          final raw = meta['agentSwipes'];
-          if (raw is! List) continue;
-          final swipes = raw
-              .whereType<Map<dynamic, dynamic>>()
-              .map((m) => AgentSwipe.fromJson(Map<String, dynamic>.from(m)))
-              .toList();
-          for (final s in swipes) {
-            if (s.kind == 'cleaned') {
-              cleaned = s;
-              final parentId = s.parentSwipeId;
-              if (parentId != null && parentId < swipes.length) {
-                original = swipes[parentId];
-              }
-              break;
-            }
-          }
-          if (cleaned != null) break;
-        }
-        if (original == null && cleaned != null) {
-          // Fallback: use the message content as the original.
-          original = AgentSwipe(
-            content: msg.content,
-            kind: 'final',
-          );
+      // The POST-cleaner appends the cleaned text as a NEW green swipe via
+      // `appendCleanerSwipe`. So the "cleaned" text is the current swipe
+      // (msg.swipes[msg.swipeId]) and the "original" is the previous swipe
+      // (msg.swipes[msg.swipeId - 1]). If there's only one swipe (or the
+      // current is at index 0), there's no diff to show.
+      String? original;
+      String? cleaned;
+      if (msg.swipeId > 0 &&
+          msg.swipes.length > msg.swipeId &&
+          msg.swipes[msg.swipeId].isNotEmpty) {
+        cleaned = msg.swipes[msg.swipeId];
+        if (msg.swipeId - 1 < msg.swipes.length &&
+            msg.swipes[msg.swipeId - 1].isNotEmpty) {
+          original = msg.swipes[msg.swipeId - 1];
         }
       }
 
       if (!mounted) return;
       setState(() {
-        _original = original;
-        _cleaned = cleaned;
+        _originalText = original;
+        _cleanedText = cleaned;
         _loading = false;
         if (original != null && cleaned != null) {
-          _diff = computeLineDiff(original.content, cleaned.content);
+          _diff = computeLineDiff(original, cleaned);
         }
       });
     } catch (e) {
@@ -214,7 +179,7 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         ),
       );
     }
-    if (_original == null || _cleaned == null) {
+    if (_originalText == null || _cleanedText == null) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),

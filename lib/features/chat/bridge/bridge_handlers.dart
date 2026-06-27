@@ -60,14 +60,11 @@ const Map<String, HandlerSpec> bridgeHandlers = {
   // Message actions
   'onMessageContext': HandlerSpec(HandlerKind.jsonObject),
   'onSwipe': HandlerSpec(HandlerKind.jsonObject),
-  'onAgentSwipe': HandlerSpec(HandlerKind.jsonObject),
   'onRegenerate': HandlerSpec(HandlerKind.idStringPair),
   'onChangeGreeting': HandlerSpec(HandlerKind.idIntPair),
   'onSelectionAction': HandlerSpec(HandlerKind.jsonObject),
   // Edit
   'onEditSave': HandlerSpec(HandlerKind.idStringPair),
-  'onStudioOutputEdit': HandlerSpec(HandlerKind.idStringPair),
-  'onStudioOutputRegen': HandlerSpec(HandlerKind.idStringPair),
   'onEditCancel': HandlerSpec(HandlerKind.stringArg),
   'onEditFocusChange': HandlerSpec(HandlerKind.idBoolPair),
   // Guided swipe / memory / lorebook

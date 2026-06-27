@@ -6,7 +6,7 @@ import '../state/post_cleaner_state_provider.dart';
 /// Floating card shown at the top of the chat while the POST-cleaner is
 /// running, and for a brief moment after it finishes (done/error).
 ///
-/// Mirrors the visual style of [_StudioRuntimeCard] in `chat_screen.dart`.
+/// Live status card shown over the chat while the POST-cleaner runs.
 /// Auto-dismisses 2.5s after the cleaner finishes.
 class PostCleanerStatusCard extends ConsumerStatefulWidget {
   const PostCleanerStatusCard({super.key});

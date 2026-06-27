@@ -51,10 +51,6 @@ class ChatWebViewCallbacks {
     messageActions.onSwipe?.call(id, direction);
   }
 
-  void onAgentSwipe(String id, String direction) {
-    messageActions.onAgentSwipe?.call(id, direction);
-  }
-
   void onChangeGreeting(String id, int direction) {
     messageActions.onChangeGreeting?.call(id, direction);
   }
@@ -81,14 +77,6 @@ class ChatWebViewCallbacks {
 
   void onEditSave(String id, String text) {
     editActions.onEditSave?.call(id, text);
-  }
-
-  void onStudioOutputEdit(String outputId, String messageId) {
-    editActions.onStudioOutputEdit?.call(outputId, messageId);
-  }
-
-  void onStudioOutputRegen(String outputId, String messageId) {
-    editActions.onStudioOutputRegen?.call(outputId, messageId);
   }
 
   void onEditCancel(String id) {

@@ -103,7 +103,7 @@ void main() {
 
   group('Stage 2 trigger suppression logic', () {
     // The write-loop trigger in GenerationPipeline.run() is guarded by:
-    //   if (regenTargetId == null && !studioFinalOnly && result.session != null)
+    //   if (regenTargetId == null && result.session != null)
     //
     // The regen branch (regenOutcome != null) returns early at ~line 155
     // BEFORE reaching the write-loop trigger at ~line 210, so regen/swipe
@@ -111,28 +111,14 @@ void main() {
     //
     // These tests verify the guard condition itself.
 
-    test('normal send (regenTargetId=null, studioFinalOnly=false) → triggers', () {
+    test('normal send (regenTargetId=null) → triggers', () {
       const String? regenTargetId = null;
-      const bool studioFinalOnly = false;
-      expect(regenTargetId == null && !studioFinalOnly, isTrue);
+      expect(regenTargetId == null, isTrue);
     });
 
     test('regen (regenTargetId != null) → suppresses', () {
       const String regenTargetId = 'msg_123';
-      const bool studioFinalOnly = false;
-      expect(regenTargetId.isEmpty && !studioFinalOnly, isFalse);
-    });
-
-    test('studioFinalOnly=true → suppresses', () {
-      const String? regenTargetId = null;
-      const bool studioFinalOnly = true;
-      expect(regenTargetId == null && !studioFinalOnly, isFalse);
-    });
-
-    test('studioFinalOnly + regenTargetId → suppresses', () {
-      const String regenTargetId = 'msg_123';
-      const bool studioFinalOnly = true;
-      expect(regenTargetId.isEmpty && !studioFinalOnly, isFalse);
+      expect(regenTargetId == null, isFalse);
     });
   });
 }

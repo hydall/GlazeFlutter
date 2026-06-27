@@ -70,7 +70,7 @@ export class Renderer {
 
   _createSection(messageData) {
     const {
-      id, role, text, reasoning, studioOutputs, studioOutputsExpanded,
+      id, role, text, reasoning,
       isError, isHidden, isLast, isTyping,
       guidanceText, guidanceType,
       imagePath, imageHidden,
@@ -82,14 +82,11 @@ export class Renderer {
     section.dataset.messageId = id;
     section.dataset.rawText = text || '';
     if (reasoning) section.dataset.reasoning = reasoning;
-    if (studioOutputs && studioOutputs.length) section.dataset.studioOutputs = JSON.stringify(studioOutputs);
     if (isLast && this._roleKey(role) === 'char') section.dataset.isLast = 'true';
     if (messageData.personaName) section.dataset.personaName = messageData.personaName;
     if (messageData.messageIndex != null) section.dataset.messageIndex = String(messageData.messageIndex);
     if (messageData.swipeIndex != null) section.dataset.swipeId = String(messageData.swipeIndex);
     if (messageData.swipeTotal != null) section.dataset.swipeTotal = String(messageData.swipeTotal);
-    if (messageData.agentSwipeIndex != null) section.dataset.agentSwipeId = String(messageData.agentSwipeIndex);
-    if (messageData.agentSwipeTotal != null) section.dataset.agentSwipeTotal = String(messageData.agentSwipeTotal);
     if (messageData.greetingTotal != null) section.dataset.greetingTotal = String(messageData.greetingTotal);
 
     const classes = ['message-section', this._roleKey(role), `layout-${layout}`];
@@ -116,9 +113,6 @@ if (messageData.isEditing) classes.push('editing');
     /* --- Reasoning (inside content stack so it flows with the bubble) --- */
     if (reasoning && reasoning.trim()) {
       stack.appendChild(this._createReasoningBlock(reasoning, this._isUser(role)));
-    }
-    if (studioOutputs && studioOutputs.length) {
-      stack.appendChild(this._createStudioOutputsBlock(id, studioOutputs, this._isUser(role), studioOutputsExpanded));
     }
 
     const wrapper = document.createElement('div');
@@ -300,81 +294,6 @@ if (messageData.isEditing) classes.push('editing');
     return block;
   }
 
-  _createStudioOutputsBlock(messageId, outputs, isUser, expanded = false) {
-    const panel = document.createElement('div');
-    panel.className = 'msg-studio-outputs';
-
-    const title = document.createElement('div');
-    title.className = 'msg-studio-title';
-    title.textContent = 'Studio Agents';
-    panel.appendChild(title);
-
-    for (const output of outputs || []) {
-      const item = document.createElement('div');
-      item.className = expanded ? 'msg-studio-output' : 'msg-studio-output collapsed';
-      if (output.status === 'error') item.classList.add('error');
-      item.dataset.outputId = output.id || '';
-
-      const header = document.createElement('div');
-      header.className = 'msg-studio-output-header';
-      header.dataset.action = 'toggle-studio-output';
-      header.dataset.outputId = output.id || '';
-
-      const name = document.createElement('span');
-      name.className = 'msg-studio-output-name';
-      name.textContent = output.status === 'error'
-        ? `${output.name || 'Studio Agent'} — error`
-        : output.name || 'Studio Agent';
-      header.appendChild(name);
-
-      const actions = document.createElement('span');
-      actions.className = 'msg-studio-output-actions';
-      const edit = document.createElement('button');
-      edit.type = 'button';
-      edit.className = 'msg-studio-output-edit';
-      edit.dataset.action = 'studio-output-edit';
-      edit.dataset.outputId = output.id || '';
-      edit.dataset.messageId = messageId;
-      edit.title = 'Edit Studio output';
-      edit.innerHTML = ICON.edit;
-      actions.appendChild(edit);
-      if (output.status === 'error') {
-        const regen = document.createElement('button');
-        regen.type = 'button';
-        regen.className = 'msg-studio-output-regen';
-        regen.dataset.action = 'studio-output-regen';
-        regen.dataset.outputId = output.id || '';
-        regen.dataset.messageId = messageId;
-        regen.title = 'Regenerate Studio output';
-        regen.innerHTML = ICON.regen;
-        actions.appendChild(regen);
-      }
-      const caret = document.createElement('span');
-      caret.className = 'msg-studio-output-caret';
-      caret.innerHTML = ICON.chevron;
-      actions.appendChild(caret);
-      header.appendChild(actions);
-
-      const content = document.createElement('div');
-      content.className = 'msg-studio-output-content';
-      const wrap = document.createElement('div');
-      wrap.className = 'msg-transition-wrapper';
-      const inner = document.createElement('div');
-      inner.className = 'msg-studio-output-inner';
-      const shadowHost = this._createContentContainer();
-      inner.appendChild(shadowHost);
-      this._writeShadowContent(shadowHost, output.content || '', isUser, false);
-      wrap.appendChild(inner);
-      content.appendChild(wrap);
-
-      item.appendChild(header);
-      item.appendChild(content);
-      panel.appendChild(item);
-    }
-
-    return panel;
-  }
-
   /* ----- Error window ----- */
   _createErrorWindow(m) {
     const win = document.createElement('div');
@@ -521,20 +440,13 @@ if (messageData.isEditing) classes.push('editing');
 
     const isChar = this._roleKey(m.role) === 'char';
     const hasSwipes = isChar && m.swipeTotal && m.swipeTotal > 1;
-    const hasAgentSwipes = isChar && m.agentSwipeFinalCount && m.agentSwipeFinalCount > 1;
     const hasGreetings = isChar && m.messageIndex === 0 && m.greetingTotal && m.greetingTotal > 1;
     const showRegen = ((!isChar && m.isLast) || m.isError) && !m.isGenerating && !m.isEditing;
-    const showStudioFinalRegen = isChar && m.isLast && !m.isGenerating && !m.isEditing && m.studioOutputs && m.studioOutputs.length;
 
     if (hasSwipes) {
       center.appendChild(this._createSwitcher(m.id, m.swipeIndex || 0, m.swipeTotal, 'swipe'));
     } else if (hasGreetings) {
       center.appendChild(this._createSwitcher(m.id, m.greetingIndex || 0, m.greetingTotal, 'greeting'));
-    }
-
-    // Nested swipes: blue sub-swipe switcher (final/cleaned/regen-final).
-    if (hasAgentSwipes) {
-      center.appendChild(this._createSwitcher(m.id, m.agentSwipeIndex || 0, m.agentSwipeTotal, 'agent-swipe'));
     }
 
     if (isChar && m.isLast && !m.isGenerating && !m.isEditing) {
@@ -557,16 +469,16 @@ if (messageData.isEditing) classes.push('editing');
       center.appendChild(stop);
     }
 
-    if (showRegen || showStudioFinalRegen) {
+    if (showRegen) {
       const regen = document.createElement('div');
       regen.className = 'msg-regenerate';
-      if (hasSwipes || hasGreetings || showStudioFinalRegen) regen.classList.add('icon-only');
+      if (hasSwipes || hasGreetings) regen.classList.add('icon-only');
       regen.dataset.action = 'regenerate';
       regen.dataset.messageId = m.id;
       regen.dataset.mode = 'magic';
-      regen.title = showStudioFinalRegen ? 'Regenerate full Studio pipeline' : 'Regenerate';
+      regen.title = 'Regenerate';
       regen.innerHTML = ICON.regen;
-      if (!hasSwipes && !hasGreetings && !showStudioFinalRegen) {
+      if (!hasSwipes && !hasGreetings) {
         const span = document.createElement('span');
         span.textContent = '↻';
         // text label; Flutter side may localize
@@ -574,21 +486,6 @@ if (messageData.isEditing) classes.push('editing');
         regen.appendChild(span);
       }
       center.appendChild(regen);
-
-      if (showStudioFinalRegen) {
-        const finalRegen = document.createElement('div');
-        finalRegen.className = 'msg-regenerate studio-final-only';
-        finalRegen.dataset.action = 'regenerate';
-        finalRegen.dataset.messageId = m.id;
-        finalRegen.dataset.mode = 'studio-final';
-        finalRegen.title = 'Regenerate final Studio agent only (reuses agent briefs)';
-        finalRegen.innerHTML = ICON.regen;
-        const label = document.createElement('span');
-        label.className = 'studio-final-only-label';
-        label.textContent = 'Final';
-        finalRegen.appendChild(label);
-        center.appendChild(finalRegen);
-      }
     }
 
     footer.appendChild(center);
@@ -695,7 +592,7 @@ if (messageData.isEditing) classes.push('editing');
   }
 
   /* ----- Public mutation API ----- */
-  updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate, studioOutputs = null, studioOutputsExpanded = false) {
+  updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate) {
     if (!sectionEl) return;
     const body = sectionEl.querySelector('.msg-body');
     if (!body) return;
@@ -715,7 +612,6 @@ if (messageData.isEditing) classes.push('editing');
               if (rHost) this._writeShadowContent(rHost, reasoning, isUser, false);
             }
           }
-          this._syncStudioOutputs(sectionEl, studioOutputs, isUser, studioOutputsExpanded);
           return;
         }
       }
@@ -757,8 +653,6 @@ if (messageData.isEditing) classes.push('editing');
       reasoningEl.remove();
     }
 
-    this._syncStudioOutputs(sectionEl, studioOutputs, isUser, studioOutputsExpanded);
-
     if (animate) {
       sectionEl.classList.add('swipe-animating');
       const dir = sectionEl.dataset.swipeDirection || 'left';
@@ -777,38 +671,10 @@ if (messageData.isEditing) classes.push('editing');
     }
   }
 
-  _syncStudioOutputs(sectionEl, studioOutputs, isUser, expanded = false) {
-    if (studioOutputs === null) return;
-    const contentStack = sectionEl.querySelector('.msg-content-stack');
-    if (!contentStack) return;
-    const existing = sectionEl.querySelector('.msg-studio-outputs');
-    if (studioOutputs && studioOutputs.length) {
-      const replacement = this._createStudioOutputsBlock(
-        sectionEl.dataset.messageId,
-        studioOutputs,
-        isUser,
-        expanded,
-      );
-      if (existing) existing.replaceWith(replacement);
-      else {
-        const reasoningEl = sectionEl.querySelector('.msg-reasoning');
-        const anchor = reasoningEl ? reasoningEl.nextSibling : contentStack.firstChild;
-        contentStack.insertBefore(replacement, anchor);
-      }
-      sectionEl.dataset.studioOutputs = JSON.stringify(studioOutputs);
-    } else if (existing) {
-      existing.remove();
-      delete sectionEl.dataset.studioOutputs;
-    }
-  }
-
   updateMessage(messageId, newText, isUser = false, reasoning = null) {
     const el = document.querySelector(`[data-message-id="${messageId}"]`);
     if (el) {
-      let studioOutputs = null;
-      try { studioOutputs = el.dataset.studioOutputs ? JSON.parse(el.dataset.studioOutputs) : null; }
-      catch (_) { studioOutputs = null; }
-      this.updateMessageContent(el, newText, reasoning || el.dataset.reasoning || null, isUser, false, false, studioOutputs);
+      this.updateMessageContent(el, newText, reasoning || el.dataset.reasoning || null, isUser, false, false);
     }
   }
 

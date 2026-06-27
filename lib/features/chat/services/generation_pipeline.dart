@@ -84,7 +84,6 @@ class GenerationPipeline {
     int? previousTokens,
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? regenTargetId,
-    bool studioFinalOnly = false,
   }) async {
     if (!ref.mounted) return null;
     abortHandler.clearStreaming();
@@ -116,7 +115,6 @@ class GenerationPipeline {
         previousSwipesMeta: previousSwipesMeta,
         guidanceText: guidanceText,
         regenTargetId: regenTargetId,
-        studioFinalOnly: studioFinalOnly,
       );
 
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
@@ -161,9 +159,9 @@ class GenerationPipeline {
             return null;
           }
 
-          // POST-cleaner on regen: run after successful regen (both full
-          // and studioFinalOnly). The cleaner rewrites the regenerated
-          // assistant message, preserving the original as a 'final' swipe.
+          // POST-cleaner on regen: run after successful regen. The cleaner
+          // rewrites the regenerated assistant message, preserving the
+          // original as a swipe.
           unawaited(
             _runPostCleaner(
               sessionId: result.session!.id,
@@ -223,13 +221,11 @@ class GenerationPipeline {
       await _autoCreateMemoryDrafts(result.session);
 
       // Stage 2: Agentic write-loop — only on accepted (non-regen) turns.
-      // Suppressed on swipe/regen/studioFinalOnly to avoid duplicate or
-      // contradictory writes (the user may swipe again). The regen branch
-      // above (regenOutcome != null) returns early before reaching here, so
-      // this code only runs on the normal send-message path.
-      if (regenTargetId == null &&
-          !studioFinalOnly &&
-          result.session != null) {
+      // Suppressed on swipe/regen to avoid duplicate or contradictory writes
+      // (the user may swipe again). The regen branch above (regenOutcome !=
+      // null) returns early before reaching here, so this code only runs on
+      // the normal send-message path.
+      if (regenTargetId == null && result.session != null) {
         unawaited(
           _runAgenticWriteLoop(
             sessionId: result.session!.id,
@@ -671,7 +667,6 @@ class GenerationPipeline {
         'textChars=${lastAssistant.content.length} '
         'broadcastBlocks=${broadcastBlocks.length} '
         'historyMessages=${recentMessages.length} '
-        'studioOutputs=${lastAssistant.studioOutputs.length} '
         'continuity=${pipeline.postCleanerContinuityEnabled} '
         'charCheck=${pipeline.postCleanerCharacterCheckEnabled}',
       );
@@ -726,7 +721,6 @@ class GenerationPipeline {
         assistantText: lastAssistant.content,
         broadcastBlocks: broadcastBlocks,
         recentMessages: recentMessages,
-        studioOutputs: lastAssistant.studioOutputs,
         auditIssues: auditIssues,
         onCleanedChunk: (text) {
           if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
@@ -735,8 +729,8 @@ class GenerationPipeline {
           // existing bubble's content in place (like regen) instead of
           // creating a new virtual streaming message. The original text is
           // preserved in the DB until applyCleanedText finalizes — at that
-          // point a 'cleaned' sub-swipe is appended and the original becomes
-          // a 'final' sub-swipe (lazy migration in ChatRepo.appendAgentSwipe).
+          // point a new swipe is appended and the original becomes the
+          // previous swipe.
           ref.read(streamingStateProvider(charId).notifier).state =
               StreamingState(text: text, targetMessageId: lastAssistant!.id);
         },
@@ -821,13 +815,11 @@ class GenerationPipeline {
         sessionId: sessionId,
         messageId: lastAssistant.id,
         cleanedText: result.cleanedText,
-        originalText: lastAssistant.content,
       );
 
       // Reset the streaming state so the WebView stops treating the bubble
       // as isTyping. The chatHistoryProvider invalidate below pushes the
-      // finalized message (with the 'cleaned' sub-swipe and agentSwipeId
-      // switched) to the WebView.
+      // finalized message (with the new cleaned swipe) to the WebView.
       if (ref.mounted) {
         ref.read(streamingStateProvider(charId).notifier).state =
             const StreamingState();

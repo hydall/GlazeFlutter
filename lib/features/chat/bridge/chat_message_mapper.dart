@@ -130,24 +130,12 @@ class ChatMessageMapper {
         'personaName': m.personaName,
       if (m.swipes.isNotEmpty) 'swipeIndex': m.swipeId,
       if (m.swipes.isNotEmpty) 'swipeTotal': m.swipes.length,
-      // Nested swipes (blue sub-swipes): agentSwipes[].
-      if (m.agentSwipes.isNotEmpty) 'agentSwipeIndex': m.agentSwipeId,
-      if (m.agentSwipes.isNotEmpty) 'agentSwipeTotal': m.agentSwipes.length,
-      if (m.agentSwipes.length > 1)
-        'agentSwipeKinds': m.agentSwipes.map((s) => s.kind).toList(),
-      // Show the blue switcher when there are ≥2 agent swipes (any kind).
-      // This includes final+cleaned (POST-cleaner) and 2+ finals (regen).
-      if (m.agentSwipes.length > 1)
-        'agentSwipeFinalCount': m.agentSwipes.length,
       if (m.genTime != null) 'genTime': m.genTime,
       if (m.tokens != null) 'tokens': m.tokens,
       'isError': m.isError,
       if (m.isTyping) 'isTyping': true,
       if (m.reasoning != null && m.reasoning!.isNotEmpty)
         'reasoning': m.reasoning,
-      if (m.studioOutputs.isNotEmpty) 'studioOutputs': m.studioOutputs,
-      if (m.memoryCoverage['studioOutputsExpanded'] == true)
-        'studioOutputsExpanded': true,
       'isHidden': m.isHidden,
       if (isLast) 'isLast': true,
       'messageIndex': ?messageIndex,

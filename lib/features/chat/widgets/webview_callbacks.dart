@@ -14,10 +14,6 @@ typedef InjectClickCallback = void Function(String id);
 typedef MemoryClickCallback = void Function(String id);
 typedef GuidedSwipeCallback = void Function(String id, String guidanceText);
 typedef EditSaveCallback = void Function(String id, String text);
-typedef StudioOutputEditCallback =
-    void Function(String outputId, String messageId);
-typedef StudioOutputRegenCallback =
-    void Function(String outputId, String messageId);
 typedef EditCancelCallback = void Function(String id);
 typedef EditFocusCallback = void Function(String id, bool focused);
 typedef ImgActionCallback = void Function(String instruction, String messageId);
@@ -33,7 +29,6 @@ typedef SelectionChangeCallback = void Function(List<String> ids);
 class MessageActionsCallbacks {
   final MessageContextCallback? onMessageContext;
   final SwipeCallback? onSwipe;
-  final SwipeCallback? onAgentSwipe;
   final GreetingCallback? onChangeGreeting;
   final RegenerateCallback? onRegenerate;
   final ToggleHiddenCallback? onToggleHidden;
@@ -44,7 +39,6 @@ class MessageActionsCallbacks {
   const MessageActionsCallbacks({
     this.onMessageContext,
     this.onSwipe,
-    this.onAgentSwipe,
     this.onChangeGreeting,
     this.onRegenerate,
     this.onToggleHidden,
@@ -56,15 +50,11 @@ class MessageActionsCallbacks {
 
 class EditActionsCallbacks {
   final EditSaveCallback? onEditSave;
-  final StudioOutputEditCallback? onStudioOutputEdit;
-  final StudioOutputRegenCallback? onStudioOutputRegen;
   final EditCancelCallback? onEditCancel;
   final EditFocusCallback? onEditFocusChange;
 
   const EditActionsCallbacks({
     this.onEditSave,
-    this.onStudioOutputEdit,
-    this.onStudioOutputRegen,
     this.onEditCancel,
     this.onEditFocusChange,
   });

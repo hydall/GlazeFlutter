@@ -14,7 +14,6 @@ import '../llm/memory_consolidation_service.dart';
 import '../llm/memory_agentic_service.dart';
 import '../llm/memory_agentic_write_service.dart';
 import '../llm/memory_studio_service.dart';
-import '../llm/studio_decomposition_service.dart';
 import '../llm/post_cleaner_service.dart';
 import 'memory_settings_provider.dart';
 
@@ -93,15 +92,9 @@ final memoryAgenticWriteServiceProvider =
   return MemoryAgenticWriteService(ref);
 });
 
-/// Studio Mode pipeline service (Phase 11). Multi-stage RP pipeline.
+/// Studio Mode pipeline service. Tracker-around-generator model.
 final memoryStudioServiceProvider = Provider<MemoryStudioService>((ref) {
   return MemoryStudioService(ref);
-});
-
-/// LLM preset decomposition service for Studio Mode.
-final studioDecompositionServiceProvider =
-    Provider<StudioDecompositionService>((ref) {
-  return StudioDecompositionService(ref);
 });
 
 /// POST-cleaner service (Stage 4). Rewrites the final assistant message

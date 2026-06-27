@@ -31,15 +31,6 @@ class ChatSwipeController {
     _setState(AsyncData(current.copyWith(session: updated)));
   }
 
-  void setAgentSwipe(int messageIndex, int agentSwipeId) {
-    final current = _getState().value;
-    if (current == null || current.session == null) return;
-    final updated =
-        _messageSvc.setAgentSwipe(current.session!, messageIndex, agentSwipeId);
-    _invalidateHistory();
-    _setState(AsyncData(current.copyWith(session: updated)));
-  }
-
   Future<void> changeSwipe(int messageIndex, int dir, {bool fromSwipe = false}) async {
     final current = _getState().value;
     if (current == null || current.session == null || current.isGenerating) return;
@@ -56,37 +47,6 @@ class ChatSwipeController {
 
     if (result.needsRegen) {
       // This will be handled by the parent provider calling regenerateLastAssistant
-      return;
-    }
-    if (result.isUpdated) {
-      _invalidateHistory();
-      _setState(AsyncData(current.copyWith(session: result.session)));
-    }
-  }
-
-  /// Navigate blue sub-swipes (agentSwipes). Right-edge on the last message
-  /// → needsRegen, which the caller resolves via a full regeneration.
-  Future<void> changeAgentSwipe(
-    int messageIndex,
-    int dir, {
-    bool fromSwipe = false,
-  }) async {
-    final current = _getState().value;
-    if (current == null || current.session == null || current.isGenerating) {
-      return;
-    }
-    if (messageIndex < 0 || messageIndex >= current.messages.length) return;
-
-    final isLast = messageIndex == current.messages.length - 1;
-    final result = _messageSvc.changeAgentSwipe(
-      current.session!,
-      messageIndex,
-      dir,
-      fromSwipe: fromSwipe,
-      isLastMessage: isLast,
-    );
-
-    if (result.needsRegen) {
       return;
     }
     if (result.isUpdated) {

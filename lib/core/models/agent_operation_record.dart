@@ -103,9 +103,9 @@ enum AgentOperationStatus {
 
 /// A single record in the agentic operations log.
 ///
-/// Plain Dart class (not freezed) — mirrors the [AgentSwipe] pattern to avoid
-/// freezed-generator breakage when a second class in the same file has a
-/// dependency on it. Kept immutable via [copyWith].
+/// Plain Dart class (not freezed) — mirrors the plain-Dart-class pattern to
+/// avoid freezed-generator breakage when a second class in the same file has
+/// a dependency on it. Kept immutable via [copyWith].
 class AgentOperationRecord {
   /// Stable unique id (uuid or timestamp-based).
   final String id;

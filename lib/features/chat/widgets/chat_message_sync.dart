@@ -141,28 +141,21 @@ class ChatMessageSync {
       final contentChanged = o.content != n.content;
       final swipeChanged = o.swipeId != n.swipeId;
       final swipeTotalChanged = o.swipes.length != n.swipes.length;
-      final agentSwipeChanged = o.agentSwipeId != n.agentSwipeId;
-      final agentSwipeTotalChanged = o.agentSwipes.length != n.agentSwipes.length;
       final hiddenChanged = o.isHidden != n.isHidden;
       final typingChanged = o.isTyping != n.isTyping;
       final errorChanged = o.isError != n.isError;
       final guidanceChanged = o.guidanceText != n.guidanceText;
       final greetingChanged = o.greetingIndex != n.greetingIndex;
-      final studioOutputsChanged = o.studioOutputs.length != n.studioOutputs.length ||
-          _studioOutputsDiffer(o.studioOutputs, n.studioOutputs);
 
       final needsUpdate =
           contentChanged ||
           swipeChanged ||
           hiddenChanged ||
           swipeTotalChanged ||
-          agentSwipeChanged ||
-          agentSwipeTotalChanged ||
           typingChanged ||
           errorChanged ||
           guidanceChanged ||
-          greetingChanged ||
-          studioOutputsChanged;
+          greetingChanged;
 
       if (needsUpdate) {
         bridge.updateMessage(n);
@@ -209,18 +202,4 @@ bool chatMessageListsIdentical(List<ChatMessage> a, List<ChatMessage> b) {
     if (!identical(a[i], b[i])) return false;
   }
   return true;
-}
-
-/// Compares two studioOutputs lists by checking the `status` and `content`
-/// fields of each output entry. Returns true if any entry differs.
-bool _studioOutputsDiffer(
-  List<Map<String, dynamic>> a,
-  List<Map<String, dynamic>> b,
-) {
-  if (a.length != b.length) return true;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i]['status'] != b[i]['status']) return true;
-    if (a[i]['content'] != b[i]['content']) return true;
-  }
-  return false;
 }

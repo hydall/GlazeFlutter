@@ -19,9 +19,8 @@ typedef RouterLlmCall =
 
 /// One routable agent bucket the router can assign blocks to.
 ///
-/// Decouples the router from the private `_ControllerSpec` list in
-/// [StudioDecompositionService]. The decomposition service maps its specs to
-/// these descriptors before calling.
+/// Decouples the router from the tracker specs. Callers map their tracker
+/// configurations to these descriptors before calling.
 class RouterBucket {
   final String id;
   final String name;

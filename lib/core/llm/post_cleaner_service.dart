@@ -25,7 +25,7 @@ import 'sidecar_retry_runner.dart';
 /// still access it.
 ///
 /// Uses [SidecarLlmClient] for the sidecar LLM call and
-/// [ChatRepo.appendSwipeToMessage] for the atomic DB update.
+/// [ChatRepo.appendCleanerSwipe] for the atomic DB update.
 /// Falls back to the original text on any error.
 class PostCleanerService {
   final Ref _ref;
@@ -45,16 +45,12 @@ class PostCleanerService {
   /// [recentMessages] is the bounded chat history before the assistant response,
   /// used for conservative local continuity checks (who said what, who is
   /// present, clothing, positions, recent actions).
-  /// [studioOutputs] are the controller notes that shaped the final response;
-  /// they let the cleaner verify the response against the intended behavior and
-  /// constraints.
   Future<PostCleanerResult> runCleaner({
     required String sessionId,
     required PipelineSettings settings,
     required String assistantText,
     List<String> broadcastBlocks = const [],
     List<ChatMessage> recentMessages = const [],
-    List<Map<String, dynamic>> studioOutputs = const [],
     List<String>? auditIssues,
     CancelToken? cancelToken,
     void Function(String accumulatedText)? onCleanedChunk,
@@ -85,7 +81,6 @@ class PostCleanerService {
         assistantText: assistantText,
         broadcastBlocks: broadcastBlocks,
         recentMessages: recentMessages,
-        studioOutputs: studioOutputs,
         auditIssues: auditIssues,
         cancelToken: token,
         onCleanedChunk: onCleanedChunk,
@@ -178,7 +173,6 @@ class PostCleanerService {
     required String assistantText,
     List<String> broadcastBlocks = const [],
     List<ChatMessage> recentMessages = const [],
-    List<Map<String, dynamic>> studioOutputs = const [],
     List<String>? auditIssues,
     required CancelToken cancelToken,
     void Function(String accumulatedText)? onCleanedChunk,
@@ -187,7 +181,6 @@ class PostCleanerService {
       assistantText: assistantText,
       broadcastBlocks: broadcastBlocks,
       recentMessages: recentMessages,
-      studioOutputs: studioOutputs,
       auditIssues: auditIssues,
       maxCharsPerMessage: settings.postCleanerMaxCharsPerMessage,
     );
@@ -227,15 +220,12 @@ class PostCleanerService {
   /// so the rewrite respects the preset's language and anti-cliché/anti-slop
   /// rules instead of a hardcoded English-only list. When [recentMessages] are
   /// supplied, the cleaner performs a conservative local continuity check
-  /// against the recent chat history. When [studioOutputs] are supplied, the
-  /// cleaner can verify the response against the controller notes that shaped
-  /// the final generation. Public for testing.
+  /// against the recent chat history. Public for testing.
   @visibleForTesting
   static String buildCleanerPrompt({
     required String assistantText,
     List<String> broadcastBlocks = const [],
     List<ChatMessage> recentMessages = const [],
-    List<Map<String, dynamic>> studioOutputs = const [],
     List<String>? auditIssues,
     int maxCharsPerMessage = 3000,
   }) {
@@ -259,17 +249,6 @@ class PostCleanerService {
         buffer
           ..writeln('RECENT CHAT HISTORY:')
           ..writeln(history)
-          ..writeln();
-      }
-    }
-
-    // Studio controller notes — authoritative for intended behavior/constraints.
-    if (studioOutputs.isNotEmpty) {
-      final notes = _formatStudioOutputs(studioOutputs);
-      if (notes.isNotEmpty) {
-        buffer
-          ..writeln('STUDIO CONTROLLER NOTES:')
-          ..writeln(notes)
           ..writeln();
       }
     }
@@ -321,13 +300,13 @@ class PostCleanerService {
       ..writeln('- Keep the same approximate length.')
       ..writeln();
 
-    // Continuity rules — only when history or Studio notes are available.
-    if (recentMessages.isNotEmpty || studioOutputs.isNotEmpty) {
+    // Continuity rules — only when history is available.
+    if (recentMessages.isNotEmpty) {
       buffer
         ..writeln('Continuity rules:')
         ..writeln(
           '- Before editing style, silently check the assistant response '
-          'against RECENT CHAT HISTORY and STUDIO CONTROLLER NOTES.',
+          'against RECENT CHAT HISTORY.',
         )
         ..writeln(
           '- Fix only clear local continuity contradictions that are directly '
@@ -386,43 +365,20 @@ class PostCleanerService {
     return buf.toString().trimRight();
   }
 
-  /// Formats Studio controller outputs into a compact block. Each entry
-  /// includes the agent name and a trimmed content preview.
-  static const _kMaxStudioOutputChars = 2000;
-
-  static String _formatStudioOutputs(List<Map<String, dynamic>> outputs) {
-    final buf = StringBuffer();
-    for (final o in outputs) {
-      final name = (o['name'] as String?)?.trim() ?? '';
-      if (name.isEmpty) continue;
-      var content = (o['content'] as String?)?.trim() ?? '';
-      if (content.isEmpty) continue;
-      if (content.length > _kMaxStudioOutputChars) {
-        content = '${content.substring(0, _kMaxStudioOutputChars)}…';
-      }
-      buf.writeln('[$name]');
-      buf.writeln(content);
-      buf.writeln();
-    }
-    return buf.toString().trimRight();
-  }
-
-  /// Applies the cleaned text to the session: appends a `'cleaned'` agent
-  /// sub-swipe (blue icon) to the last assistant message via
-  /// [ChatRepo.appendAgentSwipe], preserving the original as a `'final'`
-  /// sub-swipe. Does NOT touch the legacy `swipes[]` (green icons).
+  /// Applies the cleaned text to the session: appends a new green swipe
+  /// carrying [cleanedText] to the last assistant message via
+  /// [ChatRepo.appendCleanerSwipe]. The original text remains available as the
+  /// previous swipe.
   Future<void> applyCleanedText({
     required String sessionId,
     required String messageId,
     required String cleanedText,
-    required String originalText,
   }) async {
     final chatRepo = _ref.read(chatRepoProvider);
-    final updated = await chatRepo.appendAgentSwipe(
+    final updated = await chatRepo.appendCleanerSwipe(
       sessionId: sessionId,
       messageId: messageId,
-      content: cleanedText,
-      kind: 'cleaned',
+      cleanedText: cleanedText,
     );
     if (!updated) return;
 

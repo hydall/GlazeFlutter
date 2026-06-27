@@ -171,43 +171,35 @@ void main() {
   });
 
   group('Post-cleaner trigger suppression', () {
-    // The trigger in GenerationPipeline is guarded by the same condition as
-    // the write-loop: regenTargetId == null && !studioFinalOnly.
-    // Additionally, it checks postCleanerEnabled on MemoryBookSettings.
+    // The trigger in GenerationPipeline is guarded by:
+    //   regenTargetId == null && postCleanerEnabled
+    // (no studio-final term — that path was removed).
 
     test('normal send with postCleanerEnabled → triggers', () {
       const String? regenTargetId = null;
-      const bool studioFinalOnly = false;
       const bool postCleanerEnabled = true;
       expect(
-        regenTargetId == null && !studioFinalOnly && postCleanerEnabled,
+        regenTargetId == null && postCleanerEnabled,
         isTrue,
       );
     });
 
     test('normal send without postCleanerEnabled → does not trigger', () {
       const String? regenTargetId = null;
-      const bool studioFinalOnly = false;
       const bool postCleanerEnabled = false;
       expect(
-        regenTargetId == null && !studioFinalOnly && postCleanerEnabled,
+        regenTargetId == null && postCleanerEnabled,
         isFalse,
       );
     });
 
     test('regen → does not trigger (regenTargetId != null)', () {
       const String regenTargetId = 'msg_123';
-      const bool studioFinalOnly = false;
       const bool postCleanerEnabled = true;
       expect(
-        regenTargetId.isEmpty && !studioFinalOnly && postCleanerEnabled,
+        regenTargetId == null && postCleanerEnabled,
         isFalse,
       );
-    });
-
-    test('studioFinalOnly → does not trigger', () {
-      const bool studioFinalOnly = true;
-      expect(!studioFinalOnly, isFalse);
     });
   });
 
@@ -366,36 +358,6 @@ void main() {
       expect(promptNoContext, isNot(contains('RECENT CHAT HISTORY:')));
     });
 
-    test('includes studio controller notes when provided', () {
-      final prompt = PostCleanerService.buildCleanerPrompt(
-        assistantText: 'Клэр протирает стойку.',
-        studioOutputs: [
-          {'name': 'Continuity Controller', 'content': 'Claire must respond.'},
-          {'name': 'Agency & Character Controller', 'content': 'Lucy stays silent.'},
-        ],
-      );
-      expect(prompt, contains('STUDIO CONTROLLER NOTES:'));
-      expect(prompt, contains('Continuity Controller'));
-      expect(prompt, contains('Claire must respond.'));
-      expect(prompt, contains('Agency & Character Controller'));
-      expect(prompt, contains('Lucy stays silent.'));
-    });
-
-    test('skips studio outputs with empty name or content', () {
-      final prompt = PostCleanerService.buildCleanerPrompt(
-        assistantText: 'x',
-        studioOutputs: [
-          {'name': '', 'content': 'something'},
-          {'name': 'Good Agent', 'content': ''},
-          {'name': 'Valid', 'content': 'ok'},
-        ],
-      );
-      expect(prompt, contains('Valid'));
-      expect(prompt, contains('ok'));
-      expect(prompt, isNot(contains('something')));
-      expect(prompt, isNot(contains('Good Agent')));
-    });
-
     test('trims long messages to the character limit', () {
       final longContent = 'A' * 4000;
       final prompt = PostCleanerService.buildCleanerPrompt(
@@ -425,28 +387,22 @@ void main() {
       expect(prompt, contains('#m3]'));
     });
 
-    test('combines history, studio notes, and broadcast rules together', () {
+    test('combines history and broadcast rules together', () {
       final prompt = PostCleanerService.buildCleanerPrompt(
         assistantText: 'Финальный ответ.',
         broadcastBlocks: const ['RUSSIAN ONLY.'],
         recentMessages: [
           ChatMessage(id: 'm1', role: 'user', content: 'Вопрос?'),
         ],
-        studioOutputs: [
-          {'name': 'World Controller', 'content': 'Scene is at the bar.'},
-        ],
       );
       expect(prompt, contains('RECENT CHAT HISTORY:'));
-      expect(prompt, contains('STUDIO CONTROLLER NOTES:'));
       expect(prompt, contains('AUTHORITATIVE RULES'));
       expect(prompt, contains('Continuity rules:'));
-      // Order: history → studio → rules → rules list → continuity → text
+      // Order: history → rules → rules list → continuity → text
       final historyIdx = prompt.indexOf('RECENT CHAT HISTORY:');
-      final studioIdx = prompt.indexOf('STUDIO CONTROLLER NOTES:');
       final rulesIdx = prompt.indexOf('AUTHORITATIVE RULES');
       final textIdx = prompt.indexOf('Assistant response to clean:');
-      expect(historyIdx, lessThan(studioIdx));
-      expect(studioIdx, lessThan(rulesIdx));
+      expect(historyIdx, lessThan(rulesIdx));
       expect(rulesIdx, lessThan(textIdx));
     });
   });
@@ -483,26 +439,21 @@ void main() {
       expect(prompt, isNot(contains('CHARACTER CONSISTENCY NOTES')));
     });
 
-    test('audit notes appear after studio notes, before style rules', () {
+    test('audit notes appear before style rules', () {
       final prompt = PostCleanerService.buildCleanerPrompt(
         assistantText: 'Ответ.',
         broadcastBlocks: const ['RUSSIAN ONLY.'],
-        studioOutputs: [
-          {'name': 'Controller', 'content': 'Scene at bar.'},
-        ],
         auditIssues: const ['Lucy should be silent.'],
       );
-      final studioIdx = prompt.indexOf('STUDIO CONTROLLER NOTES:');
       final auditIdx = prompt.indexOf('CHARACTER CONSISTENCY NOTES');
       final rulesIdx = prompt.indexOf('AUTHORITATIVE RULES');
       final textIdx = prompt.indexOf('Assistant response to clean:');
-      expect(studioIdx, lessThan(auditIdx));
       expect(auditIdx, lessThan(rulesIdx));
       expect(rulesIdx, lessThan(textIdx));
     });
 
     test('audit notes do not trigger continuity rules section (separate concern)', () {
-      // Continuity rules are for local scene state (history/studio), not for
+      // Continuity rules are for local scene state (history), not for
       // audit notes. Audit notes have their own fix-instructions.
       final prompt = PostCleanerService.buildCleanerPrompt(
         assistantText: 'Text.',

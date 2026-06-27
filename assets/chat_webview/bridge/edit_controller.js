@@ -138,15 +138,11 @@ export class EditController {
       delete body.dataset.originalHtml;   // discard stale snapshot
       if (window.bridge?.renderer) {
         const isUser = section.classList.contains('user');
-        let studioOutputs = null;
-        try { studioOutputs = section.dataset.studioOutputs ? JSON.parse(section.dataset.studioOutputs) : null; }
-        catch (_) { studioOutputs = null; }
         window.bridge.renderer.updateMessageContent(
           section,
           section.dataset.rawText || '',
           section.dataset.reasoning || null,
           isUser, false, false,
-          studioOutputs,
         );
       }
     }
