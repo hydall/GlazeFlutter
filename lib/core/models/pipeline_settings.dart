@@ -56,6 +56,11 @@ abstract class PipelineSettings with _$PipelineSettings {
     // cancelled entirely so a long generation is never cut off. 0 = use the
     // per-agent fallback (final generator: 90s, trackers: 60s).
     @Default(0) int studioTimeoutMs,
+    // Max tokens for the Studio final generator (Main Responder). When > 0,
+    // overrides the per-agent default (8000). Useful for reasoning models
+    // (e.g. Gemini) that spend most of the budget on thinking and leave too
+    // little for the actual reply. 0 = use the agent's own maxTokens.
+    @Default(0) int studioFinalMaxTokens,
 
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,

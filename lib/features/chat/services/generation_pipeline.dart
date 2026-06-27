@@ -93,6 +93,21 @@ class GenerationPipeline {
   /// is in flight.
   CancelToken? _auditCancelToken;
 
+  /// Cancel token for the cleaner LLM call. Held as a field so the user can
+  /// abort a running cleaner via [abortPostCleaner] (Stop button in the
+  /// PostCleanerStatusCard). `null` when no cleaner is in flight.
+  CancelToken? _cleanerCancelToken;
+
+  /// Abort a running POST-cleaner. Called by the Stop button in
+  /// PostCleanerStatusCard. No-op when the cleaner is not running. The
+  /// cleaner's `finally` block reverts the pre-created swipe and resets
+  /// state, so this only needs to cancel the in-flight LLM request.
+  void abortPostCleaner() {
+    if (_cleanerCancelToken != null && !_cleanerCancelToken!.isCancelled) {
+      _cleanerCancelToken!.cancel('User aborted post-cleaner');
+    }
+  }
+
   /// Run the full post-SSE pipeline. Returns the final [GenerationOutcome]
   /// describing the state to apply, or null if the genId was invalidated
   /// (caller should drop the result).
@@ -916,6 +931,8 @@ class GenerationPipeline {
         }
       }
 
+      _cleanerCancelToken = CancelToken();
+      ref.read(cleanerCancelTokenProvider.notifier).state = _cleanerCancelToken;
       final result = await cleanerService.runCleaner(
         sessionId: sessionId,
         settings: pipeline,
@@ -923,6 +940,7 @@ class GenerationPipeline {
         broadcastBlocks: broadcastBlocks,
         recentMessages: recentMessages,
         auditIssues: auditIssues,
+        cancelToken: _cleanerCancelToken,
         onCleanedChunk: (text) {
           if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
           // Stream the cleaner's rewrite into the last assistant message in
@@ -1191,6 +1209,8 @@ class GenerationPipeline {
         _auditCancelToken!.cancel();
       }
       _auditCancelToken = null;
+      _cleanerCancelToken = null;
+      ref.read(cleanerCancelTokenProvider.notifier).state = null;
       _lastStreamedText = '';
       _preCreatedCleanerSwipeId = -1;
       _preCreatedMessageId = null;

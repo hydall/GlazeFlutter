@@ -106,6 +106,21 @@ class _PostCleanerStatusCardState
                 ),
               ),
             ),
+            if (isRunning)
+              IconButton(
+                onPressed: () {
+                  final token = ref.read(cleanerCancelTokenProvider);
+                  if (token != null && !token.isCancelled) {
+                    token.cancel('User aborted post-cleaner');
+                  }
+                },
+                icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                tooltip: 'Stop cleaner',
+                visualDensity: VisualDensity.compact,
+                style: IconButton.styleFrom(
+                  foregroundColor: cs.error,
+                ),
+              ),
           ],
         ),
       ),

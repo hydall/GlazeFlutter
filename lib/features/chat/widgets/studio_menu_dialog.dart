@@ -349,6 +349,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       ],
                       const SizedBox(height: 12),
                       const _StudioTimeoutTile(),
+                      const SizedBox(height: 4),
+                      const _StudioMaxTokensTile(),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -694,6 +696,89 @@ class _StudioTimeoutTile extends ConsumerWidget {
         );
         if (v != null) {
           final updated = pipeline.copyWith(studioTimeoutMs: v * 1000);
+          await ref.read(pipelineSettingsProvider.notifier).save(updated);
+        }
+      },
+    );
+  }
+}
+
+/// Max tokens override for the Studio final generator (Main Responder).
+/// Reads/writes `PipelineSettings.studioFinalMaxTokens`. When 0, the
+/// per-agent default (8000) is used. Useful for reasoning models that
+/// spend most of the budget on thinking.
+class _StudioMaxTokensTile extends ConsumerWidget {
+  const _StudioMaxTokensTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioFinalMaxTokens;
+    final valueText = value == 0
+        ? 'post_building_default_tokens'.tr(namedArgs: {'arg0': '8000'})
+        : 'post_building_tokens_count'.tr(namedArgs: {'arg0': '$value'});
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.text_snippet_outlined, size: 20, color: cs.onSurfaceVariant),
+      title: Text(
+        'post_building_studio_max_tokens'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        '$valueText — ${'post_building_studio_max_tokens_desc'.tr()}',
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final controller = TextEditingController(text: '$value');
+        final v = await showDialog<int>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('post_building_studio_max_tokens'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'post_building_tokens_min'.tr(namedArgs: {'arg0': '0'}),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    suffixText: 'tokens',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: Text('common_cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final s = int.tryParse(controller.text.trim());
+                  if (s == null || s < 0) {
+                    Navigator.of(c).pop();
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: Text('common_save'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (v != null) {
+          final updated = pipeline.copyWith(studioFinalMaxTokens: v);
           await ref.read(pipelineSettingsProvider.notifier).save(updated);
         }
       },

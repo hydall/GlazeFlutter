@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 /// Live state of the POST-cleaner, surfaced to the chat UI so the user can
@@ -71,3 +72,9 @@ enum PostCleanerPhase { idle, running, done, skipped, error }
 final postCleanerStateProvider = StateProvider<PostCleanerState>(
   (_) => const PostCleanerState.idle(),
 );
+
+/// Cancel token for the in-flight POST-cleaner LLM call. Set by
+/// `GenerationPipeline._runPostCleaner` when the cleaner starts, cleared in
+/// its `finally` block. The Stop button in [PostCleanerStatusCard] reads
+/// this and cancels it.
+final cleanerCancelTokenProvider = StateProvider<CancelToken?>((_) => null);

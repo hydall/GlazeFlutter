@@ -112,6 +112,7 @@ class AgentRunner {
       throw Exception('Studio agent "${agent.name}" API is not configured');
     }
     final timeoutMs = effectiveTimeoutMs(agent, isFinalResponse);
+    final maxTokensOverride = effectiveMaxTokens(agent, isFinalResponse);
     return _streamRunner.run(
       agent: agent,
       messages: messages,
@@ -120,6 +121,7 @@ class AgentRunner {
       isFinalResponse: isFinalResponse,
       cancelToken: cancelToken,
       timeoutMs: timeoutMs,
+      maxTokensOverride: maxTokensOverride,
       onFinalResponseUpdate: onFinalResponseUpdate,
       onIntermediateUpdate: onIntermediateUpdate,
     );
@@ -178,6 +180,21 @@ class AgentRunner {
       return global.clamp(1000, 120000);
     }
     return fallback;
+  }
+
+  /// Max tokens for the final generator. Resolution order:
+  /// 1. [PipelineSettings.studioFinalMaxTokens] (>0) — global user setting
+  ///    from the Studio menu. Useful for reasoning models (e.g. Gemini) that
+  ///    burn the budget on thinking and leave too little for the reply.
+  /// 2. [StudioAgent.maxTokens] — per-agent value set at Studio build time
+  ///    (default 8000 for the final generator).
+  /// Returns null when the global override is 0 and the caller should use
+  /// the agent's own value.
+  int? effectiveMaxTokens(StudioAgent agent, bool isFinalResponse) {
+    if (!isFinalResponse) return null;
+    final global = _ref.read(pipelineSettingsProvider).studioFinalMaxTokens;
+    if (global > 0) return global;
+    return null;
   }
 
   /// Strip `<think>`/Plan-internally directives from a message before sending
