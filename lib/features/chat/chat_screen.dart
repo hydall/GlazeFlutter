@@ -52,6 +52,7 @@ import 'widgets/chat_input_bar.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_activity_card.dart';
 import 'widgets/post_cleaner_status_card.dart';
+import 'widgets/studio_status_card.dart';
 import 'widgets/quick_replies_panel.dart';
 import 'widgets/chat_webview_widget.dart';
 import 'widgets/ext_block_dialogs.dart';
@@ -1264,6 +1265,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
               right: 12,
               top: messageListTop + memoryTopReserve,
               child: const PostCleanerStatusCard(),
+            ),
+            // Studio tracker-cycle live status card. Shown during
+            // generation while Studio trackers / final generator are running.
+            Positioned(
+              left: 12,
+              right: 12,
+              top: messageListTop + memoryTopReserve + 56,
+              child: const StudioStatusCard(),
             ),
             // Top gradient for fade effect under the header
             Positioned(

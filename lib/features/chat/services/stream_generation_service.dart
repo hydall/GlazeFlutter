@@ -22,6 +22,7 @@ import '../chat_state.dart';
 import '../state/agent_operations_log_provider.dart';
 import '../state/cached_token_breakdown.dart';
 import '../state/memory_activity_provider.dart';
+import '../state/studio_cycle_state_provider.dart';
 import 'saved_message_writer.dart';
 
 class StreamGenerationService {
@@ -165,6 +166,12 @@ class StreamGenerationService {
           'studio intercept char=$_charId session=${session.id} '
           'agents=${studioConfig.agents.length}',
         );
+        _ref
+            .read(studioCycleStateProvider.notifier)
+            .state = StudioCycleState.running(
+          sessionId: session.id,
+          totalAgents: studioConfig.agents.length,
+        );
         final promptResult = await buildPromptInIsolate(payload);
         if (_isAborted()) {
           return ChatState(
@@ -204,10 +211,24 @@ class StreamGenerationService {
             if (_isAborted()) return;
             latestStudioText = text;
             latestStudioReasoning = reasoning;
+            final cur = _ref.read(studioCycleStateProvider);
+            if (cur.phase == StudioCyclePhase.running) {
+              _ref
+                  .read(studioCycleStateProvider.notifier)
+                  .state = StudioCycleState.writingFinal(
+                sessionId: session.id,
+                totalAgents: cur.totalAgents,
+                completedAgents: cur.completedAgents,
+                failedAgents: cur.failedAgents,
+                failedAgentNames: cur.failedAgentNames,
+              );
+            }
             scheduleStudioStreamingUpdate();
           },
         );
         if (_isAborted() || studioResult.status == 'aborted') {
+          _ref.read(studioCycleStateProvider.notifier).state =
+              const StudioCycleState.idle();
           return ChatState(
             session: saveSession ?? session,
             isGenerating: false,
@@ -228,6 +249,13 @@ class StreamGenerationService {
             startGenTime: startGenTime,
             result: studioResult,
             model: apiConfig.model,
+          );
+          _ref
+              .read(studioCycleStateProvider.notifier)
+              .state = _studioFinalState(
+            session.id,
+            studioResult,
+            StudioCyclePhase.agentErrors,
           );
           final elapsed = DateTime.now()
               .difference(startGenTime)
@@ -272,6 +300,8 @@ class StreamGenerationService {
             result: studioResult,
             model: apiConfig.model,
           );
+          _ref.read(studioCycleStateProvider.notifier).state =
+              const StudioCycleState.error(sessionId: '');
           if (regenTargetId != null && saveSession != null) {
             return _writer.writeRegenError(
               errorText: message,
@@ -298,6 +328,11 @@ class StreamGenerationService {
           startGenTime: startGenTime,
           result: studioResult,
           model: apiConfig.model,
+        );
+        _ref.read(studioCycleStateProvider.notifier).state = _studioFinalState(
+          session.id,
+          studioResult,
+          StudioCyclePhase.done,
         );
         final finalState = _writer
             .writeAssistant(
@@ -768,6 +803,42 @@ class StreamGenerationService {
       'agent_errors' => AgentOperationStatus.error,
       _ => AgentOperationStatus.error,
     };
+  }
+
+  /// Builds the terminal `StudioCycleState` from a `StudioPipelineResult`,
+  /// aggregating the per-agent briefs into completed/failed counts.
+  static StudioCycleState _studioFinalState(
+    String sessionId,
+    StudioPipelineResult result,
+    StudioCyclePhase phase,
+  ) {
+    final briefs = result.stageBriefs;
+    final ok = briefs.where((b) => b.status == 'ok').length;
+    final failed = briefs.length - ok;
+    final failedNames = briefs
+        .where((b) => b.status != 'ok')
+        .map((b) => b.agentName)
+        .toList(growable: false);
+    switch (phase) {
+      case StudioCyclePhase.done:
+        return StudioCycleState.done(
+          sessionId: sessionId,
+          totalAgents: briefs.length,
+          completedAgents: ok,
+          failedAgents: failed,
+          failedAgentNames: failedNames,
+        );
+      case StudioCyclePhase.agentErrors:
+        return StudioCycleState.agentErrors(
+          sessionId: sessionId,
+          totalAgents: briefs.length,
+          completedAgents: ok,
+          failedAgents: failed,
+          failedAgentNames: failedNames,
+        );
+      default:
+        return const StudioCycleState.idle();
+    }
   }
 
   static AgentOperationStatus _sidecarStatusToOp(String status) {
