@@ -688,4 +688,97 @@ void main() {
       expect(PostCleanerService.parseAuditJson('no braces here'), isNull);
     });
   });
+
+  group('textRewriteDropsProtectedMarkup', () {
+    test('returns false when original has no tags or fences', () {
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(
+          'plain prose without any markup',
+          'edited prose without any markup',
+        ),
+        isFalse,
+      );
+    });
+
+    test('returns false when original and edited both have HTML tags', () {
+      const original = '<font color="red">She <i>smiled</i>.</font>';
+      const edited = '<font color="red">She <i>grinned</i>.</font>';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isFalse,
+      );
+    });
+
+    test('returns true when original had HTML tags but edited dropped them', () {
+      const original = '<font color="red">She smiled.</font> More prose.';
+      const edited = 'She smiled. More prose.';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isTrue,
+      );
+    });
+
+    test('returns true when original had fenced code but edited dropped it', () {
+      const original = 'Here is code:\n```dart\nvoid main() {}\n```\nDone.';
+      const edited = 'Here is code: void main() {} Done.';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isTrue,
+      );
+    });
+
+    test('returns false when original and edited both have code fences', () {
+      const original = '```dart\nvoid main() {}\n```';
+      const edited = '```dart\nvoid other() {}\n```';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isFalse,
+      );
+    });
+
+    test('does NOT treat ==custom markers== as HTML tags', () {
+      const original = '==important== and <b>bold</b> together';
+      const edited = '==important== and bold together';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isTrue,
+      );
+    });
+
+    test('does NOT treat single backtick code as fenced block', () {
+      const original = 'Use `print()` to output. No fences here.';
+      const edited = 'Use print() to output. No fences here.';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isFalse,
+      );
+    });
+
+    test('returns false when edited preserves tags but adds prose', () {
+      const original = '<i>She smiled.</i>';
+      const edited = '<i>She smiled warmly, the corners of her eyes crinkling.</i>';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isFalse,
+      );
+    });
+
+    test('returns true when original had both tags and fences, edited lost both', () {
+      const original = '<b>Bold</b> and ```fenced```.';
+      const edited = 'Bold and fenced.';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isTrue,
+      );
+    });
+
+    test('returns false when original had both, edited kept tags but lost fences', () {
+      const original = '<b>Bold</b> and ```fenced```.';
+      const edited = '<b>Bold</b> and fenced.';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isTrue,
+      );
+    });
+  });
 }

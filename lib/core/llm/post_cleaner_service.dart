@@ -146,6 +146,29 @@ class PostCleanerService {
         );
       }
 
+      // Safety: reject the rewrite if it dropped protected markup that was
+      // present in the original assistant response. Cheap presence-only check
+      // (ported from Marinara `text-rewrite-safety.ts`): if the original had
+      // inline HTML/XML tags or fenced code blocks and the cleaned version no
+      // longer has any, the cleaner stripped formatting it was told to
+      // preserve — keep the original. This guards against the common LLM
+      // failure mode of flattening formatting when asked to "rewrite for
+      // clarity". Does NOT verify the *same* tags/fences survive, just that
+      // *some* survive — structural equality is the cleaner prompt's job.
+      if (textRewriteDropsProtectedMarkup(assistantText, cleaned)) {
+        debugPrint(
+          '[PostCleaner] skipped: rewrite dropped protected markup '
+          '(HTML/XML tags or fenced code blocks present in original but '
+          'absent in cleaned)',
+        );
+        return PostCleanerResult(
+          status: 'skipped',
+          cleanedText: assistantText,
+          attempts: outcome.attempts,
+          totalElapsedMs: outcome.totalElapsedMs,
+        );
+      }
+
       return PostCleanerResult(
         status: 'ok',
         cleanedText: cleaned,
@@ -167,6 +190,38 @@ class PostCleanerService {
         error: '$e',
       );
     }
+  }
+
+  /// Returns true if [original] had inline HTML/XML tags or fenced code blocks
+  /// and [edited] no longer has any. Used as a pre-application guard for the
+  /// cleaner result: if the rewrite flattened formatting the prompt told the
+  /// cleaner to preserve, we keep the original.
+  ///
+  /// - Inline HTML/XML tags: matches `</?[a-zA-Z][^>]*>` (a `<` followed by an
+  ///   optional `/` and a letter — excludes our `==...==` markdown markers
+  ///   and inline `code` single backticks).
+  /// - Fenced code blocks: matches the triple-backtick fence ```` ``` ````.
+  ///
+  /// Presence-only check — does NOT verify the *same* tags/fences survive,
+  /// only that *some* survive. Structural preservation is the cleaner
+  /// prompt's responsibility; this guard only catches the catastrophic case
+  /// of the cleaner stripping ALL formatting.
+  @visibleForTesting
+  static bool textRewriteDropsProtectedMarkup(String original, String edited) {
+    final originalHasTags = _hasHtmlOrXmlTag(original);
+    final originalHasFences = _hasFencedBlock(original);
+    if (!originalHasTags && !originalHasFences) return false;
+    if (originalHasTags && !_hasHtmlOrXmlTag(edited)) return true;
+    if (originalHasFences && !_hasFencedBlock(edited)) return true;
+    return false;
+  }
+
+  static bool _hasHtmlOrXmlTag(String text) {
+    return RegExp(r'</?[a-zA-Z][^>]*>').hasMatch(text);
+  }
+
+  static bool _hasFencedBlock(String text) {
+    return text.contains('```');
   }
 
   static String _statusLabel(AgentOperationStatus status) {
