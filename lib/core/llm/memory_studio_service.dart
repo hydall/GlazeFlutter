@@ -12,6 +12,7 @@ import '../state/db_provider.dart';
 import '../utils/cast_helpers.dart';
 import '../utils/error_format.dart';
 import 'agent_runner.dart';
+import 'json_repair.dart';
 import 'history_assembler.dart';
 import 'macro_engine.dart';
 import 'prompt_builder.dart';
@@ -1224,7 +1225,7 @@ Rules:
     if (raw == null) return null;
     Object? decoded;
     try {
-      decoded = jsonDecode(raw);
+      decoded = jsonDecode(repairJson(raw));
     } catch (_) {
       return null;
     }

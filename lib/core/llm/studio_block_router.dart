@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/api_config.dart';
 import '../models/preset.dart';
+import 'json_repair.dart';
 
 /// Signature of the LLM call the router delegates to. The decomposition
 /// service supplies its existing build-model call (`_callLlm`) so the router
@@ -196,7 +197,7 @@ $blockLines''';
     if (jsonText == null) return const {};
     final Object? decoded;
     try {
-      decoded = jsonDecode(jsonText);
+      decoded = jsonDecode(repairJson(jsonText));
     } catch (_) {
       return const {};
     }
