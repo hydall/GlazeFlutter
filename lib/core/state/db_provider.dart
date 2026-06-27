@@ -19,6 +19,7 @@ import '../db/repositories/memory_cadence_repo.dart';
 import '../db/repositories/memory_consolidation_repo.dart';
 import '../db/repositories/studio_config_repo.dart';
 import '../db/repositories/tracker_repo.dart';
+import '../db/repositories/tracker_snapshot_repo.dart';
 import '../db/repositories/extension_presets_repository.dart';
 import '../db/repositories/info_blocks_repository.dart';
 import '../models/memory_book.dart';
@@ -130,6 +131,10 @@ final trackerRepoProvider = Provider<TrackerRepo>((ref) {
   return TrackerRepo(ref.watch(appDbProvider));
 });
 
+final trackerSnapshotRepoProvider = Provider<TrackerSnapshotRepo>((ref) {
+  return TrackerSnapshotRepo(ref.watch(appDbProvider));
+});
+
 final memoryBookProvider = FutureProvider.family<MemoryBook?, String>((
   ref,
   sessionId,
@@ -143,9 +148,9 @@ final memoryBookProvider = FutureProvider.family<MemoryBook?, String>((
 /// the source of truth and per-session edits override the global defaults.
 final pipelineSettingsProvider =
     FutureProvider.family<PipelineSettings, String>((ref, sessionId) async {
-  final repo = ref.watch(pipelineSettingsRepoProvider);
-  return repo.ensureForSession(sessionId);
-});
+      final repo = ref.watch(pipelineSettingsRepoProvider);
+      return repo.ensureForSession(sessionId);
+    });
 
 final extensionPresetsRepoProvider = Provider<ExtensionPresetsRepository>((
   ref,

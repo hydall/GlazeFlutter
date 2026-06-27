@@ -76,7 +76,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 49);
+      expect(version, 50);
     });
 
     test(
@@ -113,7 +113,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 49);
+        expect(version.first.read<int>('user_version'), 50);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },
@@ -154,8 +154,9 @@ void main() {
       final salienceCols = await db
           .customSelect("PRAGMA table_info('memory_salience_rows')")
           .get();
-      final salienceNames =
-          salienceCols.map((c) => c.read<String>('name')).toSet();
+      final salienceNames = salienceCols
+          .map((c) => c.read<String>('name'))
+          .toSet();
       expect(salienceNames, contains('chat_session_id'));
       expect(salienceNames, contains('memory_entry_id'));
       expect(salienceNames, contains('score'));
@@ -165,8 +166,9 @@ void main() {
       final cadenceCols = await db
           .customSelect("PRAGMA table_info('memory_cadence_rows')")
           .get();
-      final cadenceNames =
-          cadenceCols.map((c) => c.read<String>('name')).toSet();
+      final cadenceNames = cadenceCols
+          .map((c) => c.read<String>('name'))
+          .toSet();
       expect(cadenceNames, contains('chat_session_id'));
       expect(cadenceNames, contains('assistant_messages_since_last_run'));
       expect(cadenceNames, contains('last_run_kind'));
@@ -174,8 +176,9 @@ void main() {
       final consolidationCols = await db
           .customSelect("PRAGMA table_info('memory_consolidation_rows')")
           .get();
-      final consolidationNames =
-          consolidationCols.map((c) => c.read<String>('name')).toSet();
+      final consolidationNames = consolidationCols
+          .map((c) => c.read<String>('name'))
+          .toSet();
       expect(consolidationNames, contains('chat_session_id'));
       expect(consolidationNames, contains('tier'));
       expect(consolidationNames, contains('summary'));

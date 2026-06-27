@@ -31,6 +31,7 @@ part 'app_db.g.dart';
     MemoryConsolidationRows,
     StudioConfigRows,
     TrackerRows,
+    TrackerSnapshots,
     ExtensionPresets,
     InfoBlocks,
   ],
@@ -41,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 49;
+  int get schemaVersion => 50;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -551,10 +552,7 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('routing_mode')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.routingMode,
-          );
+          await m.addColumn(studioConfigRows, studioConfigRows.routingMode);
         }
       }
       if (from < 47) {
@@ -677,6 +675,21 @@ class AppDatabase extends _$AppDatabase {
             studioConfigRows,
             studioConfigRows.runModelOverride,
           );
+        }
+      }
+      if (from < 50) {
+        // Per-(message, swipe, agent-swipe) tracker state snapshots. Mirrors
+        // Marinara-Engine's game_state_snapshots: each swipe of each message
+        // owns an immutable tracker-state row so delete/swipe/regen rollback
+        // is emergent (drop the rows; the previous committed snapshot becomes
+        // "latest"). Guarded like every prior table migration to survive
+        // partial upgrades.
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('tracker_snapshots')) {
+          await m.createTable(trackerSnapshots);
         }
       }
     },
