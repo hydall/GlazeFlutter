@@ -244,17 +244,39 @@ plus an in-place migration in `fromJson` (see `_migrateEntryInPlace` and
 
 ### Auto-approve policy
 
-Agent drafts that pass validation land in the MemoryBook UI "Agent memories"
-tab as pending drafts (visible alongside approved agent entries). They are
-NOT silently auto-promoted to `MemoryEntry` — the user explicitly approves or
-deletes them. Invalid/empty/duplicate agent drafts stay as pending drafts in
-the same tab until the user acts on them.
+Agent drafts that pass validation are **auto-promoted to `MemoryEntry`**
+immediately — they land in the MemoryBook `entriesJson` with `kind='agent'`,
+`source='agentic'`, `messageIds=[messageId]`. The user can edit or delete
+them afterwards via the MemoryBook UI "Agent memories" tab, but no manual
+"Approve" click is required. This is the auto-approve path:
+`MemoryAgenticWriteService._executeMemoryWrites` builds `MemoryEntry`
+objects directly and calls `MemoryBookRepo.appendApprovedEntries` (not
+`appendDrafts`).
 
-The dedicated atomic repo path is `MemoryBookRepo.appendDrafts` (transactional
-read-modify-write of `pendingDraftsJson` inside `db.transaction()` per Rule 3
-above). There is NO read-modify-write of the MemoryBook outside the dedicated
-repo methods — `MemoryAgenticWriteService` calls `appendDrafts` directly and
-never touches `entriesJson`.
+Scan drafts (`source='scan_chat'`, produced by `MemoryBookController.scanChat`)
+still use the pending-drafts path: they land in `pendingDraftsJson` and the
+user explicitly approves or deletes them via the MemoryBook UI. This is
+because scan drafts are bulk-produced from a user-triggered scan, where
+review is the point of the operation.
+
+Invalid/empty/duplicate agent drafts are silently dropped (the LLM may emit
+fewer valid entries than it tried to). There is no half-approved state.
+
+The dedicated atomic repo path is `MemoryBookRepo.appendApprovedEntries`
+(transactional read-modify-write of `entriesJson` inside `db.transaction()`
+per Rule 3 above). `MemoryAgenticWriteService` never touches `entriesJson`
+directly — it always goes through `appendApprovedEntries`. The legacy
+`appendDrafts` (for scan drafts) follows the same atomic pattern.
+
+### Delete-on-message-removal
+
+Deleting an assistant message also drops the memory entries/drafts sourced
+from it: `ChatMessageService.deleteMessage` calls
+`MemoryBookRepo.deleteForMessage(sessionId, messageId)`, which atomically
+removes any `MemoryEntry` or `MemoryDraft` whose `messageIds` contains
+`messageId`. Items sourced from other messages are preserved. This mirrors
+the tracker-snapshot rollback (`TrackerSnapshotRepo.deleteForMessage`) that
+already ran on this path.
 
 ### Display separation
 
@@ -326,7 +348,7 @@ snapshot exists (legacy sessions that haven't been re-saved since Phase 1).
 
 | User action | Repo method | Effect |
 |-------------|-------------|--------|
-| Delete a message | `ChatRepo.deleteMessage` → `trackerSnapshotRepo.deleteForMessage` | All snapshots at that `messageId` are dropped; the previous committed snapshot becomes the latest. |
+| Delete a message | `ChatRepo.deleteMessage` → `trackerSnapshotRepo.deleteForMessage` + `trackerRepo.replaceForSession` + `memoryBookRepo.deleteForMessage` | All snapshots at that `messageId` are dropped; the previous committed snapshot becomes the latest. The live `tracker_rows` store is rolled back to that preceding committed snapshot so the UI "Tracker values" tab and the Studio tracker preview show the state as of the previous message (e.g. if the deleted message's write-loop recorded "put cup on shelf", that tracker value is reverted). Memory book entries/drafts whose `messageIds` contains the deleted `messageId` are also dropped. |
 | Delete a session | `chat_history_provider.deleteSession` → `deleteBySessionId` + `SyncDeletionTracker.record('tracker_snapshot', sessionId)` | All snapshots for the session are dropped; cloud sync deletion is tracked. |
 | Clear chat | `chat_session_service.clearChat` → `deleteBySessionId` (both paths) | Same as delete-session. |
 | Delete by character | `chatRepo.deleteByCharacterId` → cascade `deleteBySessionId` per session | All snapshots for all of the character's sessions are dropped. |

@@ -96,10 +96,32 @@ class ChatMessageService {
     // Drop tracker snapshots for the deleted message so the read path
     // (getLatestCommitted) falls back to the previous message's committed
     // snapshot — rollback is emergent, no explicit restore needed.
-    _ref
-        .read(trackerSnapshotRepoProvider)
+    final snapshotRepo = _ref.read(trackerSnapshotRepoProvider);
+    final trackerRepo = _ref.read(trackerRepoProvider);
+    final memoryBookRepo = _ref.read(memoryBookRepoProvider);
+    // Drop memory book entries/drafts sourced from this message. Each
+    // MemoryEntry / MemoryDraft carries `messageIds`; items whose
+    // `messageIds` contains `messageId` are removed, items sourced from
+    // other messages are preserved. Wrapped in catchError so a DB error
+    // never blocks the message deletion itself.
+    memoryBookRepo
         .deleteForMessage(session.id, messageId)
         .catchError((Object _) {});
+    snapshotRepo.deleteForMessage(session.id, messageId).then((_) {
+      // After the deleted message's snapshots are gone, the latest
+      // committed snapshot is the one written for the PREVIOUS message —
+      // that is the tracker state the user should see after deletion.
+      // Roll back the live `tracker_rows` store to it so the UI
+      // (agentic_operations_log_dialog "Tracker values" tab,
+      // studio_menu_dialog tracker preview) shows the rolled-back state
+      // instead of the cumulative state that included writes from the
+      // deleted message. Sentinel anchor (messageId='') survives
+      // deleteForMessage and serves as the legacy baseline.
+      return snapshotRepo.getLatestCommitted(session.id);
+    }).then((snapshot) {
+      if (snapshot == null) return;
+      trackerRepo.replaceForSession(session.id, snapshot.trackers);
+    }).catchError((Object _) {});
     return _persist(session, newMessages);
   }
 

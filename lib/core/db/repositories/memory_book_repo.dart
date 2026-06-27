@@ -125,6 +125,63 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Atomically appends [entries] to the approved entries of the memory book
+  /// for [sessionId]. Wraps the read-modify-write in a transaction so
+  /// concurrent writes cannot interleave (database.md Rule 3).
+  ///
+  /// Used by the agentic write-loop (Stage 1) to auto-approve agent-generated
+  /// memory entries: instead of landing in `pendingDrafts` for manual approval,
+  /// each validated agent write is promoted to a `MemoryEntry` (kind='agent',
+  /// source='agentic') immediately and persisted to `entriesJson`. The user
+  /// can still delete or edit the entry afterwards via the MemoryBook UI.
+  Future<void> appendApprovedEntries(
+    String sessionId,
+    List<MemoryEntry> entries,
+  ) async {
+    if (entries.isEmpty) return;
+    await transaction(() async {
+      final existing = await getBySessionId(sessionId);
+      final book = existing ??
+          MemoryBook(
+            id: 'memorybook_$sessionId',
+            sessionId: sessionId,
+          );
+      await put(
+        book.copyWith(
+          entries: [...book.entries, ...entries],
+        ),
+      );
+    });
+  }
+
+  /// Atomically removes all `MemoryEntry` and `MemoryDraft` items whose
+  /// `messageIds` contain [messageId] from the memory book for [sessionId].
+  /// Wraps the read-modify-write in a transaction (database.md Rule 3).
+  ///
+  /// Called by `ChatMessageService.deleteMessage` so deleting an assistant
+  /// message also drops the memory entries/drafts that were sourced from it.
+  /// Items whose `messageIds` does NOT contain [messageId] are preserved
+  /// (they were sourced from other messages and should survive).
+  Future<void> deleteForMessage(String sessionId, String messageId) async {
+    await transaction(() async {
+      final existing = await getBySessionId(sessionId);
+      if (existing == null) return;
+      final keptEntries = existing.entries
+          .where((e) => !e.messageIds.contains(messageId))
+          .toList();
+      final keptDrafts = existing.pendingDrafts
+          .where((d) => !d.messageIds.contains(messageId))
+          .toList();
+      if (keptEntries.length == existing.entries.length &&
+          keptDrafts.length == existing.pendingDrafts.length) {
+        return;
+      }
+      await put(
+        existing.copyWith(entries: keptEntries, pendingDrafts: keptDrafts),
+      );
+    });
+  }
+
   Future<void> copyForSessionBranch({
     required String fromSessionId,
     required String toSessionId,

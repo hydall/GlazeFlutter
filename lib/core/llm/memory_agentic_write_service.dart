@@ -11,7 +11,6 @@ import '../models/pipeline_settings.dart';
 import '../models/tracker.dart';
 import '../state/db_provider.dart';
 import '../utils/id_generator.dart';
-import '../utils/time_helpers.dart';
 import 'memory_agentic_policy.dart';
 import 'memory_agentic_tools.dart';
 import 'sidecar_llm_client.dart';
@@ -159,6 +158,7 @@ class MemoryAgenticWriteService {
       final memoryResult = await _executeMemoryWrites(
         policy: policy,
         sessionId: sessionId,
+        messageId: messageId,
         requests: response.memoryRequests,
         shouldAbort: () => token.isCancelled || isStillCurrent?.call() == false,
       );
@@ -332,6 +332,7 @@ Rules:
   Future<MemoryWriteResult> _executeMemoryWrites({
     required MemoryAgenticPolicy policy,
     required String sessionId,
+    required String messageId,
     required List<MemoryWriteRequest> requests,
     required bool Function() shouldAbort,
   }) async {
@@ -342,7 +343,12 @@ Rules:
     var denied = 0;
     final errors = <String>[];
 
-    final drafts = <MemoryDraft>[];
+    // Auto-approve: agent writes land directly as MemoryEntry (kind='agent',
+    // source='agentic') instead of pending drafts. The user can still edit
+    // or delete them afterwards via the MemoryBook UI. messageIds is set to
+    // [messageId] so deleting the source assistant message drops the entry
+    // via MemoryBookRepo.deleteForMessage.
+    final entries = <MemoryEntry>[];
     for (final req in requests) {
       if (shouldAbort()) break;
       final decision = policy.canUse(MemoryAgenticTool.writeMemory);
@@ -351,25 +357,27 @@ Rules:
         errors.add('Denied "${req.title}": ${decision.reason}');
         continue;
       }
-      drafts.add(
-        MemoryDraft(
-          id: generateId(),
+      entries.add(
+        MemoryEntry(
+          id: generateId().replaceAll('draft_', 'mem_'),
           title: req.title,
           content: req.content,
           keys: req.keys,
-          status: 'pending_generation',
+          messageIds: [messageId],
+          status: 'active',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
           source: 'agentic',
-          createdAt: currentTimestampSeconds(),
+          kind: 'agent',
         ),
       );
       written++;
     }
 
-    if (drafts.isNotEmpty && !shouldAbort()) {
+    if (entries.isNotEmpty && !shouldAbort()) {
       try {
-        await repo.appendDrafts(sessionId, drafts);
+        await repo.appendApprovedEntries(sessionId, entries);
       } catch (e) {
-        debugPrint('[MemoryAgenticWriteService] appendDrafts failed: $e');
+        debugPrint('[MemoryAgenticWriteService] appendApprovedEntries failed: $e');
         errors.add('Batch write error: $e');
         written = 0;
       }

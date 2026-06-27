@@ -324,9 +324,21 @@ class PostCleanerService {
         'same nesting order.',
       )
       ..writeln(
+        '- PRESERVE OOC (out-of-character) blocks VERBATIM. OOC blocks are '
+        'meta-commentary addressed to the user outside the roleplay — they '
+        'are NOT prose to be cleaned. They may be wrapped in `((...))`, '
+        '`[OOC: ...]`, `(OOC: ...)`, `((OOC: ...))`, or appear as clearly '
+        'meta lines (e.g. "((Ghost in the machine: ...))", narrator notes to '
+        'the user, system-style asides). Do not remove, rephrase, translate, '
+        'reformat, or alter OOC blocks in any way. Clean only the in-roleplay '
+        'prose around them. If the entire response is an OOC block, return it '
+        'unchanged.',
+      )
+      ..writeln(
         '- Return ONLY the cleaned text, no explanation. Inline HTML tags '
         'described above are part of the content, not markdown fences — keep '
-        'them. Do not wrap the output in ``` fences.',
+        'them. OOC blocks are also part of the content — keep them verbatim. '
+        'Do not wrap the output in ``` fences.',
       )
       ..writeln();
 

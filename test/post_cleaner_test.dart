@@ -314,6 +314,29 @@ void main() {
       );
       expect(prompt, isNot(contains('AUTHORITATIVE RULES')));
     });
+
+    test('OOC preservation rule is present in the prompt', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'He smiled. ((OOC: hey, just checking in!))',
+      );
+      // The OOC preservation rule must be in the rules section.
+      expect(prompt, contains('PRESERVE OOC'));
+      expect(prompt, contains('out-of-character'));
+      expect(prompt, contains('((...))'));
+      expect(prompt, contains('[OOC: ...]'));
+      expect(prompt, contains('(OOC: ...)'));
+      // The "return only cleaned text" line must mention OOC blocks too.
+      expect(prompt, contains('OOC blocks are also part of the content'));
+    });
+
+    test('HTML preservation rule is present in the prompt', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: '<font color="red">He smiled.</font>',
+      );
+      expect(prompt, contains('PRESERVE all inline HTML'));
+      expect(prompt, contains('<font color="...">'));
+      expect(prompt, contains('<i>'));
+    });
   });
 
   group('PostCleanerService.buildCleanerPrompt with context', () {
