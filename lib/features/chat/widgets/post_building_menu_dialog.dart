@@ -433,6 +433,27 @@ class _CleanerSection extends StatelessWidget {
             }
           },
         ),
+        _StyleOverrideTile(
+          label: 'post_building_cleaner_banned_words'.tr(),
+          subtitleKey: 'post_building_cleaner_banned_words_desc',
+          value: pipeline.postCleanerBannedWords,
+          onSaved: (v) =>
+              onSaved((p) => p.copyWith(postCleanerBannedWords: v)),
+        ),
+        _StyleOverrideTile(
+          label: 'post_building_cleaner_avoid_instructions'.tr(),
+          subtitleKey: 'post_building_cleaner_avoid_instructions_desc',
+          value: pipeline.postCleanerAvoidInstructions,
+          onSaved: (v) =>
+              onSaved((p) => p.copyWith(postCleanerAvoidInstructions: v)),
+        ),
+        _StyleOverrideTile(
+          label: 'post_building_cleaner_style_instructions'.tr(),
+          subtitleKey: 'post_building_cleaner_style_instructions_desc',
+          value: pipeline.postCleanerStyleInstructions,
+          onSaved: (v) =>
+              onSaved((p) => p.copyWith(postCleanerStyleInstructions: v)),
+        ),
       ],
     );
   }
@@ -1708,6 +1729,90 @@ Future<int?> _editNullableInt({
             }
             Navigator.of(c).pop(v);
           },
+          child: Text('common_save'.tr()),
+        ),
+      ],
+    ),
+  );
+  return result;
+}
+
+/// A `_NumberTile`-like row for multiline text style overrides (banned
+/// words, avoid/prefer instructions). Tapping opens a full-screen multiline
+/// editor. Empty values display a placeholder so the tile is still tappable.
+class _StyleOverrideTile extends StatelessWidget {
+  final String label;
+  final String subtitleKey;
+  final String value;
+  final Future<void> Function(String) onSaved;
+
+  const _StyleOverrideTile({
+    required this.label,
+    required this.subtitleKey,
+    required this.value,
+    required this.onSaved,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasValue = value.trim().isNotEmpty;
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(label),
+      subtitle: Text(
+        hasValue
+            ? (value.length > 80 ? '${value.substring(0, 80)}…' : value)
+            : subtitleKey.tr(),
+        style: TextStyle(
+          fontStyle: hasValue ? FontStyle.normal : FontStyle.italic,
+        ),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final result = await _editMultiline(
+          ctx: context,
+          title: label,
+          value: value,
+        );
+        if (result != null && result != value) {
+          await onSaved(result);
+        }
+      },
+    );
+  }
+}
+
+Future<String?> _editMultiline({
+  required BuildContext ctx,
+  required String title,
+  required String value,
+}) async {
+  final controller = TextEditingController(text: value);
+  final result = await showDialog<String?>(
+    context: ctx,
+    builder: (c) => AlertDialog(
+      title: Text(title),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 8,
+          minLines: 4,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            alignLabelWithHint: true,
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(c).pop(),
+          child: Text('common_cancel'.tr()),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(c).pop(controller.text),
           child: Text('common_save'.tr()),
         ),
       ],

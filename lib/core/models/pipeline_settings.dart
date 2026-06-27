@@ -68,6 +68,17 @@ abstract class PipelineSettings with _$PipelineSettings {
     // source / protocol are always inherited from the cleaner config — only
     // the model can differ.
     @Default('') String postCleanerAuditModel,
+    // Global prose-guardian style overrides (Marinara
+    // `applyProseGuardianChatSettings` port, adapted to our global-only
+    // pipeline settings). When non-empty, these flow into the cleaner
+    // prompt ALONGSIDE the preset's broadcastBlocks: the cleaner avoids
+    // words in [postCleanerBannedWords], follows
+    // [postCleanerAvoidInstructions], and prefers style described in
+    // [postCleanerStyleInstructions]. Empty = no override; the broadcast
+    // rules from the preset remain authoritative.
+    @Default('') String postCleanerBannedWords,
+    @Default('') String postCleanerAvoidInstructions,
+    @Default('') String postCleanerStyleInstructions,
 
     // ── Consolidation LLM ────────────────────────────────────────────────
     @Default(false) bool consolidationEnabled,

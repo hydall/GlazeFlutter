@@ -252,6 +252,9 @@ class PostCleanerService {
       recentMessages: recentMessages,
       auditIssues: auditIssues,
       maxCharsPerMessage: settings.postCleanerMaxCharsPerMessage,
+      bannedWords: settings.postCleanerBannedWords,
+      avoidInstructions: settings.postCleanerAvoidInstructions,
+      styleInstructions: settings.postCleanerStyleInstructions,
     );
 
     final effectiveMaxTokens = settings.postCleanerMaxTokens > 0
@@ -297,6 +300,9 @@ class PostCleanerService {
     List<ChatMessage> recentMessages = const [],
     List<String>? auditIssues,
     int maxCharsPerMessage = 3000,
+    String bannedWords = '',
+    String avoidInstructions = '',
+    String styleInstructions = '',
   }) {
     final rules = broadcastBlocks
         .map((b) => b.trim())
@@ -350,6 +356,42 @@ class PostCleanerService {
         ..writeln()
         ..writeln(rules.join('\n\n---\n\n'))
         ..writeln();
+    }
+
+    // Global prose-guardian style overrides (Marinara `banned`/`avoid`/
+    // `prefer` port). User-defined cross-chat style rules that supplement
+    // the preset's broadcastBlocks. Only added when at least one field is
+    // non-empty. The user sets these once globally (e.g. "never use the
+    // word 'ozone'", "avoid starting consecutive responses with dialogue",
+    // "prefer terse, hardboiled prose") and they apply to every chat.
+    final hasBanned = bannedWords.trim().isNotEmpty;
+    final hasAvoid = avoidInstructions.trim().isNotEmpty;
+    final hasStyle = styleInstructions.trim().isNotEmpty;
+    if (hasBanned || hasAvoid || hasStyle) {
+      buffer
+        ..writeln(
+          'GLOBAL STYLE OVERRIDES (user-defined cross-chat rules — apply '
+          'ALONGSIDE the authoritative rules above; do not contradict them):',
+        )
+        ..writeln();
+      if (hasBanned) {
+        buffer
+          ..writeln('BANNED WORDS (never use these, even if the original has them):')
+          ..writeln(bannedWords.trim())
+          ..writeln();
+      }
+      if (hasAvoid) {
+        buffer
+          ..writeln('AVOID (specific patterns to steer away from):')
+          ..writeln(avoidInstructions.trim())
+          ..writeln();
+      }
+      if (hasStyle) {
+        buffer
+          ..writeln('PREFER (style direction to lean into):')
+          ..writeln(styleInstructions.trim())
+          ..writeln();
+      }
     }
 
     buffer

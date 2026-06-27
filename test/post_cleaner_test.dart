@@ -781,4 +781,78 @@ void main() {
       );
     });
   });
+
+  group('buildCleanerPrompt style overrides', () {
+    test('includes BANNED WORDS section when bannedWords non-empty', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'She smiled.',
+        bannedWords: 'ozone, tapestry',
+      );
+      expect(prompt, contains('GLOBAL STYLE OVERRIDES'));
+      expect(prompt, contains('BANNED WORDS'));
+      expect(prompt, contains('ozone, tapestry'));
+    });
+
+    test('includes AVOID section when avoidInstructions non-empty', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'She smiled.',
+        avoidInstructions: 'no repetition of sentence structure',
+      );
+      expect(prompt, contains('AVOID'));
+      expect(prompt, contains('no repetition of sentence structure'));
+    });
+
+    test('includes PREFER section when styleInstructions non-empty', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'She smiled.',
+        styleInstructions: 'terse, hardboiled prose',
+      );
+      expect(prompt, contains('PREFER'));
+      expect(prompt, contains('terse, hardboiled prose'));
+    });
+
+    test('omits GLOBAL STYLE OVERRIDES section when all overrides empty', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'She smiled.',
+      );
+      expect(prompt, isNot(contains('GLOBAL STYLE OVERRIDES')));
+      expect(prompt, isNot(contains('BANNED WORDS')));
+      expect(prompt, isNot(contains('AVOID')));
+      expect(prompt, isNot(contains('PREFER')));
+    });
+
+    test('omits GLOBAL STYLE OVERRIDES section when overrides are whitespace only', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'She smiled.',
+        bannedWords: '   ',
+        avoidInstructions: '\n\t',
+        styleInstructions: '',
+      );
+      expect(prompt, isNot(contains('GLOBAL STYLE OVERRIDES')));
+    });
+
+    test('includes all three sections when all overrides non-empty', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'She smiled.',
+        bannedWords: 'ozone',
+        avoidInstructions: 'no purple prose',
+        styleInstructions: 'terse',
+      );
+      expect(prompt, contains('BANNED WORDS'));
+      expect(prompt, contains('AVOID'));
+      expect(prompt, contains('PREFER'));
+    });
+
+    test('style overrides appear AFTER authoritative rules section', () {
+      final prompt = PostCleanerService.buildCleanerPrompt(
+        assistantText: 'She smiled.',
+        broadcastBlocks: ['Rule A: do X', 'Rule B: do Y'],
+        bannedWords: 'ozone',
+      );
+      final rulesIndex = prompt.indexOf('AUTHORITATIVE RULES');
+      final overridesIndex = prompt.indexOf('GLOBAL STYLE OVERRIDES');
+      expect(rulesIndex, greaterThan(-1));
+      expect(overridesIndex, greaterThan(rulesIndex));
+    });
+  });
 }
