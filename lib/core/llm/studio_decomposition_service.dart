@@ -11,6 +11,7 @@ import '../models/preset.dart';
 import '../models/studio_config.dart';
 import '../utils/time_helpers.dart';
 import 'macro_engine.dart';
+import 'reasoning_stripper.dart';
 import 'studio_block_router.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
@@ -1062,31 +1063,8 @@ Assigned preset blocks:
     );
   }
 
-  String _stripPromptLevelReasoning(String text) {
-    var result = text;
-    final patterns = <RegExp>[
-      RegExp(
-        r'\s*Plan internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
-        caseSensitive: false,
-      ),
-      RegExp(
-        r'\s*Think internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
-        caseSensitive: false,
-      ),
-      RegExp(
-        r'\s*Use\s+<think>[\s\S]*?</think>\s*(?:for|to)[^.]*\. ?',
-        caseSensitive: false,
-      ),
-      RegExp(
-        r'\s*## Language Rule\s*- The hidden <think>[\s\S]*?(?:usually Russian\.|$)',
-        caseSensitive: false,
-      ),
-    ];
-    for (final pattern in patterns) {
-      result = result.replaceAll(pattern, ' ');
-    }
-    return result.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
-  }
+  String _stripPromptLevelReasoning(String text) =>
+      ReasoningStripper.stripPromptShardReasoning(text);
 
   String _stripReasoningSourceNames(String text) {
     return text

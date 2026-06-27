@@ -9,6 +9,7 @@ import '../models/studio_config.dart';
 import '../state/db_provider.dart';
 import '../utils/error_format.dart';
 import '../../features/settings/api_list_provider.dart';
+import 'reasoning_stripper.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
@@ -341,45 +342,12 @@ class AgentRunner {
   }
 
   /// Strip `<think>`/Plan-internally directives from a message before sending
-  /// to a model that won't honor them. Kept on this orchestrator because it
-  /// operates on the final `messages` list right before the transport call.
+  /// to a model that won't honor them. Delegates to [ReasoningStripper]; kept
+  /// as a static shim because call sites reference
+  /// `AgentRunner.stripPromptLevelReasoning`.
   static List<Map<String, dynamic>> stripPromptLevelReasoning(
     List<Map<String, dynamic>> messages,
-  ) {
-    return [
-      for (final message in messages)
-        {
-          ...message,
-          if (message['content'] is String)
-            'content': _stripThinkDirective(message['content'] as String),
-        },
-    ];
-  }
-
-  static String _stripThinkDirective(String content) {
-    var result = content;
-    final patterns = <RegExp>[
-      RegExp(
-        r'\s*Plan internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
-        caseSensitive: false,
-      ),
-      RegExp(
-        r'\s*Think internally[^.]*<think>[\s\S]*?(?:after\s*</think>|</think>)[^.]*\. ?',
-        caseSensitive: false,
-      ),
-      RegExp(
-        r'\s*Use\s\s*(?:for|to)[^.]*\. ?',
-        caseSensitive: false,
-      ),
-    ];
-    for (final pattern in patterns) {
-      result = result.replaceAll(pattern, ' ');
-    }
-    result = result.replaceAll('<think>', 'hidden reasoning');
-    result = result.replaceAll('</think>', 'hidden reasoning');
-    result = result.replaceAll(RegExp(r'\s{2,}'), ' ');
-    return result.trim();
-  }
+  ) => ReasoningStripper.stripMessageReasoning(messages);
 }
 
 /// Successful single-agent run. Mirrors the former `_StudioAgentRunResult`.
