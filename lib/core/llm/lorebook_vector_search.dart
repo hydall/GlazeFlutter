@@ -73,16 +73,30 @@ class LorebookVectorSearch {
     }
 
     final vectorEntries = <(LorebookEntry, String)>[];
+    // NEW (patch #4 follow-up — Marinara analog): semantic fallback pool
+    // for keyless entries. Entries with no keys AND no secondaryKeys cannot
+    // activate via keyword scan; this fallback activates them via cosine
+    // similarity against the current chat text. Threshold is lower (default
+    // 0.3) and topK is smaller (default 3) to avoid flooding the prompt.
+    // See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    final fallbackEntries = <(LorebookEntry, String)>[];
     for (final lb in activeLorebooks) {
       for (final entry in lb.entries) {
-        if (entry.vectorSearch && entry.enabled && !entry.constant) {
-          if (_isFilteredByCharacter(entry, character)) continue;
+        if (!entry.enabled || entry.constant) continue;
+        if (entry.excludeFromVectorization) continue;
+        if (_isFilteredByCharacter(entry, character)) continue;
+        if (entry.vectorSearch) {
           vectorEntries.add((entry, lb.id));
+        } else if (entry.keys.isEmpty && entry.secondaryKeys.isEmpty) {
+          // Keyless + vectorSearch=false → eligible for semantic fallback.
+          // These are indexed by LorebookEmbeddingService (which now
+          // extends its indexable pool to include keyless entries).
+          fallbackEntries.add((entry, lb.id));
         }
       }
     }
 
-    if (vectorEntries.isEmpty) return [];
+    if (vectorEntries.isEmpty && fallbackEntries.isEmpty) return [];
 
     final embeddingRows = await _repo.getBySourceType('lorebook_entry');
 
@@ -116,7 +130,33 @@ class LorebookVectorSearch {
       ));
     }
 
-    if (candidates.isEmpty) return [];
+    // Separate candidate pool for fallback (keyless) entries.
+    final fallbackCandidates = <VectorCandidate>[];
+    for (final (entry, lbId) in fallbackEntries) {
+      final namespacedId = '${lbId}_${entry.id}';
+      final row = embeddingMap[namespacedId];
+      if (row == null || row.vectorsBlob == null) continue;
+
+      final text = _getEmbeddingText(entry, lorebooks, lbId);
+      final fingerprint = LorebookEmbeddingService.buildEmbeddingFingerprint(entry, text);
+      final currentHash = computeHash(fingerprint);
+      if (row.textHash != currentHash) continue;
+
+      final vectors = _repo.decodeVectors(row);
+      if (vectors == null || vectors.isEmpty) continue;
+
+      fallbackCandidates.add(VectorCandidate(
+        id: entry.id,
+        vectors: vectors.map((v) => VectorChunk(text: '', vector: v)).toList(),
+        metadata: {
+          'lorebookId': lbId,
+          'entry': entry,
+          'hints': _repo.decodeHints(row) ?? [],
+        },
+      ));
+    }
+
+    if (candidates.isEmpty && fallbackCandidates.isEmpty) return [];
 
     final focusedQuery = _buildFocusedQuery(history, currentText, config.maxChunkTokens);
     final fallbackQuery = _buildFallbackQuery(history, currentText, config.maxChunkTokens);
@@ -124,18 +164,22 @@ class LorebookVectorSearch {
     final allResults = <String, double>{};
     final allLorebookIds = <String, String>{};
 
-    if (focusedQuery.isNotEmpty) {
-      final focusedChunks = await _embeddingService.getEmbeddingsWithChunks(
-        [focusedQuery],
+    Future<void> searchPool(
+      List<VectorCandidate> pool,
+      String query,
+    ) async {
+      if (query.isEmpty || pool.isEmpty) return;
+      final chunks = await _embeddingService.getEmbeddingsWithChunks(
+        [query],
         config,
         cancelToken: cancelToken,
       );
-      final focusedVecChunks = focusedChunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
-      final focusedResults = findTopKMulti(focusedVecChunks, candidates, candidates.length, 0);
-      for (final r in focusedResults) {
+      final vecChunks = chunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
+      final results = findTopKMulti(vecChunks, pool, pool.length, 0);
+      for (final r in results) {
         final entry = r.metadata['entry'] as LorebookEntry;
         final hints = r.metadata['hints'] as List<String>;
-        final boosted = _applyHybridBoost(r.score, entry, hints, focusedQuery);
+        final boosted = _applyHybridBoost(r.score, entry, hints, query);
         if (allResults[entry.id] == null || boosted > allResults[entry.id]!) {
           allResults[entry.id] = boosted;
         }
@@ -143,22 +187,40 @@ class LorebookVectorSearch {
       }
     }
 
+    // Main vector pool (vectorSearch=true entries) — both focused and
+    // fallback queries if available.
+    if (focusedQuery.isNotEmpty) {
+      await searchPool(candidates, focusedQuery);
+    }
     if (fallbackQuery.isNotEmpty && fallbackQuery != focusedQuery) {
-      final fallbackChunks = await _embeddingService.getEmbeddingsWithChunks(
-        [fallbackQuery],
+      await searchPool(candidates, fallbackQuery);
+    }
+
+    // NEW (patch #4 follow-up): semantic fallback pool for keyless entries.
+    // Lower threshold (default 0.3) and smaller topK (default 3). Only run
+    // against the focused query — the fallback query is for broader recall
+    // on the main pool and would over-activate keyless entries.
+    // See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    final fallbackThreshold = settings.fallbackThreshold;
+    final fallbackTopK = settings.fallbackTopK;
+    final fallbackResults = <String, double>{};
+    final fallbackLorebookIds = <String, String>{};
+    if (focusedQuery.isNotEmpty && fallbackCandidates.isNotEmpty) {
+      final chunks = await _embeddingService.getEmbeddingsWithChunks(
+        [focusedQuery],
         config,
         cancelToken: cancelToken,
       );
-      final fallbackVecChunks = fallbackChunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
-      final fallbackResults = findTopKMulti(fallbackVecChunks, candidates, candidates.length, 0);
-      for (final r in fallbackResults) {
+      final vecChunks = chunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
+      final results = findTopKMulti(vecChunks, fallbackCandidates, fallbackCandidates.length, 0);
+      for (final r in results) {
         final entry = r.metadata['entry'] as LorebookEntry;
-        final hints = r.metadata['hints'] as List<String>;
-        final boosted = _applyHybridBoost(r.score, entry, hints, fallbackQuery);
-        if (allResults[entry.id] == null || boosted > allResults[entry.id]!) {
-          allResults[entry.id] = boosted;
+        // No hybrid boost for keyless entries — they have no keys to boost.
+        final score = r.score;
+        if (score >= fallbackThreshold) {
+          fallbackResults[entry.id] = score;
+          fallbackLorebookIds[entry.id] = r.metadata['lorebookId'] as String;
         }
-        allLorebookIds[entry.id] = r.metadata['lorebookId'] as String;
       }
     }
 
@@ -168,7 +230,7 @@ class LorebookVectorSearch {
     final sorted = allResults.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return sorted
+    final mainResults = sorted
         .where((e) => e.value >= threshold)
         .take(topK)
         .map((e) => VectorSearchResult(
@@ -177,6 +239,24 @@ class LorebookVectorSearch {
               lorebookId: allLorebookIds[e.key] ?? '',
             ))
         .toList();
+
+    // Merge fallback results into the final list. Take top fallbackTopK
+    // sorted by score, then dedupe against mainResults (entryId) so a
+    // keyless entry that also has vectorSearch=true is not double-counted.
+    final fallbackSorted = fallbackResults.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final mainIds = mainResults.map((r) => r.entryId).toSet();
+    final fallbackFinal = fallbackSorted
+        .where((e) => !mainIds.contains(e.key))
+        .take(fallbackTopK)
+        .map((e) => VectorSearchResult(
+              entryId: e.key,
+              score: e.value,
+              lorebookId: fallbackLorebookIds[e.key] ?? '',
+            ))
+        .toList();
+
+    return [...mainResults, ...fallbackFinal];
   }
 
   String _buildFocusedQuery(List<ChatMessageForSearch> history, String currentText, int maxChunkTokens) {

@@ -32,11 +32,30 @@ class LorebookEmbeddingService {
     bool rateLimited = false;
     int retryAfter = 0;
 
-    final vectorEntries = entries.where((e) => e.vectorSearch && e.enabled && !e.constant).toList();
+    // Index two pools of entries (Marinara analog for semantic fallback):
+    // (1) entries with vectorSearch=true — explicit opt-in to vector search.
+    // (2) keyless entries (no keys AND no secondaryKeys) — these cannot
+    //     activate via keyword scan, so we index them so the semantic-
+    //     fallback path in LorebookVectorSearch can activate them via
+    //     cosine similarity. Excluded entries (excludeFromVectorization)
+    //     are dropped from both pools and their existing embeddings are
+    //     purged. See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    final excluded = entries
+        .where((e) => e.excludeFromVectorization && e.enabled && !e.constant)
+        .toList();
+    for (final e in excluded) {
+      final namespacedId = '${lorebookId}_${e.id}';
+      await _repo.deleteByEntryId(namespacedId);
+    }
+    final indexable = entries.where((e) =>
+        e.enabled &&
+        !e.constant &&
+        !e.excludeFromVectorization &&
+        (e.vectorSearch || (e.keys.isEmpty && e.secondaryKeys.isEmpty))).toList();
 
-    for (int i = 0; i < vectorEntries.length; i++) {
-      final entry = vectorEntries[i];
-      onProgress?.call(i, vectorEntries.length, entry.comment.isNotEmpty ? entry.comment : entry.id);
+    for (int i = 0; i < indexable.length; i++) {
+      final entry = indexable[i];
+      onProgress?.call(i, indexable.length, entry.comment.isNotEmpty ? entry.comment : entry.id);
 
       final text = _getEmbeddingText(entry, config);
       final hints = extractRetrievalHints(entry);
@@ -91,8 +110,8 @@ class LorebookEmbeddingService {
         rateLimited = true;
         retryAfter = e.retryAfter;
 
-        for (int j = i + 1; j < vectorEntries.length; j++) {
-          final laterEntry = vectorEntries[j];
+        for (int j = i + 1; j < indexable.length; j++) {
+          final laterEntry = indexable[j];
           final laterText = _getEmbeddingText(laterEntry, config);
           final laterHash = computeHash(buildEmbeddingFingerprint(laterEntry, laterText));
           await _repo.putEmbeddingError(
