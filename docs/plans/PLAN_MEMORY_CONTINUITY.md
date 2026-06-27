@@ -120,10 +120,13 @@ Plus: `flutter analyze` clean + all existing tests green before each commit.
 
 ## 4. Out of Scope (follow-up patches, not in this PR)
 
-- `locked` flag on `MemoryEntry` (manual user protection from agent rewrite)
-- `buildHistoricalLorebookKeeperContext` analog (replay agent with historical slice at regen)
-- `chatSummaryFingerprint` analog for prompt-cache invalidation (relevant if/when we add Anthropic/DeepSeek prompt caching)
-- Per-day / per-week summary hierarchy (Marinara conversation mode)
-- `agentWriteApprovalRequired` per-chat flag (user review modal before agent writes)
-- `excludeFromVectorization` granular opt-out for spoiler entries
-- Vector embeddings on MemoryBook entries (semantic activation without keyword gate — Marinara's supplementary system 4)
+- `locked` flag on `MemoryEntry` (manual user protection from agent rewrite) — **DONE in follow-up commit `1d27d05`.**
+- `buildHistoricalLorebookKeeperContext` analog (replay agent with historical slice at regen) — **DONE in follow-up commit `4e8ab08`.**
+- `chatSummaryFingerprint` analog for prompt-cache invalidation (relevant if/when we add Anthropic/DeepSeek prompt caching) — **DONE in follow-up commit `567bdfd`.**
+- `excludeFromVectorization` granular opt-out for spoiler entries — **DONE in follow-up commit `1d27d05` (MemoryEntry) and `5e90398` (LorebookEntry).**
+- Vector embeddings on MemoryBook entries (semantic activation without keyword gate — Marinara's supplementary system 4) — **DONE in follow-up commit `5e90398` (semantic fallback for keyless lorebook entries).**
+- `agentWriteApprovalRequired` per-chat flag (user review modal before agent writes) — **DONE in follow-up commit `1bbd3db` (backend gate; agent writes land in pendingDrafts for review in existing MemoryBook UI).**
+
+### Cancelled
+
+- **Per-day / per-week summary hierarchy** (Marinara conversation mode). CANCELLED — does not fit roleplay use case. Roleplay chats are paused between sessions (the in-fiction timeline does not advance with wall-clock time), so bucketing memories by real-world day/week is meaningless. MemoryBook's existing chronological append-only structure already handles long conversations correctly. Marinara uses day/week only for its "Conversation" mode (Discord-style DMs), not for roleplay.
