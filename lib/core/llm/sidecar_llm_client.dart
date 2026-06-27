@@ -155,8 +155,39 @@ class SidecarLlmClient {
     );
   }
 
-  /// Resolves the effective timeout for the POST-cleaner, preferring
-  /// `postCleanerTimeoutMs` and falling back to `sidecarTimeoutMs`.
+  /// Resolves the API config for the POST-cleaner CHARACTER AUDIT pass
+  /// (Fix 2). Inherits endpoint / key / source / protocol from the cleaner
+  /// config, but the [PipelineSettings.postCleanerAuditModel] field overrides
+  /// the model when non-empty. Falls back to the cleaner-resolved model when
+  /// the audit model is empty.
+  ///
+  /// Reuses [resolveConfigForCleaner] for the endpoint/key/source/protocol
+  /// resolution, then swaps in the audit model. This keeps the two resolvers
+  /// in lockstep for every source branch (inherit → sidecar, custom, current).
+  Future<SidecarApiConfig> resolveConfigForAudit(
+    PipelineSettings settings, {
+    String errorLabel = 'post-cleaner-audit',
+  }) async {
+    final cleaner = await resolveConfigForCleaner(
+      settings,
+      errorLabel: errorLabel,
+    );
+    final auditModel = settings.postCleanerAuditModel.isNotEmpty
+        ? settings.postCleanerAuditModel
+        : cleaner.model;
+    if (auditModel != cleaner.model) {
+      debugPrint(
+        '[Sidecar] audit model override for $errorLabel '
+        'model=$auditModel (cleaner=${cleaner.model})',
+      );
+    }
+    return SidecarApiConfig(
+      endpoint: cleaner.endpoint,
+      apiKey: cleaner.apiKey,
+      model: auditModel,
+      protocol: cleaner.protocol,
+    );
+  }
   int resolveCleanerTimeout(PipelineSettings settings) {
     return settings.postCleanerTimeoutMs > 0
         ? settings.postCleanerTimeoutMs

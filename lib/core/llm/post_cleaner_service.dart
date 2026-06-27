@@ -478,7 +478,7 @@ class PostCleanerService {
     if (token.isCancelled) return null;
 
     try {
-      final config = await _llm.resolveConfigForCleaner(
+      final config = await _llm.resolveConfigForAudit(
         settings,
         errorLabel: 'post-cleaner-audit',
       );

@@ -60,6 +60,11 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default(false) bool postCleanerCharacterCheckEnabled,
     @Default(12) int postCleanerHistoryMessages,
     @Default(3000) int postCleanerMaxCharsPerMessage,
+    // Optional model override for the character/world audit pass. When empty,
+    // the audit inherits the cleaner's resolved model (Fix 2). Endpoint / key /
+    // source / protocol are always inherited from the cleaner config — only
+    // the model can differ.
+    @Default('') String postCleanerAuditModel,
 
     // ── Consolidation LLM ────────────────────────────────────────────────
     @Default(false) bool consolidationEnabled,

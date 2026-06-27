@@ -285,6 +285,24 @@ class _CleanerSection extends StatelessWidget {
             (p) => p.copyWith(postCleanerCharacterCheckEnabled: v),
           ),
         ),
+        if (pipeline.postCleanerCharacterCheckEnabled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'post_building_cleaner_audit_model_desc'.tr(),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ),
+        if (pipeline.postCleanerCharacterCheckEnabled)
+          _PipelineModelSelector(
+            labelKey: 'post_building_cleaner_audit_model',
+            model: pipeline.postCleanerAuditModel,
+            onModelChanged: (v) =>
+                onSaved((p) => p.copyWith(postCleanerAuditModel: v)),
+          ),
         _SourceSegment(
           source: pipeline.postCleanerSource,
           includeInherit: true,

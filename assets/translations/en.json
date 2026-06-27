@@ -1686,6 +1686,8 @@
     "post_building_cleaner_continuity_desc": "Includes recent chat history in the cleaner prompt for local continuity checks: who said what, positions, clothing, recent actions. No extra LLM call.",
     "post_building_cleaner_audit": "Character & world audit (extra sidecar call)",
     "post_building_cleaner_audit_desc": "Opt-in. A diagnostic sidecar pass checks the response against character card, persona, lorebooks, and memory. Returns contradictions that the cleaner then fixes.",
+    "post_building_cleaner_audit_model": "Audit model (optional)",
+    "post_building_cleaner_audit_model_desc": "Overrides only the audit model. Endpoint, key, source, and protocol are inherited from the cleaner. Empty = use the cleaner's model.",
     "post_building_cleaner_model": "Cleaner model",
     "post_building_cleaner_temperature": "Cleaner temperature",
     "post_building_cleaner_temperature_desc": "Lower = more faithful rewrite, higher = more creative. 0.3 default.",
