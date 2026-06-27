@@ -75,6 +75,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   Timer? _saveTimer;
   bool _loading = false;
 
+  /// WidgetRef captured in initState for safe use in dispose() (where the
+  /// widget is already unmounted and ref.read/watch throw
+  /// "Using ref when a widget is about to or has been unmounted is unsafe").
+  late final WidgetRef _ref;
+
   List<TextEditingController> get _ctrls => [
     _nameCtrl,
     _endpointCtrl,
@@ -91,6 +96,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _ref = ref;
     for (final c in _ctrls) {
       c.addListener(_scheduleSave);
     }
@@ -189,9 +195,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   }
 
   Future<void> _save() async {
-    final config = ref.read(activeApiConfigProvider);
+    final config = _ref.read(activeApiConfigProvider);
     if (config == null) return;
-    await ref
+    await _ref
         .read(apiListProvider.notifier)
         .put(
           config.copyWith(

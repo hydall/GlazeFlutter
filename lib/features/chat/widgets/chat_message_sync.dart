@@ -152,6 +152,14 @@ class ChatMessageSync {
       final studioOutputsChanged =
           o.studioOutputs.length != n.studioOutputs.length ||
           _studioOutputsDiffer(o.studioOutputs, n.studioOutputs);
+      // Badge fields: genTime/tokens can change without any other field moving
+      // (e.g. POST-cleaner finalizes a swipe that already streamed its content
+      // into the bubble, so content/isTyping are unchanged but the badge must
+      // update). Without these checks, updateMessage is skipped and the WebView
+      // keeps the stale (or null) badge until a session re-entry forces a full
+      // reload from DB.
+      final genTimeChanged = o.genTime != n.genTime;
+      final tokensChanged = o.tokens != n.tokens;
 
       final needsUpdate =
           contentChanged ||
@@ -164,7 +172,9 @@ class ChatMessageSync {
           errorChanged ||
           guidanceChanged ||
           greetingChanged ||
-          studioOutputsChanged;
+          studioOutputsChanged ||
+          genTimeChanged ||
+          tokensChanged;
 
       if (needsUpdate) {
         bridge.updateMessage(n);
