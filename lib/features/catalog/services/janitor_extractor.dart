@@ -220,7 +220,7 @@ class JanitorExtractor {
     final scripts = meta['scripts'];
     if (scripts is List) {
       final books = scripts
-          .whereType<Map>()
+          .whereType<Map<String, dynamic>>()
           .where((s) => s['type'] == 'lorebook')
           .map((s) =>
               '- ${s['title'] ?? ''}${s['description'] != null ? ': ${s['description']}' : ''}')

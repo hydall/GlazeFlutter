@@ -74,8 +74,8 @@ void main() {
     });
 
     test('getSystemContent returns empty for a payload without a system msg', () {
-      expect(getSystemContent({'messages': []}), '');
-      expect(getSystemContent(const {}), '');
+      expect(getSystemContent(<String, dynamic>{'messages': <dynamic>[]}), '');
+      expect(getSystemContent(const <String, dynamic>{}), '');
     });
   });
 }

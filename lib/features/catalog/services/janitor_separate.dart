@@ -4,12 +4,14 @@
 /// `generateAlpha` payload's system message. JanitorAI assembles
 /// `messages[0].content` (role: system) as:
 ///
-///   [ jailbreak / system prefix ]            <- leading bracketed block(s)
-///   <{{char}}'s Persona> ... </...Persona>   <- character card
-///   <UserPersona> ... </UserPersona>         <- user persona
-///   <Scenario> ... </Scenario>               <- scenario (optional)
-///   <Example...> ... </Example...>           <- example dialogue (optional)
-///   <triggered lorebook entries ...>         <- everything else (what we want)
+/// ```
+/// [ jailbreak / system prefix ]            <- leading bracketed block(s)
+/// <{{char}}'s Persona> ... </...Persona>   <- character card
+/// <UserPersona> ... </UserPersona>         <- user persona
+/// <Scenario> ... </Scenario>               <- scenario (optional)
+/// <Example...> ... </Example...>           <- example dialogue (optional)
+/// <triggered lorebook entries ...>         <- everything else (what we want)
+/// ```
 ///
 /// No Flutter / IO dependencies — this is the deterministic, unit-tested core
 /// of the extractor.
