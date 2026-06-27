@@ -1257,22 +1257,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                 ),
               ),
             ),
-            // POST-cleaner live status card. Shown after generation finishes
-            // while the cleaner is running.
-            Positioned(
-              left: 12,
-              right: 12,
-              top: messageListTop + memoryTopReserve,
-              child: const PostCleanerStatusCard(),
-            ),
-            // Studio tracker-cycle live status card. Shown during
-            // generation while Studio trackers / final generator are running.
-            Positioned(
-              left: 12,
-              right: 12,
-              top: messageListTop + memoryTopReserve + 56,
-              child: const StudioStatusCard(),
-            ),
             // Top gradient for fade effect under the header
             Positioned(
               top: 0,
@@ -1385,6 +1369,23 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                   ),
                 ),
               ),
+            // POST-cleaner live status card. Rendered AFTER the memory activity
+            // card so it sits ABOVE it in z-order — the Stop button must stay
+            // clickable even when the memory card is visible underneath.
+            Positioned(
+              left: 12,
+              right: 12,
+              top: messageListTop + memoryTopReserve,
+              child: const PostCleanerStatusCard(),
+            ),
+            // Studio tracker-cycle live status card. Shown during generation
+            // while Studio trackers / final generator are running.
+            Positioned(
+              left: 12,
+              right: 12,
+              top: messageListTop + memoryTopReserve + 56,
+              child: const StudioStatusCard(),
+            ),
             // Bottom panel: drawer + input bar
             Positioned.fill(
               child: Stack(

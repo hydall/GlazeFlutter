@@ -591,6 +591,21 @@ class GenerationPipeline {
         orElse: () => messages.last,
       );
 
+      // Guard: if the user deleted the assistant message between the
+      // generation finishing and the write-loop starting, the message no
+      // longer exists in the session. Writing trackers/memory for a deleted
+      // message would create orphaned entries tied to a non-existent
+      // messageId. Re-read the session and abort if the target is gone.
+      final currentSession = await ref.read(chatRepoProvider).getById(sessionId);
+      if (currentSession == null ||
+          !currentSession.messages.any((m) => m.id == lastAssistant.id)) {
+        debugPrint(
+          '[AgenticWrite] target message ${lastAssistant.id} no longer exists '
+          'in session $sessionId — aborting write-loop',
+        );
+        return;
+      }
+
       debugPrint(
         '[AgenticWrite] starting write-loop session=$sessionId '
         'model=${pipeline.sidecarModel.isEmpty ? "<chat>" : pipeline.sidecarModel} '
@@ -618,6 +633,42 @@ class GenerationPipeline {
         'memoriesWritten=${result.memoryResult?.written ?? 0} '
         'error=${result.error ?? "none"}',
       );
+
+      // Post-write guard: the user may have deleted the assistant message
+      // WHILE the write-loop was running (it can take 60s+). If so, the
+      // trackers and memory entries just written are now orphaned — tied to
+      // a messageId that no longer exists. Clean them up so the UI doesn't
+      // show stale state for a deleted turn.
+      if (result.status == 'ok' && ref.mounted) {
+        final postCheck = await ref.read(chatRepoProvider).getById(sessionId);
+        if (postCheck == null ||
+            !postCheck.messages.any((m) => m.id == lastAssistant.id)) {
+          debugPrint(
+            '[AgenticWrite] message ${lastAssistant.id} deleted during '
+            'write-loop — purging orphaned trackers + memory',
+          );
+          await ref
+              .read(memoryBookRepoProvider)
+              .deleteForMessage(sessionId, lastAssistant.id)
+              .catchError((Object _) {});
+          await ref
+              .read(trackerSnapshotRepoProvider)
+              .deleteForMessage(sessionId, lastAssistant.id)
+              .catchError((Object _) {});
+          final snapshot = await ref
+              .read(trackerSnapshotRepoProvider)
+              .getLatestCommitted(sessionId);
+          if (snapshot == null) {
+            await ref
+                .read(trackerRepoProvider)
+                .clearForSession(sessionId);
+          } else {
+            await ref
+                .read(trackerRepoProvider)
+                .replaceForSession(sessionId, snapshot.trackers);
+          }
+        }
+      }
 
       // Record the agentic write-loop in the operations log so the user
       // can inspect retries (e.g. 502 → 200) from the Agentic Ops UI.
@@ -1063,6 +1114,32 @@ class GenerationPipeline {
       // genTime/tokens wiring is from Phase 1 (Fix 3 + Fix 4): per-swipe badge
       // carrying the cleaner's own elapsed time + the cleaned text's token
       // estimate so the badge doesn't disappear on the blue sub-swipe.
+
+      // Guard: if the user deleted the message while the cleaner was running,
+      // lastAssistant.id no longer exists in the session. Applying the cleaned
+      // swipe now would either fail silently or attach to the wrong message
+      // (e.g. the previous assistant turn). Re-read the session and abort if
+      // the target message is gone.
+      final currentSession = await ref.read(chatRepoProvider).getById(sessionId);
+      if (currentSession == null ||
+          !currentSession.messages.any((m) => m.id == lastAssistant!.id)) {
+        debugPrint(
+          '[PostCleaner] target message ${lastAssistant.id} no longer exists '
+          'in session $sessionId — aborting cleaner apply',
+        );
+        if (_preCreatedCleanerSwipeId >= 0) {
+          try {
+            await ref.read(chatRepoProvider).removeAgentSwipe(
+              sessionId: sessionId,
+              messageId: lastAssistant.id,
+              agentSwipeId: _preCreatedCleanerSwipeId,
+            );
+          } catch (_) {}
+        }
+        ref.read(postCleanerStateProvider.notifier).state =
+            const PostCleanerState.idle();
+        return;
+      }
 
       final genTime =
           '${(result.totalElapsedMs / 1000).toStringAsFixed(1)}s';
