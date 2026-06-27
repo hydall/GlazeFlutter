@@ -1,6 +1,6 @@
 import '../models/studio_config.dart';
-import 'memory_studio_service.dart' show StudioStageBrief;
 import 'studio_brief_parser.dart';
+import 'studio_stage_brief.dart';
 
 /// Cross-brief dedup + meta-policy sanitization for the final-stage briefs,
 /// extracted from `MemoryStudioService` (plan §2).

@@ -1,5 +1,4 @@
 ﻿import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -8,18 +7,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/api_config.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
-import '../utils/cast_helpers.dart';
 import '../utils/error_format.dart';
 import 'agent_runner.dart';
 import 'history_assembler.dart';
 import 'macro_engine.dart';
 import 'prompt_builder.dart';
 import 'studio_activation_gate.dart';
+import 'studio_brief_cache.dart';
 import 'studio_brief_deduper.dart';
 import 'studio_brief_parser.dart';
 import 'studio_context_bucketizer.dart';
 import 'studio_prompt_text.dart';
 import 'studio_request_preset.dart';
+import 'studio_stage_brief.dart';
 import 'tracker_batcher.dart';
 
 // Re-export so existing importers of `AgentPhaseSplit` via this file (e.g.
@@ -35,11 +35,11 @@ export 'studio_activation_gate.dart' show AgentPhaseSplit;
 /// compact briefs; the last enabled agent produces the actual RP response.
 class MemoryStudioService {
   final Ref _ref;
-  final Map<String, _CachedStudioBrief> _briefCache = {};
   final StudioPromptText _promptText = const StudioPromptText();
   final StudioContextBucketizer _bucketizer = const StudioContextBucketizer();
   late final StudioBriefParser _briefParser = StudioBriefParser(_log);
   late final StudioBriefDeduper _briefDeduper = StudioBriefDeduper(_briefParser);
+  late final StudioBriefCache _briefCache = StudioBriefCache(_briefParser);
 
   MemoryStudioService(this._ref);
 
@@ -113,8 +113,8 @@ class MemoryStudioService {
       final preGenTrackers = split.preGenTrackers;
       final postGenTrackers = split.postGenTrackers;
 
-      final sceneKey = _sceneCacheKey(promptPayload);
-      final turnIndex = _assistantTurnCount(promptPayload);
+      final sceneKey = _briefCache.sceneCacheKey(promptPayload);
+      final turnIndex = _briefCache.assistantTurnCount(promptPayload);
 
       // Phase 5.4 — runInterval: skip trackers whose interval doesn't fire
       // this turn. Final generator always runs.
@@ -141,9 +141,9 @@ class MemoryStudioService {
       // final briefs directly; misses go to the batcher.
       final cachedBriefs = <StudioStageBrief>[];
       final fetchTrackers = <StudioAgent>[];
-      final cacheProbeByAgent = <String, _CacheProbe>{};
+      final cacheProbeByAgent = <String, CacheProbe>{};
       for (final agent in dueTrackers) {
-        final probe = _probeCache(
+        final probe = _briefCache.probeCache(
           agent: agent,
           config: config,
           promptPayload: promptPayload,
@@ -206,12 +206,12 @@ class MemoryStudioService {
           status: result.status,
           error: result.error,
           refreshPolicy: probe?.policy ?? 'turn',
-          cacheKey: _isCacheablePolicy(probe?.policy ?? 'turn')
+          cacheKey: _briefCache.isCacheablePolicy(probe?.policy ?? 'turn')
               ? probe?.cacheKey
               : null,
           cacheHit: false,
         );
-        _persistCacheIfCacheable(
+        _briefCache.persistCacheIfCacheable(
           agent: agent,
           brief: brief,
           cacheKey: probe?.cacheKey ?? '',
@@ -331,73 +331,6 @@ class MemoryStudioService {
       _log('tracker cycle error session=$sessionId error=$e');
       return StudioPipelineResult(status: 'error', response: '', error: '$e');
     }
-  }
-
-  /// Cache probe result for one tracker. [hit] = true when a usable cached
-  /// brief exists for this turn; [brief] carries the sanitized cached brief.
-  /// Used by `runTrackerCycle` to split trackers into cached (skip LLM) vs.
-  /// batchable/individual before invoking `TrackerBatcher`.
-  _CacheProbe _probeCache({
-    required StudioAgent agent,
-    required StudioConfig config,
-    required PromptPayload promptPayload,
-    required String sceneKey,
-    required int turnIndex,
-  }) {
-    final policy = _effectiveRefreshPolicy(agent);
-    final cacheKey = _cacheKeyForAgent(
-      config: config,
-      agent: agent,
-      policy: policy,
-      sceneKey: sceneKey,
-    );
-    final cached = _usableCachedBrief(
-      cacheKey: cacheKey,
-      policy: policy,
-      sceneChanged: _lastUserMessageSuggestsSceneChange(promptPayload),
-      turnIndex: turnIndex,
-    );
-    if (cached != null) {
-      final sanitizedCachedBrief = _briefParser.sanitizeIntermediateAgentOutput(
-        agent,
-        cached.brief,
-      );
-      return _CacheProbe(
-        hit: true,
-        policy: policy,
-        cacheKey: cacheKey,
-        brief: StudioStageBrief(
-          agentId: agent.id,
-          agentName: agent.name,
-          brief: sanitizedCachedBrief,
-          status: 'cached',
-          refreshPolicy: policy,
-          cacheKey: cacheKey,
-          cacheHit: true,
-        ),
-      );
-    }
-    return _CacheProbe(hit: false, policy: policy, cacheKey: cacheKey);
-  }
-
-  /// Persist a freshly-fetched brief into `_briefCache` if its refresh policy
-  /// is cacheable and the run was successful.
-  void _persistCacheIfCacheable({
-    required StudioAgent agent,
-    required StudioStageBrief brief,
-    required String cacheKey,
-    required String policy,
-    required int turnIndex,
-    required CancelToken cancelToken,
-  }) {
-    if (cancelToken.isCancelled) return;
-    if (brief.status != 'ok') return;
-    if (!_isCacheablePolicy(policy)) return;
-    _briefCache[cacheKey] = _CachedStudioBrief(
-      brief: brief.brief,
-      policy: policy,
-      createdTurnIndex: turnIndex,
-    );
   }
 
   /// Delegate the actual LLM call to [AgentRunner]. This method still
@@ -1208,126 +1141,6 @@ class MemoryStudioService {
     return allowed.contains(role) ? role : 'system';
   }
 
-  String _normalizeRefreshPolicy(String policy) {
-    return switch (policy.trim().toLowerCase()) {
-      'static' || 'scene' || 'turn' => policy.trim().toLowerCase(),
-      _ => 'turn',
-    };
-  }
-
-  String _effectiveRefreshPolicy(StudioAgent agent) {
-    final policy = _normalizeRefreshPolicy(agent.refreshPolicy);
-    if (policy != 'turn' || agent.invalidationSignals.isNotEmpty) {
-      return policy;
-    }
-
-    final text = [
-      agent.name,
-      agent.sourceBlockNames,
-      agent.promptShard,
-    ].join('\n').toLowerCase();
-    if (RegExp(
-      r'ban|banned|forbidden|clich|клиш|запрет|forbidden words',
-      caseSensitive: false,
-    ).hasMatch(text)) {
-      return 'static';
-    }
-    if (RegExp(
-      r'lumia|ghost in the machine',
-      caseSensitive: false,
-    ).hasMatch(text)) {
-      return 'scene';
-    }
-    if (RegExp(
-      r'last\s+3|recent chat|last beat|last user|continuity|memory|current scene|anti-loop|anti-echo',
-      caseSensitive: false,
-    ).hasMatch(text)) {
-      return 'turn';
-    }
-    if (RegExp(
-      r'tone|genre|style|romantic|fluff|comfort|lumia|ghost|director',
-      caseSensitive: false,
-    ).hasMatch(text)) {
-      return 'scene';
-    }
-    return policy;
-  }
-
-  bool _isCacheablePolicy(String policy) =>
-      policy == 'static' || policy == 'scene';
-
-  _CachedStudioBrief? _usableCachedBrief({
-    required String cacheKey,
-    required String policy,
-    required bool sceneChanged,
-    required int turnIndex,
-  }) {
-    if (!_isCacheablePolicy(policy)) return null;
-    if (policy == 'scene' && sceneChanged) return null;
-    final cached = _briefCache[cacheKey];
-    if (cached == null) return null;
-    if (policy == 'scene' && turnIndex - cached.createdTurnIndex >= 4) {
-      return null;
-    }
-    return cached;
-  }
-
-  String _cacheKeyForAgent({
-    required StudioConfig config,
-    required StudioAgent agent,
-    required String policy,
-    required String sceneKey,
-  }) {
-    final base = <String, dynamic>{
-      'v': 1,
-      'profileId': config.profileId,
-      'sourcePresetHash': config.sourcePresetHash,
-      'configUpdatedAt': config.updatedAt,
-      'agentId': agent.id,
-      'promptShard': agent.promptShard,
-      'sourceBlockNames': agent.sourceBlockNames,
-      'refreshPolicy': policy,
-      'invalidationSignals': agent.invalidationSignals,
-      'agentPreset': config.agentStudioPresetId,
-      'finalPreset': config.finalStudioPresetId,
-      if (policy == 'scene') 'sceneKey': sceneKey,
-    };
-    return computeHash(jsonEncode(base));
-  }
-
-  String _sceneCacheKey(PromptPayload payload) {
-    final summary = payload.summaryContent?.trim() ?? '';
-    final authorsNote = payload.authorsNote?.content.trim() ?? '';
-    final recentAssistants = payload.history
-        .where((m) => m.role == 'assistant')
-        .length;
-    return computeHash(
-      jsonEncode({
-        'characterId': payload.character.id,
-        'personaId': payload.persona?.id ?? '',
-        'summary': summary,
-        'authorsNote': authorsNote,
-        'assistantBucket': recentAssistants ~/ 4,
-      }),
-    );
-  }
-
-  int _assistantTurnCount(PromptPayload payload) {
-    return payload.history.where((m) => m.role == 'assistant').length;
-  }
-
-  bool _lastUserMessageSuggestsSceneChange(PromptPayload payload) {
-    for (final message in payload.history.reversed) {
-      if (message.role != 'user') continue;
-      final text = message.content.toLowerCase();
-      return RegExp(
-        r'\b(new scene|next scene|time skip|timeskip|later|meanwhile|the next day|next morning|новая сцена|следующая сцена|позже|тем временем|на следующий день|утром|вечером|ночью|перенес[её]мся)\b',
-        caseSensitive: false,
-      ).hasMatch(text);
-    }
-    return false;
-  }
-
   /// Keyword-activation gate for trackers (Marinara
   /// `agent-activation.ts:matchCustomAgentActivation` port). Returns true
   /// if at least one of [keywords] appears (case-insensitive substring
@@ -1425,75 +1238,3 @@ class _FinalRunResult {
     this.rawResponseJson,
   });
 }
-
-class StudioStageBrief {
-  final String agentId;
-  final String agentName;
-  final String brief;
-  final String status;
-  final String? error;
-  final String refreshPolicy;
-  final String? cacheKey;
-  final bool cacheHit;
-
-  const StudioStageBrief({
-    required this.agentId,
-    required this.agentName,
-    required this.brief,
-    this.status = 'ok',
-    this.error,
-    this.refreshPolicy = 'turn',
-    this.cacheKey,
-    this.cacheHit = false,
-  });
-
-  StudioStageBrief copyWithCacheMetadata({
-    required String refreshPolicy,
-    String? cacheKey,
-    bool cacheHit = false,
-  }) {
-    return StudioStageBrief(
-      agentId: agentId,
-      agentName: agentName,
-      brief: brief,
-      status: status,
-      error: error,
-      refreshPolicy: refreshPolicy,
-      cacheKey: cacheKey,
-      cacheHit: cacheHit,
-    );
-  }
-}
-
-class _CachedStudioBrief {
-  final String brief;
-  final String policy;
-  final int createdTurnIndex;
-
-  const _CachedStudioBrief({
-    required this.brief,
-    required this.policy,
-    required this.createdTurnIndex,
-  });
-}
-
-/// Result of probing `_briefCache` for one tracker before batching.
-class _CacheProbe {
-  final bool hit;
-  final String policy;
-  final String cacheKey;
-  final StudioStageBrief? brief;
-
-  const _CacheProbe({
-    required this.hit,
-    required this.policy,
-    required this.cacheKey,
-    this.brief,
-  });
-}
-
-
-
-
-
-
