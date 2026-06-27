@@ -31,7 +31,6 @@ import 'memory_needs_classifier_service.dart';
 import 'memory_selector.dart';
 import 'memory_sidecar_prewarm_cache.dart';
 import 'memory_sidecar_reranker_service.dart';
-import 'memory_agentic_service.dart';
 import 'retrieval_query_builder.dart';
 import 'vector_math.dart';
 
@@ -87,7 +86,6 @@ class MemoryInjectionService {
   final MemoryNeedsClassifierService? _classifierService;
   final MemorySidecarRerankerService? _sidecarService;
   final MemorySidecarPrewarmCache? _prewarmCache;
-  final MemoryAgenticService? _agenticService;
 
   MemoryInjectionService(
     this._repo,
@@ -101,7 +99,6 @@ class MemoryInjectionService {
     this._classifierService,
     this._sidecarService,
     this._prewarmCache,
-    this._agenticService,
   });
 
   /// Build injection candidates + diagnostics. Returns the raw selection
@@ -319,7 +316,6 @@ class MemoryInjectionService {
     MemoryClassifierResult? classifierResult = const MemoryClassifierResult(status: 'disabled');
     MemorySidecarResult? sidecarResult;
     var prewarmHit = false;
-    MemoryAgenticResult? agenticResult;
 
     // Balanced mode: classifier for missing-context detection
     if (book.settings.memoryMode == 'balanced' &&
@@ -425,9 +421,6 @@ class MemoryInjectionService {
       sidecarStatus: sidecarResult?.status,
       sidecarLatencyMs: sidecarResult?.totalElapsedMs,
       sidecarAttempts: sidecarResult?.attempts ?? const [],
-      agenticStatus: agenticResult?.status,
-      agenticAttempts: agenticResult?.attempts ?? const [],
-      agenticLatencyMs: agenticResult?.totalElapsedMs,
       prewarmHit: prewarmHit,
     );
   }
@@ -865,7 +858,6 @@ final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
     classifierService: ref.watch(memoryClassifierServiceProvider),
     sidecarService: ref.watch(memorySidecarRerankerServiceProvider),
     prewarmCache: ref.watch(memorySidecarPrewarmCacheProvider),
-    agenticService: ref.watch(memoryAgenticServiceProvider),
   );
 });
 

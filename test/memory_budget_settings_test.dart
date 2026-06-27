@@ -8,7 +8,6 @@ import 'package:glaze_flutter/core/models/memory_book.dart';
 import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 import 'package:glaze_flutter/core/state/db_provider.dart';
 import 'package:glaze_flutter/core/state/memory_settings_provider.dart';
-import 'package:glaze_flutter/core/state/pipeline_settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

@@ -174,32 +174,19 @@ void main() {
     // The trigger in GenerationPipeline is guarded by:
     //   regenTargetId == null && postCleanerEnabled
     // (no studio-final term — that path was removed).
+    bool cleanerTriggers(String? regenTargetId, bool postCleanerEnabled) =>
+        regenTargetId == null && postCleanerEnabled;
 
     test('normal send with postCleanerEnabled → triggers', () {
-      const String? regenTargetId = null;
-      const bool postCleanerEnabled = true;
-      expect(
-        regenTargetId == null && postCleanerEnabled,
-        isTrue,
-      );
+      expect(cleanerTriggers(null, true), isTrue);
     });
 
     test('normal send without postCleanerEnabled → does not trigger', () {
-      const String? regenTargetId = null;
-      const bool postCleanerEnabled = false;
-      expect(
-        regenTargetId == null && postCleanerEnabled,
-        isFalse,
-      );
+      expect(cleanerTriggers(null, false), isFalse);
     });
 
     test('regen → does not trigger (regenTargetId != null)', () {
-      const String regenTargetId = 'msg_123';
-      const bool postCleanerEnabled = true;
-      expect(
-        regenTargetId == null && postCleanerEnabled,
-        isFalse,
-      );
+      expect(cleanerTriggers('msg_123', true), isFalse);
     });
   });
 

@@ -46,8 +46,9 @@ class SyncConflictDetector {
       case 'chat':
         final idx =
             localEntity?['sessionIndex'] ?? cloudEntity?['sessionIndex'];
-        if (characterName != null && idx != null)
+        if (characterName != null && idx != null) {
           return '$characterName — Chat #$idx';
+        }
         if (characterName != null) return characterName;
         final charId =
             localEntity?['characterId'] ?? cloudEntity?['characterId'];

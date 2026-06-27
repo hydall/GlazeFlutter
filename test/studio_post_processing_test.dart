@@ -18,7 +18,7 @@ final _refCaptureProvider = Provider<Ref>((ref) => ref);
 /// a live API config. All other methods are inherited unchanged and are not
 /// called by these tests.
 class _FakeAgentRunner extends AgentRunner {
-  _FakeAgentRunner(Ref ref) : super(ref);
+  _FakeAgentRunner(super.ref);
 
   @override
   Future<ResolvedAgentConfig> resolveAgentConfig(

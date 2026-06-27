@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:glaze_flutter/features/chat/state/studio_cycle_state_provider.dart';
@@ -27,7 +27,7 @@ void main() {
         totalAgents: 3,
         completedAgents: 2,
         failedAgents: 1,
-        failedAgentNames: const ['lorebook'],
+        failedAgentNames: ['lorebook'],
       );
       expect(s.isActive, isTrue);
       expect(s.completedAgents, 2);
@@ -41,7 +41,7 @@ void main() {
         totalAgents: 3,
         completedAgents: 3,
         failedAgents: 0,
-        failedAgentNames: const [],
+        failedAgentNames: [],
       );
       expect(s.isDone, isTrue);
       expect(s.isActive, isFalse);
@@ -53,7 +53,7 @@ void main() {
         totalAgents: 3,
         completedAgents: 1,
         failedAgents: 2,
-        failedAgentNames: const ['expression', 'lorebook'],
+        failedAgentNames: ['expression', 'lorebook'],
       );
       expect(s.isDone, isTrue);
       expect(s.isError, isFalse);
@@ -94,7 +94,7 @@ void main() {
         totalAgents: 2,
         completedAgents: 2,
         failedAgents: 0,
-        failedAgentNames: const [],
+        failedAgentNames: [],
       );
       expect(
         container.read(studioCycleStateProvider).phase,

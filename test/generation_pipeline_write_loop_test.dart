@@ -110,15 +110,14 @@ void main() {
     // paths never invoke _runAgenticWriteLoop.
     //
     // These tests verify the guard condition itself.
+    bool writeLoopTriggers(String? regenTargetId) => regenTargetId == null;
 
     test('normal send (regenTargetId=null) → triggers', () {
-      const String? regenTargetId = null;
-      expect(regenTargetId == null, isTrue);
+      expect(writeLoopTriggers(null), isTrue);
     });
 
     test('regen (regenTargetId != null) → suppresses', () {
-      const String regenTargetId = 'msg_123';
-      expect(regenTargetId == null, isFalse);
+      expect(writeLoopTriggers('msg_123'), isFalse);
     });
   });
 }

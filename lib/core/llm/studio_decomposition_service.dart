@@ -52,6 +52,7 @@ class _ControllerSpec {
     // the field is here so the decomposition engine CAN produce
     // post-processing agents when such specs are added without touching the
     // spec class again. See docs/PLAN_AGENTIC_STUDIO.md §5.7.1 + Feature 6.
+    // ignore: unused_element_parameter
     this.phase = 'pre_generation',
   });
 }

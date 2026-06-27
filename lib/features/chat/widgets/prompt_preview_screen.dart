@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
 
 import '../../../core/llm/history_assembler.dart';
-import '../../../core/llm/memory_studio_service.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
@@ -18,7 +17,6 @@ import '../../../core/llm/transport/openai_chat_transport.dart';
 import '../../../core/llm/transport/openrouter_chat_transport.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/api_config.dart';
-import '../../../core/state/memory_agent_providers.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/glaze_tab_bar.dart';

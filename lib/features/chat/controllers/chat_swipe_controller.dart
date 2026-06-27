@@ -53,8 +53,9 @@ class ChatSwipeController {
     bool fromSwipe = false,
   }) async {
     final current = _getState().value;
-    if (current == null || current.session == null || current.isGenerating)
+    if (current == null || current.session == null || current.isGenerating) {
       return;
+    }
     if (messageIndex < 0 || messageIndex >= current.messages.length) return;
 
     final isLast = messageIndex == current.messages.length - 1;
@@ -109,8 +110,9 @@ class ChatSwipeController {
 
   Future<void> setGreeting(int messageIndex, int direction) async {
     final current = _getState().value;
-    if (current == null || current.session == null || current.isGenerating)
+    if (current == null || current.session == null || current.isGenerating) {
       return;
+    }
     if (messageIndex != 0) return;
     if (messageIndex >= current.messages.length) return;
     final msg = current.messages[messageIndex];

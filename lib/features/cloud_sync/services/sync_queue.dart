@@ -97,10 +97,12 @@ class SyncQueue {
     final msg = e.toString();
     if (msg.contains('429')) return true;
     if (msg.contains('5') && RegExp(r'5\d\d').hasMatch(msg)) return true;
-    if (msg.contains('SocketException') || msg.contains('TimeoutException'))
+    if (msg.contains('SocketException') || msg.contains('TimeoutException')) {
       return true;
-    if (msg.contains('HttpException') || msg.contains('Connection closed'))
+    }
+    if (msg.contains('HttpException') || msg.contains('Connection closed')) {
       return true;
+    }
     if (msg.contains('Sync queue aborted')) return false;
     if (msg.contains('4') && RegExp(r'4\d\d').hasMatch(msg)) return false;
     return false;
