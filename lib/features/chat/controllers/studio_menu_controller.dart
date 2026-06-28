@@ -137,7 +137,10 @@ class StudioMenuController {
     _config = updated;
   }
 
-  Future<void> setAgentPromptShard(StudioAgent agent, String shard) async {
+  Future<void> setAgentPromptShard(
+    StudioAgent agent,
+    List<PromptShardBlock> shard,
+  ) async {
     final repo = _ref.read(studioConfigRepoProvider);
     final current = _config;
     if (current == null) return;

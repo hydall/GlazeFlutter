@@ -76,6 +76,28 @@ abstract class StudioPresetOverride with _$StudioPresetOverride {
       _$StudioPresetOverrideFromJson(json);
 }
 
+/// One structured block inside an agent's [StudioAgent.promptShard].
+///
+/// At build time, `_synthesizeRoutedShard` produces one [PromptShardBlock] per
+/// assigned preset block (preserving `blockName` / `blockId` / `role`), so
+/// `buildAgentMessages` can emit each block as a SEPARATE API system message
+/// instead of one concatenated blob. This gives the provider's prompt cache a
+/// long stable prefix (char_card / persona / scenario never change between
+/// turns; only the last volatile block invalidates) and lets the LLM navigate
+/// the shard structure. See docs/plans/PLAN_STUDIO_SHARD_BLOCKS.md.
+@freezed
+abstract class PromptShardBlock with _$PromptShardBlock {
+  const factory PromptShardBlock({
+    @Default('system') String role,
+    @Default('') String content,
+    @Default('') String blockName,
+    @Default('') String blockId,
+  }) = _PromptShardBlock;
+
+  factory PromptShardBlock.fromJson(Map<String, dynamic> json) =>
+      _$PromptShardBlockFromJson(json);
+}
+
 @freezed
 abstract class StudioPresetBlock with _$StudioPresetBlock {
   const factory StudioPresetBlock({
@@ -106,7 +128,7 @@ abstract class StudioAgent with _$StudioAgent {
     required String id,
     @Default('') String name,
     @Default('') String role,
-    @Default('') String promptShard,
+    @Default([]) List<PromptShardBlock> promptShard,
     @Default(0) int order,
     @Default(true) bool enabled,
     @Default('current') String modelSource,

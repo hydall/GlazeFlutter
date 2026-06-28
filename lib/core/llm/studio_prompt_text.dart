@@ -114,7 +114,7 @@ Rules:
     final sources = config.agents
         .map(
           (agent) =>
-              '${agent.name}\n${agent.sourceBlockNames}\n${agent.promptShard}',
+              '${agent.name}\n${agent.sourceBlockNames}\n${agent.promptShard.map((s) => s.content).join('\n\n')}',
         )
         .join('\n\n');
     final rules = <String>[];

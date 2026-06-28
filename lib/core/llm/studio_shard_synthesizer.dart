@@ -27,7 +27,7 @@ class StudioShardSynthesizer {
 
   StudioShardSynthesizer(this._buildLlm, this._log);
 
-  Future<String> synthesizePromptShard({
+  Future<List<PromptShardBlock>> synthesizePromptShard({
     required StudioControllerSpec spec,
     required List<PresetBlock> blocks,
     ApiConfig? apiConfig,
@@ -36,11 +36,13 @@ class StudioShardSynthesizer {
     CancelToken? cancelToken,
     bool lumiaActive = false,
   }) async {
-    if (blocks.isEmpty && !lumiaActive) return spec.fallbackPrompt;
+    if (blocks.isEmpty && !lumiaActive) {
+      return [PromptShardBlock(content: spec.fallbackPrompt)];
+    }
 
-    // Stage 3: verbatim routing — concatenate blocks directly, no LLM call.
-    // The preset is the source of truth; the agent sees its assigned blocks
-    // дословно. See docs/PLAN_AGENTIC_STUDIO.md §11.
+    // Stage 3: verbatim routing — emit one PromptShardBlock per preset block,
+    // no LLM call. The preset is the source of truth; the agent sees its
+    // assigned blocks дословно. See docs/PLAN_AGENTIC_STUDIO.md §11.
     if (routingMode == 'verbatim') {
       return _synthesizeRoutedShard(
         spec: spec,
@@ -49,7 +51,7 @@ class StudioShardSynthesizer {
       );
     }
 
-    // Legacy: LLM-compiled shard (переваривание).
+    // Legacy: LLM-compiled shard (переваривание) — produces a single block.
     final prompt = _buildControllerPrompt(
       spec: spec,
       blocks: blocks,
@@ -63,7 +65,9 @@ class StudioShardSynthesizer {
       );
       final text = raw?.trim() ?? '';
       final cleaned = _stripMarkdownFence(text);
-      if (cleaned.isNotEmpty && !_isBuilderRefusal(cleaned)) return cleaned;
+      if (cleaned.isNotEmpty && !_isBuilderRefusal(cleaned)) {
+        return [PromptShardBlock(content: cleaned)];
+      }
       if (cleaned.isNotEmpty) {
         _log('controller build refusal name="${spec.name}"; using fallback');
       }
@@ -73,52 +77,80 @@ class StudioShardSynthesizer {
       if (CancelToken.isCancel(e)) rethrow;
       _log('controller build error name="${spec.name}" error=$e');
     }
-    return '${spec.fallbackPrompt}\n\nSource blocks: ${sourceBlockNames(blocks)}';
+    return [
+      PromptShardBlock(
+        content:
+            '${spec.fallbackPrompt}\n\nSource blocks: ${sourceBlockNames(blocks)}',
+      ),
+    ];
   }
 
-  /// Stage 3: Verbatim routing — produces the promptShard by concatenating
-  /// assigned preset blocks дословно, without any LLM compilation.
+  /// Stage 3: Verbatim routing — produces one [PromptShardBlock] per assigned
+  /// preset block дословно, without any LLM compilation.
   ///
-  /// Each block is emitted with a header `[Block: <name>]` followed by its
-  /// content. Blocks are in preset order (priority = position in preset, §12).
-  /// A conflict-resolution footer is appended: "при конфликте следуй последнему
-  /// блоку".
+  /// Each block preserves its `role`, `blockName`, and `blockId` from the
+  /// preset, so `buildAgentMessages` can emit each as a SEPARATE API system
+  /// message (cache-friendly, structured). Blocks are in preset order
+  /// (priority = position in preset, §12). A conflict-resolution footer block
+  /// is appended: "при конфликте следуй последнему блоку". Lumia suffixes
+  /// (counting duty / compact contract) become their own blocks.
   ///
   /// This makes the preset the direct source of truth for the agent — no
   /// intermediary LLM distorts the user's instructions. See
-  /// docs/PLAN_AGENTIC_STUDIO.md §11.
-  String _synthesizeRoutedShard({
+  /// docs/PLAN_AGENTIC_STUDIO.md §11 + docs/plans/PLAN_STUDIO_SHARD_BLOCKS.md.
+  List<PromptShardBlock> _synthesizeRoutedShard({
     required StudioControllerSpec spec,
     required List<PresetBlock> blocks,
     bool lumiaActive = false,
   }) {
-    final parts = <String>[];
+    final shardBlocks = <PromptShardBlock>[];
     for (final block in blocks) {
-      final name = block.name.isNotEmpty ? block.name : block.id;
       final content = block.content.trim();
       if (content.isEmpty) continue;
-      parts.add('[Block: $name]\n$content');
+      shardBlocks.add(
+        PromptShardBlock(
+          role: block.role.isNotEmpty ? block.role : 'system',
+          content: content,
+          blockName: block.name.isNotEmpty ? block.name : block.id,
+          blockId: block.id,
+        ),
+      );
     }
-    if (parts.isEmpty && !lumiaActive) return spec.fallbackPrompt;
 
-    final body = parts.join('\n\n---\n\n');
     // Conflict resolution footer (§12): when two blocks contradict, the one
     // later in the preset wins (higher priority = closer to the end).
-    const conflictFooter =
-        '\n\n---\n\n[Conflict resolution: if two blocks above contradict each '
-        'other, follow the one that appears LAST.]';
+    shardBlocks.add(
+      const PromptShardBlock(
+        content:
+            '[Conflict resolution: if two blocks above contradict each other, '
+            'follow the one that appears LAST.]',
+        blockName: 'Conflict resolution',
+      ),
+    );
 
     // Lumia architecture (plan §Part A/B): the Meta-Weaver counts turns and
     // emits a brief; the Main Responder writes the actual `<lumiaooc>` reply
     // guided by a COMPACT contract (format + voice), not the full
     // `<lumia_ghost>` block (which lives in Meta-Weaver's shard).
-    final lumiaSuffix = lumiaActive
-        ? (spec.id == 'meta'
-            ? _metaWeaverCountingDuty
-            : (spec.id == 'final' ? _mainResponderLumiaContract : ''))
-        : '';
+    if (lumiaActive) {
+      if (spec.id == 'meta') {
+        shardBlocks.add(
+          const PromptShardBlock(
+            content: _metaWeaverCountingDuty,
+            blockName: 'Lumia counting duty',
+          ),
+        );
+      } else if (spec.id == 'final') {
+        shardBlocks.add(
+          const PromptShardBlock(
+            content: _mainResponderLumiaContract,
+            blockName: 'Lumia output contract',
+          ),
+        );
+      }
+    }
 
-    return '$body$conflictFooter$lumiaSuffix';
+    return shardBlocks;
   }
 
   /// Appended to the Meta-Weaver's shard when a `<lumia_ghost>` block is
@@ -126,7 +158,7 @@ class StudioShardSynthesizer {
   /// assistant messages, apply the period rule from the block, and emit a
   /// brief — NOT the actual `<lumiaooc>` reply (the Main Responder writes
   /// that). See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
-  static const _metaWeaverCountingDuty = '\n\n---\n\n[Lumia counting duty]\n'
+  static const _metaWeaverCountingDuty = '[Lumia counting duty]\n'
       'You run EVERY turn. Count the assistant messages in the chat history you '
       'see. Read the period rule from the assigned `<lumia_ghost>` block above '
       '(e.g. "Every 4 assistant responses"). Decide one of:\n'
@@ -141,7 +173,7 @@ class StudioShardSynthesizer {
   /// a COMPACT Lumia output contract: format + voice + emit-when-brief-says-due.
   /// The Main Responder never sees the full `<lumia_ghost>` block — only this
   /// contract + the Meta-Weaver's brief. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part B.
-  static const _mainResponderLumiaContract = '\n\n---\n\n[Lumia output contract]\n'
+  static const _mainResponderLumiaContract = '[Lumia output contract]\n'
       'A separate Meta-Weaver agent runs every turn and sends you a brief. '
       'When the brief says `lumia_ooc: due` or `lumia_periodic_note: due`, '
       'append a Lumia OOC note AFTER your narrative reply, wrapped EXACTLY '
@@ -311,13 +343,27 @@ Assigned preset blocks:
     StudioAgent agent, {
     required bool isFinal,
   }) {
-    var prompt = ReasoningStripper.stripPromptShardReasoning(agent.promptShard);
-    prompt = isFinal
-        ? _appendSentence(prompt, _finalResponderGuard)
-        : _appendSentence(prompt, _intermediateBriefGuard);
+    final guard = isFinal ? _finalResponderGuard : _intermediateBriefGuard;
+    final stripped = <PromptShardBlock>[];
+    for (final block in agent.promptShard) {
+      final cleaned = ReasoningStripper.stripPromptShardReasoning(block.content);
+      if (cleaned.trim().isEmpty) continue;
+      stripped.add(block.copyWith(content: cleaned));
+    }
+    // Append the guard sentence to the last non-empty block. If no blocks
+    // survived stripping, emit the guard as a single block so the contract
+    // still reaches the model.
+    if (stripped.isEmpty) {
+      stripped.add(PromptShardBlock(content: guard, blockName: 'Guard'));
+    } else {
+      final last = stripped.removeLast();
+      stripped.add(
+        last.copyWith(content: _appendSentence(last.content, guard)),
+      );
+    }
 
     return agent.copyWith(
-      promptShard: prompt,
+      promptShard: stripped,
       sourceBlockNames: _stripReasoningSourceNames(agent.sourceBlockNames),
     );
   }

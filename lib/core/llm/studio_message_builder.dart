@@ -57,18 +57,27 @@ class StudioMessageBuilder {
     for (final block in blocks) {
       switch (block.kind) {
         case 'agent_instruction':
-          final control = StringBuffer();
-          final promptShard = _expandStudioBlockContent(
-            agent.promptShard,
-            promptPayload: promptPayload,
-            promptResult: promptResult,
-            context: context,
-          ).trim();
-          if (promptShard.isNotEmpty) {
-            control
-              ..writeln(promptShard)
-              ..writeln();
+          // Each PromptShardBlock becomes its own API message (cache-friendly,
+          // structured — see docs/plans/PLAN_STUDIO_SHARD_BLOCKS.md). Macro
+          // expansion is applied per-block so `{{char}}`/`{{user}}` resolve.
+          for (final shard in agent.promptShard) {
+            final expanded = _expandStudioBlockContent(
+              shard.content,
+              promptPayload: promptPayload,
+              promptResult: promptResult,
+              context: context,
+            ).trim();
+            if (expanded.isEmpty) continue;
+            messages.add({
+              'role': _normalizeRole(
+                shard.role.isNotEmpty ? shard.role : agent.role,
+              ),
+              'content': expanded,
+            });
           }
+          // Preset's agent_instruction block content + runtime envelope +
+          // final-responder contract follow as the final control message.
+          final control = StringBuffer();
           control.writeln(
             _expandStudioBlockContent(
               block.content,
@@ -93,12 +102,15 @@ class StudioMessageBuilder {
                 ..writeln(styleContract);
             }
           }
-          messages.add({
-            'role': _normalizeRole(
-              block.role.isNotEmpty ? block.role : agent.role,
-            ),
-            'content': control.toString().trim(),
-          });
+          final controlText = control.toString().trim();
+          if (controlText.isNotEmpty) {
+            messages.add({
+              'role': _normalizeRole(
+                block.role.isNotEmpty ? block.role : agent.role,
+              ),
+              'content': controlText,
+            });
+          }
           break;
         case 'previous_agents':
           if (!isFinalResponse) break;
@@ -221,12 +233,17 @@ class StudioMessageBuilder {
         .toList()
       ..sort((a, b) => a.order.compareTo(b.order));
     final buf = StringBuffer();
-    final promptShard = _expandStudioBlockContent(
-      agent.promptShard,
-      promptPayload: promptPayload,
-      promptResult: promptResult,
-      context: context,
-    ).trim();
+    final shardParts = <String>[];
+    for (final shard in agent.promptShard) {
+      final expanded = _expandStudioBlockContent(
+        shard.content,
+        promptPayload: promptPayload,
+        promptResult: promptResult,
+        context: context,
+      ).trim();
+      if (expanded.isNotEmpty) shardParts.add(expanded);
+    }
+    final promptShard = shardParts.join('\n\n');
     if (promptShard.isNotEmpty) {
       buf.writeln(promptShard);
       buf.writeln();

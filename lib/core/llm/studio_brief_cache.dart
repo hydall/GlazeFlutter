@@ -120,7 +120,9 @@ class StudioBriefCache {
       'sourcePresetHash': config.sourcePresetHash,
       'configUpdatedAt': config.updatedAt,
       'agentId': agent.id,
-      'promptShard': agent.promptShard,
+      'promptShard': agent.promptShard
+          .map((b) => {'role': b.role, 'content': b.content, 'blockName': b.blockName, 'blockId': b.blockId})
+          .toList(),
       'sourceBlockNames': agent.sourceBlockNames,
       'refreshPolicy': policy,
       'invalidationSignals': agent.invalidationSignals,
@@ -180,7 +182,7 @@ class StudioBriefCache {
     final text = [
       agent.name,
       agent.sourceBlockNames,
-      agent.promptShard,
+      agent.promptShard.map((s) => s.content).join('\n'),
     ].join('\n').toLowerCase();
     if (RegExp(
       r'ban|banned|forbidden|clich|клиш|запрет|forbidden words',

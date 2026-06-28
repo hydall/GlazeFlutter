@@ -153,46 +153,28 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   /// [StudioDecompositionService.decompose] build — the user can hand-tune
   /// any agent's instruction after a build.
   Future<void> _editAgentShard(StudioAgent agent) async {
-    final controller = TextEditingController(text: agent.promptShard);
-    final result = await showDialog<String>(
+    // Preset-style editor: each PromptShardBlock is its own card with editable
+    // blockName + content. Save returns List<PromptShardBlock>.
+    final edited = List<PromptShardBlock>.from(agent.promptShard);
+    if (edited.isEmpty) {
+      edited.add(const PromptShardBlock());
+    }
+    final result = await showDialog<List<PromptShardBlock>>(
       context: context,
       useRootNavigator: true,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(
-            agent.name.isEmpty ? 'Edit prompt shard' : 'Edit "${agent.name}"',
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: TextField(
-              controller: controller,
-              maxLines: 12,
-              autofocus: true,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Prompt shard for this tracker…',
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(controller.text),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => _ShardBlockEditorDialog(
+        agentName: agent.name,
+        blocks: edited,
+      ),
     );
-    controller.dispose();
     if (result == null) return;
     await _setAgentPromptShard(agent, result);
   }
 
-  Future<void> _setAgentPromptShard(StudioAgent agent, String shard) async {
+  Future<void> _setAgentPromptShard(
+    StudioAgent agent,
+    List<PromptShardBlock> shard,
+  ) async {
     await _ctrl.setAgentPromptShard(agent, shard);
     if (!mounted) return;
     setState(() {});
@@ -565,7 +547,7 @@ class _TrackerRow extends StatelessWidget {
 
   Widget _shardChip(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final hasShard = agent.promptShard.trim().isNotEmpty;
+    final hasShard = agent.promptShard.any((b) => b.content.trim().isNotEmpty);
     return InkWell(
       onTap: onEditShard,
       borderRadius: BorderRadius.circular(4),
@@ -874,6 +856,128 @@ class _StudioTemperatureTile extends ConsumerWidget {
           await ref.read(pipelineSettingsProvider.notifier).save(updated);
         }
       },
+    );
+  }
+}
+
+/// Preset-style editor for an agent's `List<PromptShardBlock>`. Each block is
+/// a card with editable `blockName` + multi-line `content`. Add/remove/reorder
+/// not supported in MVP — the user edits existing blocks only. Empty list gets
+/// a single blank block so the user can type something. See
+/// docs/plans/PLAN_STUDIO_SHARD_BLOCKS.md.
+class _ShardBlockEditorDialog extends StatefulWidget {
+  final String agentName;
+  final List<PromptShardBlock> blocks;
+  const _ShardBlockEditorDialog({
+    required this.agentName,
+    required this.blocks,
+  });
+
+  @override
+  State<_ShardBlockEditorDialog> createState() =>
+      _ShardBlockEditorDialogState();
+}
+
+class _ShardBlockEditorDialogState extends State<_ShardBlockEditorDialog> {
+  late final List<PromptShardBlock> _blocks;
+  late final List<TextEditingController> _nameControllers;
+  late final List<TextEditingController> _contentControllers;
+
+  @override
+  void initState() {
+    super.initState();
+    _blocks = List<PromptShardBlock>.from(widget.blocks);
+    _nameControllers = _blocks
+        .map((b) => TextEditingController(text: b.blockName))
+        .toList();
+    _contentControllers = _blocks
+        .map((b) => TextEditingController(text: b.content))
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _nameControllers) {
+      c.dispose();
+    }
+    for (final c in _contentControllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  List<PromptShardBlock> _collect() {
+    final result = <PromptShardBlock>[];
+    for (var i = 0; i < _blocks.length; i++) {
+      final name = _nameControllers[i].text.trim();
+      final content = _contentControllers[i].text.trim();
+      if (content.isEmpty) continue;
+      result.add(
+        _blocks[i].copyWith(blockName: name, content: content),
+      );
+    }
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        widget.agentName.isEmpty
+            ? 'Edit prompt shard'
+            : 'Edit "${widget.agentName}"',
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: _blocks.length,
+          itemBuilder: (context, i) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_blocks[i].blockId.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'block: ${_blocks[i].blockId}',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ),
+                TextField(
+                  controller: _nameControllers[i],
+                  decoration: const InputDecoration(
+                    labelText: 'Block name',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _contentControllers[i],
+                  maxLines: 10,
+                  decoration: const InputDecoration(
+                    labelText: 'Content',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_collect()),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
