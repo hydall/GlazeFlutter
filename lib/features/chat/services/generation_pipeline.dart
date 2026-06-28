@@ -4,20 +4,29 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/prompt_builder.dart' show PromptPayload;
+import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/agent_operation_record.dart';
+import '../../../core/models/pipeline_settings.dart';
 import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_agentic_service.dart';
+import '../../../core/llm/memory_injection_service.dart'
+    show chatMessageEmbeddingServiceProvider;
+import '../../../core/llm/lorebook_providers.dart' show embeddingConfigProvider;
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/services/generation_notification_service.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/character_provider.dart';
 import '../../../core/utils/time_helpers.dart';
 import '../../cloud_sync/sync_provider.dart' show notifySyncMessageGenerated;
+import '../../extensions/services/extension_post_gen_service.dart';
 import '../../chat_history/chat_history_provider.dart';
 import '../abort_handler.dart';
 import '../chat_generation_service.dart';
+import '../chat_provider.dart' show streamingStateProvider;
 import '../chat_session_service.dart';
 import '../chat_state.dart';
 import '../state/agent_operations_log_provider.dart';
@@ -67,6 +76,44 @@ class GenerationPipeline {
     required this.getState,
   });
 
+  /// Latest accumulated chunk from the cleaner's onCleanedChunk callback.
+  /// Captured so we can persist partial text when the cleaner fails
+  /// mid-stream (Fix 1): SidecarCallOutcome.text is null on any failure, so
+  /// the partial text the user saw live is only reachable via the callback.
+  /// Reset in `_runPostCleaner`'s finally block.
+  String _lastStreamedText = '';
+
+  /// The agent-swipe id of the blue 'cleaned' swipe pre-created at cleaner
+  /// start (Fix 1). `-1` when no pre-created swipe exists. Reset in the
+  /// finally block so a stale id never leaks into the next run.
+  int _preCreatedCleanerSwipeId = -1;
+
+  /// The message id the pre-created swipe belongs to (tracked so the catch
+  /// block can remove the swipe on a hard pipeline failure, when
+  /// `lastAssistant` is out of scope).
+  String? _preCreatedMessageId;
+
+  /// Cancel token for the parallel character-audit call (Feature 3). On the
+  /// race-loser path the audit Future outlives the cleaner; this lets the
+  /// `finally` block cancel the orphaned LLM request. `null` when no audit
+  /// is in flight.
+  CancelToken? _auditCancelToken;
+
+  /// Cancel token for the cleaner LLM call. Held as a field so the user can
+  /// abort a running cleaner via [abortPostCleaner] (Stop button in the
+  /// PostCleanerStatusCard). `null` when no cleaner is in flight.
+  CancelToken? _cleanerCancelToken;
+
+  /// Abort a running POST-cleaner. Called by the Stop button in
+  /// PostCleanerStatusCard. No-op when the cleaner is not running. The
+  /// cleaner's `finally` block reverts the pre-created swipe and resets
+  /// state, so this only needs to cancel the in-flight LLM request.
+  void abortPostCleaner() {
+    if (_cleanerCancelToken != null && !_cleanerCancelToken!.isCancelled) {
+      _cleanerCancelToken!.cancel('User aborted post-cleaner');
+    }
+  }
+
   /// Run the full post-SSE pipeline. Returns the final [GenerationOutcome]
   /// describing the state to apply, or null if the genId was invalidated
   /// (caller should drop the result).
@@ -82,7 +129,6 @@ class GenerationPipeline {
     int? previousTokens,
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? regenTargetId,
-    bool studioFinalOnly = false,
   }) async {
     if (!ref.mounted) return null;
     abortHandler.clearStreaming();
@@ -114,7 +160,6 @@ class GenerationPipeline {
         previousSwipesMeta: previousSwipesMeta,
         guidanceText: guidanceText,
         regenTargetId: regenTargetId,
-        studioFinalOnly: studioFinalOnly,
       );
 
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
@@ -159,14 +204,16 @@ class GenerationPipeline {
             return null;
           }
 
-          // POST-cleaner on regen: run after successful regen (both full
-          // and studioFinalOnly). The cleaner rewrites the regenerated
-          // assistant message, preserving the original as a 'final' swipe.
+          // POST-cleaner on regen: run after successful regen. The cleaner
+          // rewrites the regenerated assistant message, preserving the
+          // original as a swipe.
           unawaited(
             _runPostCleaner(
               sessionId: result.session!.id,
               messages: result.session!.messages,
               genId: genId,
+              promptPayload: result.promptPayload,
+              character: character,
             ),
           );
         }
@@ -219,19 +266,38 @@ class GenerationPipeline {
 
       await _autoCreateMemoryDrafts(result.session);
 
-      // Stage 2: Agentic write-loop — only on accepted (non-regen) turns.
-      // Suppressed on swipe/regen/studioFinalOnly to avoid duplicate or
-      // contradictory writes (the user may swipe again). The regen branch
-      // above (regenOutcome != null) returns early before reaching here, so
-      // this code only runs on the normal send-message path.
-      if (regenTargetId == null &&
-          !studioFinalOnly &&
-          result.session != null) {
+      // Stage 2: Agentic write-loop — runs on both normal send AND regen.
+      // On regen, SavedMessageWriter resets agentSwipes to a single fresh
+      // 'final' (agentSwipeId=0), so the write-loop anchors the new snapshot
+      // to (messageId, swipeId, 0) — mirroring Marinara's retry-agents which
+      // re-run the full agent cycle per swipe. The stale snapshot from the
+      // previous swipe is excluded via getLatestCommittedExcludingMessage.
+      if (result.session != null) {
+        // Stage 3.5: Embed raw chat-message chunks (fire-and-forget,
+        // best-effort insurance for the lossy MemoryBook compression).
+        // Pairs with Stage 1's MessageRecallService cosine search to give
+        // the LLM access to verbatim original chunks from earlier in the
+        // chat. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3).
+        unawaited(
+          _embedChatMessages(
+            sessionId: result.session!.id,
+            messages: result.session!.messages,
+            genId: genId,
+          ),
+        );
+
+        // Stage 2: Agentic write-loop — runs on both normal send AND regen.
+        // On regen, SavedMessageWriter resets agentSwipes to a single fresh
+        // 'final' (agentSwipeId=0), so the write-loop anchors the new snapshot
+        // to (messageId, swipeId, 0) — mirroring Marinara's retry-agents which
+        // re-run the full agent cycle per swipe. The stale snapshot from the
+        // previous swipe is excluded via getLatestCommittedExcludingMessage.
         unawaited(
           _runAgenticWriteLoop(
             sessionId: result.session!.id,
             messages: result.session!.messages,
             genId: genId,
+            regenTargetId: regenTargetId,
           ),
         );
 
@@ -243,6 +309,8 @@ class GenerationPipeline {
             sessionId: result.session!.id,
             messages: result.session!.messages,
             genId: genId,
+            promptPayload: result.promptPayload,
+            character: character,
           ),
         );
       }
@@ -394,12 +462,27 @@ class GenerationPipeline {
     final hasGenerationError = lastMessage?.isError == true;
 
     if (character != null && result.session != null && !hasGenerationError) {
-      await service.processExtensions(
-        charId: charId,
-        session: result.session!,
-        character: character,
-      );
-      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      // Defer extension blocks when the POST-cleaner is enabled: the
+      // cleaner rewrites the trailing assistant message into a new blue
+      // sub-swipe, and ext blocks must bind to that cleaned swipe (see
+      // _executeAndApplyCleaner's wasCleaned branch). Launching them here
+      // on the raw streamed text would create blocks bound to the 'final'
+      // swipe that the user never sees after the cleaner runs. When the
+      // cleaner is disabled (or skipped/failed), _runPostCleaner's else
+      // branch launches extensions with agentSwipeId=-1 (legacy binding
+      // to the top-level swipe, identical to the pre-patch behavior).
+      final pipeline = ref.read(pipelineSettingsProvider);
+      final bookRepo = ref.read(memoryBookRepoProvider);
+      final book = await bookRepo.getBySessionId(result.session!.id);
+      final cleanerEnabled = pipeline.postCleanerEnabled && book != null;
+      if (!cleanerEnabled) {
+        await service.processExtensions(
+          charId: charId,
+          session: result.session!,
+          character: character,
+        );
+        if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      }
     }
 
     if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
@@ -417,6 +500,39 @@ class GenerationPipeline {
           : null,
       avatarPath: character?.avatarPath,
     );
+  }
+
+  /// Launch extension blocks for the trailing assistant message, bound to
+  /// [agentSwipeId]. Called from `_executeAndApplyCleaner` after the cleaner
+  /// finalizes (or skips/fails) so blocks always target the swipe the user
+  /// will actually see:
+  /// - `agentSwipeId >= 0` → cleaned blue sub-swipe (post-cleaner path).
+  /// - `agentSwipeId = -1` → original 'final' swipe (cleaner disabled or
+  ///   skipped/fallback branches — legacy binding, identical to pre-patch
+  ///   behavior when the cleaner was off).
+  /// See docs/plans/PLAN_EXT_BLOCKS_AFTER_CLEANER.md.
+  Future<void> _launchExtensionsForSwipe({
+    required ChatSession session,
+    required Character character,
+    required int agentSwipeId,
+  }) async {
+    if (session.id.isEmpty || session.messages.isEmpty) return;
+    final lastMessage = session.messages.last;
+    if (lastMessage.role == 'user' || lastMessage.isError) return;
+    try {
+      final extensionService = ref.read(extensionPostGenServiceProvider);
+      await extensionService.processAfterGeneration(
+        charId: charId,
+        session: session,
+        character: character,
+        persona: null,
+        agentSwipeId: agentSwipeId,
+      );
+    } catch (e) {
+      debugPrint(
+        '[GenerationPipeline] extension launch for swipe=$agentSwipeId failed: $e',
+      );
+    }
   }
 
   Future<void> _handlePipelineError(
@@ -510,6 +626,7 @@ class GenerationPipeline {
     required String sessionId,
     required List<ChatMessage> messages,
     required int genId,
+    String? regenTargetId,
   }) async {
     if (!ref.mounted) return;
 
@@ -517,18 +634,89 @@ class GenerationPipeline {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      if (book == null || !book.settings.agenticWriteEnabled) return;
+      final pipeline = ref.read(pipelineSettingsProvider);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (book == null || !pipeline.agenticWriteEnabled) return;
 
+      // Cadence (Marinara runInterval=8 analog): run the agentic write-loop
+      // every N assistant turns, not every turn. Cuts LLM cost / latency on
+      // long chats at the cost of slower memory propagation between runs.
+      // 1 = every turn (legacy behavior). The current turn number is the
+      // count of assistant messages in the session — this method is called
+      // after the just-finished assistant turn is persisted, so the count
+      // includes it.
+      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (cadence) and
+      // PipelineSettings.runAgenticEveryN.
+      final assistantTurnCount =
+          messages.where((m) => m.role == 'assistant' && !m.isTyping).length;
+      final cadence = pipeline.runAgenticEveryN < 1
+          ? 1
+          : pipeline.runAgenticEveryN;
+      if (cadence > 1 && assistantTurnCount % cadence != 0) {
+        debugPrint(
+          '[AgenticWrite] skipping write-loop — cadence=$cadence, '
+          'turn=$assistantTurnCount (not a multiple)',
+        );
+        return;
+      }
+
+      // Read the current tracker state from snapshots (preferred) with a
+      // tracker_rows fallback for legacy sessions pre-migration. On regen,
+      // exclude the regenerating message's own stale snapshot so the base
+      // state does not read the pre-regen tracker values.
+      final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
       final trackerRepo = ref.read(trackerRepoProvider);
-      final trackers = await trackerRepo.getBySessionId(sessionId);
+      final snapshot = regenTargetId != null
+          ? await snapshotRepo.getLatestCommittedExcludingMessage(
+              sessionId,
+              regenTargetId,
+            )
+          : await snapshotRepo.getLatestCommitted(sessionId);
+      final trackers =
+          snapshot?.trackers ?? await trackerRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
-      final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
+      final recentHistory = extractRecentHistoryText(
+        messages,
+        maxMessages: 10,
+        // Historical replay (Marinara `buildHistoricalLorebookKeeperContext`
+        // analog): at regen, slice messages up to AND INCLUDING the regen
+        // target so the write-loop sees the same context the original
+        // turn saw, not the current post-regen state. Without this, regen
+        // would produce different entries than the original turn.
+        // See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2.
+        upToMessageId: regenTargetId,
+      );
+
+      // Anchor for the tracker snapshot: the just-finished assistant turn.
+      // On both normal send and regen, SavedMessageWriter seeds a single
+      // 'final' agentSwipe (agentSwipeId=0), so the anchor is
+      // (messageId, swipeId, 0). Guard against non-assistant trailing
+      // messages defensively.
+      final lastAssistant = messages.lastWhere(
+        (m) => m.role == 'assistant',
+        orElse: () => messages.last,
+      );
+
+      // Guard: if the user deleted the assistant message between the
+      // generation finishing and the write-loop starting, the message no
+      // longer exists in the session. Writing trackers/memory for a deleted
+      // message would create orphaned entries tied to a non-existent
+      // messageId. Re-read the session and abort if the target is gone.
+      final currentSession = await ref.read(chatRepoProvider).getById(sessionId);
+      if (currentSession == null ||
+          !currentSession.messages.any((m) => m.id == lastAssistant.id)) {
+        debugPrint(
+          '[AgenticWrite] target message ${lastAssistant.id} no longer exists '
+          'in session $sessionId — aborting write-loop',
+        );
+        return;
+      }
 
       debugPrint(
         '[AgenticWrite] starting write-loop session=$sessionId '
-        'model=${book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel} '
-        'timeoutMs=${book.settings.sidecarTimeoutMs} '
+        'model=${pipeline.sidecarModel.isEmpty ? "<chat>" : pipeline.sidecarModel} '
+        'timeoutMs=${pipeline.sidecarTimeoutMs} '
         'existingTrackers=${trackers.length} '
         'historyChars=${recentHistory.length}',
       );
@@ -536,9 +724,12 @@ class GenerationPipeline {
       final agenticService = ref.read(memoryAgenticWriteServiceProvider);
       final result = await agenticService.runWriteLoop(
         sessionId: sessionId,
-        settings: book.settings,
+        settings: pipeline,
         recentHistoryText: recentHistory,
         currentTrackers: trackers,
+        messageId: lastAssistant.id,
+        swipeId: lastAssistant.swipeId,
+        agentSwipeId: lastAssistant.agentSwipeId,
         isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
       );
 
@@ -550,6 +741,42 @@ class GenerationPipeline {
         'error=${result.error ?? "none"}',
       );
 
+      // Post-write guard: the user may have deleted the assistant message
+      // WHILE the write-loop was running (it can take 60s+). If so, the
+      // trackers and memory entries just written are now orphaned — tied to
+      // a messageId that no longer exists. Clean them up so the UI doesn't
+      // show stale state for a deleted turn.
+      if (result.status == 'ok' && ref.mounted) {
+        final postCheck = await ref.read(chatRepoProvider).getById(sessionId);
+        if (postCheck == null ||
+            !postCheck.messages.any((m) => m.id == lastAssistant.id)) {
+          debugPrint(
+            '[AgenticWrite] message ${lastAssistant.id} deleted during '
+            'write-loop — purging orphaned trackers + memory',
+          );
+          await ref
+              .read(memoryBookRepoProvider)
+              .deleteForMessage(sessionId, lastAssistant.id)
+              .catchError((Object _) {});
+          await ref
+              .read(trackerSnapshotRepoProvider)
+              .deleteForMessage(sessionId, lastAssistant.id)
+              .catchError((Object _) {});
+          final snapshot = await ref
+              .read(trackerSnapshotRepoProvider)
+              .getLatestCommitted(sessionId);
+          if (snapshot == null) {
+            await ref
+                .read(trackerRepoProvider)
+                .clearForSession(sessionId);
+          } else {
+            await ref
+                .read(trackerRepoProvider)
+                .replaceForSession(sessionId, snapshot.trackers);
+          }
+        }
+      }
+
       // Record the agentic write-loop in the operations log so the user
       // can inspect retries (e.g. 502 → 200) from the Agentic Ops UI.
       if (result.status != 'disabled' && result.attempts.isNotEmpty) {
@@ -559,24 +786,24 @@ class GenerationPipeline {
             .read(agentOperationsLogProvider)
             .append(
               AgentOperationRecord(
-                id:
-                    'agentic-write-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+                id: 'agentic-write-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
                 kind: AgentOperationKind.agenticWrite,
                 status: status,
                 sessionId: sessionId,
                 messageId: messages.isNotEmpty ? messages.last.id : null,
                 attempts: result.attempts,
                 totalElapsedMs: result.totalElapsedMs,
-                model: book.settings.sidecarModel.isEmpty
+                model: pipeline.sidecarModel.isEmpty
                     ? null
-                    : book.settings.sidecarModel,
+                    : pipeline.sidecarModel,
                 summary: status == AgentOperationStatus.ok
                     ? (totalWritten > 0
-                        ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
-                        : 'no changes')
+                          ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
+                          : 'no changes')
                     : result.status,
                 startedAtMs: result.attempts.first.startedAtMs,
-                finishedAtMs: result.attempts.last.startedAtMs +
+                finishedAtMs:
+                    result.attempts.last.startedAtMs +
                     result.attempts.last.elapsedMs,
                 canRegenerate: status.isFailure,
               ),
@@ -584,6 +811,45 @@ class GenerationPipeline {
       }
     } catch (e) {
       debugPrint('[AgenticWrite] failed session=$sessionId error=$e');
+    }
+  }
+
+  /// Stage 3.5: embed raw chat-message chunks (fire-and-forget, best-effort
+  /// insurance for the lossy MemoryBook compression).
+  ///
+  /// Idempotent via textHash — chunks whose content has not changed since
+  /// the last embedding pass are skipped. Filters to visible user+assistant
+  /// messages, groups them into fixed-size chunks (default 5), and stores
+  /// one embedding row per chunk under `sourceType='chat_message'`. The
+  /// [MessageRecallService] cosine-searches against these rows on the next
+  /// generation and injects top-K chunks as `<recalled_messages>` in the
+  /// prompt.
+  ///
+  /// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3) and §2.1 (ADR:
+  /// mobile escape hatch if latency / binary size becomes prohibitive).
+  ///
+  /// Staleness guard: aborts early if a newer generation has started. The
+  /// underlying [ChatMessageEmbeddingService] wraps all errors in try/catch
+  /// and records them via `putEmbeddingError` so the next run can retry —
+  /// this method never throws to the caller.
+  Future<void> _embedChatMessages({
+    required String sessionId,
+    required List<ChatMessage> messages,
+    required int genId,
+  }) async {
+    try {
+      if (!abortHandler.isCurrentGen(genId)) return;
+      final pipeline = ref.read(pipelineSettingsProvider);
+      if (!pipeline.messageRecallEnabled) return;
+      final config = ref.read(embeddingConfigProvider);
+      if (config.endpoint.isEmpty) return;
+      await ref.read(chatMessageEmbeddingServiceProvider).indexSessionMessages(
+            sessionId: sessionId,
+            messages: messages,
+            config: config,
+          );
+    } catch (e) {
+      debugPrint('[EmbedChat] failed session=$sessionId error=$e');
     }
   }
 
@@ -600,6 +866,8 @@ class GenerationPipeline {
     required String sessionId,
     required List<ChatMessage> messages,
     required int genId,
+    PromptPayload? promptPayload,
+    Character? character,
   }) async {
     if (!ref.mounted) return;
 
@@ -607,20 +875,58 @@ class GenerationPipeline {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      if (book == null || !book.settings.postCleanerEnabled) return;
+      final pipeline = ref.read(pipelineSettingsProvider);
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      if (book == null || !pipeline.postCleanerEnabled) return;
 
-      // Find the last assistant message.
+      // The cleaner must only rewrite the just-generated assistant message.
+      // If the trailing message is an error (e.g. Studio returned an empty
+      // response → writeError), there is nothing to clean — return early so
+      // we never accidentally rewrite a PREVIOUS valid assistant message.
+      final trailing = messages.isNotEmpty ? messages.last : null;
+      if (trailing == null ||
+          trailing.role != 'assistant' ||
+          trailing.isError) {
+        return;
+      }
+
+      // Find the last non-error, non-typing, non-empty assistant message.
       ChatMessage? lastAssistant;
+      int lastAssistantIndex = -1;
       for (var i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role == 'assistant' &&
             !messages[i].isError &&
             !messages[i].isTyping &&
             messages[i].content.trim().isNotEmpty) {
           lastAssistant = messages[i];
+          lastAssistantIndex = i;
           break;
         }
       }
       if (lastAssistant == null) return;
+
+      // Defensive: the found `lastAssistant` must be the trailing message
+      // (or its most recent swipe). If a later error message snuck in, abort.
+      if (lastAssistant.id != trailing.id) return;
+
+      // Collect bounded recent chat history before the assistant response for
+      // conservative local continuity checks. Uses configurable history window
+      // from settings. Excludes the response being cleaned itself.
+      final maxHistory = pipeline.postCleanerContinuityEnabled
+          ? pipeline.postCleanerHistoryMessages
+          : 0;
+      final recentMessages = <ChatMessage>[];
+      if (maxHistory > 0 && lastAssistantIndex > 0) {
+        final start = (lastAssistantIndex - maxHistory).clamp(
+          0,
+          lastAssistantIndex,
+        );
+        for (var i = start; i < lastAssistantIndex; i++) {
+          final m = messages[i];
+          if (m.content.trim().isEmpty || m.isError) continue;
+          recentMessages.add(m);
+        }
+      }
 
       // Load broadcast blocks (output language + prose guards) captured at
       // Studio build time so the cleaner applies the user's own rules instead
@@ -632,135 +938,687 @@ class GenerationPipeline {
             .getBySessionId(sessionId);
         broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
       } catch (e) {
-        debugPrint('[PostCleaner] broadcast load failed session=$sessionId error=$e');
+        debugPrint(
+          '[PostCleaner] broadcast load failed session=$sessionId error=$e',
+        );
       }
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
-      debugPrint(
-        '[PostCleaner] starting session=$sessionId '
-        'model=${book.settings.sidecarModel.isEmpty ? "<chat>" : book.settings.sidecarModel} '
-        'timeoutMs=${book.settings.sidecarTimeoutMs} '
-        'textChars=${lastAssistant.content.length} '
-        'broadcastBlocks=${broadcastBlocks.length}',
-      );
-
-      ref.read(postCleanerStateProvider.notifier).state = PostCleanerState.running(
+      await _executeAndApplyCleaner(
         sessionId: sessionId,
-        messageId: lastAssistant.id,
-        originalChars: lastAssistant.content.length,
-      );
-
-      final cleanerService = ref.read(postCleanerServiceProvider);
-      final result = await cleanerService.runCleaner(
-        sessionId: sessionId,
-        settings: book.settings,
+        genId: genId,
+        targetMessage: lastAssistant,
         assistantText: lastAssistant.content,
+        recentMessages: recentMessages,
         broadcastBlocks: broadcastBlocks,
+        pipeline: pipeline,
+        promptPayload: promptPayload,
+        character: character,
       );
-
-      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
-        ref.read(postCleanerStateProvider.notifier).state =
-            const PostCleanerState.idle();
-        return;
-      }
-
-      debugPrint(
-        '[PostCleaner] result session=$sessionId wasCleaned=${result.wasCleaned} '
-        'origChars=${lastAssistant.content.length} '
-        'cleanedChars=${result.cleanedText.length} '
-        'error=${result.error ?? "none"} '
-        'attempts=${result.attempts.length}',
-      );
-
-      ref.read(postCleanerStateProvider.notifier).state = result.wasCleaned
-          ? PostCleanerState.done(
-              sessionId: sessionId,
-              messageId: lastAssistant.id,
-              originalChars: lastAssistant.content.length,
-              cleanedChars: result.cleanedText.length,
-            )
-          : (result.status == 'ok' || result.status == 'disabled')
-              ? const PostCleanerState.idle()
-              : PostCleanerState.error(
-                  sessionId: sessionId,
-                  messageId: lastAssistant.id,
-                );
-
-      // Record the operation in the agentic operations log so the user can
-      // inspect retries (502 → 200, etc.) from the dedicated UI.
-      ref.read(agentOperationsLogProvider.notifier).state = ref
-          .read(agentOperationsLogProvider)
-          .append(
-            AgentOperationRecord(
-              id:
-                  'cleaner-${lastAssistant.id}-${DateTime.now().microsecondsSinceEpoch}',
-              kind: AgentOperationKind.postCleaner,
-              status: _cleanerStatusToOp(result.status),
-              sessionId: sessionId,
-              messageId: lastAssistant.id,
-              attempts: result.attempts,
-              totalElapsedMs: result.totalElapsedMs,
-              model: book.settings.sidecarModel.isEmpty
-                  ? null
-                  : book.settings.sidecarModel,
-              summary: result.wasCleaned
-                  ? 'cleaned (${result.cleanedText.length} chars)'
-                  : result.status == 'ok'
-                  ? 'no change'
-                  : result.status,
-              startedAtMs: result.attempts.isNotEmpty
-                  ? result.attempts.first.startedAtMs
-                  : DateTime.now().millisecondsSinceEpoch,
-              finishedAtMs: result.attempts.isNotEmpty
-                  ? result.attempts.last.startedAtMs +
-                        result.attempts.last.elapsedMs
-                  : DateTime.now().millisecondsSinceEpoch,
-              canRegenerate:
-                  result.status == 'timeout' ||
-                  result.status == 'error' ||
-                  result.status == 'skipped',
-            ),
-          );
-
-      if (!result.wasCleaned) return;
-
-      await cleanerService.applyCleanedText(
-        sessionId: sessionId,
-        messageId: lastAssistant.id,
-        cleanedText: result.cleanedText,
-        originalText: lastAssistant.content,
-      );
-
-      // Refresh ChatNotifier state so the UI picks up the new swipe
-      // immediately without requiring the user to re-enter the chat.
-      // applyCleanedText writes to DB + invalidates chatHistoryProvider,
-      // but ChatNotifier holds its own ChatState copy that must be pushed.
-      // Note: we do NOT check isCurrentGen here — the cleaner may run
-      // after a regen, and the UI must always reflect the cleaned swipe.
-      if (ref.mounted) {
-        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
-        if (refreshed != null) {
-          ChatSessionService.updateCache(refreshed);
-          final current = getState().value;
-          if (current != null) {
-            setState(
-              AsyncData(
-                current.copyWith(
-                  session: refreshed,
-                  isGenerating: false,
-                ),
-              ),
-            );
-          }
-          ref.invalidate(chatHistoryProvider);
-        }
-      }
     } catch (e) {
       debugPrint('[PostCleaner] failed session=$sessionId error=$e');
       if (ref.mounted) {
+        // Reset any partial stream so the bubble doesn't stay isTyping.
+        ref.read(streamingStateProvider(charId).notifier).state =
+            const StreamingState();
         ref.read(postCleanerStateProvider.notifier).state =
             const PostCleanerState.idle();
+        // Best-effort cleanup of the pre-created swipe on a hard pipeline
+        // failure (e.g. runCleaner threw before returning). Revert to final.
+        if (_preCreatedCleanerSwipeId >= 0) {
+          try {
+            final removed = await ref
+                .read(chatRepoProvider)
+                .removeAgentSwipe(
+                  sessionId: sessionId,
+                  messageId: _preCreatedMessageId ?? '',
+                  agentSwipeId: _preCreatedCleanerSwipeId,
+                );
+            if (removed) {
+              final reverted = await ref
+                  .read(chatRepoProvider)
+                  .getById(sessionId);
+              if (reverted != null) {
+                ChatSessionService.updateCache(reverted);
+                ref.invalidate(chatHistoryProvider);
+              }
+            }
+          } catch (_) {
+            // swallow — already in an error path
+          }
+        }
       }
+    } finally {
+      // Cancel any still-running (race-loser) audit call so it doesn't burn
+      // an LLM request after the cleaner has finalized / the turn aborted.
+      // No-op if the audit already completed (won the race) or was never
+      // started. The `.catchError` on `auditFuture` neutralizes the
+      // resulting cancellation error for the late `.then` logger.
+      if (_auditCancelToken != null && !_auditCancelToken!.isCancelled) {
+        _auditCancelToken!.cancel();
+      }
+      _auditCancelToken = null;
+      _cleanerCancelToken = null;
+      ref.read(cleanerCancelTokenProvider.notifier).state = null;
+      _lastStreamedText = '';
+      _preCreatedCleanerSwipeId = -1;
+      _preCreatedMessageId = null;
+    }
+  }
+
+  /// Shared core of the POST-cleaner pipeline. Handles:
+  ///   - debugPrint start line + `PostCleanerState.running`
+  ///   - optional parallel character audit (race against pre-create+chunk)
+  ///   - pre-create the blue 'cleaned' sub-swipe (Fix 1)
+  ///   - `runCleaner` with streaming into the chat bubble
+  ///   - finalize the pre-created swipe (update / remove / append fallback)
+  ///   - record to the agentic operations log
+  ///   - setState with the refreshed session so the UI picks up the new swipe
+  ///
+  /// [targetMessage] is the assistant message being cleaned. [assistantText]
+  /// is the text passed to `runCleaner` — for the auto post-generation path
+  /// this is `targetMessage.content` (the just-streamed final text); for
+  /// `rerunCleaner` it is `targetMessage.agentSwipes[0].content` (the parent
+  /// 'final' text, regardless of which blue sub-swipe is currently active).
+  ///
+  /// The `genId` is used only for abort checks (`abortHandler.isCurrentGen`).
+  /// Pass `-1` for a manual rerun (no abort possible — the user can still
+  /// stop via the Stop button which cancels the in-flight cleaner token).
+  Future<void> _executeAndApplyCleaner({
+    required String sessionId,
+    required int genId,
+    required ChatMessage targetMessage,
+    required String assistantText,
+    required List<ChatMessage> recentMessages,
+    required List<String> broadcastBlocks,
+    required PipelineSettings pipeline,
+    PromptPayload? promptPayload,
+    Character? character,
+  }) async {
+    final isManualRerun = genId < 0;
+    bool abortCheck() =>
+        ref.mounted && (isManualRerun || abortHandler.isCurrentGen(genId));
+
+    debugPrint(
+      '[PostCleaner] starting session=$sessionId '
+      'model=${pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : (pipeline.sidecarModel.isEmpty ? "<chat>" : pipeline.sidecarModel)} '
+      'timeoutMs=${pipeline.postCleanerTimeoutMs > 0 ? pipeline.postCleanerTimeoutMs : pipeline.sidecarTimeoutMs} '
+      'textChars=${assistantText.length} '
+      'broadcastBlocks=${broadcastBlocks.length} '
+      'historyMessages=${recentMessages.length} '
+      'continuity=${pipeline.postCleanerContinuityEnabled} '
+      'charCheck=${pipeline.postCleanerCharacterCheckEnabled} '
+      'rerun=$isManualRerun',
+    );
+
+    ref
+        .read(postCleanerStateProvider.notifier)
+        .state = PostCleanerState.running(
+        sessionId: sessionId,
+        messageId: targetMessage.id,
+        originalChars: assistantText.length,
+      );
+
+    final cleanerService = ref.read(postCleanerServiceProvider);
+
+    // Pass 0: Character/World Auditor (diagnostic, optional). Runs only when
+    // characterCheckEnabled AND promptPayload is available (exact generation
+    // snapshot). Returns null on failure → cleaner runs without audit notes.
+    //
+    // Parallelised with the cleaner (Marinara `mergePairedBuiltInRewriteAgents`
+    // adaptation for streaming UX): audit is non-streaming and short; the
+    // cleaner is streaming and long. We fire audit `unawaited`-style in a
+    // Future and `await` it with a SHORT timeout that races the cleaner's
+    // pre-create-swipe + first-chunk work. If audit wins → its issues are
+    // injected into the cleaner prompt as CHARACTER CONSISTENCY NOTES (same
+    // as the serial path). If audit loses the race → cleaner runs without
+    // audit notes this turn (graceful degradation; the audit Future is left
+    // running and its result is logged when it completes — it does NOT block
+    // cleanup). This trades 1 serial LLM call's latency for parallel
+    // execution: UX-feel is "blue swipe starts streaming immediately,
+    // audit badge appears later if it finished in time".
+    List<String>? auditIssues;
+    Future<List<String>?>? auditFuture;
+    if (pipeline.postCleanerCharacterCheckEnabled && promptPayload != null) {
+      final loreContent = _assembleLorebooksContent(promptPayload);
+      // Dedicated cancel token: on the race-loser path the audit Future
+      // keeps running in the background. Without this it would run to
+      // completion (burning an LLM call / quota) even after the cleaner
+      // finalized or the turn was aborted. We cancel it in the `finally`
+      // block so the orphaned call is always bounded.
+      _auditCancelToken = CancelToken();
+      auditFuture = cleanerService
+          .runCharacterAudit(
+            assistantText: assistantText,
+            character: promptPayload.character,
+            persona: promptPayload.persona,
+            lorebooksContent: loreContent,
+            memoryContent:
+                promptPayload.memoryContent ?? promptPayload.memoryMacroContent,
+            summaryContent: promptPayload.summaryContent,
+            arcContent: promptPayload.arcContent,
+            entitiesContent: promptPayload.entitiesContent,
+            recentMessages: recentMessages,
+            settings: pipeline,
+            cancelToken: _auditCancelToken,
+          )
+          .catchError((Object e) {
+            debugPrint('[PostCleaner] audit failed session=$sessionId error=$e');
+            return null;
+          });
+      // Log late-landing audit results (race-loser case): the Future
+      // keeps running after the 3s timeout below; when it completes we
+      // emit a debug line so the user can see "audit found N issues" even
+      // on a turn where the cleaner ran without them. Fire-and-forget.
+      unawaited(
+        auditFuture.then((r) {
+          if (r != null && r.isNotEmpty) {
+            debugPrint(
+              '[PostCleaner] audit late-landed session=$sessionId '
+              'issues=${r.length} (not applied this turn — race loser)',
+            );
+          }
+        }),
+      );
+    }
+
+    // ── Swipe-first: pre-create the blue 'cleaned' swipe NOW (Fix 1) ─────────
+    _lastStreamedText = '';
+    _preCreatedCleanerSwipeId = -1;
+    _preCreatedMessageId = targetMessage.id;
+    try {
+      final chatRepo = ref.read(chatRepoProvider);
+      final preCreated = await chatRepo.appendAgentSwipe(
+        sessionId: sessionId,
+        messageId: targetMessage.id,
+        content: '',
+        kind: 'cleaned',
+      );
+      if (preCreated && ref.mounted) {
+        // Re-read to capture the new active agentSwipeId (handles
+        // lazy-backfill for legacy messages the same way applyCleanedText
+        // does at post_cleaner_service.dart:417).
+        final postAppend = await chatRepo.getById(sessionId);
+        if (postAppend != null) {
+          ChatSessionService.updateCache(postAppend);
+          final msg = postAppend.messages
+              .where((m) => m.id == targetMessage.id)
+              .firstOrNull;
+          if (msg != null && msg.agentSwipeId > 0) {
+            _preCreatedCleanerSwipeId = msg.agentSwipeId;
+            final parentAgentSwipeId = msg.agentSwipeId - 1;
+            final snapshotRepo = ref.read(
+              trackerSnapshotRepoProvider,
+            );
+            final parent = await snapshotRepo.getByAnchor(
+              sessionId: sessionId,
+              messageId: targetMessage.id,
+              swipeId: msg.swipeId,
+              agentSwipeId: parentAgentSwipeId,
+            );
+            if (parent != null) {
+              await snapshotRepo.upsertTrackers(
+                sessionId: sessionId,
+                messageId: targetMessage.id,
+                swipeId: msg.swipeId,
+                agentSwipeId: msg.agentSwipeId,
+                trackers: parent.trackers,
+              );
+            }
+            ref.invalidate(chatHistoryProvider);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint(
+        '[PostCleaner] pre-create swipe failed session=$sessionId error=$e',
+      );
+      _preCreatedCleanerSwipeId = -1;
+    }
+
+    // Race the audit Future against a short budget (3s). If audit wins,
+    // its issues flow into the cleaner prompt as CHARACTER CONSISTENCY
+    // NOTES (same as the serial path). If it loses the race, the cleaner
+    // runs without audit notes this turn — graceful degradation. The
+    // audit Future keeps running in the background; we log its result
+    // when it lands (below, after the cleaner returns) so the user can
+    // still see "audit found N issues" even on a losing race.
+    if (auditFuture != null) {
+      try {
+        auditIssues = await auditFuture.timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => null,
+        );
+        if (!abortCheck()) {
+          ref.read(postCleanerStateProvider.notifier).state =
+              const PostCleanerState.idle();
+          return;
+        }
+        debugPrint(
+          '[PostCleaner] audit session=$sessionId '
+          'issues=${auditIssues?.length ?? "null(timeout/failed)"}',
+        );
+      } catch (e) {
+        debugPrint('[PostCleaner] audit await error=$e');
+        auditIssues = null;
+      }
+    }
+
+    _cleanerCancelToken = CancelToken();
+    ref.read(cleanerCancelTokenProvider.notifier).state = _cleanerCancelToken;
+    final result = await cleanerService.runCleaner(
+      sessionId: sessionId,
+      settings: pipeline,
+      assistantText: assistantText,
+      broadcastBlocks: broadcastBlocks,
+      recentMessages: recentMessages,
+      auditIssues: auditIssues,
+      cancelToken: _cleanerCancelToken,
+      onCleanedChunk: (text) {
+        if (!abortCheck()) return;
+        // Stream the cleaner's rewrite into the target assistant message in
+        // the WebView. targetMessageId makes _listenStreaming update the
+        // existing bubble's content in place (like regen) instead of
+        // creating a new virtual streaming message. The original text is
+        // preserved in the DB until applyCleanedText finalizes — at that
+        // point a new swipe is appended and the original becomes the
+        // previous swipe.
+        ref.read(streamingStateProvider(charId).notifier).state =
+            StreamingState(text: text, targetMessageId: targetMessage.id);
+        // Track the latest accumulated chunk (Fix 1 — "preserve partial
+        // text on failure"). SidecarCallOutcome.text is null on any failure
+        // (timeout, error, abort), so the partial text the user saw live is
+        // only available via this callback. Retries reset the accumulator
+        // and re-call onChunk from '', so only overwrite lastStreamedText
+        // when the incoming chunk is at least as long — that picks the
+        // latest attempt's partial output.
+        if (text.length >= _lastStreamedText.length) {
+          _lastStreamedText = text;
+        }
+      },
+    );
+
+    if (!abortCheck()) {
+      // Aborted mid-cleaner. The pre-created empty 'cleaned' swipe would be
+      // left dangling — remove it and revert to the parent 'final'. We do
+      // NOT persist partial text on abort (per plan: default delete on
+      // abort). onCleanedChunk early-returns on stale genId, so
+      // _lastStreamedText is empty here.
+      if (_preCreatedCleanerSwipeId >= 0) {
+        try {
+          await ref.read(chatRepoProvider).removeAgentSwipe(
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            agentSwipeId: _preCreatedCleanerSwipeId,
+          );
+        } catch (_) {}
+      }
+      ref.read(postCleanerStateProvider.notifier).state =
+          const PostCleanerState.idle();
+      return;
+    }
+
+    debugPrint(
+      '[PostCleaner] result session=$sessionId wasCleaned=${result.wasCleaned} '
+      'origChars=${assistantText.length} '
+      'cleanedChars=${result.cleanedText.length} '
+      'error=${result.error ?? "none"} '
+      'attempts=${result.attempts.length} '
+      'partialChars=${_lastStreamedText.length}',
+    );
+
+    ref.read(postCleanerStateProvider.notifier).state = result.wasCleaned
+        ? PostCleanerState.done(
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            originalChars: assistantText.length,
+            cleanedChars: result.cleanedText.length,
+          )
+        : (result.status == 'ok' || result.status == 'disabled')
+        ? const PostCleanerState.idle()
+        : PostCleanerState.error(
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+          );
+
+    // Record the operation in the agentic operations log so the user can
+    // inspect retries (502 → 200, etc.) from the dedicated UI.
+    ref.read(agentOperationsLogProvider.notifier).state = ref
+        .read(agentOperationsLogProvider)
+        .append(
+          AgentOperationRecord(
+            id: 'cleaner-${targetMessage.id}-${DateTime.now().microsecondsSinceEpoch}',
+            kind: AgentOperationKind.postCleaner,
+            status: _cleanerStatusToOp(result.status),
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            attempts: result.attempts,
+            totalElapsedMs: result.totalElapsedMs,
+            model: pipeline.sidecarModel.isEmpty
+                ? null
+                : pipeline.sidecarModel,
+            summary: result.wasCleaned
+                ? 'cleaned (${result.cleanedText.length} chars)'
+                : result.status == 'ok'
+                ? 'no change'
+                : _lastStreamedText.trim().isNotEmpty
+                ? 'partialSaved (${_lastStreamedText.length} chars)'
+                : result.status,
+            startedAtMs: result.attempts.isNotEmpty
+                ? result.attempts.first.startedAtMs
+                : DateTime.now().millisecondsSinceEpoch,
+            finishedAtMs: result.attempts.isNotEmpty
+                ? result.attempts.last.startedAtMs +
+                      result.attempts.last.elapsedMs
+                : DateTime.now().millisecondsSinceEpoch,
+            canRegenerate:
+                result.status == 'timeout' ||
+                result.status == 'error' ||
+                result.status == 'skipped',
+          ),
+        );
+
+    // ── Swipe-first finalization (Fix 1) ─────────────────────────────────
+    final genTime =
+        '${(result.totalElapsedMs / 1000).toStringAsFixed(1)}s';
+    final chatRepo = ref.read(chatRepoProvider);
+
+    if (result.wasCleaned) {
+      final cleanedAgentSwipeId = _preCreatedCleanerSwipeId >= 0
+          ? _preCreatedCleanerSwipeId
+          : (targetMessage.agentSwipes.isNotEmpty
+              ? targetMessage.agentSwipes.length - 1
+              : 0);
+      if (_preCreatedCleanerSwipeId >= 0) {
+        await chatRepo.updateAgentSwipeContent(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          agentSwipeId: _preCreatedCleanerSwipeId,
+          content: result.cleanedText,
+          genTime: genTime,
+          tokens: estimateTokens(result.cleanedText),
+        );
+      } else {
+        // Pre-create failed earlier — fall back to the legacy append path so
+        // the user still gets a 'cleaned' swipe.
+        await cleanerService.applyCleanedText(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          cleanedText: result.cleanedText,
+          genTime: genTime,
+          tokens: estimateTokens(result.cleanedText),
+        );
+      }
+      // Launch extension blocks bound to the NEW cleaned swipe. Extensions
+      // were deferred in _runPostTextSide when the cleaner is enabled, so
+      // this is the only place they start for the cleaned path. Blocks are
+      // bound to (messageId, swipeId, agentSwipeId=cleanedAgentSwipeId) so
+      // switching to a different blue swipe shows its own blocks. See
+      // docs/plans/PLAN_EXT_BLOCKS_AFTER_CLEANER.md.
+      if (character != null && ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await _launchExtensionsForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: cleanedAgentSwipeId,
+          );
+        }
+      }
+    } else if (result.status == 'skipped') {
+      // The cleaner ran to completion but the result was DELIBERATELY
+      // rejected by a safety guard (length-ratio out of bounds, or the
+      // rewrite dropped protected markup — see PostCleanerService). In this
+      // case `_lastStreamedText` holds the rejected (e.g. markup-stripped)
+      // text that was streamed live for UX; we must NOT persist it, or the
+      // guard is defeated. Delete the pre-created swipe and revert to the
+      // parent 'final' (the untouched original).
+      if (_preCreatedCleanerSwipeId >= 0) {
+        await chatRepo.removeAgentSwipe(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          agentSwipeId: _preCreatedCleanerSwipeId,
+        );
+      }
+      // Cleaner skipped → no cleaned swipe exists. Launch extensions bound
+      // to the original 'final' swipe (agentSwipeId=-1 = legacy binding).
+      // These blocks were deferred in _runPostTextSide and must still run
+      // even though the cleaner produced no output.
+      if (character != null && ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await _launchExtensionsForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: -1,
+          );
+        }
+      }
+    } else if (_lastStreamedText.trim().isNotEmpty) {
+      // Cleaner failed mid-stream (error/timeout/aborted) but produced
+      // partial text — keep it (do-no-harm: partial cleaned text is still
+      // closer to the user's intent than discarding the work).
+      if (_preCreatedCleanerSwipeId >= 0) {
+        await chatRepo.updateAgentSwipeContent(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          agentSwipeId: _preCreatedCleanerSwipeId,
+          content: _lastStreamedText,
+          genTime: genTime,
+          tokens: estimateTokens(_lastStreamedText),
+        );
+      } else {
+        // Pre-create failed — append the partial text as a new swipe.
+        await cleanerService.applyCleanedText(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          cleanedText: _lastStreamedText,
+          genTime: genTime,
+          tokens: estimateTokens(_lastStreamedText),
+        );
+      }
+      // Partial cleaned swipe was persisted — bind extensions to it.
+      if (character != null && ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await _launchExtensionsForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: _preCreatedCleanerSwipeId >= 0
+                ? _preCreatedCleanerSwipeId
+                : -1,
+          );
+        }
+      }
+    } else if (_preCreatedCleanerSwipeId >= 0) {
+      // Nothing useful was produced — delete the pre-created empty swipe
+      // and revert to the parent 'final'.
+      await chatRepo.removeAgentSwipe(
+        sessionId: sessionId,
+        messageId: targetMessage.id,
+        agentSwipeId: _preCreatedCleanerSwipeId,
+      );
+      // No swipe to bind to → launch extensions on the original (agentSwipeId=-1).
+      if (character != null && ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await _launchExtensionsForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: -1,
+          );
+        }
+      }
+    }
+
+    // Reset the streaming state so the WebView stops treating the bubble
+    // as isTyping. The chatHistoryProvider invalidate below pushes the
+    // finalized message (with the new cleaned swipe) to the WebView.
+    if (ref.mounted) {
+      ref.read(streamingStateProvider(charId).notifier).state =
+          const StreamingState();
+    }
+
+    // Refresh ChatNotifier state so the UI picks up the new swipe
+    // immediately without requiring the user to re-enter the chat. The
+    // update/remove above wrote to DB; ChatNotifier holds its own
+    // ChatState copy that must be pushed.
+    // Note: we do NOT check isCurrentGen here — the cleaner may run
+    // after a regen, and the UI must always reflect the cleaned swipe.
+    if (ref.mounted) {
+      final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+      if (refreshed != null) {
+        ChatSessionService.updateCache(refreshed);
+        final current = getState().value;
+        if (current != null) {
+          setState(
+            AsyncData(
+              current.copyWith(session: refreshed, isGenerating: false),
+            ),
+          );
+        }
+        ref.invalidate(chatHistoryProvider);
+      }
+    }
+  }
+
+  /// Re-run the POST-cleaner against an existing assistant message.
+  ///
+  /// Unlike the auto post-generation `_runPostCleaner` which cleans the
+  /// just-streamed trailing message, this:
+  ///   - Takes the **final** (agentSwipes[0]) text as the cleaner input,
+  ///     regardless of which blue sub-swipe is currently active (so the
+  ///     rerun always re-cleans the original, not a previous cleaned swipe).
+  ///   - Appends a NEW 'cleaned' sub-swipe (does not overwrite the existing
+  ///     one). The user sees a third (fourth, etc.) blue swipe appear.
+  ///   - Streams the rewrite into the bubble as it arrives (same live-preview
+  ///     UX as the auto path).
+  ///   - Has no `genId` abort (genId = -1) — the user can still stop via the
+  ///     Stop button which cancels the in-flight cleaner token.
+  ///
+  /// [messageIndex] is the index of the target message in the current
+  /// `ChatNotifier` messages list. No-op if the message is not an assistant
+  /// message, has no `agentSwipes`, or the cleaner is already running.
+  Future<void> rerunCleaner({
+    required String sessionId,
+    required String messageId,
+  }) async {
+    if (!ref.mounted) return;
+
+    // Refuse concurrent cleaner runs — the pre-created swipe tracking
+    // (`_preCreatedCleanerSwipeId`) is single-slot; a second run would
+    // clobber it and leave the first in a broken state.
+    if (_cleanerCancelToken != null) {
+      debugPrint('[PostCleaner] rerun skipped: cleaner already in flight');
+      return;
+    }
+
+    final pipeline = ref.read(pipelineSettingsProvider);
+    if (!pipeline.postCleanerEnabled) {
+      debugPrint('[PostCleaner] rerun skipped: postCleaner disabled');
+      return;
+    }
+
+    final session = await ref.read(chatRepoProvider).getById(sessionId);
+    if (session == null) return;
+    final targetIndex = session.messages.indexWhere(
+      (m) => m.id == messageId,
+    );
+    if (targetIndex < 0) return;
+    final target = session.messages[targetIndex];
+    if (target.role != 'assistant' || target.isError || target.isTyping) {
+      return;
+    }
+    // The 'final' agentSwipe carries the original assistant text we want
+    // to re-clean. If the message somehow has no agentSwipes (e.g. legacy
+    // greeting), fall back to the top-level content — appendAgentSwipe's
+    // lazy-backfill will synthesize a 'final' from it on the first clean.
+    final finalText = target.agentSwipes.isNotEmpty
+        ? target.agentSwipes[0].content
+        : target.content;
+    if (finalText.trim().isEmpty) return;
+
+    final bookRepo = ref.read(memoryBookRepoProvider);
+    final book = await bookRepo.getBySessionId(sessionId);
+    if (!ref.mounted) return;
+    if (book == null) {
+      debugPrint('[PostCleaner] rerun skipped: no memory book for session');
+      return;
+    }
+
+    // Collect recent chat history before the target message for continuity
+    // checks (same window as the auto path).
+    final maxHistory = pipeline.postCleanerContinuityEnabled
+        ? pipeline.postCleanerHistoryMessages
+        : 0;
+    final recentMessages = <ChatMessage>[];
+    if (maxHistory > 0 && targetIndex > 0) {
+      final start = (targetIndex - maxHistory).clamp(0, targetIndex);
+      for (var i = start; i < targetIndex; i++) {
+        final m = session.messages[i];
+        if (m.content.trim().isEmpty || m.isError) continue;
+        recentMessages.add(m);
+      }
+    }
+
+    // Load broadcast blocks (same as auto path).
+    List<String> broadcastBlocks = const [];
+    try {
+      final studioConfig = await ref
+          .read(studioConfigRepoProvider)
+          .getBySessionId(sessionId);
+      broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
+    } catch (e) {
+      debugPrint(
+        '[PostCleaner] rerun broadcast load failed session=$sessionId error=$e',
+      );
+    }
+    if (!ref.mounted) return;
+
+    // Manual rerun has no promptPayload snapshot (the original generation
+    // context is gone), so the character-audit pass is skipped — the
+    // cleaner runs without CHARACTER CONSISTENCY NOTES. This matches the
+    // auto path's graceful-degradation case (audit timeout / failure).
+    final character = ref.read(characterByIdProvider(charId));
+    try {
+      await _executeAndApplyCleaner(
+        sessionId: sessionId,
+        genId: -1,
+        targetMessage: target,
+        assistantText: finalText,
+        recentMessages: recentMessages,
+        broadcastBlocks: broadcastBlocks,
+        pipeline: pipeline,
+        promptPayload: null,
+        character: character,
+      );
+    } catch (e) {
+      debugPrint('[PostCleaner] rerun failed session=$sessionId error=$e');
+      if (ref.mounted) {
+        ref.read(streamingStateProvider(charId).notifier).state =
+            const StreamingState();
+        ref.read(postCleanerStateProvider.notifier).state =
+            const PostCleanerState.idle();
+        if (_preCreatedCleanerSwipeId >= 0) {
+          try {
+            await ref.read(chatRepoProvider).removeAgentSwipe(
+              sessionId: sessionId,
+              messageId: target.id,
+              agentSwipeId: _preCreatedCleanerSwipeId,
+            );
+          } catch (_) {}
+        }
+      }
+    } finally {
+      if (_auditCancelToken != null && !_auditCancelToken!.isCancelled) {
+        _auditCancelToken!.cancel();
+      }
+      _auditCancelToken = null;
+      _cleanerCancelToken = null;
+      ref.read(cleanerCancelTokenProvider.notifier).state = null;
+      _lastStreamedText = '';
+      _preCreatedCleanerSwipeId = -1;
+      _preCreatedMessageId = null;
     }
   }
 }
@@ -772,11 +1630,27 @@ class GenerationPipeline {
 String extractRecentHistoryText(
   List<ChatMessage> messages, {
   int maxMessages = 10,
+  /// If non-null, only messages up to AND INCLUDING the one with this id
+  /// are considered. Messages after it are dropped — used at regen time
+  /// so the agentic write-loop replays against the historical slice that
+  /// existed when the original turn was generated, not the current
+  /// (post-regen) state. Mirrors Marinara's
+  /// `buildHistoricalLorebookKeeperContext`. See
+  /// docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2 (follow-up).
+  String? upToMessageId,
 }) {
-  final start = messages.length > maxMessages
-      ? messages.length - maxMessages
+  // Truncate to the historical slice first if requested.
+  List<ChatMessage> source = messages;
+  if (upToMessageId != null) {
+    final idx = messages.indexWhere((m) => m.id == upToMessageId);
+    if (idx >= 0) {
+      source = messages.sublist(0, idx + 1);
+    }
+  }
+  final start = source.length > maxMessages
+      ? source.length - maxMessages
       : 0;
-  final recent = messages.sublist(start);
+  final recent = source.sublist(start);
   final lines = <String>[];
   for (final msg in recent) {
     if (msg.isError || msg.isTyping) continue;
@@ -812,4 +1686,35 @@ AgentOperationStatus _agenticWriteStatusToOp(String status) {
     'invalid_output' => AgentOperationStatus.invalidOutput,
     _ => AgentOperationStatus.error,
   };
+}
+
+/// Assembles a plain-text lorebook context snapshot from the [PromptPayload]
+/// for the auditor. Combines vector entries (already retrieved, with content)
+/// and pre-scanned keyword entries (if available). This is a simpler assembly
+/// than the full prompt builder's `_classifyLorebooks` — the auditor only needs
+/// the facts, not the precise positioning/formatting.
+String? _assembleLorebooksContent(PromptPayload payload) {
+  final blocks = <String>[];
+
+  // Pre-scanned keyword entries (from buildFromSession path).
+  final preScanned = payload.preScannedEntries;
+  if (preScanned != null) {
+    for (final e in preScanned) {
+      final content = e.content.trim();
+      if (content.isEmpty) continue;
+      final name = e.comment.isNotEmpty ? e.comment : e.id;
+      blocks.add('[${e.lorebookName}] $name:\n$content');
+    }
+  }
+
+  // Vector entries (from buildFromPreFetched / deep mode).
+  for (final e in payload.vectorEntries) {
+    final content = e.content.trim();
+    if (content.isEmpty) continue;
+    final name = e.comment.isNotEmpty ? e.comment : e.id;
+    blocks.add('[vector] $name:\n$content');
+  }
+
+  if (blocks.isEmpty) return null;
+  return blocks.join('\n\n');
 }

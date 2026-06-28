@@ -21,7 +21,10 @@ void main() {
       }
       expect(state.records.length, AgentOperationsLogState.maxRecords);
       expect(state.records.first.id, 'r5');
-      expect(state.records.last.id, 'r${AgentOperationsLogState.maxRecords + 4}');
+      expect(
+        state.records.last.id,
+        'r${AgentOperationsLogState.maxRecords + 4}',
+      );
     });
 
     test('forSession filters by session id', () {
@@ -54,6 +57,37 @@ void main() {
       expect(next.records.length, 1);
       expect(next.records.first.id, 'r2');
     });
+
+    test('studioTracker kind survives append/filter/label', () {
+      var state = const AgentOperationsLogState();
+      final rec = AgentOperationRecord(
+        id: 'st1',
+        kind: AgentOperationKind.studioTracker,
+        status: AgentOperationStatus.error,
+        sessionId: 's1',
+        attempts: const [
+          AgentOperationAttempt(
+            attempt: 1,
+            statusCode: 0,
+            status: 'error',
+            startedAtMs: 100,
+            elapsedMs: 50,
+          ),
+        ],
+        totalElapsedMs: 50,
+        summary: 'agent errors: 1/2 failed (tracker1)',
+        startedAtMs: 100,
+        finishedAtMs: 150,
+        canRegenerate: true,
+      );
+      state = state.append(rec);
+      expect(state.records.length, 1);
+      expect(state.records.first.kind, AgentOperationKind.studioTracker);
+      expect(state.records.first.kind.label, 'Studio tracker');
+      expect(state.failures.length, 1);
+      expect(state.failures.first.id, 'st1');
+      expect(state.forSession('s1').length, 1);
+    });
   });
 
   group('agentOperationsLogProvider', () {
@@ -66,10 +100,9 @@ void main() {
     test('append via notifier', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      container.read(agentOperationsLogProvider.notifier).state =
-          container.read(agentOperationsLogProvider).append(
-                _mkRecord('r1', AgentOperationStatus.ok),
-              );
+      container.read(agentOperationsLogProvider.notifier).state = container
+          .read(agentOperationsLogProvider)
+          .append(_mkRecord('r1', AgentOperationStatus.ok));
       expect(container.read(agentOperationsLogProvider).records.length, 1);
     });
   });

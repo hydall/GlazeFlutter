@@ -21,6 +21,7 @@ typedef PanelRefresher =
       String sessionId,
       String messageId,
       int swipeId,
+      int agentSwipeId,
     );
 
 typedef StreamHandlerFactory =
@@ -76,6 +77,7 @@ class InfoblockHandler implements BlockHandler {
         sessionId: context.sessionId,
         messageId: context.messageId,
         swipeId: context.swipeId,
+        agentSwipeId: context.agentSwipeId,
         blockId: blockConfig.id,
         blockName: blockConfig.name,
         blockType: blockConfig.type.name,
@@ -92,6 +94,7 @@ class InfoblockHandler implements BlockHandler {
         context.sessionId,
         context.messageId,
         context.swipeId,
+        context.agentSwipeId,
       );
       return stopped;
     }
@@ -116,6 +119,7 @@ class InfoblockHandler implements BlockHandler {
       sessionId: context.sessionId,
       messageId: context.messageId,
       swipeId: context.swipeId,
+      agentSwipeId: context.agentSwipeId,
       blockId: blockConfig.id,
       blockName: blockConfig.name,
       blockType: blockConfig.type.name,
@@ -130,6 +134,7 @@ class InfoblockHandler implements BlockHandler {
       context.sessionId,
       context.messageId,
       context.swipeId,
+      context.agentSwipeId,
     );
     return done;
   }

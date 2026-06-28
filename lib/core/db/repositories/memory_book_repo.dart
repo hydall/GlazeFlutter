@@ -48,12 +48,6 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         batchSize: global.batchSize,
         vectorSearchEnabled: global.vectorSearchEnabled,
         keyMatchMode: global.keyMatchMode,
-        generationSource: global.generationSource,
-        generationModel: global.generationModel,
-        generationEndpoint: global.generationEndpoint,
-        generationApiKey: global.generationApiKey,
-        generationTemperature: global.generationTemperature,
-        generationMaxTokens: global.generationMaxTokens,
         promptPreset: global.promptPreset,
         diversityAware: global.diversityAware,
         diversityPenalty: global.diversityPenalty,
@@ -63,31 +57,10 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         importanceWeight: global.importanceWeight,
         sourceWindowExclusion: global.sourceWindowExclusion,
         factualContinuityGuardEnabled: global.factualContinuityGuardEnabled,
-        classifierEnabled: global.classifierEnabled,
-        classifierSource: global.classifierSource,
-        classifierModel: global.classifierModel,
-        classifierEndpoint: global.classifierEndpoint,
-        classifierApiKey: global.classifierApiKey,
-        classifierTimeoutMs: global.classifierTimeoutMs,
-        sidecarEnabled: global.sidecarEnabled,
-        sidecarSource: global.sidecarSource,
-        sidecarModel: global.sidecarModel,
-        sidecarEndpoint: global.sidecarEndpoint,
-        sidecarApiKey: global.sidecarApiKey,
-        sidecarTimeoutMs: global.sidecarTimeoutMs,
         queryIncludeAssistant: global.queryIncludeAssistant,
         queryRecentTurns: global.queryRecentTurns,
         queryMaxChars: global.queryMaxChars,
         cadenceInterval: global.cadenceInterval,
-        consolidationEnabled: global.consolidationEnabled,
-        consolidationThreshold: global.consolidationThreshold,
-        consolidationSource: global.consolidationSource,
-        consolidationModel: global.consolidationModel,
-        consolidationEndpoint: global.consolidationEndpoint,
-        consolidationApiKey: global.consolidationApiKey,
-        consolidationTimeoutMs: global.consolidationTimeoutMs,
-        postCleanerTemperature: global.postCleanerTemperature,
-        postCleanerMaxTokens: global.postCleanerMaxTokens,
       ),
     );
     await put(book);
@@ -148,6 +121,124 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         book.copyWith(
           pendingDrafts: [...book.pendingDrafts, ...drafts],
         ),
+      );
+    });
+  }
+
+  /// Atomically appends [entries] to the approved entries of the memory book
+  /// for [sessionId]. Wraps the read-modify-write in a transaction so
+  /// concurrent writes cannot interleave (database.md Rule 3).
+  ///
+  /// Used by the agentic write-loop (Stage 1) to auto-approve agent-generated
+  /// memory entries: instead of landing in `pendingDrafts` for manual approval,
+  /// each validated agent write is promoted to a `MemoryEntry` (kind='agent',
+  /// source='agentic') immediately and persisted to `entriesJson`. The user
+  /// can still delete or edit the entry afterwards via the MemoryBook UI.
+  Future<void> appendApprovedEntries(
+    String sessionId,
+    List<MemoryEntry> entries,
+  ) async {
+    if (entries.isEmpty) return;
+    await transaction(() async {
+      final existing = await getBySessionId(sessionId);
+      final book = existing ??
+          MemoryBook(
+            id: 'memorybook_$sessionId',
+            sessionId: sessionId,
+          );
+      await put(
+        book.copyWith(
+          entries: [...book.entries, ...entries],
+        ),
+      );
+    });
+  }
+
+  /// Atomically appends [newFacts] to the `content` of the existing entry
+  /// with [entryId] in the memory book for [sessionId], and merges [newKeys]
+  /// into that entry's `keys` (case-insensitive dedup). Wraps the
+  /// read-modify-write in a transaction (database.md Rule 3).
+  ///
+  /// Append-only semantics (patch #4 — Marinara analog): the existing
+  /// entry's content is NEVER rewritten — only appended to. This preserves
+  /// prior agent writes and protects against regen-time fact loss (the
+  /// agentic write-loop at regen sees the existing entry via
+  /// `<existing_memory_entries>` in its prompt and only appends new facts).
+  ///
+  /// Returns true if the entry was found and updated, false if no entry
+  /// with [entryId] exists in the book (caller may fall back to creating
+  /// a new entry via [appendApprovedEntries]).
+  ///
+  /// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #4) and §2.2.
+  Future<bool> appendFactsToEntry({
+    required String sessionId,
+    required String entryId,
+    required String newFacts,
+    List<String> newKeys = const [],
+  }) async {
+    if (newFacts.trim().isEmpty) return false;
+    var didAppend = false;
+    await transaction(() async {
+      final existing = await getBySessionId(sessionId);
+      if (existing == null) return;
+      final idx = existing.entries.indexWhere((e) => e.id == entryId);
+      if (idx < 0) return;
+      final entry = existing.entries[idx];
+      // Locked entries are user-protected — agent cannot modify them.
+      // Mirrors Marinara's `locked` flag. See
+      // docs/plans/PLAN_MEMORY_CONTINUITY.md §2.4.
+      if (entry.locked) return;
+      didAppend = true;
+      final appendedContent = entry.content.isEmpty
+          ? newFacts
+          : '${entry.content}\n\n$newFacts';
+      // Case-insensitive key merge — preserves existing keys and adds new
+      // ones without duplicates.
+      final existingLower = entry.keys
+          .map((k) => k.toLowerCase())
+          .toSet();
+      final mergedKeys = <String>[...entry.keys];
+      for (final k in newKeys) {
+        if (k.isEmpty) continue;
+        if (existingLower.add(k.toLowerCase())) {
+          mergedKeys.add(k);
+        }
+      }
+      final updatedEntry = entry.copyWith(
+        content: appendedContent,
+        keys: mergedKeys,
+      );
+      final updatedEntries = List<MemoryEntry>.from(existing.entries);
+      updatedEntries[idx] = updatedEntry;
+      await put(existing.copyWith(entries: updatedEntries));
+    });
+    return didAppend;
+  }
+
+  /// Atomically removes all `MemoryEntry` and `MemoryDraft` items whose
+  /// `messageIds` contain [messageId] from the memory book for [sessionId].
+  /// Wraps the read-modify-write in a transaction (database.md Rule 3).
+  ///
+  /// Called by `ChatMessageService.deleteMessage` so deleting an assistant
+  /// message also drops the memory entries/drafts that were sourced from it.
+  /// Items whose `messageIds` does NOT contain [messageId] are preserved
+  /// (they were sourced from other messages and should survive).
+  Future<void> deleteForMessage(String sessionId, String messageId) async {
+    await transaction(() async {
+      final existing = await getBySessionId(sessionId);
+      if (existing == null) return;
+      final keptEntries = existing.entries
+          .where((e) => !e.messageIds.contains(messageId))
+          .toList();
+      final keptDrafts = existing.pendingDrafts
+          .where((d) => !d.messageIds.contains(messageId))
+          .toList();
+      if (keptEntries.length == existing.entries.length &&
+          keptDrafts.length == existing.pendingDrafts.length) {
+        return;
+      }
+      await put(
+        existing.copyWith(entries: keptEntries, pendingDrafts: keptDrafts),
       );
     });
   }

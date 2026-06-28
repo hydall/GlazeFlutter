@@ -221,10 +221,12 @@ class ChatBridgeController {
   void Function(String id, String direction)? onAgentSwipe;
   void Function(String id, int direction)? onChangeGreeting;
   void Function(String id, String mode)? onRegenerate;
+  /// Called when the user taps the "Re-run cleaner" icon on an assistant
+  /// message: re-runs POST-cleaner against that message's final (agentSwipes[0])
+  /// text and appends a new 'cleaned' sub-swipe. Carries the message id.
+  void Function(String messageId)? onRerunCleaner;
   void Function(String action, String text)? onSelectionAction;
   void Function(String id, String text)? onEditSave;
-  void Function(String outputId, String messageId)? onStudioOutputEdit;
-  void Function(String outputId, String messageId)? onStudioOutputRegen;
   void Function(String id)? onEditCancel;
   void Function(String id, bool focused)? onEditFocusChange;
   void Function(String id, String guidanceText)? onGuidedSwipe;
@@ -356,6 +358,8 @@ class ChatBridgeController {
         onInjectClick?.call(s);
       case 'onExtBlocksRunAll':
         onExtBlocksRunAll?.call(s);
+      case 'onRerunCleaner':
+        onRerunCleaner?.call(s);
     }
   }
 
@@ -417,10 +421,6 @@ class ChatBridgeController {
     switch (name) {
       case 'onEditSave':
         onEditSave?.call(id, s);
-      case 'onStudioOutputEdit':
-        onStudioOutputEdit?.call(id, s);
-      case 'onStudioOutputRegen':
-        onStudioOutputRegen?.call(id, s);
       case 'onRegenerate':
         onRegenerate?.call(id, s);
     }

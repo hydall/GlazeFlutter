@@ -6,10 +6,12 @@ import 'package:dio/dio.dart';
 import 'gdrive_folders.dart';
 
 class GDriveFiles {
-  final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 120),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 120),
+    ),
+  );
 
   final Map<String, String> _fileIdCache = {};
   final GDriveFolders _folders;
@@ -35,10 +37,12 @@ class GDriveFiles {
         await _dio.patch<void>(
           'https://www.googleapis.com/upload/drive/v3/files/$existingId?uploadType=media',
           data: data,
-          options: Options(headers: {
-            'Authorization': 'Bearer $token',
-            'Content-Type': 'application/json',
-          }),
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          ),
         );
         return;
       } on DioException catch (e) {
@@ -52,10 +56,12 @@ class GDriveFiles {
       await _dio.patch<void>(
         'https://www.googleapis.com/upload/drive/v3/files/$fileId?uploadType=media',
         data: data,
-        options: Options(headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        }),
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        ),
       );
       _fileIdCache[cacheKey] = fileId;
       return;
@@ -67,7 +73,8 @@ class GDriveFiles {
       'parents': [parentId],
     });
 
-    final body = '--$boundary\r\n'
+    final body =
+        '--$boundary\r\n'
         'Content-Type: application/json; charset=UTF-8\r\n\r\n'
         '$metadata\r\n'
         '--$boundary\r\n'
@@ -78,10 +85,12 @@ class GDriveFiles {
     final response = await _dio.post<Map<String, dynamic>>(
       'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
       data: body,
-      options: Options(headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'multipart/related; boundary=$boundary',
-      }),
+      options: Options(
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'multipart/related; boundary=$boundary',
+        },
+      ),
     );
     final newId = response.data?['id'] as String?;
     if (newId != null) _fileIdCache[cacheKey] = newId;
@@ -92,15 +101,19 @@ class GDriveFiles {
     final parentId = await _folders.resolvePathToParent(path);
     final fileName = path.split('/').last;
 
-    final existingId = _fileIdCache[path] ?? await _findFileByName(fileName, parentId, token);
+    final existingId =
+        _fileIdCache[path] ?? await _findFileByName(fileName, parentId, token);
     if (existingId != null) {
       await _dio.patch<void>(
         'https://www.googleapis.com/upload/drive/v3/files/$existingId?uploadType=media',
         data: Stream.fromIterable([data]),
-        options: Options(headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/octet-stream',
-        }, contentType: 'application/octet-stream'),
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/octet-stream',
+          },
+          contentType: 'application/octet-stream',
+        ),
       );
       _fileIdCache[path] = existingId;
       return;
@@ -108,11 +121,16 @@ class GDriveFiles {
 
     final metaResponse = await _dio.post<Map<String, dynamic>>(
       'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
-      data: jsonEncode({'name': fileName, 'parents': [parentId]}),
-      options: Options(headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
+      data: jsonEncode({
+        'name': fileName,
+        'parents': [parentId],
       }),
+      options: Options(
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ),
     );
     final location = metaResponse.headers['location']?.first;
     if (location == null) throw Exception('No resumable upload URL');
@@ -120,9 +138,10 @@ class GDriveFiles {
     final uploadResponse = await _dio.put<Map<String, dynamic>>(
       location,
       data: Stream.fromIterable([data]),
-      options: Options(headers: {
-        'Content-Length': data.length.toString(),
-      }, contentType: 'application/octet-stream'),
+      options: Options(
+        headers: {'Content-Length': data.length.toString()},
+        contentType: 'application/octet-stream',
+      ),
     );
     final newId = uploadResponse.data?['id'] as String?;
     if (newId != null) _fileIdCache[path] = newId;
@@ -133,9 +152,10 @@ class GDriveFiles {
     final fileId = await _resolveFileId(path, token);
     final response = await _dio.get<String>(
       'https://www.googleapis.com/drive/v3/files/$fileId?alt=media',
-      options: Options(headers: {
-        'Authorization': 'Bearer $token',
-      }, responseType: ResponseType.plain),
+      options: Options(
+        headers: {'Authorization': 'Bearer $token'},
+        responseType: ResponseType.plain,
+      ),
     );
     return response.data ?? '';
   }
@@ -145,9 +165,10 @@ class GDriveFiles {
     final fileId = await _resolveFileId(path, token);
     final response = await _dio.get<List<int>>(
       'https://www.googleapis.com/drive/v3/files/$fileId?alt=media',
-      options: Options(headers: {
-        'Authorization': 'Bearer $token',
-      }, responseType: ResponseType.bytes),
+      options: Options(
+        headers: {'Authorization': 'Bearer $token'},
+        responseType: ResponseType.bytes,
+      ),
     );
     return Uint8List.fromList(response.data ?? []);
   }
@@ -162,7 +183,11 @@ class GDriveFiles {
     _fileIdCache.remove(path);
   }
 
-  Future<String?> _findFileByName(String name, String parentId, String token) async {
+  Future<String?> _findFileByName(
+    String name,
+    String parentId,
+    String token,
+  ) async {
     try {
       final query = "name='$name' and '$parentId' in parents and trashed=false";
       final response = await _dio.get<Map<String, dynamic>>(

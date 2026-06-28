@@ -370,8 +370,6 @@ export class Bridge {
 
     if (msg.reasoning) section.dataset.reasoning = msg.reasoning;
     else if (msg.reasoning === null || msg.reasoning === '') delete section.dataset.reasoning;
-    if (msg.studioOutputs && msg.studioOutputs.length) section.dataset.studioOutputs = JSON.stringify(msg.studioOutputs);
-    else if (msg.studioOutputs !== undefined) delete section.dataset.studioOutputs;
 
     if (msg.text != null) section.dataset.rawText = msg.text;
 
@@ -385,8 +383,6 @@ export class Bridge {
       isUser,
       !!msg.isTyping,
       animate,
-      msg.studioOutputs !== undefined ? msg.studioOutputs : null,
-      !!msg.studioOutputsExpanded
     );
     this._imgGenTimer.ensureRunning();
 
@@ -446,8 +442,6 @@ export class Bridge {
     const hasAgentSwipes = isChar && agentSwipeFinalCount > 1;
     const hasGreetings = isChar && messageIndex === 0 && greetingTotal > 1;
     const showRegen = ((!isChar && isLast) || isError) && !isGenerating && !isEditing;
-    const studioOutputs = msg.studioOutputs !== undefined ? msg.studioOutputs : null;
-    const showStudioFinalRegen = isChar && isLast && !isGenerating && !isEditing && studioOutputs && studioOutputs.length;
 
     center.innerHTML = '';
 
@@ -482,36 +476,21 @@ export class Bridge {
       center.appendChild(stop);
     }
 
-    if (showRegen || showStudioFinalRegen) {
+    if (showRegen) {
       const regen = document.createElement('div');
       regen.className = 'msg-regenerate';
-      if (hasSwipes || hasGreetings || hasAgentSwipes || showStudioFinalRegen) regen.classList.add('icon-only');
+      if (hasSwipes || hasGreetings || hasAgentSwipes) regen.classList.add('icon-only');
       regen.dataset.action = 'regenerate';
       regen.dataset.messageId = section.dataset.messageId;
       regen.dataset.mode = 'magic';
-      regen.title = showStudioFinalRegen ? 'Regenerate full Studio pipeline' : 'Regenerate';
+      regen.title = 'Regenerate';
       regen.innerHTML = ICON.regen;
-      if (!hasSwipes && !hasGreetings && !hasAgentSwipes && !showStudioFinalRegen) {
+      if (!hasSwipes && !hasGreetings && !hasAgentSwipes) {
         const span = document.createElement('span');
         span.textContent = 'Regenerate';
         regen.appendChild(span);
       }
       center.appendChild(regen);
-
-      if (showStudioFinalRegen) {
-        const finalRegen = document.createElement('div');
-        finalRegen.className = 'msg-regenerate studio-final-only';
-        finalRegen.dataset.action = 'regenerate';
-        finalRegen.dataset.messageId = section.dataset.messageId;
-        finalRegen.dataset.mode = 'studio-final';
-        finalRegen.title = 'Regenerate final Studio agent only (reuses agent briefs)';
-        finalRegen.innerHTML = ICON.regen;
-        const label = document.createElement('span');
-        label.className = 'studio-final-only-label';
-        label.textContent = 'Final';
-        finalRegen.appendChild(label);
-        center.appendChild(finalRegen);
-      }
     }
   }
 

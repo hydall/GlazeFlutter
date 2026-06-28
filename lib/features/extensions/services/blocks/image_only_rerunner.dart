@@ -28,6 +28,7 @@ class ImageOnlyRerunner {
     required String blockId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required String sessionId,
     required String charId,
     required Character character,
@@ -42,6 +43,7 @@ class ImageOnlyRerunner {
       sessionId,
       messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
     );
     final existing = rows.where((b) => b.blockId == blockId).firstOrNull;
     if (existing == null || existing.content.isEmpty) return;
@@ -56,13 +58,14 @@ class ImageOnlyRerunner {
     ref
         .read(infoBlocksProvider(sessionId).notifier)
         .addOrReplace(existing.copyWith(status: BlockRunStatus.running));
-    refreshPanelForMessage(charId, sessionId, messageId, swipeId);
+    refreshPanelForMessage(charId, sessionId, messageId, swipeId, agentSwipeId);
 
     await renderImagePixels(
       charId: charId,
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
       blockConfig: blockConfig,
       character: character,
       persona: persona,
@@ -80,6 +83,7 @@ typedef ImagePixelRerenderFn =
       required String sessionId,
       required String messageId,
       required int swipeId,
+      required int agentSwipeId,
       required BlockConfig blockConfig,
       required Character character,
       required Persona? persona,

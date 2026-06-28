@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -5,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/platform_paths.dart';
+import '../utils/time_helpers.dart';
 import 'tables.dart';
 
 part 'app_db.g.dart';
@@ -29,6 +31,7 @@ part 'app_db.g.dart';
     MemoryConsolidationRows,
     StudioConfigRows,
     TrackerRows,
+    TrackerSnapshots,
     ExtensionPresets,
     InfoBlocks,
   ],
@@ -39,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 47;
+  int get schemaVersion => 53;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -549,10 +552,7 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('routing_mode')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.routingMode,
-          );
+          await m.addColumn(studioConfigRows, studioConfigRows.routingMode);
         }
       }
       if (from < 47) {
@@ -569,6 +569,216 @@ class AppDatabase extends _$AppDatabase {
             studioConfigRows,
             studioConfigRows.broadcastBlocksJson,
           );
+        }
+      }
+      if (from < 48) {
+        // Pipeline settings separation: extract pipeline LLM fields from
+        // memory_book_rows.settings_json into a new pipeline_settings_rows
+        // table so generation-pipeline config is owned by the pipeline, not
+        // the memory book. Additive only — old JSON keys are left in
+        // memory_book_rows.settings_json and silently ignored by the updated
+        // MemoryBookSettings.fromJson (unknown keys are dropped by freezed).
+        //
+        // NOTE: the pipeline_settings_rows table was dropped in schema v52
+        // (pipeline settings are now a singleton global in SharedPreferences).
+        // This v48 migration is retained so users upgrading from <48 → >=52
+        // still create the table transiently before the v52 step drops it.
+        // The CREATE TABLE uses raw SQL (not m.createTable) because the Drift
+        // table definition was removed when the table was dropped.
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('pipeline_settings_rows')) {
+          await customStatement(
+            'CREATE TABLE IF NOT EXISTS pipeline_settings_rows ('
+            'session_id TEXT NOT NULL PRIMARY KEY, '
+            "settings_json TEXT NOT NULL DEFAULT '{}', "
+            'updated_at INTEGER NOT NULL DEFAULT 0)',
+          );
+        }
+        // Migrate existing per-session pipeline settings out of memory books.
+        // Done in Dart (not SQL) because the field set is large and typed.
+        final rows = await customSelect(
+          'SELECT session_id, settings_json FROM memory_book_rows',
+        ).get();
+        const pipelineKeys = <String>{
+          'generationSource',
+          'generationModel',
+          'generationEndpoint',
+          'generationApiKey',
+          'generationTemperature',
+          'generationMaxTokens',
+          'classifierEnabled',
+          'classifierSource',
+          'classifierModel',
+          'classifierEndpoint',
+          'classifierApiKey',
+          'classifierTimeoutMs',
+          'sidecarEnabled',
+          'sidecarSource',
+          'sidecarModel',
+          'sidecarEndpoint',
+          'sidecarApiKey',
+          'sidecarTimeoutMs',
+          'agenticWriteEnabled',
+          'postCleanerEnabled',
+          'postCleanerTemperature',
+          'postCleanerMaxTokens',
+          'postCleanerSource',
+          'postCleanerModel',
+          'postCleanerEndpoint',
+          'postCleanerApiKey',
+          'postCleanerTimeoutMs',
+          'postCleanerContinuityEnabled',
+          'postCleanerCharacterCheckEnabled',
+          'postCleanerHistoryMessages',
+          'postCleanerMaxCharsPerMessage',
+          'consolidationEnabled',
+          'consolidationThreshold',
+          'consolidationSource',
+          'consolidationModel',
+          'consolidationEndpoint',
+          'consolidationApiKey',
+          'consolidationTimeoutMs',
+        };
+        for (final row in rows) {
+          final sessionId = row.read<String>('session_id');
+          final raw = row.read<String>('settings_json');
+          Map<String, dynamic>? bookJson;
+          try {
+            bookJson = jsonDecode(raw) as Map<String, dynamic>;
+          } catch (_) {
+            bookJson = null;
+          }
+          if (bookJson == null) continue;
+          final pipelineJson = <String, dynamic>{};
+          for (final key in pipelineKeys) {
+            if (bookJson.containsKey(key)) {
+              pipelineJson[key] = bookJson[key];
+            }
+          }
+          if (pipelineJson.isEmpty) continue;
+          await customStatement(
+            'INSERT OR REPLACE INTO pipeline_settings_rows '
+            '(session_id, settings_json, updated_at) '
+            "VALUES (?, ?, CAST(strftime('%s','now') AS INTEGER))",
+            [sessionId, jsonEncode(pipelineJson)],
+          );
+        }
+      }
+      if (from < 49) {
+        // Studio Build/Run model overrides: allow the user to pick a specific
+        // model from the API config's fetched model list, independent of the
+        // config's default `model` field. Additive — defaults to '' (use
+        // config.model).
+        final cols = await customSelect(
+          'PRAGMA table_info("studio_config_rows")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('build_model_override')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.buildModelOverride,
+          );
+        }
+        if (!colNames.contains('run_model_override')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.runModelOverride,
+          );
+        }
+      }
+      if (from < 50) {
+        // Per-(message, swipe, agent-swipe) tracker state snapshots. Mirrors
+        // Marinara-Engine's game_state_snapshots: each swipe of each message
+        // owns an immutable tracker-state row so delete/swipe/regen rollback
+        // is emergent (drop the rows; the previous committed snapshot becomes
+        // "latest"). Guarded like every prior table migration to survive
+        // partial upgrades.
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('tracker_snapshots')) {
+          await m.createTable(trackerSnapshots);
+        }
+      }
+      if (from < 51) {
+        // Migrate existing tracker_rows into baseline tracker_snapshots so
+        // legacy sessions get a committed snapshot the read path can find.
+        // For each session with trackers, insert one snapshot at the sentinel
+        // anchor (messageId='', swipeId=0, agentSwipeId=0, committed=1). This
+        // snapshot is never dropped by deleteForMessage (no real message has
+        // id='') and is naturally superseded when a new turn writes a real
+        // snapshot with a higher createdAt.
+        final snapTables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final snapNames =
+            snapTables.map((r) => r.read<String>('name')).toSet();
+        if (snapNames.contains('tracker_snapshots') &&
+            snapNames.contains('tracker_rows')) {
+          // Aggregate each session's trackers into a JSON array and insert
+          // as a single baseline snapshot.
+          final sessions = await customSelect(
+            'SELECT DISTINCT session_id FROM tracker_rows',
+          ).get();
+          final now = currentTimestampSeconds();
+          for (final s in sessions) {
+            final sessionId = s.read<String>('session_id');
+            final rows = await customSelect(
+              'SELECT name, value, scope, provenance, updated_at '
+              'FROM tracker_rows WHERE session_id = ? '
+              'ORDER BY name',
+              variables: [Variable.withString(sessionId)],
+            ).get();
+            if (rows.isEmpty) continue;
+            final trackersJson = rows
+                .map((r) {
+                  return jsonEncode({
+                    'sessionId': sessionId,
+                    'name': r.read<String>('name'),
+                    'value': r.read<String>('value'),
+                    'scope': r.read<String>('scope'),
+                    'provenance': r.read<String>('provenance'),
+                    'updatedAt': r.read<int>('updated_at'),
+                  });
+                })
+                .join(',');
+            await customStatement(
+              'INSERT OR REPLACE INTO tracker_snapshots '
+              '(session_id, message_id, swipe_id, agent_swipe_id, '
+              'trackers_json, committed, created_at) VALUES '
+              "(?, '', 0, 0, ?, 1, ?)",
+              [sessionId, '[$trackersJson]', now],
+            );
+          }
+        }
+      }
+      if (from < 52) {
+        // Pipeline settings are now a singleton global stored in
+        // SharedPreferences (key 'pipelineSettings'), not per-session Drift
+        // rows. Drop the table — per-session overrides are abandoned by
+        // explicit user choice (pipeline config is set once via Build Studio
+        // and applied uniformly across all chats). The SharedPreferences
+        // payload is unaffected; PipelineSettings.fromJson reads the same
+        // fields, with new cleaner fields defaulting to their @Default values.
+        await m.deleteTable('pipeline_settings_rows');
+      }
+      if (from < 53) {
+        // InfoBlock.agentSwipeId: bind ext blocks to the blue cleaned
+        // sub-swipe so blocks launched after the POST-cleaner target the
+        // cleaned text, not the raw streamed final. Default -1 = "no agent
+        // swipe" (legacy blocks written before the cleaner existed or when
+        // the cleaner is disabled — these match by (messageId, swipeId)
+        // only, preserving prior behavior).
+        final cols = await customSelect(
+          'PRAGMA table_info("info_blocks")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('agent_swipe_id')) {
+          await m.addColumn(infoBlocks, infoBlocks.agentSwipeId);
         }
       }
     },

@@ -279,10 +279,7 @@ class MemoryConsolidationRows extends Table {
 
 @DataClassName('TrackerRow')
 @TableIndex(name: 'idx_trackers_session', columns: {#sessionId})
-@TableIndex(
-  name: 'idx_trackers_session_scope',
-  columns: {#sessionId, #scope},
-)
+@TableIndex(name: 'idx_trackers_session_scope', columns: {#sessionId, #scope})
 class TrackerRows extends Table {
   @override
   String get tableName => 'tracker_rows';
@@ -302,6 +299,44 @@ class TrackerRows extends Table {
   // insertOnConflictUpdate targets this natural key.
   @override
   Set<Column> get primaryKey => {sessionId, name};
+}
+
+/// Per-(message, swipe, agent-swipe) immutable tracker state snapshot.
+///
+/// Mirrors Marinara-Engine's `game_state_snapshots` model: each swipe of each
+/// message owns its own tracker state row, so delete/swipe/regen rollback is
+/// emergent (delete the rows; the previous committed snapshot becomes
+/// "latest"). The `committed` flag separates accepted state (user sent a
+/// follow-up) from tentative/regen state.
+///
+/// Keyed by `(sessionId, messageId, swipeId, agentSwipeId)` so branching a
+/// session (which preserves `ChatMessage.id` across the slice) does not
+/// alias across sessions — the `sessionId` prefix isolates each branch's
+/// snapshots. `trackersJson` is a JSON array of `Tracker.toJson()` entries.
+@DataClassName('TrackerSnapshotRow')
+@TableIndex(name: 'idx_tracker_snapshots_session', columns: {#sessionId})
+@TableIndex(
+  name: 'idx_tracker_snapshots_session_message',
+  columns: {#sessionId, #messageId},
+)
+@TableIndex(
+  name: 'idx_tracker_snapshots_session_committed',
+  columns: {#sessionId, #committed},
+)
+class TrackerSnapshots extends Table {
+  @override
+  String get tableName => 'tracker_snapshots';
+
+  TextColumn get sessionId => text()();
+  TextColumn get messageId => text()();
+  IntColumn get swipeId => integer().withDefault(const Constant(0))();
+  IntColumn get agentSwipeId => integer().withDefault(const Constant(0))();
+  TextColumn get trackersJson => text().withDefault(const Constant('[]'))();
+  IntColumn get committed => integer().withDefault(const Constant(0))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sessionId, messageId, swipeId, agentSwipeId};
 }
 
 @DataClassName('StudioConfigRow')
@@ -326,6 +361,8 @@ class StudioConfigRows extends Table {
   TextColumn get sourcePresetHash => text().withDefault(const Constant(''))();
   TextColumn get buildApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get buildModelOverride => text().withDefault(const Constant(''))();
+  TextColumn get runModelOverride => text().withDefault(const Constant(''))();
   TextColumn get builderPromptTemplate =>
       text().withDefault(const Constant(''))();
   IntColumn get maxFinalHistoryMessages =>
@@ -509,6 +546,10 @@ class ExtensionPresets extends Table {
   name: 'idx_info_blocks_message_swipe',
   columns: {#messageId, #swipeId},
 )
+@TableIndex(
+  name: 'idx_info_blocks_message_agent_swipe',
+  columns: {#messageId, #swipeId, #agentSwipeId},
+)
 class InfoBlocks extends Table {
   @override
   String get tableName => 'info_blocks';
@@ -517,6 +558,7 @@ class InfoBlocks extends Table {
   TextColumn get sessionId => text()();
   TextColumn get messageId => text()();
   IntColumn get swipeId => integer().withDefault(const Constant(0))();
+  IntColumn get agentSwipeId => integer().withDefault(const Constant(-1))();
   TextColumn get blockId => text()();
   TextColumn get blockName => text()();
   TextColumn get blockType => text()();

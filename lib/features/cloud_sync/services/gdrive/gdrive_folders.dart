@@ -2,14 +2,15 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
-
 class GDriveFolders {
   static const _folderName = 'Glaze';
 
-  final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 60),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+    ),
+  );
 
   final Map<String, String> _folderIdCache = {};
   String? _glazeFolderId;
@@ -86,10 +87,12 @@ class GDriveFolders {
         'mimeType': 'application/vnd.google-apps.folder',
         'parents': [parentId],
       }),
-      options: Options(headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      }),
+      options: Options(
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ),
     );
     final id = response.data?['id'] as String;
     return id;
@@ -112,9 +115,14 @@ class GDriveFolders {
     if (path == '/$_folderName') _glazeFolderId = null;
   }
 
-  Future<String?> _findFolderByName(String name, String parentId, String token) async {
+  Future<String?> _findFolderByName(
+    String name,
+    String parentId,
+    String token,
+  ) async {
     try {
-      final query = "name='$name' and '$parentId' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false";
+      final query =
+          "name='$name' and '$parentId' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false";
       final response = await _dio.get<Map<String, dynamic>>(
         'https://www.googleapis.com/drive/v3/files',
         queryParameters: {'q': query, 'fields': 'files(id,name)'},

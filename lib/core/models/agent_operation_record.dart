@@ -41,13 +41,13 @@ class AgentOperationAttempt {
       );
 
   Map<String, dynamic> toJson() => {
-        'attempt': attempt,
-        'statusCode': statusCode,
-        'status': status,
-        'error': error,
-        'startedAtMs': startedAtMs,
-        'elapsedMs': elapsedMs,
-      };
+    'attempt': attempt,
+    'statusCode': statusCode,
+    'status': status,
+    'error': error,
+    'startedAtMs': startedAtMs,
+    'elapsedMs': elapsedMs,
+  };
 
   bool get isSuccess => status == 'ok';
 }
@@ -59,16 +59,18 @@ enum AgentOperationKind {
   agenticSearch,
   agenticWrite,
   classifier,
-  consolidation;
+  consolidation,
+  studioTracker;
 
   String get label => switch (this) {
-        AgentOperationKind.memorySidecar => 'Memory sidecar',
-        AgentOperationKind.postCleaner => 'POST-cleaner',
-        AgentOperationKind.agenticSearch => 'Agentic search',
-        AgentOperationKind.agenticWrite => 'Agentic write',
-        AgentOperationKind.classifier => 'Classifier',
-        AgentOperationKind.consolidation => 'Consolidation',
-      };
+    AgentOperationKind.memorySidecar => 'Memory sidecar',
+    AgentOperationKind.postCleaner => 'POST-cleaner',
+    AgentOperationKind.agenticSearch => 'Agentic search',
+    AgentOperationKind.agenticWrite => 'Agentic write',
+    AgentOperationKind.classifier => 'Classifier',
+    AgentOperationKind.consolidation => 'Consolidation',
+    AgentOperationKind.studioTracker => 'Studio tracker',
+  };
 }
 
 /// Final status of an agentic operation.
@@ -91,21 +93,21 @@ enum AgentOperationStatus {
       this != AgentOperationStatus.disabled;
 
   String get label => switch (this) {
-        AgentOperationStatus.ok => 'ok',
-        AgentOperationStatus.disabled => 'disabled',
-        AgentOperationStatus.aborted => 'aborted',
-        AgentOperationStatus.timeout => 'timeout',
-        AgentOperationStatus.httpError => 'http_error',
-        AgentOperationStatus.invalidOutput => 'invalid_output',
-        AgentOperationStatus.error => 'error',
-      };
+    AgentOperationStatus.ok => 'ok',
+    AgentOperationStatus.disabled => 'disabled',
+    AgentOperationStatus.aborted => 'aborted',
+    AgentOperationStatus.timeout => 'timeout',
+    AgentOperationStatus.httpError => 'http_error',
+    AgentOperationStatus.invalidOutput => 'invalid_output',
+    AgentOperationStatus.error => 'error',
+  };
 }
 
 /// A single record in the agentic operations log.
 ///
-/// Plain Dart class (not freezed) — mirrors the [AgentSwipe] pattern to avoid
-/// freezed-generator breakage when a second class in the same file has a
-/// dependency on it. Kept immutable via [copyWith].
+/// Plain Dart class (not freezed) — mirrors the plain-Dart-class pattern to
+/// avoid freezed-generator breakage when a second class in the same file has
+/// a dependency on it. Kept immutable via [copyWith].
 class AgentOperationRecord {
   /// Stable unique id (uuid or timestamp-based).
   final String id;
@@ -178,10 +180,14 @@ class AgentOperationRecord {
         ),
         sessionId: json['sessionId'] as String?,
         messageId: json['messageId'] as String?,
-        attempts: (json['attempts'] as List?)
+        attempts:
+            (json['attempts'] as List?)
                 ?.whereType<Map<dynamic, dynamic>>()
-                .map((e) =>
-                    AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)))
+                .map(
+                  (e) => AgentOperationAttempt.fromJson(
+                    Map<String, dynamic>.from(e),
+                  ),
+                )
                 .toList() ??
             const [],
         totalElapsedMs: json['totalElapsedMs'] as int? ?? 0,
@@ -194,20 +200,20 @@ class AgentOperationRecord {
       );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'kind': kind.name,
-        'status': status.name,
-        'sessionId': sessionId,
-        'messageId': messageId,
-        'attempts': attempts.map((a) => a.toJson()).toList(),
-        'totalElapsedMs': totalElapsedMs,
-        'model': model,
-        'endpoint': endpoint,
-        'summary': summary,
-        'startedAtMs': startedAtMs,
-        'finishedAtMs': finishedAtMs,
-        'canRegenerate': canRegenerate,
-      };
+    'id': id,
+    'kind': kind.name,
+    'status': status.name,
+    'sessionId': sessionId,
+    'messageId': messageId,
+    'attempts': attempts.map((a) => a.toJson()).toList(),
+    'totalElapsedMs': totalElapsedMs,
+    'model': model,
+    'endpoint': endpoint,
+    'summary': summary,
+    'startedAtMs': startedAtMs,
+    'finishedAtMs': finishedAtMs,
+    'canRegenerate': canRegenerate,
+  };
 
   AgentOperationRecord copyWith({
     String? id,
@@ -223,22 +229,21 @@ class AgentOperationRecord {
     int? startedAtMs,
     int? finishedAtMs,
     bool? canRegenerate,
-  }) =>
-      AgentOperationRecord(
-        id: id ?? this.id,
-        kind: kind ?? this.kind,
-        status: status ?? this.status,
-        sessionId: sessionId ?? this.sessionId,
-        messageId: messageId ?? this.messageId,
-        attempts: attempts ?? this.attempts,
-        totalElapsedMs: totalElapsedMs ?? this.totalElapsedMs,
-        model: model ?? this.model,
-        endpoint: endpoint ?? this.endpoint,
-        summary: summary ?? this.summary,
-        startedAtMs: startedAtMs ?? this.startedAtMs,
-        finishedAtMs: finishedAtMs ?? this.finishedAtMs,
-        canRegenerate: canRegenerate ?? this.canRegenerate,
-      );
+  }) => AgentOperationRecord(
+    id: id ?? this.id,
+    kind: kind ?? this.kind,
+    status: status ?? this.status,
+    sessionId: sessionId ?? this.sessionId,
+    messageId: messageId ?? this.messageId,
+    attempts: attempts ?? this.attempts,
+    totalElapsedMs: totalElapsedMs ?? this.totalElapsedMs,
+    model: model ?? this.model,
+    endpoint: endpoint ?? this.endpoint,
+    summary: summary ?? this.summary,
+    startedAtMs: startedAtMs ?? this.startedAtMs,
+    finishedAtMs: finishedAtMs ?? this.finishedAtMs,
+    canRegenerate: canRegenerate ?? this.canRegenerate,
+  );
 
   /// Number of attempts actually executed (1 for one-shot, up to 3 for retry).
   int get attemptCount => attempts.length;

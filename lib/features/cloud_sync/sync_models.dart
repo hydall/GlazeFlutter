@@ -92,7 +92,15 @@ class SyncManifestEntry {
 class SyncManifest {
   /// Bump when hash/canonicalization changes so push can skip re-uploading
   /// existing cloud files and refresh manifest only.
-  static const int currentVersion = 4;
+  ///
+  /// Version history:
+  ///   4 — baseline before pipeline_settings sync.
+  ///   5 — added `pipeline_settings` entity type (per-session pipeline LLM
+  ///         settings: cleaner/sidecar/classifier/consolidation config).
+  ///   6 — removed `pipeline_settings` entity type. Pipeline settings are now
+  ///         a singleton global in SharedPreferences, no longer synced as a
+  ///         per-session Drift collection.
+  static const int currentVersion = 6;
 
   final int version;
   final String deviceId;
@@ -177,6 +185,8 @@ String cloudPath(String type, String id) {
       return '$cloudBase/extensions_settings.json';
     case 'info_block':
       return '$cloudBase/info_blocks/$id.json';
+    case 'tracker_snapshot':
+      return '$cloudBase/tracker_snapshots/$id.json';
     case 'studio_config':
       return '$cloudBase/studio_configs/$id.json';
     case 'lorebooks':

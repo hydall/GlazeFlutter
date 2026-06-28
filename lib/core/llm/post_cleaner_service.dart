@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_operation_record.dart';
-import '../models/memory_book.dart';
+import '../models/chat_message.dart';
+import '../models/character.dart';
+import '../models/persona.dart';
+import '../models/pipeline_settings.dart';
 import '../state/db_provider.dart';
+import '../utils/think_tags.dart';
 import '../../features/chat/chat_session_service.dart';
 import '../../features/chat_history/chat_history_provider.dart';
 import 'sidecar_llm_client.dart';
@@ -21,7 +26,7 @@ import 'sidecar_retry_runner.dart';
 /// still access it.
 ///
 /// Uses [SidecarLlmClient] for the sidecar LLM call and
-/// [ChatRepo.appendSwipeToMessage] for the atomic DB update.
+/// [ChatRepo.appendAgentSwipe] for the atomic DB update.
 /// Falls back to the original text on any error.
 class PostCleanerService {
   final Ref _ref;
@@ -38,16 +43,30 @@ class PostCleanerService {
   /// drive the cleaner using the user's OWN rules instead of the hardcoded
   /// English-only cliché list, and pin the output language so the rewrite does
   /// not silently translate or break language-specific formatting.
+  /// [recentMessages] is the bounded chat history before the assistant response,
+  /// used for conservative local continuity checks (who said what, who is
+  /// present, clothing, positions, recent actions).
   Future<PostCleanerResult> runCleaner({
     required String sessionId,
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
     required String assistantText,
     List<String> broadcastBlocks = const [],
+    List<ChatMessage> recentMessages = const [],
+    List<String>? auditIssues,
     CancelToken? cancelToken,
+    void Function(String accumulatedText)? onCleanedChunk,
   }) async {
     if (!settings.postCleanerEnabled) {
       return PostCleanerResult(status: 'disabled', cleanedText: assistantText);
     }
+
+    // Strip any hidden reasoning (`<think>…</think>` / `<thinking>…`) that the
+    // generator left inside the saved message content. If it reaches the
+    // cleaner prompt the model often echoes / re-expands it, blowing the
+    // output length past the safety ratio (→ silently skipped, no swipe). We
+    // clean the visible prose only and compare lengths against this stripped
+    // baseline, not the raw stored text.
+    assistantText = stripThinkTags(assistantText);
 
     final token = cancelToken ?? CancelToken();
     if (token.isCancelled) {
@@ -59,8 +78,10 @@ class PostCleanerService {
     }
 
     try {
-      final config =
-          await _llm.resolveConfig(settings, errorLabel: 'post-cleaner');
+      final config = await _llm.resolveConfigForCleaner(
+        settings,
+        errorLabel: 'post-cleaner',
+      );
       if (token.isCancelled) {
         return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
       }
@@ -70,7 +91,10 @@ class PostCleanerService {
         settings: settings,
         assistantText: assistantText,
         broadcastBlocks: broadcastBlocks,
+        recentMessages: recentMessages,
+        auditIssues: auditIssues,
         cancelToken: token,
+        onCleanedChunk: onCleanedChunk,
       );
 
       if (token.isCancelled) {
@@ -82,7 +106,11 @@ class PostCleanerService {
         );
       }
 
-      final cleaned = outcome.text;
+      // Also strip reasoning the cleaner model itself may have emitted in its
+      // reply (some sidecar models wrap output in raw `<think>` blocks).
+      final cleaned = outcome.text == null
+          ? null
+          : stripThinkTags(outcome.text!);
       if (cleaned == null || cleaned.trim().isEmpty) {
         if (!outcome.isOk) {
           return PostCleanerResult(
@@ -118,6 +146,29 @@ class PostCleanerService {
         );
       }
 
+      // Safety: reject the rewrite if it dropped protected markup that was
+      // present in the original assistant response. Cheap presence-only check
+      // (ported from Marinara `text-rewrite-safety.ts`): if the original had
+      // inline HTML/XML tags or fenced code blocks and the cleaned version no
+      // longer has any, the cleaner stripped formatting it was told to
+      // preserve — keep the original. This guards against the common LLM
+      // failure mode of flattening formatting when asked to "rewrite for
+      // clarity". Does NOT verify the *same* tags/fences survive, just that
+      // *some* survive — structural equality is the cleaner prompt's job.
+      if (textRewriteDropsProtectedMarkup(assistantText, cleaned)) {
+        debugPrint(
+          '[PostCleaner] skipped: rewrite dropped protected markup '
+          '(HTML/XML tags or fenced code blocks present in original but '
+          'absent in cleaned)',
+        );
+        return PostCleanerResult(
+          status: 'skipped',
+          cleanedText: assistantText,
+          attempts: outcome.attempts,
+          totalElapsedMs: outcome.totalElapsedMs,
+        );
+      }
+
       return PostCleanerResult(
         status: 'ok',
         cleanedText: cleaned,
@@ -129,8 +180,7 @@ class PostCleanerService {
     } on TimeoutException {
       return PostCleanerResult(status: 'timeout', cleanedText: assistantText);
     } catch (e) {
-      if (token.isCancelled ||
-          (e is DioException && CancelToken.isCancel(e))) {
+      if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
         return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
       }
       debugPrint('[PostCleaner] error: $e');
@@ -140,6 +190,38 @@ class PostCleanerService {
         error: '$e',
       );
     }
+  }
+
+  /// Returns true if [original] had inline HTML/XML tags or fenced code blocks
+  /// and [edited] no longer has any. Used as a pre-application guard for the
+  /// cleaner result: if the rewrite flattened formatting the prompt told the
+  /// cleaner to preserve, we keep the original.
+  ///
+  /// - Inline HTML/XML tags: matches `</?[a-zA-Z][^>]*>` (a `<` followed by an
+  ///   optional `/` and a letter — excludes our `==...==` markdown markers
+  ///   and inline `code` single backticks).
+  /// - Fenced code blocks: matches the triple-backtick fence ```` ``` ````.
+  ///
+  /// Presence-only check — does NOT verify the *same* tags/fences survive,
+  /// only that *some* survive. Structural preservation is the cleaner
+  /// prompt's responsibility; this guard only catches the catastrophic case
+  /// of the cleaner stripping ALL formatting.
+  @visibleForTesting
+  static bool textRewriteDropsProtectedMarkup(String original, String edited) {
+    final originalHasTags = _hasHtmlOrXmlTag(original);
+    final originalHasFences = _hasFencedBlock(original);
+    if (!originalHasTags && !originalHasFences) return false;
+    if (originalHasTags && !_hasHtmlOrXmlTag(edited)) return true;
+    if (originalHasFences && !_hasFencedBlock(edited)) return true;
+    return false;
+  }
+
+  static bool _hasHtmlOrXmlTag(String text) {
+    return RegExp(r'</?[a-zA-Z][^>]*>').hasMatch(text);
+  }
+
+  static bool _hasFencedBlock(String text) {
+    return text.contains('```');
   }
 
   static String _statusLabel(AgentOperationStatus status) {
@@ -156,26 +238,50 @@ class PostCleanerService {
 
   Future<SidecarCallOutcome> _askLlmForCleanedText({
     required SidecarApiConfig config,
-    required MemoryBookSettings settings,
+    required PipelineSettings settings,
     required String assistantText,
     List<String> broadcastBlocks = const [],
+    List<ChatMessage> recentMessages = const [],
+    List<String>? auditIssues,
     required CancelToken cancelToken,
+    void Function(String accumulatedText)? onCleanedChunk,
   }) async {
     final prompt = buildCleanerPrompt(
       assistantText: assistantText,
       broadcastBlocks: broadcastBlocks,
+      recentMessages: recentMessages,
+      auditIssues: auditIssues,
+      maxCharsPerMessage: settings.postCleanerMaxCharsPerMessage,
+      bannedWords: settings.postCleanerBannedWords,
+      avoidInstructions: settings.postCleanerAvoidInstructions,
+      styleInstructions: settings.postCleanerStyleInstructions,
     );
 
     final effectiveMaxTokens = settings.postCleanerMaxTokens > 0
         ? settings.postCleanerMaxTokens
         : (assistantText.length ~/ 2).clamp(1000, 16000);
 
+    // When the caller passes an onCleanedChunk callback, stream the rewrite
+    // so the UI can render it progressively instead of replacing the text in
+    // one shot. Otherwise use the non-streaming path (same as before).
+    if (onCleanedChunk != null) {
+      return _llm.callStreamWithLog(
+        config: config,
+        prompt: prompt,
+        maxTokens: effectiveMaxTokens,
+        temperature: settings.postCleanerTemperature,
+        timeoutMs: _llm.resolveCleanerTimeout(settings),
+        cancelToken: cancelToken,
+        onChunk: onCleanedChunk,
+      );
+    }
+
     return _llm.callOnceWithLog(
       config: config,
       prompt: prompt,
       maxTokens: effectiveMaxTokens,
       temperature: settings.postCleanerTemperature,
-      timeoutMs: settings.sidecarTimeoutMs,
+      timeoutMs: _llm.resolveCleanerTimeout(settings),
       cancelToken: cancelToken,
     );
   }
@@ -184,11 +290,19 @@ class PostCleanerService {
   /// user's own language + prose-quality rules (captured verbatim at Studio
   /// build time) are injected and take precedence over the built-in defaults,
   /// so the rewrite respects the preset's language and anti-cliché/anti-slop
-  /// rules instead of a hardcoded English-only list. Public for testing.
+  /// rules instead of a hardcoded English-only list. When [recentMessages] are
+  /// supplied, the cleaner performs a conservative local continuity check
+  /// against the recent chat history. Public for testing.
   @visibleForTesting
   static String buildCleanerPrompt({
     required String assistantText,
     List<String> broadcastBlocks = const [],
+    List<ChatMessage> recentMessages = const [],
+    List<String>? auditIssues,
+    int maxCharsPerMessage = 3000,
+    String bannedWords = '',
+    String avoidInstructions = '',
+    String styleInstructions = '',
   }) {
     final rules = broadcastBlocks
         .map((b) => b.trim())
@@ -197,12 +311,41 @@ class PostCleanerService {
 
     final buffer = StringBuffer()
       ..writeln(
-        'You are a prose editor for a roleplay story. Your job is to clean up '
-        'the following assistant response by removing clichés, repetitive '
-        'phrasings, and common AI-isms.',
+        'You are a conservative prose editor for a roleplay story. Your '
+        'primary job is to clean up the following assistant response by '
+        'removing clichés, repetitive phrasings, and common AI-isms.',
       )
       ..writeln();
 
+    // Recent chat history — authoritative for local scene state.
+    if (recentMessages.isNotEmpty) {
+      final history = _formatRecentMessages(recentMessages, maxCharsPerMessage);
+      if (history.isNotEmpty) {
+        buffer
+          ..writeln('RECENT CHAT HISTORY:')
+          ..writeln(history)
+          ..writeln();
+      }
+    }
+
+    // Character consistency notes from the auditor — explicit fix instructions.
+    // Only added when the auditor found concrete contradictions.
+    if (auditIssues != null && auditIssues.isNotEmpty) {
+      buffer
+        ..writeln('CHARACTER CONSISTENCY NOTES (from auditor — fix these):')
+        ..writeln(auditIssues.map((i) => '- $i').join('\n'))
+        ..writeln()
+        ..writeln(
+          'Apply minimal fixes for these issues while also cleaning style.',
+        )
+        ..writeln(
+          'Do not add new content to resolve them. Prefer deletion or neutral '
+          'rewording.',
+        )
+        ..writeln();
+    }
+
+    // Authoritative style rules from the active preset.
     if (rules.isNotEmpty) {
       buffer
         ..writeln(
@@ -213,6 +356,42 @@ class PostCleanerService {
         ..writeln()
         ..writeln(rules.join('\n\n---\n\n'))
         ..writeln();
+    }
+
+    // Global prose-guardian style overrides (Marinara `banned`/`avoid`/
+    // `prefer` port). User-defined cross-chat style rules that supplement
+    // the preset's broadcastBlocks. Only added when at least one field is
+    // non-empty. The user sets these once globally (e.g. "never use the
+    // word 'ozone'", "avoid starting consecutive responses with dialogue",
+    // "prefer terse, hardboiled prose") and they apply to every chat.
+    final hasBanned = bannedWords.trim().isNotEmpty;
+    final hasAvoid = avoidInstructions.trim().isNotEmpty;
+    final hasStyle = styleInstructions.trim().isNotEmpty;
+    if (hasBanned || hasAvoid || hasStyle) {
+      buffer
+        ..writeln(
+          'GLOBAL STYLE OVERRIDES (user-defined cross-chat rules — apply '
+          'ALONGSIDE the authoritative rules above; do not contradict them):',
+        )
+        ..writeln();
+      if (hasBanned) {
+        buffer
+          ..writeln('BANNED WORDS (never use these, even if the original has them):')
+          ..writeln(bannedWords.trim())
+          ..writeln();
+      }
+      if (hasAvoid) {
+        buffer
+          ..writeln('AVOID (specific patterns to steer away from):')
+          ..writeln(avoidInstructions.trim())
+          ..writeln();
+      }
+      if (hasStyle) {
+        buffer
+          ..writeln('PREFER (style direction to lean into):')
+          ..writeln(styleInstructions.trim())
+          ..writeln();
+      }
     }
 
     buffer
@@ -230,7 +409,68 @@ class PostCleanerService {
         'language and formatting required by the authoritative rules above.',
       )
       ..writeln('- Keep the same approximate length.')
-      ..writeln('- Return ONLY the cleaned text, no explanation, no markdown.')
+      ..writeln(
+        '- PRESERVE all inline HTML / formatting markup VERBATIM. This includes '
+        '<font color="...">, <i>, <b>, <em>, <strong>, <mark>, <sub>, <sup>, '
+        'and any other inline tags. These tags carry the user\'s styling '
+        '(colored thoughts, colored speech, emphasis) and are NOT markdown to '
+        'be stripped. Rewrite the prose INSIDE the tags if needed, but never '
+        'remove, move, or alter the tags themselves, and never collapse '
+        '<font><i>...</i></font> into plain text. If a sentence with colored '
+        'markup is rephrased, keep the tags around the rephrased text in the '
+        'same nesting order.',
+      )
+      ..writeln(
+        '- PRESERVE OOC (out-of-character) blocks VERBATIM. OOC blocks are '
+        'meta-commentary addressed to the user outside the roleplay — they '
+        'are NOT prose to be cleaned. They may be wrapped in `((...))`, '
+        '`[OOC: ...]`, `(OOC: ...)`, `((OOC: ...))`, or appear as clearly '
+        'meta lines (e.g. "((Ghost in the machine: ...))", narrator notes to '
+        'the user, system-style asides). Do not remove, rephrase, translate, '
+        'reformat, or alter OOC blocks in any way. Clean only the in-roleplay '
+        'prose around them. If the entire response is an OOC block, return it '
+        'unchanged.',
+      )
+      ..writeln(
+        '- Return ONLY the cleaned text, no explanation. Inline HTML tags '
+        'described above are part of the content, not markdown fences — keep '
+        'them. OOC blocks are also part of the content — keep them verbatim. '
+        'Do not wrap the output in ``` fences.',
+      )
+      ..writeln();
+
+    // Continuity rules — only when history is available.
+    if (recentMessages.isNotEmpty) {
+      buffer
+        ..writeln('Continuity rules:')
+        ..writeln(
+          '- Before editing style, silently check the assistant response '
+          'against RECENT CHAT HISTORY.',
+        )
+        ..writeln(
+          '- Fix only clear local continuity contradictions that are directly '
+          'contradicted by the provided context: who said what, who is '
+          'present, current position, clothing, held objects, object '
+          'ownership, and recent actions.',
+        )
+        ..writeln('- If the context is ambiguous, keep the original wording.')
+        ..writeln('- Do not invent missing details.')
+        ..writeln(
+          '- Do not add new events, explanations, dialogue, memories, or '
+          'motivations.',
+        )
+        ..writeln(
+          '- Prefer minimal edits: remove, shorten, or neutralize the '
+          'incorrect phrase.',
+        )
+        ..writeln(
+          '- If correcting a continuity issue requires adding a new '
+          'paragraph or scene event, do not fix it — only clean style.',
+        )
+        ..writeln();
+    }
+
+    buffer
       ..writeln()
       ..writeln('Assistant response to clean:')
       ..write(assistantText);
@@ -238,15 +478,50 @@ class PostCleanerService {
     return buffer.toString();
   }
 
-  /// Applies the cleaned text to the session: appends a `'cleaned'` agent
-  /// sub-swipe (blue icon) to the last assistant message via
-  /// [ChatRepo.appendAgentSwipe], preserving the original as a `'final'`
-  /// sub-swipe. Does NOT touch the legacy `swipes[]` (green icons).
+  /// Formats recent chat messages into a compact literal block for the cleaner
+  /// prompt. Each message is trimmed to [maxChars] characters to keep the
+  /// prompt within a reasonable token budget.
+  static const _kDefaultMaxMessageChars = 3000;
+
+  static String _formatRecentMessages(
+    List<ChatMessage> messages, [
+    int maxChars = _kDefaultMaxMessageChars,
+  ]) {
+    final buf = StringBuffer();
+    for (final m in messages) {
+      if (m.content.trim().isEmpty) continue;
+      final role = m.role == 'assistant' ? 'assistant' : 'user';
+      final idSuffix = m.id.isNotEmpty ? ' #${m.id}' : '';
+      var content = m.content;
+      if (content.length > maxChars) {
+        content = '${content.substring(0, maxChars)}…';
+      }
+      buf.writeln('[$role$idSuffix]');
+      buf.writeln(content);
+      buf.writeln();
+    }
+    return buf.toString().trimRight();
+  }
+
+  /// Applies the cleaned text to the session: appends a blue 'cleaned' agent
+  /// swipe carrying [cleanedText] to the last assistant message via
+  /// [ChatRepo.appendAgentSwipe]. The original 'final' text remains available
+  /// as the parent swipe and is lazy-migrated on first clean.
+  ///
+  /// [genTime] is the cleaner's own elapsed time (e.g. `"12.3s"`), surfaced as
+  /// a per-swipe badge on the cleaned sub-swipe (Fix 3). [tokens] is the
+  /// cleaned text's token count (Fix 4). When null, the badge is omitted by
+  /// the mapper and renderer — pass non-null to keep the badge visible.
+  ///
+  /// After the append, clones the parent agent-swipe's tracker snapshot into
+  /// the new 'cleaned' anchor so navigating to the blue sub-swipe restores the
+  /// correct tracker state (the cleaner rewrites prose, not trackers).
   Future<void> applyCleanedText({
     required String sessionId,
     required String messageId,
     required String cleanedText,
-    required String originalText,
+    String? genTime,
+    int? tokens,
   }) async {
     final chatRepo = _ref.read(chatRepoProvider);
     final updated = await chatRepo.appendAgentSwipe(
@@ -254,6 +529,8 @@ class PostCleanerService {
       messageId: messageId,
       content: cleanedText,
       kind: 'cleaned',
+      genTime: genTime,
+      tokens: tokens,
     );
     if (!updated) return;
 
@@ -263,6 +540,281 @@ class PostCleanerService {
       ChatSessionService.updateCache(session);
     }
     _ref.invalidate(chatHistoryProvider);
+
+    // Clone the parent agent-swipe's tracker snapshot into the new 'cleaned'
+    // anchor. The cleaner rewrites prose — tracker state is unchanged, so the
+    // 'cleaned' sub-swipe inherits the parent 'final's trackers. Read the
+    // post-append message to get the exact swipeId + new agentSwipeId (handles
+    // lazy-backfill for legacy messages).
+    try {
+      final msg = session?.messages.where((m) => m.id == messageId).firstOrNull;
+      if (msg == null || msg.agentSwipeId <= 0) return;
+      final parentAgentSwipeId = msg.agentSwipeId - 1;
+      final snapshotRepo = _ref.read(trackerSnapshotRepoProvider);
+      final parent = await snapshotRepo.getByAnchor(
+        sessionId: sessionId,
+        messageId: messageId,
+        swipeId: msg.swipeId,
+        agentSwipeId: parentAgentSwipeId,
+      );
+      if (parent != null) {
+        await snapshotRepo.upsertTrackers(
+          sessionId: sessionId,
+          messageId: messageId,
+          swipeId: msg.swipeId,
+          agentSwipeId: msg.agentSwipeId,
+          trackers: parent.trackers,
+        );
+      }
+    } catch (e) {
+      debugPrint('[PostCleaner] snapshot clone failed: $e');
+    }
+  }
+
+  /// Pass 0: Character/World Auditor.
+  ///
+  /// Diagnostic sidecar pass that checks [assistantText] against the full
+  /// generation context (character card, persona, lorebooks, memory, summary,
+  /// arcs, entities, recent history) and returns a compact list of
+  /// contradictions. Does NOT rewrite text.
+  ///
+  /// Returns:
+  /// - `[]` — no contradictions found.
+  /// - `['issue 1', ...]` — list of specific contradictions.
+  /// - `null` — audit call failed, JSON unparseable, or was aborted. Caller
+  ///   should skip audit notes and run the cleaner as Phase 1.
+  Future<List<String>?> runCharacterAudit({
+    required String assistantText,
+    required Character character,
+    Persona? persona,
+    String? lorebooksContent,
+    String? memoryContent,
+    String? summaryContent,
+    String? arcContent,
+    String? entitiesContent,
+    List<ChatMessage> recentMessages = const [],
+    required PipelineSettings settings,
+    CancelToken? cancelToken,
+  }) async {
+    if (assistantText.trim().isEmpty) return const [];
+
+    final token = cancelToken ?? CancelToken();
+    if (token.isCancelled) return null;
+
+    try {
+      final config = await _llm.resolveConfigForAudit(
+        settings,
+        errorLabel: 'post-cleaner-audit',
+      );
+      if (token.isCancelled) return null;
+
+      final prompt = buildAuditPrompt(
+        assistantText: assistantText,
+        character: character,
+        persona: persona,
+        lorebooksContent: lorebooksContent,
+        memoryContent: memoryContent,
+        summaryContent: summaryContent,
+        arcContent: arcContent,
+        entitiesContent: entitiesContent,
+        recentMessages: recentMessages,
+        maxCharsPerMessage: settings.postCleanerMaxCharsPerMessage,
+      );
+
+      // Auditor: cheap, JSON-only, low temperature, small token budget.
+      final outcome = await _llm.callOnceWithLog(
+        config: config,
+        prompt: prompt,
+        maxTokens: 1024,
+        temperature: 0.0,
+        timeoutMs: _llm.resolveCleanerTimeout(settings),
+        cancelToken: token,
+      );
+
+      if (token.isCancelled) return null;
+
+      final text = outcome.text;
+      if (text == null || text.trim().isEmpty) {
+        if (!outcome.isOk) return null;
+        return const [];
+      }
+
+      return parseAuditJson(text);
+    } on TimeoutException {
+      return null;
+    } catch (e) {
+      if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
+        return null;
+      }
+      debugPrint('[PostCleanerAudit] error: $e');
+      return null;
+    }
+  }
+
+  /// Builds the auditor prompt. The auditor checks the assistant response
+  /// against all provided context and returns a compact JSON list of
+  /// contradictions. Public for testing.
+  @visibleForTesting
+  static String buildAuditPrompt({
+    required String assistantText,
+    required Character character,
+    Persona? persona,
+    String? lorebooksContent,
+    String? memoryContent,
+    String? summaryContent,
+    String? arcContent,
+    String? entitiesContent,
+    List<ChatMessage> recentMessages = const [],
+    int maxCharsPerMessage = 3000,
+  }) {
+    final buffer = StringBuffer()
+      ..writeln(
+        'You are a continuity auditor for a roleplay story. Your job is to '
+        'find contradictions between the assistant response and the provided '
+        'context.',
+      )
+      ..writeln();
+
+    // Character profile.
+    buffer.writeln('CHARACTER PROFILE:');
+    buffer.writeln('Name: ${character.name}');
+    final desc = character.description?.trim() ?? '';
+    if (desc.isNotEmpty) buffer.writeln('Description: $desc');
+    final pers = character.personality?.trim() ?? '';
+    if (pers.isNotEmpty) buffer.writeln('Personality: $pers');
+    final scen = character.scenario?.trim() ?? '';
+    if (scen.isNotEmpty) buffer.writeln('Scenario: $scen');
+    final phi = character.postHistoryInstructions?.trim() ?? '';
+    if (phi.isNotEmpty) buffer.writeln('Post-history instructions: $phi');
+    buffer.writeln();
+
+    // User persona.
+    if (persona != null) {
+      buffer.writeln('USER PERSONA:');
+      buffer.writeln('Name: ${persona.name}');
+      final pp = persona.prompt?.trim() ?? '';
+      if (pp.isNotEmpty) buffer.writeln('Description: $pp');
+      buffer.writeln();
+    }
+
+    // Lorebooks / world context.
+    final lore = lorebooksContent?.trim() ?? '';
+    if (lore.isNotEmpty) {
+      buffer
+        ..writeln('INJECTED WORLD/LORE CONTEXT:')
+        ..writeln(lore)
+        ..writeln();
+    }
+
+    // Memory context.
+    final mem = memoryContent?.trim() ?? '';
+    if (mem.isNotEmpty) {
+      buffer
+        ..writeln('INJECTED MEMORY CONTEXT:')
+        ..writeln(mem)
+        ..writeln();
+    }
+
+    // Summary.
+    final sum = summaryContent?.trim() ?? '';
+    if (sum.isNotEmpty) {
+      buffer
+        ..writeln('SUMMARY:')
+        ..writeln(sum)
+        ..writeln();
+    }
+
+    // Arcs.
+    final arcs = arcContent?.trim() ?? '';
+    if (arcs.isNotEmpty) {
+      buffer
+        ..writeln('ARCS:')
+        ..writeln(arcs)
+        ..writeln();
+    }
+
+    // Entities.
+    final ents = entitiesContent?.trim() ?? '';
+    if (ents.isNotEmpty) {
+      buffer
+        ..writeln('ENTITIES:')
+        ..writeln(ents)
+        ..writeln();
+    }
+
+    // Recent chat history.
+    if (recentMessages.isNotEmpty) {
+      final history = _formatRecentMessages(recentMessages, maxCharsPerMessage);
+      if (history.isNotEmpty) {
+        buffer
+          ..writeln('RECENT CHAT HISTORY:')
+          ..writeln(history)
+          ..writeln();
+      }
+    }
+
+    buffer
+      ..writeln('ASSISTANT RESPONSE TO AUDIT:')
+      ..writeln(assistantText)
+      ..writeln()
+      ..writeln('Instructions:')
+      ..writeln('- Check the response against ALL provided context.')
+      ..writeln(
+        '- Report ONLY direct contradictions: wrong names, wrong '
+        'relationships, wrong locations, personality conflicts, world-fact '
+        'errors, persona identity errors.',
+      )
+      ..writeln('- Do NOT report style issues, cliches, or prose quality.')
+      ..writeln(
+        '- Do NOT suggest fixes or rewrites. Only describe the contradiction.',
+      )
+      ..writeln('- If no contradictions found, return: {"ok": true}')
+      ..writeln(
+        '- If contradictions found, return: {"ok": false, "issues": ["...", "..."]}',
+      )
+      ..writeln()
+      ..writeln('Return ONLY the JSON, no other text.');
+
+    return buffer.toString();
+  }
+
+  /// Parses the auditor JSON response.
+  ///
+  /// - `{"ok": true}` → `[]`
+  /// - `{"ok": false, "issues": [...]}` → list of strings
+  /// - malformed / unparseable → `null` (skip audit)
+  @visibleForTesting
+  static List<String>? parseAuditJson(String raw) {
+    var text = raw.trim();
+    if (text.isEmpty) return null;
+
+    // Some models wrap JSON in ``` fences or prose. Extract the first
+    // balanced `{...}` block.
+    final start = text.indexOf('{');
+    if (start < 0) return null;
+    final end = text.lastIndexOf('}');
+    if (end <= start) return null;
+    text = text.substring(start, end + 1);
+
+    try {
+      final parsed = jsonDecode(text);
+      if (parsed is! Map<String, dynamic>) return null;
+      final ok = parsed['ok'];
+      if (ok == true) return const [];
+      if (ok == false) {
+        final issues = parsed['issues'];
+        if (issues is List) {
+          return issues
+              .whereType<String>()
+              .where((s) => s.trim().isNotEmpty)
+              .toList();
+        }
+        return null;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 }
 

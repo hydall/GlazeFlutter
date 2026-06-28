@@ -68,7 +68,9 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
 
   Future<void> _loadMessage() async {
     try {
-      final session = await ref.read(chatRepoProvider).getById(widget.sessionId);
+      final session = await ref
+          .read(chatRepoProvider)
+          .getById(widget.sessionId);
       if (session == null) {
         if (!mounted) return;
         setState(() {
@@ -77,7 +79,9 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         });
         return;
       }
-      final msg = session.messages.where((m) => m.id == widget.messageId).firstOrNull;
+      final msg = session.messages
+          .where((m) => m.id == widget.messageId)
+          .firstOrNull;
       if (msg == null) {
         if (!mounted) return;
         setState(() {
@@ -133,10 +137,7 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         }
         if (original == null && cleaned != null) {
           // Fallback: use the message content as the original.
-          original = AgentSwipe(
-            content: msg.content,
-            kind: 'final',
-          );
+          original = AgentSwipe(content: msg.content, kind: 'final');
         }
       }
 
@@ -174,7 +175,10 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
                 children: [
                   Icon(Icons.compare_arrows, color: cs.primary),
                   const SizedBox(width: 8),
-                  Text('Cleaner Diff', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Cleaner Diff',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(width: 8),
                   if (_diff.removedLines > 0 || _diff.addedLines > 0)
                     Text(
@@ -289,7 +293,9 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
                 controller: controller,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: lines.map((line) => _buildDiffLine(context, line)).toList(),
+                  children: lines
+                      .map((line) => _buildDiffLine(context, line))
+                      .toList(),
                 ),
               ),
             ),
@@ -322,65 +328,65 @@ class _PostCleanerDiffDialogState extends ConsumerState<PostCleanerDiffDialog> {
         : Colors.green.withValues(alpha: 0.35);
 
     final spans = <TextSpan>[];
-    spans.add(TextSpan(
-      text: prefix,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.bold,
-        color: fg.withValues(alpha: 0.5),
-        fontFamily: 'monospace',
+    spans.add(
+      TextSpan(
+        text: prefix,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: fg.withValues(alpha: 0.5),
+          fontFamily: 'monospace',
+        ),
       ),
-    ));
+    );
 
     if (line.words != null && line.words!.isNotEmpty) {
       for (var wi = 0; wi < line.words!.length; wi++) {
         final w = line.words![wi];
         // Add space between words (except before the first).
         if (wi > 0) {
-          spans.add(TextSpan(
-            text: ' ',
-            style: TextStyle(fontSize: 13, height: 1.4, color: fg),
-          ));
+          spans.add(
+            TextSpan(
+              text: ' ',
+              style: TextStyle(fontSize: 13, height: 1.4, color: fg),
+            ),
+          );
         }
         if (w.isChanged) {
-          spans.add(TextSpan(
-            text: w.text.isEmpty ? '\u200B' : w.text,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: fg,
-              backgroundColor: changedWordBg,
+          spans.add(
+            TextSpan(
+              text: w.text.isEmpty ? '\u200B' : w.text,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: fg,
+                backgroundColor: changedWordBg,
+              ),
             ),
-          ));
+          );
         } else {
-          spans.add(TextSpan(
-            text: w.text,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: fg,
+          spans.add(
+            TextSpan(
+              text: w.text,
+              style: TextStyle(fontSize: 13, height: 1.4, color: fg),
             ),
-          ));
+          );
         }
       }
     } else {
-      spans.add(TextSpan(
-        text: line.text,
-        style: TextStyle(
-          fontSize: 13,
-          height: 1.4,
-          color: fg,
+      spans.add(
+        TextSpan(
+          text: line.text,
+          style: TextStyle(fontSize: 13, height: 1.4, color: fg),
         ),
-      ));
+      );
     }
 
     return Container(
       width: double.infinity,
       color: bg,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      child: SelectableText.rich(
-        TextSpan(children: spans),
-      ),
+      child: SelectableText.rich(TextSpan(children: spans)),
     );
   }
 }

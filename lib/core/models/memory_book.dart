@@ -52,6 +52,29 @@ abstract class MemoryEntry with _$MemoryEntry {
     @Default('') String arc,
     @Default('curated') String kind,
     @Default('') String sourceHash,
+    /// Provenance marker for UI filtering (Phase 7). Empty for entries
+    /// created before the source field existed or for manual/curated
+    /// entries. Set to `'scan_chat'` when promoted from a scan draft, or
+    /// `'agentic'` when promoted from an agent write-loop draft. Lets the
+    /// MemoryBook UI tab agent-sourced entries separately from curated
+    /// ones (see `memory_books_sheet.dart` "Agent memories" tab).
+    @Default('') String source,
+    /// When true, the agentic write-loop MUST NOT modify this entry —
+    /// `MemoryBookRepo.appendFactsToEntry` skips it and the parser marks
+    /// it as `[locked]` in the `<existing_memory_entries>` prompt block
+    /// so the LLM knows not to propose updates to it. Mirrors Marinara's
+    /// `locked` flag on lorebook entries. User-toggled via the MemoryBook
+    /// UI to protect manually-curated facts from being rewritten by the
+    /// agent. See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.4.
+    @Default(false) bool locked,
+    /// When true, this entry is excluded from the embedding pipeline —
+    /// `MemoryEmbeddingService` skips it, and `MessageRecallService` /
+    /// memory vector search do not surface it. Useful for spoiler entries
+    /// or entries that should only activate via explicit keyword match,
+    /// never via semantic similarity. Mirrors Marinara's
+    /// `excludeFromVectorization` flag. See docs/plans/PLAN_MEMORY_CONTINUITY.md
+    /// §4 (out-of-scope → now in-scope).
+    @Default(false) bool excludeFromVectorization,
   }) = _MemoryEntry;
 
   factory MemoryEntry.fromJson(Map<String, dynamic> json) =>
@@ -85,12 +108,6 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(3) int batchSize,
     @Default(false) bool vectorSearchEnabled,
     @Default('glaze') String keyMatchMode,
-    @Default('current') String generationSource,
-    @Default('') String generationModel,
-    @Default('') String generationEndpoint,
-    @Default('') String generationApiKey,
-    @Default(null) double? generationTemperature,
-    @Default(null) int? generationMaxTokens,
     @Default('detailed_beats') String promptPreset,
     @Default(true) bool diversityAware,
     @Default(0.15) double diversityPenalty,
@@ -100,42 +117,16 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(0.5) double importanceWeight,
     @Default(true) bool sourceWindowExclusion,
     @Default(false) bool factualContinuityGuardEnabled,
-    @Default(false) bool classifierEnabled,
-    @Default('current') String classifierSource,
-    @Default('') String classifierModel,
-    @Default('') String classifierEndpoint,
-    @Default('') String classifierApiKey,
-    @Default(2500) int classifierTimeoutMs,
-    @Default(false) bool sidecarEnabled,
-    @Default('current') String sidecarSource,
-    @Default('') String sidecarModel,
-    @Default('') String sidecarEndpoint,
-    @Default('') String sidecarApiKey,
-    @Default(60000) int sidecarTimeoutMs,
     @Default(true) bool queryIncludeAssistant,
     @Default(6) int queryRecentTurns,
     @Default(1500) int queryMaxChars,
     @Default(3) int cadenceInterval,
+    /// Enables the memory consolidation pass. The consolidation LLM config
+    /// (model/endpoint/key/timeout) lives in [PipelineSettings]; this flag is
+    /// the retrieval-side toggle that gates whether the post-turn pipeline
+    /// triggers consolidation at all.
     @Default(false) bool consolidationEnabled,
     @Default(5) int consolidationThreshold,
-    @Default('current') String consolidationSource,
-    @Default('') String consolidationModel,
-    @Default('') String consolidationEndpoint,
-    @Default('') String consolidationApiKey,
-    @Default(4000) int consolidationTimeoutMs,
-    /// Enables the agentic write-loop: after a turn is finalized, the memory
-    /// agent may write trackers and memory drafts via sidecar JSON. Off by
-    /// default — the agent runs read-only (searchMemory only) unless this is
-    /// explicitly enabled. See docs/PLAN_AGENTIC_STUDIO.md Stage 1.
-    @Default(false) bool agenticWriteEnabled,
-    /// Enables the POST-cleaner: after generation, a sidecar LLM call
-    /// rewrites the final assistant message to remove clichés and repetition.
-    /// The original text is preserved as a swipe; the cleaned version replaces
-    /// the active text. Falls back to original on error. See
-    /// docs/PLAN_AGENTIC_STUDIO.md Stage 4.
-    @Default(false) bool postCleanerEnabled,
-    @Default(0.3) double postCleanerTemperature,
-    @Default(0) int postCleanerMaxTokens,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>
@@ -146,15 +137,25 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
 /// (pre-{{memory}}-split) to `hard_block` / `macro` in-place. The old
 /// values were misleadingly named because the "summary" prefix was
 /// about *where* memory goes, not about the summary feature itself.
+///
+/// Also migrates the removed `agentic` retrieval mode to `deep`. The
+/// `agentic` mode mixed retrieval depth with an LLM sidecar layer; the
+/// sidecar is now a separate tracker concern (see
+/// docs/PLAN_AGENTIC_STUDIO.md Phase 4). Old MemoryBook JSON with
+/// `memoryMode: "agentic"` reads as `deep` so users keep deep rerank
+/// without silent LLM calls.
 Map<String, dynamic> _migrateInjectionTargetInPlace(Map<String, dynamic> json) {
-  final raw = json['injectionTarget'];
-  if (raw == 'summary_block') {
-    return {...json, 'injectionTarget': 'hard_block'};
+  var result = json;
+  final injectionTarget = result['injectionTarget'];
+  if (injectionTarget == 'summary_block') {
+    result = {...result, 'injectionTarget': 'hard_block'};
+  } else if (injectionTarget == 'summary_macro') {
+    result = {...result, 'injectionTarget': 'macro'};
   }
-  if (raw == 'summary_macro') {
-    return {...json, 'injectionTarget': 'macro'};
+  if (result['memoryMode'] == 'agentic') {
+    result = {...result, 'memoryMode': 'deep'};
   }
-  return json;
+  return result;
 }
 
 /// Coerces new optional fields into safe defaults when reading older JSON
@@ -184,6 +185,9 @@ Map<String, dynamic> _migrateEntryInPlace(Map<String, dynamic> json) {
   }
   if (out['sourceHash'] is! String) {
     out = {...out, 'sourceHash': ''};
+  }
+  if (out['source'] is! String) {
+    out = {...out, 'source': ''};
   }
   return out;
 }

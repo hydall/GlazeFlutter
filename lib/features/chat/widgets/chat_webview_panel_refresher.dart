@@ -47,12 +47,14 @@ class ChatWebViewPanelRefresher {
     if (b == null || !ready() || !isMounted()) return;
     final isLastAssistant = messageId == _lastAssistantMessageId();
     final swipeId = _swipeIdForMessage(messageId);
+    final agentSwipeId = _agentSwipeIdForMessage(messageId);
     final isGreeting = _isGreetingMessage(messageId);
     final isAssistant = _isAssistantMessage(messageId);
     final panelKey = (
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
     );
     final visibilityKey = (
       sessionId: sessionId,
@@ -61,6 +63,7 @@ class ChatWebViewPanelRefresher {
       isLastAssistant: isLastAssistant,
       isGreeting: isGreeting,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
     );
     if (!ref.read(extBlocksPanelVisibleProvider(visibilityKey))) {
       await b.hideExtBlocksPanel(messageId);
@@ -114,6 +117,11 @@ class ChatWebViewPanelRefresher {
   int _swipeIdForMessage(String messageId) {
     final msg = messages().where((m) => m.id == messageId).firstOrNull;
     return msg?.swipeId ?? 0;
+  }
+
+  int _agentSwipeIdForMessage(String messageId) {
+    final msg = messages().where((m) => m.id == messageId).firstOrNull;
+    return msg?.agentSwipeId ?? -1;
   }
 
   bool _isGreetingMessage(String messageId) {

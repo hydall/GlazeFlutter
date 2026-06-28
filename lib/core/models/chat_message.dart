@@ -42,15 +42,11 @@ class TriggeredEntry {
   };
 }
 
-/// A sub-swipe (blue icon) nested under a main swipe (green icon).
-///
-/// Nested swipes form a linear sequence inside one full generation run:
-/// `final → cleaned → final (regen) → cleaned → ...`.
-/// - `kind: 'final'` — raw final-agent response (or regen of it).
-/// - `kind: 'cleaned'` — POST-cleaner output derived from the preceding
-///   `'final'` swipe.
-///
-/// See `docs/PLAN_NESTED_SWIPES.md`.
+/// A nested swipe variation produced by the Studio pipeline (POST-cleaner
+/// rewrite, final-regen, etc.). Stored as a colour-coded sub-swipe under a
+/// [ChatMessage]; `kind` drives the WebView colour coding ('cleaned' = blue,
+/// 'final' = white). `parentSwipeId` links a sub-swipe to its parent green
+/// swipe index for diffing.
 class AgentSwipe {
   final String content;
   final String kind;
@@ -71,28 +67,29 @@ class AgentSwipe {
   });
 
   factory AgentSwipe.fromJson(Map<String, dynamic> json) => AgentSwipe(
-        content: json['content'] as String? ?? '',
-        kind: json['kind'] as String? ?? 'final',
-        reasoning: json['reasoning'] as String?,
-        genTime: json['genTime'] as String?,
-        tokens: json['tokens'] as int?,
-        studioOutputs: (json['studioOutputs'] as List?)
-                ?.whereType<Map<dynamic, dynamic>>()
-                .map((e) => Map<String, dynamic>.from(e))
-                .toList() ??
-            const [],
-        parentSwipeId: json['parentSwipeId'] as int?,
-      );
+    content: json['content'] as String? ?? '',
+    kind: json['kind'] as String? ?? 'final',
+    reasoning: json['reasoning'] as String?,
+    genTime: json['genTime'] as String?,
+    tokens: json['tokens'] as int?,
+    studioOutputs:
+        (json['studioOutputs'] as List?)
+            ?.whereType<Map<dynamic, dynamic>>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList() ??
+        const [],
+    parentSwipeId: json['parentSwipeId'] as int?,
+  );
 
   Map<String, dynamic> toJson() => {
-        'content': content,
-        'kind': kind,
-        'reasoning': reasoning,
-        'genTime': genTime,
-        'tokens': tokens,
-        'studioOutputs': studioOutputs,
-        'parentSwipeId': parentSwipeId,
-      };
+    'content': content,
+    'kind': kind,
+    'reasoning': reasoning,
+    'genTime': genTime,
+    'tokens': tokens,
+    'studioOutputs': studioOutputs,
+    'parentSwipeId': parentSwipeId,
+  };
 
   AgentSwipe copyWith({
     String? content,
@@ -102,16 +99,15 @@ class AgentSwipe {
     int? tokens,
     List<Map<String, dynamic>>? studioOutputs,
     int? parentSwipeId,
-  }) =>
-      AgentSwipe(
-        content: content ?? this.content,
-        kind: kind ?? this.kind,
-        reasoning: reasoning ?? this.reasoning,
-        genTime: genTime ?? this.genTime,
-        tokens: tokens ?? this.tokens,
-        studioOutputs: studioOutputs ?? this.studioOutputs,
-        parentSwipeId: parentSwipeId ?? this.parentSwipeId,
-      );
+  }) => AgentSwipe(
+    content: content ?? this.content,
+    kind: kind ?? this.kind,
+    reasoning: reasoning ?? this.reasoning,
+    genTime: genTime ?? this.genTime,
+    tokens: tokens ?? this.tokens,
+    studioOutputs: studioOutputs ?? this.studioOutputs,
+    parentSwipeId: parentSwipeId ?? this.parentSwipeId,
+  );
 }
 
 @freezed
@@ -142,11 +138,11 @@ abstract class ChatMessage with _$ChatMessage {
     @Default([]) List<TriggeredEntry> triggeredLorebooks,
     @Default([]) List<TriggeredEntry> triggeredMemories,
     @Default([]) List<Map<String, dynamic>> swipesMeta,
-    @Default({}) Map<String, dynamic> memoryCoverage,
     @Default([]) List<Map<String, dynamic>> studioOutputs,
-    String? time,
     @Default([]) List<AgentSwipe> agentSwipes,
     @Default(0) int agentSwipeId,
+    @Default({}) Map<String, dynamic> memoryCoverage,
+    String? time,
   }) = _ChatMessage;
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) =>

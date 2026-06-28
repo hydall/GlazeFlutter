@@ -15,11 +15,13 @@ import '../models/chat_message.dart';
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/memory_graph.dart';
+import '../models/pipeline_settings.dart';
 import '../state/db_provider.dart';
 import '../state/memory_settings_provider.dart';
 import '../state/memory_agent_providers.dart';
 import 'embedding_service.dart';
 import 'embedding_types.dart';
+import 'chat_message_embedding_service.dart';
 import 'memory_catalog_builder.dart';
 import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
@@ -27,10 +29,10 @@ import 'memory_embedding_service.dart';
 import 'memory_excerpt_selector.dart';
 import 'memory_formatting.dart';
 import 'memory_needs_classifier_service.dart';
+import 'message_recall_service.dart';
 import 'memory_selector.dart';
 import 'memory_sidecar_prewarm_cache.dart';
 import 'memory_sidecar_reranker_service.dart';
-import 'memory_agentic_service.dart';
 import 'retrieval_query_builder.dart';
 import 'vector_math.dart';
 
@@ -76,6 +78,7 @@ class MemoryCandidateBuildResult {
 
 class MemoryInjectionService {
   final MemoryBookRepo _repo;
+  final PipelineSettings Function() _readPipelineSettings;
   final EmbeddingRepo _embeddingRepo;
   final MemoryCatalogRepo _catalogRepo;
   final MemorySalienceRepo? _salienceRepo;
@@ -85,10 +88,10 @@ class MemoryInjectionService {
   final MemoryNeedsClassifierService? _classifierService;
   final MemorySidecarRerankerService? _sidecarService;
   final MemorySidecarPrewarmCache? _prewarmCache;
-  final MemoryAgenticService? _agenticService;
 
   MemoryInjectionService(
     this._repo,
+    this._readPipelineSettings,
     this._embeddingRepo,
     this._catalogRepo,
     this._embeddingService,
@@ -98,7 +101,6 @@ class MemoryInjectionService {
     this._classifierService,
     this._sidecarService,
     this._prewarmCache,
-    this._agenticService,
   });
 
   /// Build injection candidates + diagnostics. Returns the raw selection
@@ -196,6 +198,11 @@ class MemoryInjectionService {
       return finish(const MemorySelection());
     }
     if (book == null) {
+      return finish(const MemorySelection());
+    }
+
+    final pipeline = _readPipelineSettings();
+    if (shouldAbort?.call() == true) {
       return finish(const MemorySelection());
     }
 
@@ -311,12 +318,11 @@ class MemoryInjectionService {
     MemoryClassifierResult? classifierResult = const MemoryClassifierResult(status: 'disabled');
     MemorySidecarResult? sidecarResult;
     var prewarmHit = false;
-    MemoryAgenticResult? agenticResult;
 
     // Balanced mode: classifier for missing-context detection
     if (book.settings.memoryMode == 'balanced' &&
         _classifierService != null &&
-        book.settings.classifierEnabled &&
+        pipeline.classifierEnabled &&
         !selection.allScores.every((s) => s.excludedBySourceWindow || s.score == 0)) {
       final candidateTitles = selection.allScores
           .where((s) => !s.excludedBySourceWindow && s.score > 0)
@@ -324,7 +330,7 @@ class MemoryInjectionService {
           .toList();
       classifierResult = await _classifierService.classify(
         MemoryClassifierRequest(
-          settings: book.settings,
+          settings: pipeline,
           currentText: currentText,
           candidateTitles: candidateTitles,
           missingContextReasons: const [],
@@ -342,7 +348,7 @@ class MemoryInjectionService {
     // Deep mode: sidecar reranker with prewarm
     if (book.settings.memoryMode == 'deep' &&
         _sidecarService != null &&
-        book.settings.sidecarEnabled) {
+        pipeline.sidecarEnabled) {
       // Try prewarm cache first
       if (_prewarmCache != null) {
         final prewarmKey = MemorySidecarPrewarmKey(
@@ -366,7 +372,7 @@ class MemoryInjectionService {
       if (!prewarmHit) {
         sidecarResult = await _sidecarService.rerank(
           MemorySidecarRequest(
-            settings: book.settings,
+            settings: pipeline,
             candidates: selection.allScores
                 .where((s) => !s.excludedBySourceWindow)
                 .toList(),
@@ -401,22 +407,11 @@ class MemoryInjectionService {
       }
     }
 
-    // Agentic mode: searchMemory tool (Phase 10)
-    if (book.settings.memoryMode == 'agentic' &&
-        _agenticService != null) {
-      agenticResult = await _agenticService.runAgentic(
-        settings: book.settings,
-        entries: activeEntries,
-        currentText: currentText,
-        visibleMessageIds: visibleMessageIds,
-        fallbackSelection: finalSelection,
-        cancelToken: cancelToken,
-      );
-      if (shouldAbort?.call() == true) {
-        return finish(finalSelection, budget: budget, settings: book.settings);
-      }
-      finalSelection = agenticResult.selection;
-    }
+    // Agentic read (searchMemory tool) was previously gated by
+    // `memoryMode == 'agentic'`, but that mode was removed in Phase 4 of
+    // docs/PLAN_AGENTIC_STUDIO.md. Agentic read will be wired as a
+    // pre-generation memory tracker in a later phase; until then it is
+    // disabled.
 
     return finish(
       finalSelection,
@@ -428,9 +423,6 @@ class MemoryInjectionService {
       sidecarStatus: sidecarResult?.status,
       sidecarLatencyMs: sidecarResult?.totalElapsedMs,
       sidecarAttempts: sidecarResult?.attempts ?? const [],
-      agenticStatus: agenticResult?.status,
-      agenticAttempts: agenticResult?.attempts ?? const [],
-      agenticLatencyMs: agenticResult?.totalElapsedMs,
       prewarmHit: prewarmHit,
     );
   }
@@ -858,6 +850,7 @@ class _CatalogMatchResult {
 final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
   return MemoryInjectionService(
     ref.watch(memoryBookRepoProvider),
+    () => ref.read(pipelineSettingsProvider),
     ref.watch(embeddingRepoProvider),
     ref.watch(memoryCatalogRepoProvider),
     EmbeddingService(),
@@ -867,12 +860,28 @@ final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
     classifierService: ref.watch(memoryClassifierServiceProvider),
     sidecarService: ref.watch(memorySidecarRerankerServiceProvider),
     prewarmCache: ref.watch(memorySidecarPrewarmCacheProvider),
-    agenticService: ref.watch(memoryAgenticServiceProvider),
   );
 });
 
 final memoryEmbeddingServiceProvider = Provider<MemoryEmbeddingService>((ref) {
   return MemoryEmbeddingService(
+    ref.watch(embeddingRepoProvider),
+    EmbeddingService(),
+  );
+});
+
+// NEW (patch #3 — memory continuity): chat-message embedding + recall.
+// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+final chatMessageEmbeddingServiceProvider =
+    Provider<ChatMessageEmbeddingService>((ref) {
+  return ChatMessageEmbeddingService(
+    ref.watch(embeddingRepoProvider),
+    EmbeddingService(),
+  );
+});
+
+final messageRecallServiceProvider = Provider<MessageRecallService>((ref) {
+  return MessageRecallService(
     ref.watch(embeddingRepoProvider),
     EmbeddingService(),
   );

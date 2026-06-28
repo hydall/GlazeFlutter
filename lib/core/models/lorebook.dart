@@ -32,6 +32,15 @@ abstract class LorebookEntry with _$LorebookEntry {
     @Default(true) bool useKeywordSearch,
     @Default(false) bool delayUntilRecursion,
     @Default(false) bool useGroupScoring,
+    /// When true, this entry is excluded from the embedding pipeline —
+    /// `LorebookEmbeddingService` skips it (deletes any existing embedding
+    /// row), and the semantic-fallback path in `LorebookVectorSearch`
+    /// never activates it. Useful for spoiler entries or entries that
+    /// should only activate via explicit keyword match, never via
+    /// semantic similarity. Mirrors Marinara's `excludeFromVectorization`
+    /// flag. See docs/plans/PLAN_MEMORY_CONTINUITY.md §4 (Vector embeddings
+    /// on MemoryBook entries — semantic activation without keys).
+    @Default(false) bool excludeFromVectorization,
   }) = _LorebookEntry;
 
   factory LorebookEntry.fromJson(Map<String, dynamic> json) =>
@@ -83,6 +92,15 @@ abstract class LorebookGlobalSettings with _$LorebookGlobalSettings {
     @Default(50) int keywordVectorSplit,
     @Default(0.45) double vectorThreshold,
     @Default(10) int vectorTopK,
+    /// Semantic fallback for keyless entries (Marinara analog). Entries
+    /// with no `keys` and no `secondaryKeys` cannot activate via keyword
+    /// scan; this fallback activates them via cosine similarity against
+    /// the current chat text. Threshold is lower than `vectorThreshold`
+    /// (default 0.3, Marinara-matching) and top-K is smaller (default 3)
+    /// to avoid flooding the prompt with weakly-similar entries.
+    /// See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    @Default(0.3) double fallbackThreshold,
+    @Default(3) int fallbackTopK,
   }) = _LorebookGlobalSettings;
 
   factory LorebookGlobalSettings.fromJson(Map<String, dynamic> json) =>

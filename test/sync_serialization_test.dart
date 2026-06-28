@@ -5,23 +5,18 @@ import 'package:glaze_flutter/core/models/memory_book.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_serialization.dart';
 
 void main() {
-  test('computeMemoryBookHash ignores device-local generation settings', () {
+  test('computeMemoryBookHash ignores device-local fields', () {
     final base = MemoryBook(
       id: 'memorybook_s1',
       sessionId: 's1',
       updatedAt: 1000,
       lastProcessedMessageCount: 42,
     ).toJson();
-    final withLocalGen = MemoryBook(
+    final withLocalFields = MemoryBook(
       id: 'memorybook_s1',
       sessionId: 's1',
       updatedAt: 999999,
       lastProcessedMessageCount: 99,
-      settings: const MemoryBookSettings(
-        generationApiKey: 'sk-local-secret',
-        generationModel: 'local-model',
-        generationEndpoint: 'http://localhost:1234',
-      ),
     ).toJson();
 
     final fromMake = MemoryBook(
@@ -32,7 +27,7 @@ void main() {
 
     final baseHash = SyncSerialization.computeMemoryBookHash(base);
     expect(
-      SyncSerialization.computeMemoryBookHash(withLocalGen),
+      SyncSerialization.computeMemoryBookHash(withLocalFields),
       equals(baseHash),
     );
     expect(

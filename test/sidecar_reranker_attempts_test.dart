@@ -5,6 +5,7 @@ import 'package:glaze_flutter/core/llm/memory_sidecar_reranker_service.dart';
 import 'package:glaze_flutter/core/llm/memory_selector.dart';
 import 'package:glaze_flutter/core/models/agent_operation_record.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 
 void main() {
   group('MemorySidecarRerankerService with callWithLog', () {
@@ -38,7 +39,7 @@ void main() {
       );
 
       final result = await service.rerank(MemorySidecarRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           sidecarEnabled: true,
           sidecarTimeoutMs: 5000,
         ),
@@ -91,7 +92,7 @@ void main() {
       );
 
       final result = await service.rerank(MemorySidecarRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           sidecarEnabled: true,
           sidecarTimeoutMs: 5000,
         ),
@@ -129,7 +130,7 @@ void main() {
       );
 
       final result = await service.rerank(MemorySidecarRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           sidecarEnabled: true,
           sidecarTimeoutMs: 5000,
         ),
@@ -149,7 +150,7 @@ void main() {
           '{"selectedEntryIds": [], "selectedReasons": {}, "rejectedReasons": {}}';
       final service = MemorySidecarRerankerService((_, _) async => json);
       final result = await service.rerank(MemorySidecarRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           sidecarEnabled: true,
           sidecarTimeoutMs: 5000,
         ),

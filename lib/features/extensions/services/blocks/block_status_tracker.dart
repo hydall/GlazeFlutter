@@ -14,6 +14,7 @@ typedef BlockPanelRefresh =
       String sessionId,
       String messageId,
       int swipeId,
+      int agentSwipeId,
     );
 
 class PreparedBlockRun {
@@ -42,6 +43,7 @@ class BlockStatusTracker {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required BlockConfig blockConfig,
     String? reuseBlockId,
   }) async {
@@ -51,6 +53,7 @@ class BlockStatusTracker {
         sessionId: sessionId,
         messageId: messageId,
         swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
         blockConfig: blockConfig,
         reuseBlockId: reuseBlockId,
       );
@@ -59,6 +62,7 @@ class BlockStatusTracker {
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
       blockConfig: blockConfig,
     );
   }
@@ -93,7 +97,13 @@ class BlockStatusTracker {
       status: BlockRunStatus.error,
     );
     ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(errored);
-    refreshPanelForMessage(charId, sessionId, messageId, placeholder.swipeId);
+    refreshPanelForMessage(
+      charId,
+      sessionId,
+      messageId,
+      placeholder.swipeId,
+      placeholder.agentSwipeId,
+    );
     return errored;
   }
 
@@ -107,7 +117,13 @@ class BlockStatusTracker {
     await repo.updateStatus(placeholderId, BlockRunStatus.stopped);
     final stopped = placeholder.copyWith(status: BlockRunStatus.stopped);
     ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(stopped);
-    refreshPanelForMessage(charId, sessionId, messageId, placeholder.swipeId);
+    refreshPanelForMessage(
+      charId,
+      sessionId,
+      messageId,
+      placeholder.swipeId,
+      placeholder.agentSwipeId,
+    );
     return stopped;
   }
 
@@ -115,12 +131,14 @@ class BlockStatusTracker {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required String blockId,
   }) async {
     final existing = await repo.getByMessageId(
       sessionId,
       messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
     );
     final matching = existing.where((b) => b.blockId == blockId).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -138,6 +156,7 @@ class BlockStatusTracker {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required BlockConfig blockConfig,
     required String reuseBlockId,
   }) async {
@@ -145,6 +164,7 @@ class BlockStatusTracker {
       sessionId,
       messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
     );
     final row = existing.where((b) => b.id == reuseBlockId).firstOrNull;
     final placeholder =
@@ -154,6 +174,7 @@ class BlockStatusTracker {
                   sessionId: sessionId,
                   messageId: messageId,
                   swipeId: swipeId,
+                  agentSwipeId: agentSwipeId,
                   blockId: blockConfig.id,
                   blockName: blockConfig.name,
                   blockType: blockConfig.type.name,
@@ -166,7 +187,13 @@ class BlockStatusTracker {
     await repo.updateContent(reuseBlockId, '');
     await repo.updateStatus(reuseBlockId, BlockRunStatus.running);
     ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(placeholder);
-    refreshPanelForMessage(charId, sessionId, messageId, placeholder.swipeId);
+    refreshPanelForMessage(
+      charId,
+      sessionId,
+      messageId,
+      placeholder.swipeId,
+      placeholder.agentSwipeId,
+    );
     return PreparedBlockRun(
       placeholderId: reuseBlockId,
       placeholder: placeholder,
@@ -177,6 +204,7 @@ class BlockStatusTracker {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required BlockConfig blockConfig,
   }) async {
     final placeholderId = generateId();
@@ -185,6 +213,7 @@ class BlockStatusTracker {
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
       blockId: blockConfig.id,
       blockName: blockConfig.name,
       blockType: blockConfig.type.name,

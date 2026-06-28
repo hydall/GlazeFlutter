@@ -18,11 +18,9 @@ class SavedMessageWriter {
   /// If [regenTargetId] is given, the message replaces the existing swipe
   /// at that id instead of appending a new one.
   ///
-  /// When [studioFinalOnly] is true (regen of the final agent only), the
-  /// new text is appended to `agentSwipes` as a `'final'` sub-swipe (blue
-  /// icon) and the legacy `swipes[]` (green icons) is left untouched.
-  /// When false (full regen or new generation), `agentSwipes` is reset to a
-  /// single `'final'` swipe pointing at the new text.
+  /// On regen, the new text is appended to `swipes[]` (green icons) as a
+  /// new swipe and `swipeId` points at it; on a new generation, `swipes[]`
+  /// is seeded with a single swipe pointing at the new text.
   ChatState writeAssistant({
     required String text,
     required String? reasoning,
@@ -43,9 +41,7 @@ class SavedMessageWriter {
     bool isAllReasoning = false,
     List<TriggeredEntry> triggeredLorebooks = const [],
     List<TriggeredEntry> triggeredMemories = const [],
-    List<Map<String, dynamic>> studioOutputs = const [],
     String? regenTargetId,
-    bool studioFinalOnly = false,
     int visibleStartIndex = 0,
   }) {
     final persistedMemoryCoverage = stripEphemeralMemoryCoverage(
@@ -54,12 +50,7 @@ class SavedMessageWriter {
     List<String> swipes;
     int swipeId;
 
-    // When studioFinalOnly is true, the legacy swipes[] (green icons) stay
-    // frozen — the new final-agent text goes into agentSwipes[] (blue).
-    if (studioFinalOnly && previousSwipes != null && previousSwipes.isNotEmpty) {
-      swipes = List<String>.from(previousSwipes);
-      swipeId = previousSwipeId;
-    } else if (previousSwipes != null && previousSwipes.isNotEmpty) {
+    if (previousSwipes != null && previousSwipes.isNotEmpty) {
       swipes = [...previousSwipes, text];
       swipeId = swipes.length - 1;
     } else {
@@ -79,7 +70,6 @@ class SavedMessageWriter {
             .toList(),
       if (triggeredMemories.isNotEmpty)
         'triggeredMemories': triggeredMemories.map((e) => e.toJson()).toList(),
-      if (studioOutputs.isNotEmpty) 'studioOutputs': studioOutputs,
     };
     if (guidanceText != null && guidanceText.isNotEmpty) {
       currentSwipeMeta['guidanceText'] = guidanceText;
@@ -118,60 +108,26 @@ class SavedMessageWriter {
       if (idx >= 0) {
         final existing = currentSession.messages[idx];
 
-        // Nested swipes: compute agentSwipes[] (blue sub-swipes).
-        // - studioFinalOnly: append a 'final' sub-swipe (regen of final
-        //   agent only). Legacy swipes[] stays frozen.
-        // - Full regen: reset to a single 'final' pointing at the new text.
-        List<AgentSwipe> agentSwipes;
-        int agentSwipeId;
-        if (studioFinalOnly) {
-          agentSwipes = List<AgentSwipe>.from(existing.agentSwipes);
-          if (agentSwipes.isEmpty) {
-            // Lazy migration: old message has no agentSwipes yet — seed
-            // a 'final' from the existing content so the new regen has a
-            // sibling.
-            agentSwipes.add(AgentSwipe(
-              content: existing.content,
-              kind: 'final',
-              reasoning: existing.reasoning,
-              genTime: existing.genTime,
-              tokens: existing.tokens,
-              studioOutputs: existing.studioOutputs,
-            ));
-          }
-          agentSwipes.add(AgentSwipe(
+        // Nested swipes: full regen replaces agentSwipes with a fresh
+        // single 'final' pointing at the new text (the old 'cleaned'
+        // sub-swipe applied to the previous content and is dropped).
+        final agentSwipes = [
+          AgentSwipe(
             content: text,
             kind: 'final',
             reasoning: reasoning,
             genTime: genTime,
             tokens: tokens,
-            studioOutputs: studioOutputs,
-          ));
-          agentSwipeId = agentSwipes.length - 1;
-        } else {
-          // Full regen: replace agentSwipes with a fresh single 'final'.
-          agentSwipes = [
-            AgentSwipe(
-              content: text,
-              kind: 'final',
-              reasoning: reasoning,
-              genTime: genTime,
-              tokens: tokens,
-              studioOutputs: studioOutputs,
-            ),
-          ];
-          agentSwipeId = 0;
-        }
-
-        // Sync agentSwipes into swipesMeta[swipeId] so that green-swipe
-        // round-trips (setSwipe) restore the correct blue swipes. Without
-        // this, a studioFinalOnly regen adds a 'final' to agentSwipes on the
-        // message but swipesMeta[swipeId] keeps the old count — switching
-        // away and back loses the extra blue swipe.
-        if (agentSwipes.isNotEmpty && swipeId >= 0 && swipeId < swipesMeta.length) {
-          swipesMeta = List<Map<String, dynamic>>.from(swipesMeta);
-          swipesMeta[swipeId] = {
-            ...swipesMeta[swipeId],
+          ),
+        ];
+        const agentSwipeId = 0;
+        // Sync agentSwipes into swipesMeta[swipeId] so green-swipe
+        // round-trips (setSwipe) restore the correct blue swipes.
+        var syncedSwipesMeta = swipesMeta;
+        if (swipeId >= 0 && swipeId < swipesMeta.length) {
+          syncedSwipesMeta = List<Map<String, dynamic>>.from(swipesMeta);
+          syncedSwipesMeta[swipeId] = {
+            ...syncedSwipesMeta[swipeId],
             'agentSwipes': agentSwipes.map((e) => e.toJson()).toList(),
             'agentSwipeId': agentSwipeId,
           };
@@ -187,12 +143,11 @@ class SavedMessageWriter {
           tokens: tokens,
           swipes: swipes,
           swipeId: swipeId,
-          swipesMeta: swipesMeta,
+          swipesMeta: syncedSwipesMeta,
           swipeDirection: 'right',
           memoryCoverage: persistedMemoryCoverage,
           triggeredLorebooks: triggeredLorebooks,
           triggeredMemories: triggeredMemories,
-          studioOutputs: studioOutputs,
           agentSwipes: agentSwipes,
           agentSwipeId: agentSwipeId,
         );
@@ -220,8 +175,8 @@ class SavedMessageWriter {
       );
     }
 
-    // New message: seed agentSwipes with a single 'final' pointing at
-    // the new text (nested-swipes RFC §5).
+    // New message: seed agentSwipes with a single 'final' pointing at the
+    // new text so the blue sub-swipe model is consistent from creation.
     final newAgentSwipes = [
       AgentSwipe(
         content: text,
@@ -229,7 +184,6 @@ class SavedMessageWriter {
         reasoning: reasoning,
         genTime: genTime,
         tokens: tokens,
-        studioOutputs: studioOutputs,
       ),
     ];
     final assistantMsg = ChatMessage(
@@ -247,7 +201,6 @@ class SavedMessageWriter {
       memoryCoverage: persistedMemoryCoverage,
       triggeredLorebooks: triggeredLorebooks,
       triggeredMemories: triggeredMemories,
-      studioOutputs: studioOutputs,
       agentSwipes: newAgentSwipes,
       agentSwipeId: 0,
     );

@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
-import '../models/memory_book.dart';
+import '../models/pipeline_settings.dart';
 import 'sidecar_retry_runner.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
@@ -54,7 +54,7 @@ class SidecarLlmClient {
   /// Resolves the API config from [settings]: either the custom sidecar
   /// endpoint or the active chat config. Throws if not configured.
   Future<SidecarApiConfig> resolveConfig(
-    MemoryBookSettings settings, {
+    PipelineSettings settings, {
     String errorLabel = 'sidecar',
   }) async {
     final isCustom = settings.sidecarSource == 'custom';
@@ -97,6 +97,101 @@ class SidecarLlmClient {
       model: model,
       protocol: chatConfig.protocol,
     );
+  }
+
+  /// Resolves the API config for the POST-cleaner, preferring
+  /// `postCleaner*` fields and falling back to `sidecar*` when the
+  /// cleaner-specific fields are empty/zero.
+  Future<SidecarApiConfig> resolveConfigForCleaner(
+    PipelineSettings settings, {
+    String errorLabel = 'post-cleaner',
+  }) async {
+    final source = settings.postCleanerSource == 'inherit'
+        ? settings.sidecarSource
+        : settings.postCleanerSource;
+    final model = settings.postCleanerModel.isNotEmpty
+        ? settings.postCleanerModel
+        : settings.sidecarModel;
+    final endpoint = settings.postCleanerEndpoint.isNotEmpty
+        ? settings.postCleanerEndpoint
+        : settings.sidecarEndpoint;
+    final apiKey = settings.postCleanerApiKey.isNotEmpty
+        ? settings.postCleanerApiKey
+        : settings.sidecarApiKey;
+
+    if (source == 'custom') {
+      if (endpoint.isEmpty || model.isEmpty) {
+        debugPrint(
+          '[Sidecar] cleaner custom config incomplete — endpoint='
+          "'$endpoint' model='$model'",
+        );
+        throw Exception('Sidecar custom config incomplete for $errorLabel');
+      }
+      debugPrint('[Sidecar] resolved custom for $errorLabel model=$model');
+      return SidecarApiConfig(
+        endpoint: endpoint,
+        apiKey: apiKey,
+        model: model,
+        protocol: LlmProtocol.openai,
+      );
+    }
+
+    await _ref.read(apiListProvider.future);
+    final chatConfig = _ref.read(activeApiConfigProvider);
+    if (chatConfig == null) {
+      debugPrint('[Sidecar] no active chat API config for $errorLabel');
+      throw Exception('No chat API config available for $errorLabel');
+    }
+    final effectiveModel = model.isNotEmpty ? model : chatConfig.model;
+    debugPrint(
+      '[Sidecar] resolved chat-fallback for $errorLabel '
+      'model=$effectiveModel endpoint=${chatConfig.endpoint}',
+    );
+    return SidecarApiConfig(
+      endpoint: chatConfig.endpoint,
+      apiKey: chatConfig.apiKey,
+      model: effectiveModel,
+      protocol: chatConfig.protocol,
+    );
+  }
+
+  /// Resolves the API config for the POST-cleaner CHARACTER AUDIT pass
+  /// (Fix 2). Inherits endpoint / key / source / protocol from the cleaner
+  /// config, but the [PipelineSettings.postCleanerAuditModel] field overrides
+  /// the model when non-empty. Falls back to the cleaner-resolved model when
+  /// the audit model is empty.
+  ///
+  /// Reuses [resolveConfigForCleaner] for the endpoint/key/source/protocol
+  /// resolution, then swaps in the audit model. This keeps the two resolvers
+  /// in lockstep for every source branch (inherit → sidecar, custom, current).
+  Future<SidecarApiConfig> resolveConfigForAudit(
+    PipelineSettings settings, {
+    String errorLabel = 'post-cleaner-audit',
+  }) async {
+    final cleaner = await resolveConfigForCleaner(
+      settings,
+      errorLabel: errorLabel,
+    );
+    final auditModel = settings.postCleanerAuditModel.isNotEmpty
+        ? settings.postCleanerAuditModel
+        : cleaner.model;
+    if (auditModel != cleaner.model) {
+      debugPrint(
+        '[Sidecar] audit model override for $errorLabel '
+        'model=$auditModel (cleaner=${cleaner.model})',
+      );
+    }
+    return SidecarApiConfig(
+      endpoint: cleaner.endpoint,
+      apiKey: cleaner.apiKey,
+      model: auditModel,
+      protocol: cleaner.protocol,
+    );
+  }
+  int resolveCleanerTimeout(PipelineSettings settings) {
+    return settings.postCleanerTimeoutMs > 0
+        ? settings.postCleanerTimeoutMs
+        : settings.sidecarTimeoutMs;
   }
 
   /// Makes a single non-streaming LLM call and returns the raw text response.
@@ -155,6 +250,48 @@ class SidecarLlmClient {
     );
   }
 
+  /// Streaming variant of [callOnceWithLog]. Makes a streaming LLM call
+  /// (`stream: true`) and invokes [onChunk] with the accumulated text on
+  /// every delta. Returns the same [SidecarCallOutcome] (final text = last
+  /// accumulation).
+  ///
+  /// On retry, the accumulator resets and [onChunk] is called with the new
+  /// attempt's accumulated text (starting from `''`). Callers that render the
+  /// chunks into a chat bubble should reset their view on the first chunk of
+  /// each new attempt — a simple way is to overwrite with the incoming
+  /// accumulated text (which starts at `''` on a fresh attempt).
+  ///
+  /// Used by the POST-cleaner to stream its rewrite into the chat bubble
+  /// instead of replacing the text in one shot. Reranker / agentic-write /
+  /// auditor keep using [callOnceWithLog] (non-streaming) because they need
+  /// the full structured response before acting.
+  Future<SidecarCallOutcome> callStreamWithLog({
+    required SidecarApiConfig config,
+    required String prompt,
+    required int maxTokens,
+    required double temperature,
+    required int timeoutMs,
+    CancelToken? cancelToken,
+    void Function(String accumulatedText)? onChunk,
+  }) async {
+    if (config.endpoint.isEmpty || config.model.isEmpty) {
+      throw Exception('Sidecar API not configured');
+    }
+    final runner = const SidecarRetryRunner();
+    return runner.run(
+      cancelToken: cancelToken,
+      attempt: (i) => _callStream(
+        config: config,
+        prompt: prompt,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        timeoutMs: timeoutMs,
+        cancelToken: cancelToken,
+        onChunk: onChunk,
+      ),
+    );
+  }
+
   /// Builds a descriptive exception from a non-ok [SidecarCallOutcome] so the
   /// caller's `catch` block can fall back to the original text with a useful
   /// error message.
@@ -209,6 +346,74 @@ class SidecarLlmClient {
         },
         onError: (error) {
           if (!completer.isCompleted) completer.completeError(error);
+        },
+      ),
+    );
+
+    return completer.future.timeout(Duration(milliseconds: timeoutMs));
+  }
+
+  /// Streaming variant of [_callOnce]. Calls `transport.stream` with
+  /// `stream: true` and forwards accumulated text to [onChunk] on every
+  /// delta. Completes with the final accumulated text.
+  Future<String> _callStream({
+    required SidecarApiConfig config,
+    required String prompt,
+    required int maxTokens,
+    required double temperature,
+    required int timeoutMs,
+    CancelToken? cancelToken,
+    void Function(String accumulatedText)? onChunk,
+  }) async {
+    final completer = Completer<String>();
+    final transport = pickChatTransport(config.protocol);
+    final accumulated = StringBuffer();
+
+    unawaited(
+      transport.stream(
+        request: ChatTransportRequest(
+          endpoint: config.endpoint,
+          apiKey: config.apiKey,
+          model: config.model,
+          messages: [
+            {'role': 'user', 'content': prompt},
+          ],
+          maxTokens: maxTokens,
+          temperature: temperature,
+          topP: 1.0,
+          stream: true,
+        ),
+        cancelToken: cancelToken,
+        onUpdate: (delta, _) {
+          if (delta.isEmpty) return;
+          accumulated.write(delta);
+          final text = accumulated.toString();
+          if (onChunk != null && !completer.isCompleted) {
+            try {
+              onChunk(text);
+            } catch (_) {
+              // Callback errors must not abort the stream.
+            }
+          }
+        },
+        onComplete: (text, _, {rawResponseJson}) {
+          // Prefer the transport's aggregated text (it may have post-processing
+          // like trimming or final newline normalization). Fall back to our
+          // own accumulation if the transport returned empty.
+          final finalText = text.isNotEmpty ? text : accumulated.toString();
+          if (!completer.isCompleted) {
+            if (onChunk != null && finalText != accumulated.toString()) {
+              try {
+                onChunk(finalText);
+              } catch (_) {}
+            }
+            completer.complete(finalText);
+          }
+        },
+        onError: (error) {
+          if (!completer.isCompleted) {
+            completer.completeError(error);
+          }
         },
       ),
     );

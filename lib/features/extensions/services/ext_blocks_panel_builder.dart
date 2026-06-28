@@ -5,7 +5,12 @@ import '../providers/extension_presets_provider.dart';
 import '../providers/extensions_settings_provider.dart';
 import '../providers/info_blocks_provider.dart';
 
-typedef ExtBlocksPanelKey = ({String sessionId, String messageId, int swipeId});
+typedef ExtBlocksPanelKey = ({
+  String sessionId,
+  String messageId,
+  int swipeId,
+  int agentSwipeId,
+});
 
 typedef ExtBlocksPanelVisibilityKey = ({
   String sessionId,
@@ -14,6 +19,7 @@ typedef ExtBlocksPanelVisibilityKey = ({
   bool isLastAssistant,
   bool isGreeting,
   int swipeId,
+  int agentSwipeId,
 });
 
 /// Builds WebView panel payloads by merging preset block definitions with
@@ -34,6 +40,7 @@ class ExtBlocksPanelBuilder {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required bool isAssistant,
     required bool isLastAssistant,
     bool isGreeting = false,
@@ -47,6 +54,7 @@ class ExtBlocksPanelBuilder {
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
     );
     if (blocks.isNotEmpty) return true;
     return isLastAssistant;
@@ -58,6 +66,7 @@ class ExtBlocksPanelBuilder {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    int agentSwipeId = -1,
   }) {
     final settings = ref.read(extensionsSettingsProvider);
     if (!settings.enabled) return [];
@@ -72,7 +81,7 @@ class ExtBlocksPanelBuilder {
 
     final dbBlocks = ref
         .read(infoBlocksProvider(sessionId).notifier)
-        .getByMessageId(messageId, swipeId: swipeId);
+        .getByMessageId(messageId, swipeId: swipeId, agentSwipeId: agentSwipeId);
     final dbByBlockId = {for (final b in dbBlocks) b.blockId: b};
 
     final enabledConfigs = preset.blocks.where((b) => b.enabled).toList()
@@ -112,6 +121,7 @@ final extBlocksPanelBlocksProvider =
         sessionId: key.sessionId,
         messageId: key.messageId,
         swipeId: key.swipeId,
+        agentSwipeId: key.agentSwipeId,
       );
     });
 
@@ -125,6 +135,7 @@ final extBlocksPanelVisibleProvider =
         sessionId: key.sessionId,
         messageId: key.messageId,
         swipeId: key.swipeId,
+        agentSwipeId: key.agentSwipeId,
         isAssistant: key.isAssistant,
         isLastAssistant: key.isLastAssistant,
         isGreeting: key.isGreeting,

@@ -157,6 +157,257 @@ range such as `91-105` are read with a `messageRange` backfill in
 `MemoryEntry.fromJson()`. This does not rewrite the stored JSON until the book
 is saved normally.
 
+### INV-M6: Agent-generated memory batches are marked and display-separated ✅ ENFORCED (Phase 7)
+
+`MemoryDraft.source = 'agentic'` is set by `MemoryAgenticWriteService._executeMemoryWrites`
+when the post-turn write-loop creates a draft. `MemoryBookController.approveDraft()`
+propagates `draft.source` to `entry.source` and sets `entry.kind = 'agent'` when
+`source == 'agentic'` (else `'curated'`). The MemoryBook UI
+(`memory_books_sheet.dart`) tabs drafts/entries by source so agent-sourced
+content is shown in a dedicated "Agent memories" tab, separate from bulk scan
+drafts (`source == 'scan_chat'` or empty) and curated entries.
+
+Auto-approve policy (Phase 7): agent drafts that pass validation land in the
+same "Agent memories" tab. Invalid/empty/duplicate agent drafts are NOT
+auto-approved — they stay as pending drafts in the same tab until the user
+approves or deletes them. The dedicated atomic repo path is
+`MemoryBookRepo.appendDrafts` (transactional); no read-modify-write of the
+MemoryBook happens outside the dedicated repo methods.
+
+Compatibility rule: `MemoryEntry.source` defaults to `''` and is migrated in
+`_migrateEntryInPlace` (`memory_book.dart`) — no Drift schema migration is
+needed because `MemoryBookRows.entriesJson` / `pendingDraftsJson` are JSON
+TEXT blob columns.
+
+---
+
+## 4b. Studio Tracker Invariants
+
+These cover the tracker-around-generator pipeline introduced in Phase 5
+(`docs/PLAN_AGENTIC_STUDIO.md`). See also `docs/rules/generation.md` § Studio
+Mode for the rules every contributor touching `MemoryStudioService` /
+`AgentRunner` / `TrackerBatcher` must follow.
+
+### INV-ST1: Trackers receive ≤ contextSize last messages, not full history ✅ ENFORCED (Phase 3)
+
+`MemoryStudioService._limitTrackerHistory(history, contextSize)` slices
+`history.slice(-contextSize)` before building tracker messages. Each message is
+run through `_truncateAgentText` (head 40% + `[Trimmed ...]` marker + tail 60%,
+rune-counted) and `_stripHtmlTags` (conservative tag regex preserving `==...==`
+markers and code fences). `StudioAgent.contextSize` default 5, hard-cap 200.
+
+The final generator does NOT use this trim — it uses
+`StudioConfig.maxFinalHistoryMessages` (default 15). MemoryBook injection
+(`dynamic_context` block: memory, summary, worldInfo) is NOT trimmed — only
+the `chat_history` block is. Users without rolling summary keep long-term memory
+via MemoryBook (static `dynamic_context` injection), not via chat history.
+
+### INV-ST2: maxFinalHistoryMessages applies to the generator ✅ ENFORCED
+
+`_limitFinalHistory` trims `chat_history` to the last
+`StudioConfig.maxFinalHistoryMessages` (default 15) messages for the final
+generator only (`_runFinalGenerator` → `_buildAgentMessages(isFinalResponse:
+true)`). Trackers are governed by INV-ST1 instead.
+
+### INV-ST3: Same-(provider, model) trackers batch into one LLM request ✅ ENFORCED (Phase 5)
+
+`TrackerBatcher.groupAgents` keys batch groups by `"${resolved.protocol}|${resolved.model}"`.
+Agents with `StudioAgent.runIndividually = true` (or whose name matches
+`expression` / `illustrator` / `lorebook`, case-insensitive) are pulled out of
+the batch and run as individual requests. There is no `postProcessingDataKey`
+grouping (yet) — all trackers are pre-generation; the POST-cleaner is a separate
+post-gen rewrite pass, not a tracker.
+
+### INV-ST4: Nested agentSwipes (cleaned / final) ✅ ENFORCED
+
+The `AgentSwipe` class and `agentSwipes` / `agentSwipeId` / `studioOutputs`
+fields live on `ChatMessage`. The POST-cleaner writes a blue `'cleaned'`
+sub-swipe via `ChatRepo.appendAgentSwipe(kind: 'cleaned')`, preserving the
+original `'final'` as the parent (lazy-migrated on first clean). Blue
+sub-swipe navigation goes through `ChatMessageService.setAgentSwipe` /
+`changeAgentSwipe`; the WebView renders an `agent-switcher` (blue) control
+when `agentSwipes.length > 1`. `appendAgentSwipe` syncs
+`agentSwipes`+`agentSwipeId` into `swipesMeta[swipeId]` so green-swipe
+round-trips preserve the nested swipes. `ChatRepo.updateAgentSwipeContent`
+and `ChatRepo.removeAgentSwipe` are the atomic in-place swipe editers
+(used by the swipe-first cleaner flow — see below); they re-sync
+`swipesMeta` the same way.
+
+A full regeneration (`SavedMessageWriter.writeAssistant` with
+`regenTargetId`) resets `agentSwipes` to a single fresh `'final'` pointing
+at the new text — the old `'cleaned'` sub-swipe (which applied to the
+previous content) is dropped. The `studioFinalOnly` re-run branch (append a
+`'final'` without touching green swipes) is NOT restored: it depended on
+the removed 8-controller `regenerateIntermediateAgent` orchestration.
+Hold mode (Marinara) is not implemented.
+
+#### Swipe-first cleaner lifecycle (UX phase) ✅ ENFORCED
+
+`generation_pipeline._runPostCleaner` pre-creates an empty `'cleaned'`
+swipe at cleaner start and finalizes it based on the outcome:
+- `wasCleaned==true` → `updateAgentSwipeContent` fills it with the cleaned
+  text + `genTime` (cleaner elapsed) + `tokens` (estimateTokens).
+- `wasCleaned==false` AND `_lastStreamedText` non-empty → keep the partial
+  (truncated) text in the swipe (ops log marks `partialSaved`).
+- `wasCleaned==false` AND nothing streamed → `removeAgentSwipe` reverts
+  active to the parent `'final'`.
+- Abort mid-cleaner → `removeAgentSwipe` (no partial save on abort).
+- Hard pipeline failure → best-effort `removeAgentSwipe` in the catch
+  block; pre-create failure → fall back to the legacy `applyCleanedText`
+  append path.
+
+`GenerationPipeline._lastStreamedText` /
+`_preCreatedCleanerSwipeId` / `_preCreatedMessageId` are instance fields,
+reset in the `_runPostCleaner` finally block so state never leaks across
+runs.
+
+### INV-ST5: Single tracker failure does not abort the rest ✅ ENFORCED (Phase 5.7.5)
+
+`AgentRunner.runAgent` wraps any tracker exception (timeout, transport, idle,
+invalid output) in `AgentRunFailedException`. `MemoryStudioService._runTracker`
+catches it and emits a failed `StudioStageBrief` (`status: 'error'`,
+`error: reason`); the remaining trackers and the final generator continue.
+
+Fallback chain (Phase 5.1): in-batch invalid-JSON retry (re-request the whole
+batch once) → individual fallback (re-run each still-failed agent as its own
+request, concurrency limit 2) → error-result. The final generator rethrows —
+its failure aborts the turn.
+
+### INV-ST6: Batch budget and concurrency caps ✅ ENFORCED (Phase 5.7.2)
+
+Batch `maxTokens` = Σ per-tracker `maxTokens`, capped by `resolved.contextSize ~/ 2`
+(output ceiling = half the context window; the other half is input). Batch
+`temperature` = MIN across the group (low-temp wins for deterministic
+trackers). Batch `contextSize` = MAX across the group (the tracker that needs
+20 messages gets 20; the tracker that needs 5 sees more, which is safe).
+
+Concurrent in-flight tracker requests: `_maxConcurrentGroups = 4` for the
+phase, `_maxConcurrentFallback = 2` for the individual-fallback layer.
+Conservative defaults for desktop (Marinara runs 8/4 on a server; one user
+hitting one provider with 8 concurrent SSE streams is a real rate-limit risk).
+
+### INV-ST7: Studio cache-friendly prompt ordering ✅ ENFORCED (Phase 6.1)
+
+`TrackerBatcher.buildBatchSystemPrompt` orders the batch system prompt as
+`<role>` (shared role text) → `<lore>` (shared static + dynamic + trimmed
+history) → `<agents>` (per-agent `<agent_task>` XML) → required output format.
+Shared stable content sits at the prefix; per-agent volatile content sits at
+the tail. `MemoryStudioService._buildSharedBatchMessages` orders shared
+messages as `static_context` → `dynamic_context` → `chat_history` for the same
+reason. This gives the provider's prompt cache (Anthropic ephemeral /
+OpenRouter `cache_control`) a long stable prefix to hit across turns.
+`cacheControlTtl` / `cacheBreakpointMode` are wired through
+`ResolvedAgentConfig.fromApiConfig` → `ChatTransportRequest` → transport.
+
+---
+
+## 4c. Tracker Snapshot Rollback Invariants
+
+The tracker snapshot system (Phases 1-12) provides per-agent-swipe
+rollback for tracker state by writing immutable snapshots after each
+generation's write-loop completes.
+
+### INV-TS1: Snapshots are write-once; rollback is emergent ✅ ENFORCED (Phase 1-4)
+
+`tracker_snapshots` rows are never updated in place (other than the
+`committed` 0→1 flip via `commit` / `commitLatest`). The only allowed
+writes are:
+
+- `TrackerSnapshotRepo.upsertTrackers` — insert-or-replace by composite
+  PK `(sessionId, messageId, swipeId, agentSwipeId)` (write-loop, Phase 2).
+- `commit` / `commitLatest` — flip `committed` 0→1 (`ChatNotifier.sendMessage`,
+  Phase 6).
+- Delete methods (`deleteForMessage` / `deleteAnchor` / `deleteBySessionId`).
+
+Rollback is **emergent**: deleting the rows for a message makes the
+previous committed snapshot become the new latest — there is no explicit
+"restore" code path. `getLatestCommitted` / `getLatestCommittedExcludingMessage`
+return the highest-`createdAt` committed row, which naturally rolls back
+when newer rows are deleted.
+
+Code refs: `lib/core/db/repositories/tracker_snapshot_repo.dart`,
+`lib/core/llm/memory_agentic_write_service.dart` (write-loop + upsert),
+`lib/features/chat/chat_message_service.dart:deleteMessage` →
+`deleteForMessage`.
+
+### INV-TS2: Sentinel anchor survives per-message deletes ✅ ENFORCED (Phase 7)
+
+The migration-v51 baseline snapshot lives at the sentinel anchor
+`(messageId='', committed=1)`. `deleteForMessage(messageId)` only deletes
+rows with a non-empty `messageId` — it **must never** drop the sentinel
+anchor. Only `deleteBySessionId` and `deleteByCharacterId` (full-session /
+full-character cleanup) may drop it.
+
+This guarantees legacy sessions (migrated from `tracker_rows` in v51)
+always have a baseline snapshot until the session itself is deleted.
+
+Code ref: `lib/core/db/repositories/tracker_snapshot_repo.dart:deleteForMessage`
+— the `where` clause filters by `messageId.equals(messageId)` and the
+sentinel anchor has `messageId = ''`, so it is never matched.
+
+### INV-TS3: Read path is snapshot-first with `tracker_rows` fallback ✅ ENFORCED (Phase 3)
+
+The 3 read call sites (`generation_pipeline.dart`, `studio_menu_dialog.dart`,
+`agentic_operations_log_dialog.dart`) call `getLatestCommitted` /
+`getLatest` first and fall back to `trackerRepoProvider.getBySessionId`
+when no snapshot exists. This keeps legacy sessions (pre-Phase-1, not yet
+re-saved) working without a forced migration of every read.
+
+Code ref: `lib/features/chat/services/generation_pipeline.dart:_runAgenticWriteLoop`
+— `trackers = (await snapshotRepo.getLatestCommitted(sessionId: sessionId)) ??
+   await trackerRepo.getBySessionId(sessionId)`.
+
+### INV-TS4: Snapshot granularity is per-agent-swipe ✅ ENFORCED (Phase 1)
+
+Each snapshot is anchored at `(sessionId, messageId, swipeId, agentSwipeId)`
+— not per-message or per-session. This lets the rollback system restore
+state at the exact granularity the user navigates: swiping back through
+agent sub-swipes (e.g. `'final'` → `'cleaned'`) restores the matching
+tracker state, because each agent sub-swipe has its own snapshot row.
+
+### INV-TS5: POST-cleaner clones parent snapshot ✅ ENFORCED (Phase 2)
+
+The POST-cleaner clones the parent message's snapshot into the new `'cleaned'`
+agent-swipe anchor so the cleaned sub-swipe inherits the parent's tracker
+state; the original `'final'` snapshot is preserved. Two paths:
+
+- **Swipe-first flow (UX phase, `generation_pipeline._runPostCleaner`):**
+  the snapshot is cloned at pre-create time (right after
+  `appendAgentSwipe(kind: 'cleaned', content: '')`), before the cleaner
+  runs. So even if the cleaner crashes the pre-created swipe already has a
+  valid snapshot anchor.
+- **Legacy fallback (`post_cleaner_service.applyCleanedText`):** used when
+  pre-create failed earlier; clones after the append inside `applyCleanedText`.
+
+Code ref: `lib/features/chat/services/generation_pipeline.dart` (pre-create
+snapshot clone) and `lib/core/llm/post_cleaner_service.dart:applyCleanedText`
+(fallback) — both call `snapshotRepo.upsertTrackers(...)` with the parent's
+`messageId`/`swipeId` and the new `agentSwipeId`.
+
+### INV-TS6: Branch copies snapshots for sliced messages ✅ ENFORCED (Phase 5)
+
+`chat_session_service.branchSession` calls
+`trackerSnapshotRepo.copyForSessionBranch` to copy snapshots for the
+sliced message IDs to the new session ID. Snapshots beyond the branch
+point are not copied (the branch starts fresh from the slice). The PK
+includes `sessionId` as a prefix, so branches don't alias even though
+messages are not re-id'd on branch.
+
+Code ref: `lib/core/db/repositories/tracker_snapshot_repo.dart:copyForSessionBranch`,
+`lib/features/chat/chat_session_service.dart:branchSession`.
+
+### INV-TS7: Snapshots are covered by backup + cloud sync ✅ ENFORCED (Phase 8, 9)
+
+`tracker_snapshots` is in the backup whitelist (`backup_exporter.dart`,
+backup `_schemaVersion` 5) and has full cloud sync coverage via
+`SyncTrackerSnapshotStore` + `TrackerSnapshotSyncStore` adapter (Phase 9).
+Session deletes record `SyncDeletionTracker.record('tracker_snapshot',
+sessionId)` so the cloud counterpart is deleted too.
+
+Code ref: `lib/core/services/backup/backup_exporter.dart:_knownTableNames`,
+`lib/features/cloud_sync/adapters/ext_blocks_sync_stores.dart:TrackerSnapshotSyncStore`,
+`lib/features/chat_history/chat_history_provider.dart:deleteSession`.
+
 ---
 
 ## 5. Prompt Semantics Invariants

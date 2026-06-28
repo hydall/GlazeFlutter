@@ -132,9 +132,11 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
   Future<void> deleteSession(String sessionId) async {
     await ref.read(chatRepoProvider).delete(sessionId);
     await ref.read(memoryBookRepoProvider).deleteBySessionId(sessionId);
+    await ref.read(trackerSnapshotRepoProvider).deleteBySessionId(sessionId);
     ChatSessionService.clearCache();
     await SyncDeletionTracker.record('chat', sessionId);
     await SyncDeletionTracker.record('memory_book', sessionId);
+    await SyncDeletionTracker.record('tracker_snapshot', sessionId);
   }
 
   Future<void> clearChat(String sessionId) async {
@@ -150,6 +152,9 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
       messages: [],
     );
     await chatRepo.put(clearedSession);
+    // Wipe tracker snapshots so stale state from before the clear does not
+    // leak into the fresh chat.
+    await ref.read(trackerSnapshotRepoProvider).deleteBySessionId(sessionId);
   }
 
   Future<void> renameSession(String sessionId, String newName) async {

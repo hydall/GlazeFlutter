@@ -52,6 +52,7 @@ class InteractiveBlockHandler implements BlockHandler {
         context.sessionId,
         context.messageId,
         context.swipeId,
+        context.agentSwipeId,
       );
       return placeholder.copyWith(status: BlockRunStatus.done);
     } else {
@@ -120,6 +121,7 @@ class InteractiveBlockHandler implements BlockHandler {
       context.sessionId,
       context.messageId,
       context.swipeId,
+      context.agentSwipeId,
     );
     return done;
   }

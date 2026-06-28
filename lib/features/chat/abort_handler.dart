@@ -8,9 +8,9 @@ import '../../core/services/generation_notification_service.dart';
 import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import 'chat_provider.dart' show streamingStateProvider;
+import 'state/studio_cycle_state_provider.dart';
 import 'chat_session_service.dart';
 import 'chat_state.dart';
-import '../../core/llm/memory_studio_service.dart';
 
 class AbortHandler {
   final Ref _ref;
@@ -79,6 +79,16 @@ class AbortHandler {
         const StreamingState();
   }
 
+  void clearStudioCycle() {
+    if (!_ref.mounted) return;
+    final cur = _ref.read(studioCycleStateProvider);
+    if (cur.phase == StudioCyclePhase.running ||
+        cur.phase == StudioCyclePhase.writingFinal) {
+      _ref.read(studioCycleStateProvider.notifier).state =
+          const StudioCycleState.idle();
+    }
+  }
+
   void abortGeneration() {
     if (!_ref.mounted) return;
     _activeGenId++;
@@ -88,10 +98,7 @@ class AbortHandler {
     _imgGenCancelToken?.cancel();
     _imgGenCancelToken = null;
     clearStreaming();
-    // Reset studio runtime state so the "Studio 8/8" plaque disappears
-    // immediately on abort (not waiting for the pipeline's finally block).
-    _ref.read(studioRuntimeStateProvider.notifier).state =
-        const StudioRuntimeState.idle();
+    clearStudioCycle();
 
     final current = _getState().value;
     if (current != null && current.isGenerating) {

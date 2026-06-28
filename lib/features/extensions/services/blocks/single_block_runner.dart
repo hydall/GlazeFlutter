@@ -27,6 +27,7 @@ class SingleBlockRunner {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required List<ChatMessage> messages,
     required BlockConfig blockConfig,
     required ExtensionPreset preset,
@@ -43,6 +44,7 @@ class SingleBlockRunner {
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
       blockConfig: blockConfig,
       reuseBlockId: reuseBlockId,
     );
@@ -59,13 +61,14 @@ class SingleBlockRunner {
       );
     }
 
-    refreshPanelForMessage(charId, sessionId, messageId, swipeId);
+    refreshPanelForMessage(charId, sessionId, messageId, swipeId, agentSwipeId);
 
     final context = BlockContext(
       charId: charId,
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
       messages: messages,
       blockConfig: blockConfig,
       preset: preset,

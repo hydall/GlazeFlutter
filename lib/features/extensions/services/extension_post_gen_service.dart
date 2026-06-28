@@ -63,8 +63,15 @@ class ExtensionPostGenService {
     String sessionId,
     String messageId,
     int swipeId,
+    int agentSwipeId,
   ) {
-    _panelUpdater.refreshForMessage(charId, sessionId, messageId, swipeId);
+    _panelUpdater.refreshForMessage(
+      charId,
+      sessionId,
+      messageId,
+      swipeId,
+      agentSwipeId,
+    );
   }
 
   Future<InfoBlock> _markContextBlockError({
@@ -88,6 +95,7 @@ class ExtensionPostGenService {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required List<ChatMessage> messages,
     required Character character,
     required Persona? persona,
@@ -99,10 +107,10 @@ class ExtensionPostGenService {
     if (clearExisting) {
       await _ref
           .read(infoBlocksProvider(sessionId).notifier)
-          .deleteByMessageId(messageId, swipeId: swipeId);
+          .deleteByMessageId(messageId, swipeId: swipeId, agentSwipeId: agentSwipeId);
     }
 
-    _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
+    _refreshPanelForMessage(charId, sessionId, messageId, swipeId, agentSwipeId);
 
     final cancelToken = _startBlockRun();
     try {
@@ -111,6 +119,7 @@ class ExtensionPostGenService {
         sessionId: sessionId,
         messageId: messageId,
         swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
         messages: messages,
         preset: preset,
         character: character,
@@ -120,7 +129,7 @@ class ExtensionPostGenService {
       );
     } finally {
       _finishBlockRun(cancelToken);
-      _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
+      _refreshPanelForMessage(charId, sessionId, messageId, swipeId, agentSwipeId);
     }
   }
 
@@ -144,11 +153,16 @@ class ExtensionPostGenService {
   }
 
   /// Called by GenerationPipeline after assistant message is finalised.
+  /// When the POST-cleaner is enabled, [agentSwipeId] identifies the blue
+  /// cleaned sub-swipe the blocks should bind to (and read for content).
+  /// When the cleaner is disabled or skipped, [agentSwipeId] stays -1
+  /// (legacy: blocks bind to the top-level swipe only).
   Future<void> processAfterGeneration({
     required String charId,
     required ChatSession session,
     required Character character,
     required Persona? persona,
+    int agentSwipeId = -1,
   }) async {
     if (session.id.isEmpty || session.messages.isEmpty) return;
 
@@ -162,6 +176,7 @@ class ExtensionPostGenService {
       sessionId: session.id,
       messageId: lastMessage.id,
       swipeId: lastMessage.swipeId,
+      agentSwipeId: agentSwipeId,
       messages: session.messages,
       character: character,
       persona: persona,
@@ -190,6 +205,7 @@ class ExtensionPostGenService {
         sessionId: session.id,
         messageId: lastMessage.id,
         swipeId: lastMessage.swipeId,
+        agentSwipeId: -1,
         messages: session.messages,
         preset: preset,
         character: character,
@@ -204,6 +220,7 @@ class ExtensionPostGenService {
         session.id,
         lastMessage.id,
         lastMessage.swipeId,
+        -1,
       );
     }
   }
@@ -213,6 +230,7 @@ class ExtensionPostGenService {
     required String blockId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required String sessionId,
     required String charId,
     required List<ChatMessage> messages,
@@ -231,6 +249,7 @@ class ExtensionPostGenService {
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
       blockId: blockId,
     );
 
@@ -240,6 +259,7 @@ class ExtensionPostGenService {
         sessionId: sessionId,
         messageId: messageId,
         swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
         messages: messages,
         blockConfig: blockConfig,
         preset: preset,
@@ -256,7 +276,7 @@ class ExtensionPostGenService {
     } finally {
       _finishBlockRun(cancelToken);
     }
-    _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
+    _refreshPanelForMessage(charId, sessionId, messageId, swipeId, agentSwipeId);
   }
 
   /// Cancels any in-flight block generation for the current session.
@@ -315,6 +335,7 @@ class ExtensionPostGenService {
     required String blockId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required String sessionId,
     required String charId,
     required Character character,
@@ -333,10 +354,11 @@ class ExtensionPostGenService {
         renderImagePixels: _renderImagePixels,
       ).rerun(
         blockId: blockId,
-        charId: charId,
-        sessionId: sessionId,
         messageId: messageId,
         swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
+        sessionId: sessionId,
+        charId: charId,
         character: character,
         persona: persona,
         blocks: preset.blocks,
@@ -356,6 +378,7 @@ class ExtensionPostGenService {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required List<ChatMessage> messages,
     required ExtensionPreset preset,
     required Character character,
@@ -373,6 +396,7 @@ class ExtensionPostGenService {
           sessionId: sessionId,
           messageId: messageId,
           swipeId: swipeId,
+          agentSwipeId: agentSwipeId,
           messages: messages,
           blockConfig: blockConfig,
           preset: preset,
@@ -397,6 +421,7 @@ class ExtensionPostGenService {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required List<ChatMessage> messages,
     required BlockConfig blockConfig,
     required ExtensionPreset preset,
@@ -415,6 +440,7 @@ class ExtensionPostGenService {
         sessionId: sessionId,
         messageId: messageId,
         swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
         messages: messages,
         blockConfig: blockConfig,
         preset: preset,
@@ -478,6 +504,7 @@ class ExtensionPostGenService {
       sessionId: context.sessionId,
       messageId: context.messageId,
       swipeId: context.swipeId,
+      agentSwipeId: context.agentSwipeId,
       blockConfig: context.blockConfig,
       character: context.character,
       persona: context.persona,
@@ -493,6 +520,7 @@ class ExtensionPostGenService {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required BlockConfig blockConfig,
     required Character character,
     required Persona? persona,
@@ -512,6 +540,7 @@ class ExtensionPostGenService {
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
       blockConfig: blockConfig,
       character: character,
       persona: persona,

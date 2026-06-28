@@ -19,7 +19,6 @@ import 'editing_message_provider.dart';
 
 import '../../core/state/character_provider.dart';
 import '../../core/llm/regex_service.dart';
-import '../../core/llm/memory_studio_service.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/memory_settings_provider.dart';
 import '../../core/state/memory_agent_providers.dart';
@@ -53,9 +52,9 @@ import 'widgets/chat_input_bar.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_activity_card.dart';
 import 'widgets/post_cleaner_status_card.dart';
+import 'widgets/studio_status_card.dart';
 import 'widgets/quick_replies_panel.dart';
 import 'widgets/chat_webview_widget.dart';
-import 'widgets/ext_block_dialogs.dart';
 import 'widgets/triggered_items_sheet.dart';
 import 'widgets/webview_callbacks.dart';
 import '../../core/models/chat_message.dart';
@@ -394,67 +393,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ],
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _StudioRuntimeCard extends StatelessWidget {
-  final StudioRuntimeState runtime;
-  final VoidCallback onFinish;
-
-  const _StudioRuntimeCard({required this.runtime, required this.onFinish});
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = runtime.total > 0
-        ? '${runtime.index + 1}/${runtime.total}'
-        : '';
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: context.cs.surface.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: context.cs.primary.withValues(alpha: 0.35)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: context.cs.primary,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Studio $progress: ${runtime.agentName ?? 'Agent'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: context.cs.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: onFinish,
-              icon: const Icon(Icons.skip_next_rounded, size: 18),
-              label: const Text('Finish agent'),
-            ),
-          ],
         ),
       ),
     );
@@ -873,7 +811,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final isEditingMessage =
         ref.watch(editingMessageIdProvider(widget.charId)) != null;
     final memoryActivity = ref.watch(lastMemoryActivityProvider(widget.charId));
-    final studioRuntime = ref.watch(studioRuntimeStateProvider);
     final memoryEnabled = ref.watch(
       memoryGlobalSettingsProvider.select((s) => s.enabled),
     );
@@ -1131,12 +1068,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       onRegenerate: (id, mode) {
                         ref
                             .read(chatProvider(widget.charId).notifier)
-                            .regenerateLastAssistant(
-                              studioFinalOnly: mode == 'studio-final',
-                            );
+                            .regenerateLastAssistant();
                         ref
                             .read(memorySidecarPrewarmCacheProvider)
                             .invalidateSession(widget.state.session?.id ?? '');
+                      },
+                      onRerunCleaner: (id) {
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .rerunCleaner(id);
                       },
                       onToggleHidden: (id) {
                         final idx = widget.state.messages.indexWhere(
@@ -1215,36 +1155,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                 )
                                 .state =
                             null;
-                      },
-                      onStudioOutputEdit: (outputId, messageId) async {
-                        final idx = widget.state.messages.indexWhere(
-                          (m) => m.id == messageId,
-                        );
-                        if (idx < 0) return;
-                        final output = widget.state.messages[idx].studioOutputs
-                            .where((o) => o['id'] == outputId)
-                            .firstOrNull;
-                        if (output == null) return;
-                        final newContent = await ExtBlockDialogs.promptEdit(
-                          context: context,
-                          blockName:
-                              output['name'] as String? ?? 'Studio Agent',
-                          initialContent: output['content'] as String? ?? '',
-                        );
-                        if (!mounted) return;
-                        if (newContent == null) return;
-                        await ref
-                            .read(chatProvider(widget.charId).notifier)
-                            .editStudioOutput(idx, outputId, newContent);
-                      },
-                      onStudioOutputRegen: (outputId, messageId) async {
-                        final idx = widget.state.messages.indexWhere(
-                          (m) => m.id == messageId,
-                        );
-                        if (idx < 0) return;
-                        await ref
-                            .read(chatProvider(widget.charId).notifier)
-                            .regenerateStudioOutput(idx, outputId);
                       },
                       onEditCancel: (id) {
                         ref
@@ -1351,29 +1261,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                   ),
                 ),
               ),
-            ),
-            if (studioRuntime.canFinishAgent)
-              Positioned(
-                left: 12,
-                right: 12,
-                top: messageListTop,
-                child: _StudioRuntimeCard(
-                  runtime: studioRuntime,
-                  onFinish: () => ref
-                      .read(chatProvider(widget.charId).notifier)
-                      .finishCurrentStudioAgent(),
-                ),
-              ),
-            // POST-cleaner live status card. Shown after generation finishes
-            // while the cleaner is running. Stacks below the studio card and
-            // memory card (which occupy the same top slot but are never
-            // visible simultaneously — studio runs during generation, cleaner
-            // runs after).
-            Positioned(
-              left: 12,
-              right: 12,
-              top: messageListTop + memoryTopReserve,
-              child: const PostCleanerStatusCard(),
             ),
             // Top gradient for fade effect under the header
             Positioned(
@@ -1487,6 +1374,23 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                   ),
                 ),
               ),
+            // POST-cleaner live status card. Rendered AFTER the memory activity
+            // card so it sits ABOVE it in z-order — the Stop button must stay
+            // clickable even when the memory card is visible underneath.
+            Positioned(
+              left: 12,
+              right: 12,
+              top: messageListTop + memoryTopReserve,
+              child: const PostCleanerStatusCard(),
+            ),
+            // Studio tracker-cycle live status card. Shown during generation
+            // while Studio trackers / final generator are running.
+            Positioned(
+              left: 12,
+              right: 12,
+              top: messageListTop + memoryTopReserve + 56,
+              child: const StudioStatusCard(),
+            ),
             // Bottom panel: drawer + input bar
             Positioned.fill(
               child: Stack(
@@ -1649,15 +1553,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                     isGenerating: widget.state.isGenerating,
                                     isGeneratingImage:
                                         widget.state.isGeneratingImage,
-                                    onFinishAgent: studioRuntime.canFinishAgent
-                                        ? () => ref
-                                              .read(
-                                                chatProvider(
-                                                  widget.charId,
-                                                ).notifier,
-                                              )
-                                              .finishCurrentStudioAgent()
-                                        : null,
                                     onStop:
                                         (widget.state.isGenerating ||
                                             widget.state.isGeneratingImage)

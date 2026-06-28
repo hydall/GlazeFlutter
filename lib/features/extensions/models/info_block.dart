@@ -12,6 +12,7 @@ abstract class InfoBlock with _$InfoBlock {
     required String sessionId,
     required String messageId,
     @Default(0) int swipeId,
+    @Default(-1) int agentSwipeId,
     required String blockId,
     required String blockName,
     required String blockType,

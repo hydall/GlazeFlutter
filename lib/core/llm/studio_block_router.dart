@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/api_config.dart';
 import '../models/preset.dart';
+import 'json_repair.dart';
 
 /// Signature of the LLM call the router delegates to. The decomposition
 /// service supplies its existing build-model call (`_callLlm`) so the router
@@ -19,9 +20,8 @@ typedef RouterLlmCall =
 
 /// One routable agent bucket the router can assign blocks to.
 ///
-/// Decouples the router from the private `_ControllerSpec` list in
-/// [StudioDecompositionService]. The decomposition service maps its specs to
-/// these descriptors before calling.
+/// Decouples the router from the tracker specs. Callers map their tracker
+/// configurations to these descriptors before calling.
 class RouterBucket {
   final String id;
   final String name;
@@ -193,11 +193,11 @@ $blockLines''';
     Set<String> validBucketIds,
     Set<String> validBlockIds,
   ) {
-    final jsonText = _extractJsonObject(text);
+    final jsonText = extractJsonObject(text);
     if (jsonText == null) return const {};
     final Object? decoded;
     try {
-      decoded = jsonDecode(jsonText);
+      decoded = jsonDecode(repairJson(jsonText));
     } catch (_) {
       return const {};
     }
@@ -216,13 +216,6 @@ $blockLines''';
       result[block] = bucket;
     }
     return result;
-  }
-
-  String? _extractJsonObject(String text) {
-    final start = text.indexOf('{');
-    final end = text.lastIndexOf('}');
-    if (start < 0 || end <= start) return null;
-    return text.substring(start, end + 1);
   }
 
   void _log(String message) {

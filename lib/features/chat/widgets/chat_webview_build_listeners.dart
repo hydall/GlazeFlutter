@@ -127,9 +127,7 @@ class ChatWebViewBuildListeners {
     ref.listen<StreamingState>(streamingStateProvider(charId), (prev, next) {
       final b = bridge;
       if (b == null || !ready()) return;
-      if (next.text.isEmpty &&
-          next.reasoning == null &&
-          next.studioOutputs.isEmpty) {
+      if (next.text.isEmpty && next.reasoning == null) {
         return;
       }
 
@@ -142,13 +140,28 @@ class ChatWebViewBuildListeners {
             content: next.text,
             reasoning: next.reasoning ?? original.reasoning,
             isTyping: true,
-            studioOutputs: next.studioOutputs,
-            memoryCoverage: next.studioOutputsExpanded
-                ? const {'studioOutputsExpanded': true}
-                : const {},
           );
           b.updateMessage(updated);
           syncState.regenStreamingSent = true;
+        }
+        return;
+      }
+
+      // POST-cleaner streaming: rewrite the existing last assistant message
+      // in place. targetMessageId points at the message being cleaned; the
+      // cleaner streams its rewrite into the same bubble, replacing the
+      // original text. After the cleaner finalizes, applyCleanedText appends
+      // a new green swipe with the cleaned content.
+      final targetId = next.targetMessageId;
+      if (targetId != null) {
+        final idx = messages.indexWhere((m) => m.id == targetId);
+        if (idx >= 0) {
+          final original = messages[idx];
+          final updated = original.copyWith(
+            content: next.text,
+            isTyping: true,
+          );
+          b.updateMessage(updated);
         }
         return;
       }
@@ -160,10 +173,6 @@ class ChatWebViewBuildListeners {
         reasoning: next.reasoning,
         timestamp: DateTime.now().millisecondsSinceEpoch,
         isTyping: true,
-        studioOutputs: next.studioOutputs,
-        memoryCoverage: next.studioOutputsExpanded
-            ? const {'studioOutputsExpanded': true}
-            : const {},
       );
 
       if (!syncState.streamingSent) {

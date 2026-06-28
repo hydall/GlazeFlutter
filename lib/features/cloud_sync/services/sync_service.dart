@@ -29,6 +29,7 @@ class SyncService {
   final SyncExtensionPresetStore _extensionPresetRepo;
   final SyncExtensionsSettingsStore _extensionsSettingsStore;
   final SyncInfoBlockStore _infoBlockStore;
+  final SyncTrackerSnapshotStore _trackerSnapshotStore;
   final SyncStudioConfigStore _studioConfigStore;
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
 
@@ -89,6 +90,7 @@ class SyncService {
     required this._extensionPresetRepo,
     required this._extensionsSettingsStore,
     required this._infoBlockStore,
+    required this._trackerSnapshotStore,
     required this._studioConfigStore,
     required Future<void> Function(LorebookActivations) saveLorebookActivations,
     // ignore: prefer_initializing_formals
@@ -115,6 +117,7 @@ class SyncService {
     extensionPresetRepo: _extensionPresetRepo,
     extensionsSettingsStore: _extensionsSettingsStore,
     infoBlockStore: _infoBlockStore,
+    trackerSnapshotStore: _trackerSnapshotStore,
     studioConfigStore: _studioConfigStore,
     imageStore: _imageStorage,
   );
@@ -135,6 +138,7 @@ class SyncService {
     _extensionPresetRepo,
     _extensionsSettingsStore,
     _infoBlockStore,
+    _trackerSnapshotStore,
     _studioConfigStore,
     _saveLorebookActivations,
   );

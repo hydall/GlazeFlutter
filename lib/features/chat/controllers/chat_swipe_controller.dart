@@ -26,7 +26,11 @@ class ChatSwipeController {
   void setSwipe(int messageIndex, int swipeId) {
     final current = _getState().value;
     if (current == null || current.session == null) return;
-    final updated = _messageSvc.setSwipe(current.session!, messageIndex, swipeId);
+    final updated = _messageSvc.setSwipe(
+      current.session!,
+      messageIndex,
+      swipeId,
+    );
     _invalidateHistory();
     _setState(AsyncData(current.copyWith(session: updated)));
   }
@@ -34,15 +38,24 @@ class ChatSwipeController {
   void setAgentSwipe(int messageIndex, int agentSwipeId) {
     final current = _getState().value;
     if (current == null || current.session == null) return;
-    final updated =
-        _messageSvc.setAgentSwipe(current.session!, messageIndex, agentSwipeId);
+    final updated = _messageSvc.setAgentSwipe(
+      current.session!,
+      messageIndex,
+      agentSwipeId,
+    );
     _invalidateHistory();
     _setState(AsyncData(current.copyWith(session: updated)));
   }
 
-  Future<void> changeSwipe(int messageIndex, int dir, {bool fromSwipe = false}) async {
+  Future<void> changeSwipe(
+    int messageIndex,
+    int dir, {
+    bool fromSwipe = false,
+  }) async {
     final current = _getState().value;
-    if (current == null || current.session == null || current.isGenerating) return;
+    if (current == null || current.session == null || current.isGenerating) {
+      return;
+    }
     if (messageIndex < 0 || messageIndex >= current.messages.length) return;
 
     final isLast = messageIndex == current.messages.length - 1;
@@ -97,7 +110,9 @@ class ChatSwipeController {
 
   Future<void> setGreeting(int messageIndex, int direction) async {
     final current = _getState().value;
-    if (current == null || current.session == null || current.isGenerating) return;
+    if (current == null || current.session == null || current.isGenerating) {
+      return;
+    }
     if (messageIndex != 0) return;
     if (messageIndex >= current.messages.length) return;
     final msg = current.messages[messageIndex];

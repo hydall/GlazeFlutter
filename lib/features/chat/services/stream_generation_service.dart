@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/memory_studio_service.dart';
-import '../../../core/llm/memory_studio_mode.dart';
 import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/transport/chat_transport_request.dart';
 import '../../../core/llm/transport/transport_factory.dart';
@@ -23,6 +22,7 @@ import '../chat_state.dart';
 import '../state/agent_operations_log_provider.dart';
 import '../state/cached_token_breakdown.dart';
 import '../state/memory_activity_provider.dart';
+import '../state/studio_cycle_state_provider.dart';
 import 'saved_message_writer.dart';
 
 class StreamGenerationService {
@@ -53,7 +53,6 @@ class StreamGenerationService {
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? guidanceText,
     String? regenTargetId,
-    bool studioFinalOnly = false,
     required ChatState currentState,
   }) async {
     final vsi = currentState.visibleStartIndex;
@@ -167,6 +166,12 @@ class StreamGenerationService {
           'studio intercept char=$_charId session=${session.id} '
           'agents=${studioConfig.agents.length}',
         );
+        _ref
+            .read(studioCycleStateProvider.notifier)
+            .state = StudioCycleState.running(
+          sessionId: session.id,
+          totalAgents: studioConfig.agents.length,
+        );
         final promptResult = await buildPromptInIsolate(payload);
         if (_isAborted()) {
           return ChatState(
@@ -179,7 +184,6 @@ class StreamGenerationService {
         bool studioFrameScheduled = false;
         var latestStudioText = '';
         String? latestStudioReasoning;
-        var latestStudioOutputs = const <Map<String, dynamic>>[];
         void scheduleStudioStreamingUpdate() {
           if (studioFrameScheduled) return;
           studioFrameScheduled = true;
@@ -191,55 +195,40 @@ class StreamGenerationService {
                 .state = StreamingState(
               text: latestStudioText,
               reasoning: latestStudioReasoning,
-              studioOutputs: latestStudioOutputs,
             );
           });
         }
 
-        final studioOutputsSub = _ref.listen<List<Map<String, dynamic>>>(
-          studioStreamingOutputsProvider(session.id),
-          (_, next) {
+        final studioService = _ref.read(memoryStudioServiceProvider);
+        final studioResult = await studioService.runTrackerCycle(
+          config: studioConfig,
+          promptResult: promptResult,
+          promptPayload: payload,
+          apiConfig: apiConfig,
+          sessionId: session.id,
+          cancelToken: cancelToken,
+          onFinalResponseUpdate: (text, reasoning) {
             if (_isAborted()) return;
-            latestStudioOutputs = next;
+            latestStudioText = text;
+            latestStudioReasoning = reasoning;
+            final cur = _ref.read(studioCycleStateProvider);
+            if (cur.phase == StudioCyclePhase.running) {
+              _ref
+                  .read(studioCycleStateProvider.notifier)
+                  .state = StudioCycleState.writingFinal(
+                sessionId: session.id,
+                totalAgents: cur.totalAgents,
+                completedAgents: cur.completedAgents,
+                failedAgents: cur.failedAgents,
+                failedAgentNames: cur.failedAgentNames,
+              );
+            }
             scheduleStudioStreamingUpdate();
           },
         );
-        final previousBriefs = studioFinalOnly
-            ? _studioBriefsFromSwipeMeta(previousSwipesMeta, previousSwipeId)
-            : const <StudioStageBrief>[];
-        final studioService = _ref.read(memoryStudioServiceProvider);
-        final studioResult = studioFinalOnly && previousBriefs.isNotEmpty
-            ? await studioService.runFinalAgentOnly(
-                config: studioConfig,
-                promptResult: promptResult,
-                promptPayload: payload,
-                apiConfig: apiConfig,
-                sessionId: session.id,
-                priorBriefs: previousBriefs,
-                cancelToken: cancelToken,
-                onFinalResponseUpdate: (text, reasoning) {
-                  if (_isAborted()) return;
-                  latestStudioText = text;
-                  latestStudioReasoning = reasoning;
-                  scheduleStudioStreamingUpdate();
-                },
-              )
-            : await studioService.runPipeline(
-                config: studioConfig,
-                promptResult: promptResult,
-                promptPayload: payload,
-                apiConfig: apiConfig,
-                sessionId: session.id,
-                cancelToken: cancelToken,
-                onFinalResponseUpdate: (text, reasoning) {
-                  if (_isAborted()) return;
-                  latestStudioText = text;
-                  latestStudioReasoning = reasoning;
-                  scheduleStudioStreamingUpdate();
-                },
-              );
-        studioOutputsSub.close();
         if (_isAborted() || studioResult.status == 'aborted') {
+          _ref.read(studioCycleStateProvider.notifier).state =
+              const StudioCycleState.idle();
           return ChatState(
             session: saveSession ?? session,
             isGenerating: false,
@@ -255,33 +244,47 @@ class StreamGenerationService {
             'studio agent_errors char=$_charId session=${session.id} '
             'error=${studioResult.error}',
           );
-          final elapsed =
-              DateTime.now().difference(startGenTime).inMilliseconds;
-          final finalState = _writer.writeAssistant(
-            text: '',
-            reasoning: null,
-            currentSession: saveSession ?? session,
-            isAborted: _isAborted,
-            pendingSessionVars: pendingSessionVars,
-            genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
-            tokens: 0,
-            rawResponse: '',
-            previousSwipes: previousSwipes,
-            previousSwipeId: previousSwipeId,
-            previousReasoning: previousReasoning,
-            previousGenTime: previousGenTime,
-            previousTokens: previousTokens,
-            previousSwipesMeta: previousSwipesMeta,
-            guidanceText: guidanceText,
-            memoryCoverage: coverage,
-            isAllReasoning: false,
-            triggeredLorebooks: triggeredLorebooks,
-            triggeredMemories: triggeredMemories,
-            studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
-            regenTargetId: regenTargetId,
-            studioFinalOnly: studioFinalOnly,
-            visibleStartIndex: vsi,
+          _recordStudioTrackerOperation(
+            sessionId: session.id,
+            startGenTime: startGenTime,
+            result: studioResult,
+            model: apiConfig.model,
           );
+          _ref
+              .read(studioCycleStateProvider.notifier)
+              .state = _studioFinalState(
+            session.id,
+            studioResult,
+            StudioCyclePhase.agentErrors,
+          );
+          final elapsed = DateTime.now()
+              .difference(startGenTime)
+              .inMilliseconds;
+          final finalState = _writer
+              .writeAssistant(
+                text: '',
+                reasoning: null,
+                currentSession: saveSession ?? session,
+                isAborted: _isAborted,
+                pendingSessionVars: pendingSessionVars,
+                genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
+                tokens: 0,
+                rawResponse: '',
+                previousSwipes: previousSwipes,
+                previousSwipeId: previousSwipeId,
+                previousReasoning: previousReasoning,
+                previousGenTime: previousGenTime,
+                previousTokens: previousTokens,
+                previousSwipesMeta: previousSwipesMeta,
+                guidanceText: guidanceText,
+                memoryCoverage: coverage,
+                isAllReasoning: false,
+                triggeredLorebooks: triggeredLorebooks,
+                triggeredMemories: triggeredMemories,
+                regenTargetId: regenTargetId,
+                visibleStartIndex: vsi,
+              )
+              .copyWith(promptPayload: payload);
           return finalState;
         }
         if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
@@ -291,6 +294,14 @@ class StreamGenerationService {
             'studio failed char=$_charId session=${session.id} '
             'status=${studioResult.status} error=$message',
           );
+          _recordStudioTrackerOperation(
+            sessionId: session.id,
+            startGenTime: startGenTime,
+            result: studioResult,
+            model: apiConfig.model,
+          );
+          _ref.read(studioCycleStateProvider.notifier).state =
+              const StudioCycleState.error(sessionId: '');
           if (regenTargetId != null && saveSession != null) {
             return _writer.writeRegenError(
               errorText: message,
@@ -312,33 +323,45 @@ class StreamGenerationService {
           'elapsedMs=$elapsed chars=${studioResult.response.length} '
           'briefs=${studioResult.stageBriefs.length}',
         );
-        final finalState = _writer.writeAssistant(
-          text: studioResult.response,
-          reasoning: studioResult.reasoning.isNotEmpty
-              ? studioResult.reasoning
-              : null,
-          currentSession: saveSession ?? session,
-          isAborted: _isAborted,
-          pendingSessionVars: pendingSessionVars,
-          genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
-          tokens: estimateTokens(studioResult.response),
-          rawResponse: studioResult.rawResponseJson ?? studioResult.response,
-          previousSwipes: previousSwipes,
-          previousSwipeId: previousSwipeId,
-          previousReasoning: previousReasoning,
-          previousGenTime: previousGenTime,
-          previousTokens: previousTokens,
-          previousSwipesMeta: previousSwipesMeta,
-          guidanceText: guidanceText,
-          memoryCoverage: coverage,
-          isAllReasoning: false,
-          triggeredLorebooks: triggeredLorebooks,
-          triggeredMemories: triggeredMemories,
-          studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
-          regenTargetId: regenTargetId,
-          studioFinalOnly: studioFinalOnly,
-          visibleStartIndex: vsi,
+        _recordStudioTrackerOperation(
+          sessionId: session.id,
+          startGenTime: startGenTime,
+          result: studioResult,
+          model: apiConfig.model,
         );
+        _ref.read(studioCycleStateProvider.notifier).state = _studioFinalState(
+          session.id,
+          studioResult,
+          StudioCyclePhase.done,
+        );
+        final finalState = _writer
+            .writeAssistant(
+              text: studioResult.response,
+              reasoning: studioResult.reasoning.isNotEmpty
+                  ? studioResult.reasoning
+                  : null,
+              currentSession: saveSession ?? session,
+              isAborted: _isAborted,
+              pendingSessionVars: pendingSessionVars,
+              genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
+              tokens: estimateTokens(studioResult.response),
+              rawResponse:
+                  studioResult.rawResponseJson ?? studioResult.response,
+              previousSwipes: previousSwipes,
+              previousSwipeId: previousSwipeId,
+              previousReasoning: previousReasoning,
+              previousGenTime: previousGenTime,
+              previousTokens: previousTokens,
+              previousSwipesMeta: previousSwipesMeta,
+              guidanceText: guidanceText,
+              memoryCoverage: coverage,
+              isAllReasoning: false,
+              triggeredLorebooks: triggeredLorebooks,
+              triggeredMemories: triggeredMemories,
+              regenTargetId: regenTargetId,
+              visibleStartIndex: vsi,
+            )
+            .copyWith(promptPayload: payload);
         if (memoryDiagnostics is Map<String, dynamic> &&
             finalState.session != null) {
           final messageId = _lastAssistantId(
@@ -466,30 +489,31 @@ class StreamGenerationService {
               .inMilliseconds;
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
           final tokenCount = estimateTokens(finalText);
-          finalState = _writer.writeAssistant(
-            text: finalText,
-            reasoning: finalReasoning,
-            currentSession: saveSession ?? session,
-            isAborted: _isAborted,
-            pendingSessionVars: pendingSessionVars,
-            genTime: timeStr,
-            tokens: tokenCount,
-            rawResponse: rawResponseJson ?? text,
-            previousSwipes: previousSwipes,
-            previousSwipeId: previousSwipeId,
-            previousReasoning: previousReasoning,
-            previousGenTime: previousGenTime,
-            previousTokens: previousTokens,
-            previousSwipesMeta: previousSwipesMeta,
-            guidanceText: guidanceText,
-            memoryCoverage: coverage,
-            isAllReasoning: isAllReasoning,
-            triggeredLorebooks: triggeredLorebooks,
-            triggeredMemories: triggeredMemories,
-            regenTargetId: regenTargetId,
-            studioFinalOnly: studioFinalOnly,
-            visibleStartIndex: vsi,
-          );
+          finalState = _writer
+              .writeAssistant(
+                text: finalText,
+                reasoning: finalReasoning,
+                currentSession: saveSession ?? session,
+                isAborted: _isAborted,
+                pendingSessionVars: pendingSessionVars,
+                genTime: timeStr,
+                tokens: tokenCount,
+                rawResponse: rawResponseJson ?? text,
+                previousSwipes: previousSwipes,
+                previousSwipeId: previousSwipeId,
+                previousReasoning: previousReasoning,
+                previousGenTime: previousGenTime,
+                previousTokens: previousTokens,
+                previousSwipesMeta: previousSwipesMeta,
+                guidanceText: guidanceText,
+                memoryCoverage: coverage,
+                isAllReasoning: isAllReasoning,
+                triggeredLorebooks: triggeredLorebooks,
+                triggeredMemories: triggeredMemories,
+                regenTargetId: regenTargetId,
+                visibleStartIndex: vsi,
+              )
+              .copyWith(promptPayload: payload);
           if (memoryDiagnostics is Map<String, dynamic> &&
               finalState?.session != null) {
             final messageId = _lastAssistantId(
@@ -605,54 +629,6 @@ class StreamGenerationService {
     return null;
   }
 
-  static List<Map<String, dynamic>> _studioOutputsToJson(
-    List<StudioStageBrief> briefs,
-  ) {
-    return briefs
-        .map(
-          (b) => {
-            'id': b.agentId,
-            'name': b.agentName,
-            'content': b.brief,
-            'status': b.status,
-            'refreshPolicy': b.refreshPolicy,
-            if (b.cacheHit) 'cacheHit': true,
-            if (b.cacheKey != null) 'cacheKey': b.cacheKey,
-            if (b.error != null) 'error': b.error,
-          },
-        )
-        .toList(growable: false);
-  }
-
-  static List<StudioStageBrief> _studioBriefsFromSwipeMeta(
-    List<Map<String, dynamic>>? swipesMeta,
-    int swipeId,
-  ) {
-    if (swipesMeta == null || swipeId < 0 || swipeId >= swipesMeta.length) {
-      return const [];
-    }
-    final raw = swipesMeta[swipeId]['studioOutputs'];
-    if (raw is! List) return const [];
-    return raw
-        .whereType<Map<dynamic, dynamic>>()
-        .map((item) {
-          final json = Map<String, dynamic>.from(item);
-          return StudioStageBrief(
-            agentId: json['id'] as String? ?? '',
-            agentName: json['name'] as String? ?? 'Studio Agent',
-            brief: json['content'] as String? ?? '',
-            disposition: MemoryStudioOutputDisposition.ephemeral,
-            status: json['status'] as String? ?? 'ok',
-            error: json['error'] as String?,
-            refreshPolicy: json['refreshPolicy'] as String? ?? 'turn',
-            cacheKey: json['cacheKey'] as String?,
-            cacheHit: json['cacheHit'] == true,
-          );
-        })
-        .where((b) => b.agentId.isNotEmpty && b.brief.trim().isNotEmpty)
-        .toList(growable: false);
-  }
-
   static void _log(String message) {
     debugPrint('[StudioGen] $message');
   }
@@ -671,31 +647,27 @@ class StreamGenerationService {
       if (rawAttempts is List) {
         final attempts = rawAttempts
             .whereType<Map<dynamic, dynamic>>()
-            .map((e) => AgentOperationAttempt.fromJson(
-                  Map<String, dynamic>.from(e),
-                ))
+            .map(
+              (e) =>
+                  AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)),
+            )
             .toList();
         if (attempts.isNotEmpty) {
           final status = _sidecarStatusToOp(sidecarStatus);
           _appendOperation(
             AgentOperationRecord(
-              id:
-                  'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+              id: 'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
               kind: AgentOperationKind.memorySidecar,
               status: status,
               sessionId: sessionId,
               messageId: messageId,
               attempts: attempts,
-              totalElapsedMs: attempts.fold(
-                0,
-                (sum, a) => sum + a.elapsedMs,
-              ),
+              totalElapsedMs: attempts.fold(0, (sum, a) => sum + a.elapsedMs),
               summary: status == AgentOperationStatus.ok
                   ? 'reranked ${diagnostics['selectedCount'] ?? 0} entries'
                   : sidecarStatus,
               startedAtMs: attempts.first.startedAtMs,
-              finishedAtMs:
-                  attempts.last.startedAtMs + attempts.last.elapsedMs,
+              finishedAtMs: attempts.last.startedAtMs + attempts.last.elapsedMs,
               canRegenerate: status.isFailure,
             ),
           );
@@ -712,31 +684,27 @@ class StreamGenerationService {
       if (rawAttempts is List) {
         final attempts = rawAttempts
             .whereType<Map<dynamic, dynamic>>()
-            .map((e) => AgentOperationAttempt.fromJson(
-                  Map<String, dynamic>.from(e),
-                ))
+            .map(
+              (e) =>
+                  AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)),
+            )
             .toList();
         if (attempts.isNotEmpty) {
           final status = _sidecarStatusToOp(agenticStatus);
           _appendOperation(
             AgentOperationRecord(
-              id:
-                  'agentic-search-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+              id: 'agentic-search-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
               kind: AgentOperationKind.agenticSearch,
               status: status,
               sessionId: sessionId,
               messageId: messageId,
               attempts: attempts,
-              totalElapsedMs: attempts.fold(
-                0,
-                (sum, a) => sum + a.elapsedMs,
-              ),
+              totalElapsedMs: attempts.fold(0, (sum, a) => sum + a.elapsedMs),
               summary: status == AgentOperationStatus.ok
                   ? 'agentic search'
                   : agenticStatus,
               startedAtMs: attempts.first.startedAtMs,
-              finishedAtMs:
-                  attempts.last.startedAtMs + attempts.last.elapsedMs,
+              finishedAtMs: attempts.last.startedAtMs + attempts.last.elapsedMs,
               canRegenerate: status.isFailure,
             ),
           );
@@ -749,6 +717,128 @@ class StreamGenerationService {
     _ref.read(agentOperationsLogProvider.notifier).state = _ref
         .read(agentOperationsLogProvider)
         .append(record);
+  }
+
+  /// Records a Studio tracker-cycle operation in the agentic operations log.
+  ///
+  /// Studio differs from the other agentic ops in that the per-agent LLM
+  /// attempts are not surfaced as a structured `attempts` array on the
+  /// pipeline result — they are summarised as `stageBriefs` (one per tracker
+  /// agent) plus an overall `status`. We synthesise a single aggregate
+  /// `AgentOperationAttempt` covering the whole cycle elapsed time and put
+  /// the per-agent breakdown into the `summary` text.
+  ///
+  /// Call sites:
+  ///   - success path (`status == 'ok'`)
+  ///   - partial agent errors (`status == 'agent_errors'`)
+  ///   - hard failure (`status != 'ok' && status != 'agent_errors' &&
+  ///     status != 'aborted' && status != 'disabled'`)
+  ///
+  /// Aborted / disabled runs are not logged — they are user-initiated
+  /// cancellations or no-op configurations, not real operations.
+  void _recordStudioTrackerOperation({
+    required String sessionId,
+    required DateTime startGenTime,
+    required StudioPipelineResult result,
+    String? model,
+  }) {
+    final status = _studioStatusToOp(result.status);
+    if (status == AgentOperationStatus.aborted ||
+        status == AgentOperationStatus.disabled) {
+      return;
+    }
+    final now = DateTime.now();
+    final elapsedMs = now.difference(startGenTime).inMilliseconds;
+    final startedAtMs = startGenTime.millisecondsSinceEpoch;
+
+    final briefs = result.stageBriefs;
+    final okCount = briefs.where((b) => b.status == 'ok').length;
+    final errCount = briefs.length - okCount;
+
+    final summary = switch (result.status) {
+      'ok' =>
+        briefs.isEmpty
+            ? 'studio ok (no trackers)'
+            : 'ran ${briefs.length} tracker${briefs.length > 1 ? 's' : ''}'
+                  '${okCount > 0 ? '' : ''}',
+      'agent_errors' =>
+        'agent errors: $errCount/${briefs.length} failed (${briefs.where((b) => b.status != 'ok').map((b) => b.agentName).join(', ')})',
+      _ => result.error ?? result.status,
+    };
+
+    _appendOperation(
+      AgentOperationRecord(
+        id: 'studio-tracker-$sessionId-${now.microsecondsSinceEpoch}',
+        kind: AgentOperationKind.studioTracker,
+        status: status,
+        sessionId: sessionId,
+        messageId: null,
+        attempts: [
+          AgentOperationAttempt(
+            attempt: 1,
+            statusCode: 0,
+            status: status.label,
+            error: status.isFailure ? (result.error ?? result.status) : null,
+            startedAtMs: startedAtMs,
+            elapsedMs: elapsedMs,
+          ),
+        ],
+        totalElapsedMs: elapsedMs,
+        model: model,
+        summary: summary,
+        startedAtMs: startedAtMs,
+        finishedAtMs: now.millisecondsSinceEpoch,
+        canRegenerate: status.isFailure,
+      ),
+    );
+  }
+
+  static AgentOperationStatus _studioStatusToOp(String status) {
+    return switch (status) {
+      'ok' => AgentOperationStatus.ok,
+      'disabled' => AgentOperationStatus.disabled,
+      'aborted' => AgentOperationStatus.aborted,
+      'timeout' => AgentOperationStatus.timeout,
+      'error' => AgentOperationStatus.error,
+      'agent_errors' => AgentOperationStatus.error,
+      _ => AgentOperationStatus.error,
+    };
+  }
+
+  /// Builds the terminal `StudioCycleState` from a `StudioPipelineResult`,
+  /// aggregating the per-agent briefs into completed/failed counts.
+  static StudioCycleState _studioFinalState(
+    String sessionId,
+    StudioPipelineResult result,
+    StudioCyclePhase phase,
+  ) {
+    final briefs = result.stageBriefs;
+    final ok = briefs.where((b) => b.status == 'ok').length;
+    final failed = briefs.length - ok;
+    final failedNames = briefs
+        .where((b) => b.status != 'ok')
+        .map((b) => b.agentName)
+        .toList(growable: false);
+    switch (phase) {
+      case StudioCyclePhase.done:
+        return StudioCycleState.done(
+          sessionId: sessionId,
+          totalAgents: briefs.length,
+          completedAgents: ok,
+          failedAgents: failed,
+          failedAgentNames: failedNames,
+        );
+      case StudioCyclePhase.agentErrors:
+        return StudioCycleState.agentErrors(
+          sessionId: sessionId,
+          totalAgents: briefs.length,
+          completedAgents: ok,
+          failedAgents: failed,
+          failedAgentNames: failedNames,
+        );
+      default:
+        return const StudioCycleState.idle();
+    }
   }
 
   static AgentOperationStatus _sidecarStatusToOp(String status) {

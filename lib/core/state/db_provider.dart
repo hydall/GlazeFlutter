@@ -18,12 +18,18 @@ import '../db/repositories/memory_cadence_repo.dart';
 import '../db/repositories/memory_consolidation_repo.dart';
 import '../db/repositories/studio_config_repo.dart';
 import '../db/repositories/tracker_repo.dart';
+import '../db/repositories/tracker_snapshot_repo.dart';
 import '../db/repositories/extension_presets_repository.dart';
 import '../db/repositories/info_blocks_repository.dart';
 import '../models/memory_book.dart';
 import '../services/character_importer.dart';
 import '../services/image_storage_service.dart';
 import '../services/migration_service.dart';
+
+// Re-export so existing call sites that `import db_provider.dart` can still
+// read pipelineSettingsProvider (previously defined here as a
+// FutureProvider.family before the singleton-global refactor).
+export 'pipeline_settings_provider.dart' show pipelineSettingsProvider;
 
 final appDbProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
@@ -122,6 +128,10 @@ final studioConfigRepoProvider = Provider<StudioConfigRepo>((ref) {
 
 final trackerRepoProvider = Provider<TrackerRepo>((ref) {
   return TrackerRepo(ref.watch(appDbProvider));
+});
+
+final trackerSnapshotRepoProvider = Provider<TrackerSnapshotRepo>((ref) {
+  return TrackerSnapshotRepo(ref.watch(appDbProvider));
 });
 
 final memoryBookProvider = FutureProvider.family<MemoryBook?, String>((

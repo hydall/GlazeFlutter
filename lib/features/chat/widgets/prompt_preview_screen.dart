@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
 
 import '../../../core/llm/history_assembler.dart';
-import '../../../core/llm/memory_studio_service.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
@@ -18,7 +17,6 @@ import '../../../core/llm/transport/openai_chat_transport.dart';
 import '../../../core/llm/transport/openrouter_chat_transport.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/api_config.dart';
-import '../../../core/state/memory_agent_providers.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/glaze_tab_bar.dart';
@@ -41,7 +39,6 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   ApiConfig? _apiConfig;
   String? _sessionId;
   Map<String, dynamic>? _requestBody;
-  StudioRequestPreview? _studioRequest;
   bool _loading = true;
   _SectionFilter _filter = _SectionFilter.all;
   int _dataTabIndex = 0;
@@ -73,20 +70,13 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       _sessionId = session.id;
 
       final result = await buildPromptInIsolate(payload);
-      final studioConfig = await ref
-          .read(memoryStudioServiceProvider)
-          .getEnabledConfig(session.id);
-      final studioRequest = studioConfig != null
-          ? ref.read(studioLastRequestProvider(session.id))
-          : null;
 
       ref.read(cachedTokenBreakdownProvider(widget.charId).notifier).state =
           result.breakdown;
       if (mounted) {
         setState(() {
           _result = result;
-          _studioRequest = studioRequest;
-          _requestBody = studioRequest?.body ?? _buildRequestBody();
+          _requestBody = _buildRequestBody();
           _loading = false;
         });
       }
@@ -196,9 +186,8 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
                 SliverToBoxAdapter(
                   child: _SummaryBar(
                     result: _result!,
-                    contextSize:
-                        _studioRequest?.contextSize ?? _apiConfig!.contextSize,
-                    tokenOverride: _studioRequest?.tokenEstimate,
+                    contextSize: _apiConfig!.contextSize,
+                    tokenOverride: null,
                     messageCountOverride: _previewMessages.length,
                   ),
                 ),
@@ -339,7 +328,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
 
     // Model lives in the URL (not the body) for Gemini, so surface it from the
     // config to keep it visible across every protocol.
-    final model = _studioRequest?.model ?? _apiConfig?.model;
+    final model = _apiConfig?.model;
     if (model != null && model.isNotEmpty) {
       items.add(_ParamItem(label: 'model', value: model));
     }
@@ -383,17 +372,6 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   }
 
   List<PromptMessage> get _previewMessages {
-    final studio = _studioRequest;
-    if (studio != null) {
-      return studio.messages
-          .map(
-            (m) => PromptMessage(
-              role: m['role']?.toString() ?? 'user',
-              content: m['content']?.toString() ?? '',
-            ),
-          )
-          .toList(growable: false);
-    }
     return _result?.messages ?? const [];
   }
 
@@ -510,9 +488,6 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   /// section header.
   String get _protocolLabel {
     final protocol = _apiConfig?.protocol;
-    if (_studioRequest != null) {
-      return '${LlmProtocol.labels[_studioRequest!.protocol] ?? _studioRequest!.protocol} Studio: ${_studioRequest!.agentName}';
-    }
     if (protocol == null) return 'label_generation_params'.tr();
     return LlmProtocol.labels[protocol] ?? protocol;
   }

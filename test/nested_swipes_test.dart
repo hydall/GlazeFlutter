@@ -117,11 +117,7 @@ void main() {
 
     test('new generation seeds agentSwipes with a single final', () {
       final session = makeSessionWithMessage(
-        ChatMessage(
-          id: 'u1',
-          role: 'user',
-          content: 'hello',
-        ),
+        ChatMessage(id: 'u1', role: 'user', content: 'hello'),
       );
       final state = writer.writeAssistant(
         text: 'response',
@@ -158,7 +154,6 @@ void main() {
         previousSwipes: ['old'],
         previousSwipeId: 0,
         regenTargetId: 'a1',
-        studioFinalOnly: false,
       );
       final updated = state.session!.messages.first;
       expect(updated.agentSwipes.length, 1);
@@ -168,71 +163,6 @@ void main() {
       // Full regen adds to swipes (green).
       expect(updated.swipes.length, 2);
       expect(updated.swipeId, 1);
-    });
-
-    test('studioFinalOnly appends to agentSwipes, freezes swipes', () {
-      final existing = ChatMessage(
-        id: 'a1',
-        role: 'assistant',
-        content: 'final v1',
-        swipes: ['final v1'],
-        swipeId: 0,
-        agentSwipes: [
-          const AgentSwipe(content: 'final v1', kind: 'final'),
-        ],
-        agentSwipeId: 0,
-      );
-      final session = makeSessionWithMessage(existing);
-      final state = writer.writeAssistant(
-        text: 'final v2',
-        reasoning: null,
-        currentSession: session,
-        isAborted: () => false,
-        previousSwipes: ['final v1'],
-        previousSwipeId: 0,
-        regenTargetId: 'a1',
-        studioFinalOnly: true,
-      );
-      final updated = state.session!.messages.first;
-      // agentSwipes gets the new 'final' appended.
-      expect(updated.agentSwipes.length, 2);
-      expect(updated.agentSwipes[0].content, 'final v1');
-      expect(updated.agentSwipes[1].content, 'final v2');
-      expect(updated.agentSwipes[1].kind, 'final');
-      expect(updated.agentSwipeId, 1);
-      // swipes[] frozen — not modified.
-      expect(updated.swipes.length, 1);
-      expect(updated.swipeId, 0);
-      // content = new final.
-      expect(updated.content, 'final v2');
-    });
-
-    test('studioFinalOnly backfills final from content if agentSwipes empty', () {
-      final existing = ChatMessage(
-        id: 'a1',
-        role: 'assistant',
-        content: 'old final',
-        swipes: ['old final'],
-        swipeId: 0,
-        // agentSwipes empty — old message predating nested swipes.
-      );
-      final session = makeSessionWithMessage(existing);
-      final state = writer.writeAssistant(
-        text: 'new final',
-        reasoning: null,
-        currentSession: session,
-        isAborted: () => false,
-        previousSwipes: ['old final'],
-        previousSwipeId: 0,
-        regenTargetId: 'a1',
-        studioFinalOnly: true,
-      );
-      final updated = state.session!.messages.first;
-      // Backfilled 'old final' + new 'new final'.
-      expect(updated.agentSwipes.length, 2);
-      expect(updated.agentSwipes[0].content, 'old final');
-      expect(updated.agentSwipes[0].kind, 'final');
-      expect(updated.agentSwipes[1].content, 'new final');
     });
   });
 }

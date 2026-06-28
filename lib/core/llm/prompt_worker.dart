@@ -5,6 +5,7 @@ import 'dart:isolate';
 import '../utils/platform_paths.dart';
 
 import '../models/chat_message.dart';
+import '../utils/cast_helpers.dart';
 import 'glaze_matcher.dart';
 import 'memory_budget.dart';
 import 'memory_excerpt_selector.dart';
@@ -276,6 +277,18 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     }
   }
 
+  // NEW (patch #4 follow-up): chatSummaryFingerprint analog for prompt
+  // cache invalidation. djb2-style hash of the compiled memory injection
+  // content so the next generation can detect "memory changed since last
+  // turn" and invalidate prompt cache (Anthropic/DeepSeek). The fingerprint
+  // is stored on the produced ChatMessage so the NEXT turn can compare.
+  // Marinara uses djb2 on the compiled chat summary; we hash the memory
+  // injection content (MemoryBook is our summary equivalent — see
+  // docs/plans/PLAN_MEMORY_CONTINUITY.md §2.3).
+  final memoryInjectionFingerprint = memoryContent != null && memoryContent.isNotEmpty
+      ? computeHash(memoryContent)
+      : '';
+
   // 2. Build payload
   final payload = PromptPayload(
     character: inputs.character,
@@ -300,6 +313,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     memoryContent: memoryContent,
     memoryMacroContent: memoryMacroContent,
     memoryInjectionTarget: memoryInjectionTarget,
+    memoryInjectionFingerprint: memoryInjectionFingerprint,
     memoryCoverage: memorySelection == null
         ? const {}
         : {

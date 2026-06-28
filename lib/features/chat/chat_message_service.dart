@@ -77,52 +77,6 @@ class ChatMessageService {
     return _persist(session, newMessages);
   }
 
-  ChatSession editStudioOutput(
-    ChatSession session,
-    int index,
-    String outputId,
-    String newContent,
-  ) {
-    return updateStudioOutput(session, index, outputId, {
-      'content': newContent,
-    });
-  }
-
-  ChatSession updateStudioOutput(
-    ChatSession session,
-    int index,
-    String outputId,
-    Map<String, dynamic> patch,
-  ) {
-    if (index < 0 || index >= session.messages.length) return session;
-    final msg = session.messages[index];
-    final outputIndex = msg.studioOutputs.indexWhere(
-      (o) => o['id'] == outputId,
-    );
-    if (outputIndex < 0) return session;
-
-    final updatedOutputs = msg.studioOutputs
-        .map((o) => Map<String, dynamic>.from(o))
-        .toList(growable: true);
-    updatedOutputs[outputIndex] = {...updatedOutputs[outputIndex], ...patch};
-
-    final updatedSwipesMeta = List<Map<String, dynamic>>.from(msg.swipesMeta);
-    final swipeIdx = msg.swipeId;
-    if (swipeIdx >= 0 && swipeIdx < updatedSwipesMeta.length) {
-      updatedSwipesMeta[swipeIdx] = {
-        ...updatedSwipesMeta[swipeIdx],
-        'studioOutputs': updatedOutputs,
-      };
-    }
-
-    final newMessages = List<ChatMessage>.from(session.messages);
-    newMessages[index] = msg.copyWith(
-      studioOutputs: updatedOutputs,
-      swipesMeta: updatedSwipesMeta,
-    );
-    return _persist(session, newMessages);
-  }
-
   ChatSession moveMessage(ChatSession session, int fromIndex, int toIndex) {
     final msgs = session.messages;
     if (fromIndex < 0 || fromIndex >= msgs.length) return session;
@@ -136,8 +90,48 @@ class ChatMessageService {
 
   ChatSession deleteMessage(ChatSession session, int index) {
     if (index < 0 || index >= session.messages.length) return session;
+    final messageId = session.messages[index].id;
     final newMessages = List<ChatMessage>.from(session.messages)
       ..removeAt(index);
+    // Drop tracker snapshots for the deleted message so the read path
+    // (getLatestCommitted) falls back to the previous message's committed
+    // snapshot — rollback is emergent, no explicit restore needed.
+    final snapshotRepo = _ref.read(trackerSnapshotRepoProvider);
+    final trackerRepo = _ref.read(trackerRepoProvider);
+    final memoryBookRepo = _ref.read(memoryBookRepoProvider);
+    // Drop memory book entries/drafts sourced from this message. Each
+    // MemoryEntry / MemoryDraft carries `messageIds`; items whose
+    // `messageIds` contains `messageId` are removed, items sourced from
+    // other messages are preserved. Wrapped in catchError so a DB error
+    // never blocks the message deletion itself.
+    memoryBookRepo
+        .deleteForMessage(session.id, messageId)
+        .catchError((Object _) {});
+    snapshotRepo.deleteForMessage(session.id, messageId).then((_) {
+      // After the deleted message's snapshots are gone, the latest
+      // committed snapshot is the one written for the PREVIOUS message —
+      // that is the tracker state the user should see after deletion.
+      // Roll back the live `tracker_rows` store to it so the UI
+      // (agentic_operations_log_dialog "Tracker values" tab,
+      // studio_menu_dialog tracker preview) shows the rolled-back state
+      // instead of the cumulative state that included writes from the
+      // deleted message. Sentinel anchor (messageId='') survives
+      // deleteForMessage and serves as the legacy baseline.
+      return snapshotRepo.getLatestCommitted(session.id);
+    }).then((snapshot) {
+      if (snapshot == null) {
+        // No committed snapshot exists — the deleted message was the first
+        // (its snapshot was uncommitted; commit happens only on the next
+        // user turn via chat_provider.commitLatest). There is nothing to
+        // roll back to, so clear the live store entirely: otherwise the
+        // trackers written by the deleted turn would persist in
+        // `tracker_rows` forever (the UI falls back to tracker_rows when
+        // no snapshot is found). See chat_message_service.deleteMessage.
+        trackerRepo.clearForSession(session.id);
+        return;
+      }
+      trackerRepo.replaceForSession(session.id, snapshot.trackers);
+    }).catchError((Object _) {});
     return _persist(session, newMessages);
   }
 
@@ -190,13 +184,13 @@ class ChatMessageService {
         ? msg.swipesMeta[swipeId]
         : null;
 
-    // Nested swipes: persist current agentSwipes into the outgoing green
-    // swipe's meta, then load (or seed) agentSwipes for the incoming swipe.
     final swipesMeta = List<Map<String, dynamic>>.from(msg.swipesMeta);
     // Ensure swipesMeta is long enough.
     while (swipesMeta.length < msg.swipes.length) {
       swipesMeta.add(<String, dynamic>{});
     }
+    // Nested swipes: persist current agentSwipes into the outgoing green
+    // swipe's meta, then load (or seed) agentSwipes for the incoming swipe.
     // Save outgoing agentSwipes.
     if (msg.agentSwipes.isNotEmpty && msg.swipeId < swipesMeta.length) {
       swipesMeta[msg.swipeId] = {
@@ -229,25 +223,42 @@ class ChatMessageService {
 
     // The active content is the active blue swipe (if any), else the green.
     final activeContent = nextAgentSwipes.isNotEmpty
-        ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].content
+        ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)]
+              .content
         : msg.swipes[swipeId];
 
     final updated = msg.copyWith(
       swipeId: swipeId,
       content: activeContent,
       reasoning: nextAgentSwipes.isNotEmpty
-          ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].reasoning
+          ? nextAgentSwipes[nextAgentSwipeId.clamp(
+                  0,
+                  nextAgentSwipes.length - 1,
+                )]
+                .reasoning
           : meta?['reasoning'] as String?,
       genTime: nextAgentSwipes.isNotEmpty
-          ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].genTime
+          ? nextAgentSwipes[nextAgentSwipeId.clamp(
+                  0,
+                  nextAgentSwipes.length - 1,
+                )]
+                .genTime
           : meta?['genTime'] as String?,
       tokens: nextAgentSwipes.isNotEmpty
-          ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].tokens
+          ? nextAgentSwipes[nextAgentSwipeId.clamp(
+                  0,
+                  nextAgentSwipes.length - 1,
+                )]
+                .tokens
           : meta?['tokens'] as int?,
       triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
       triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
       studioOutputs: nextAgentSwipes.isNotEmpty
-          ? nextAgentSwipes[nextAgentSwipeId.clamp(0, nextAgentSwipes.length - 1)].studioOutputs
+          ? nextAgentSwipes[nextAgentSwipeId.clamp(
+                  0,
+                  nextAgentSwipes.length - 1,
+                )]
+                .studioOutputs
           : _studioOutputsFromMeta(meta),
       swipesMeta: swipesMeta,
       agentSwipes: nextAgentSwipes,
@@ -277,9 +288,7 @@ class ChatMessageService {
           swipes[i].parentSwipeId! < swipes.length) {
         final parent = swipes[swipes[i].parentSwipeId!];
         if (parent.studioOutputs.isNotEmpty) {
-          swipes[i] = swipes[i].copyWith(
-            studioOutputs: parent.studioOutputs,
-          );
+          swipes[i] = swipes[i].copyWith(studioOutputs: parent.studioOutputs);
         }
       }
     }
@@ -305,7 +314,10 @@ class ChatMessageService {
     }
     final swipe = msg.agentSwipes[agentSwipeId];
     final swipesMeta = _syncAgentSwipesToMeta(
-      msg.swipesMeta, msg.swipeId, msg.agentSwipes, agentSwipeId,
+      msg.swipesMeta,
+      msg.swipeId,
+      msg.agentSwipes,
+      agentSwipeId,
     );
     final updated = msg.copyWith(
       agentSwipeId: agentSwipeId,
@@ -419,7 +431,6 @@ class ChatMessageService {
         tokens: meta?['tokens'] as int?,
         triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
         triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
-        studioOutputs: _studioOutputsFromMeta(meta),
       );
       final newMessages = List<ChatMessage>.from(session.messages)
         ..[messageIndex] = updated;
@@ -489,7 +500,10 @@ class ChatMessageService {
 
     final swipe = msg.agentSwipes[newIndex];
     final swipesMeta = _syncAgentSwipesToMeta(
-      msg.swipesMeta, msg.swipeId, msg.agentSwipes, newIndex,
+      msg.swipesMeta,
+      msg.swipeId,
+      msg.agentSwipes,
+      newIndex,
     );
     final updated = msg.copyWith(
       agentSwipeId: newIndex,

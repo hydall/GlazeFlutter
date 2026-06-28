@@ -1,21 +1,25 @@
-import 'dart:async';
-
-import 'package:dio/dio.dart';
-import 'package:easy_localization/easy_localization.dart';
+﻿import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/lorebook_providers.dart';
-import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_injection_service.dart';
+import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/models/memory_book.dart';
+import '../../../core/models/pipeline_settings.dart';
 import '../../../core/state/memory_book_ops_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
+import '../../../core/state/pipeline_settings_provider.dart';
 import '../../chat/chat_provider.dart';
-import '../../chat/memory_draft_generator.dart';
 import '../../settings/api_list_provider.dart';
-import '../state/memory_active_drafts_provider.dart';
+import 'memory_draft_generation_controller.dart';
+import 'memory_settings_mapper.dart';
 
 /// Controller for memory book operations, separating business logic from UI.
+///
+/// Thin orchestrator: owns the [MemoryBook] + entry/index CRUD + settings
+/// mapping + reindex, and delegates the draft-generation lifecycle (active
+/// set, cancel tokens, elapsed timer, INV-M3 mutex) to
+/// [MemoryDraftGenerationController].
 class MemoryBookController {
   final WidgetRef _ref;
   final String _sessionId;
@@ -24,22 +28,39 @@ class MemoryBookController {
   MemoryBook? _book;
   bool _loading = true;
   bool _isReindexing = false;
-  final Map<String, bool> _generatingDrafts = {};
-  final Set<String> _activeDraftIds = {};
-  final Map<String, DateTime> _genStartTimes = {};
-  final Map<String, CancelToken> _cancelTokens = {};
-  Timer? _genElapsedTimer;
+  final MemorySettingsMapper _settingsMapper = const MemorySettingsMapper();
+  late final MemoryDraftGenerationController _draftGen =
+      MemoryDraftGenerationController(
+    ref: _ref,
+    charId: _charId,
+    sessionId: _sessionId,
+    settingsMapper: _settingsMapper,
+    bookGetter: () => _book,
+    persistAndSet: (book) async {
+      _book = book;
+      await save();
+    },
+  );
 
   MemoryBookController(this._ref, this._sessionId, this._charId);
 
   MemoryBook? get book => _book;
   bool get loading => _loading;
   bool get isReindexing => _isReindexing;
-  Map<String, bool> get generatingDrafts => Map.unmodifiable(_generatingDrafts);
-  Map<String, DateTime> get genStartTimes => Map.unmodifiable(_genStartTimes);
+  Map<String, bool> get generatingDrafts => _draftGen.generatingDrafts;
+  Map<String, DateTime> get genStartTimes => _draftGen.genStartTimes;
 
   MemoryGlobalSettings get globalSettings =>
       _ref.read(memoryGlobalSettingsProvider);
+
+  /// Global pipeline LLM settings (singleton, SharedPreferences-backed).
+  PipelineSettings get pipelineSettings =>
+      _ref.read(pipelineSettingsProvider);
+
+  /// Returns the global [PipelineSettings]. Kept as a method for call-site
+  /// compatibility — pipeline settings are now a singleton global, so this
+  /// is just [pipelineSettings].
+  PipelineSettings globalPipelineAsPipeline() => pipelineSettings;
 
   Future<void> load() async {
     _book = await _ref.read(memoryBookOpsProvider).ensureForSession(_sessionId);
@@ -51,61 +72,8 @@ class MemoryBookController {
     await _ref.read(memoryBookOpsProvider).saveMemoryBook(_book!);
   }
 
-  MemoryBookSettings globalSettingsAsBookSettings() {
-    final g = globalSettings;
-    return MemoryBookSettings(
-      enabled: g.enabled,
-      memoryMode: g.memoryMode,
-      autoCreateEnabled: g.autoCreateEnabled,
-      autoGenerateEnabled: g.autoGenerateEnabled,
-      maxInjectedEntries: g.maxInjectedEntries,
-      memoryExcerptingEnabled: g.memoryExcerptingEnabled,
-      memoryPackingMode: g.memoryPackingMode,
-      memoryExcerptTokensPerChunk: g.memoryExcerptTokensPerChunk,
-      memoryExcerptChunksPerEntry: g.memoryExcerptChunksPerEntry,
-      chunkFirstTopEntries: g.chunkFirstTopEntries,
-      chunkFirstTopChunks: g.chunkFirstTopChunks,
-      maxInjectedTokens: g.maxInjectedTokens,
-      memoryBudgetPreset: g.memoryBudgetPreset,
-      autoCreateInterval: g.autoCreateInterval,
-      autoCreateLagMessages: g.autoCreateLagMessages,
-      useDelayedAutomation: g.useDelayedAutomation,
-      injectionTarget: g.injectionTarget,
-      batchSize: g.batchSize,
-      vectorSearchEnabled: g.vectorSearchEnabled,
-      keyMatchMode: g.keyMatchMode,
-      generationSource: g.generationSource,
-      generationModel: g.generationModel,
-      generationEndpoint: g.generationEndpoint,
-      generationApiKey: g.generationApiKey,
-      generationTemperature: g.generationTemperature,
-      generationMaxTokens: g.generationMaxTokens,
-      promptPreset: g.promptPreset,
-      diversityAware: g.diversityAware,
-      diversityPenalty: g.diversityPenalty,
-      recencyBoost: g.recencyBoost,
-      recencyHalfLifeDays: g.recencyHalfLifeDays,
-      importanceBoost: g.importanceBoost,
-      importanceWeight: g.importanceWeight,
-      sourceWindowExclusion: g.sourceWindowExclusion,
-      factualContinuityGuardEnabled: g.factualContinuityGuardEnabled,
-      classifierEnabled: g.classifierEnabled,
-      classifierSource: g.classifierSource,
-      classifierModel: g.classifierModel,
-      classifierEndpoint: g.classifierEndpoint,
-      classifierApiKey: g.classifierApiKey,
-      classifierTimeoutMs: g.classifierTimeoutMs,
-      sidecarEnabled: g.sidecarEnabled,
-      sidecarSource: g.sidecarSource,
-      sidecarModel: g.sidecarModel,
-      sidecarEndpoint: g.sidecarEndpoint,
-      sidecarApiKey: g.sidecarApiKey,
-      sidecarTimeoutMs: g.sidecarTimeoutMs,
-      queryIncludeAssistant: g.queryIncludeAssistant,
-      queryRecentTurns: g.queryRecentTurns,
-      queryMaxChars: g.queryMaxChars,
-    );
-  }
+  MemoryBookSettings globalSettingsAsBookSettings() =>
+      _settingsMapper.globalToBook(globalSettings);
 
   String get settingsSummary {
     if (_book == null) return '';
@@ -114,6 +82,8 @@ class MemoryBookController {
       'balanced' => 'memory_mode_balanced'.tr(),
       'deep' => 'memory_mode_deep'.tr(),
       'legacy' => 'memory_mode_legacy'.tr(),
+      // `agentic` was removed in Phase 4 — migrate to `deep` for display.
+      'agentic' => 'memory_mode_deep'.tr(),
       _ => 'memory_mode_fast'.tr(),
     };
     final interval = s.autoCreateInterval;
@@ -140,17 +110,18 @@ class MemoryBookController {
         ? 'memory_books_summary_auto_out'.tr()
         : '${s.maxInjectedTokens} memory tokens';
     final batchSize = s.batchSize;
+    final pg = pipelineSettings;
     final outTokens =
-        (s.generationMaxTokens != null && s.generationMaxTokens! > 0)
-        ? '${s.generationMaxTokens} out'
+        (pg.generationMaxTokens != null && pg.generationMaxTokens! > 0)
+        ? '${pg.generationMaxTokens} out'
         : 'memory_books_summary_auto_out'.tr();
     return '$mode • $interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget • $packing • ${s.memoryExcerptChunksPerEntry}x${s.memoryExcerptTokensPerChunk} chunks';
   }
 
   String get searchModelLabel {
-    final s = globalSettings;
-    return s.generationModel.isNotEmpty
-        ? s.generationModel
+    final pg = pipelineSettings;
+    return pg.generationModel.isNotEmpty
+        ? pg.generationModel
         : 'memory_books_current_llm_model'.tr();
   }
 
@@ -200,27 +171,7 @@ class MemoryBookController {
     return 'memory_books_drafts_created'.tr(args: ['${plan.drafts.length}']);
   }
 
-  void generateAllPending() {
-    if (_book == null) return;
-    final needsGen = _book!.pendingDrafts
-        .where(
-          (d) =>
-              d.content.isEmpty &&
-              (d.status == 'pending_generation' ||
-                  d.status == 'needs_regeneration') &&
-              !_activeDraftIds.contains(d.id),
-        )
-        .toList();
-
-    for (final draft in needsGen) {
-      generateDraft(
-        draft.id,
-        onStart: () {},
-        onComplete: () {},
-        onError: (e) {},
-      );
-    }
-  }
+  void generateAllPending() => _draftGen.generateAllPending();
 
   /// Generates a draft. Callbacks are for UI updates.
   Future<void> generateDraft(
@@ -228,124 +179,27 @@ class MemoryBookController {
     required void Function() onStart,
     required void Function() onComplete,
     required void Function(String error) onError,
-  }) async {
-    if (_book == null || _activeDraftIds.contains(draftId)) return;
-    final chatState = _ref.read(chatProvider(_charId));
-    if (chatState.value?.isGenerating == true) {
-      onError('memory_books_chat_generation_active'.tr());
-      return;
-    }
-    final draftIndex = _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
-    if (draftIndex < 0) return;
-
-    final session = chatState.value?.session;
-    if (session == null) return;
-
-    final draft = _book!.pendingDrafts[draftIndex];
-    final draftMessages = session.messages
-        .where((m) => draft.messageIds.contains(m.id))
-        .toList();
-    if (draftMessages.isEmpty) {
-      onError('memory_books_messages_not_found'.tr());
-      return;
-    }
-
-    final historyText = draftMessages
-        .map((m) => '${m.role}: ${m.content}')
-        .join('\n\n');
-    final cancelToken = CancelToken();
-    _cancelTokens[draftId] = cancelToken;
-
-    _activeDraftIds.add(draftId);
-    _generatingDrafts[draftId] = true;
-    _genStartTimes[draftId] = DateTime.now();
-    _startGenElapsedTimer();
-    _ref.read(memoryActiveDraftsProvider.notifier).markActive(_sessionId);
-    onStart();
-
-    try {
-      final generator = MemoryDraftGenerator(_ref);
-      final result = await generator.generate(
-        draft: draft,
-        settings: globalSettingsAsBookSettings(),
-        historyText: historyText,
-        cancelToken: cancelToken,
+  }) =>
+      _draftGen.generateDraft(
+        draftId,
+        onStart: onStart,
+        onComplete: onComplete,
+        onError: onError,
       );
 
-      final updatedDrafts = [..._book!.pendingDrafts];
-      updatedDrafts[draftIndex] = result;
-      _book = _book!.copyWith(pendingDrafts: updatedDrafts);
-      _activeDraftIds.remove(draftId);
-      _generatingDrafts.remove(draftId);
-      _genStartTimes.remove(draftId);
-      _stopGenElapsedTimer();
-      if (_generatingDrafts.isEmpty) {
-        _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
-      }
-      await save();
-      onComplete();
-    } catch (e) {
-      final updatedDrafts = [..._book!.pendingDrafts];
-      updatedDrafts[draftIndex] = updatedDrafts[draftIndex].copyWith(
-        status: 'needs_regeneration',
-        error: e.toString(),
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-      _book = _book!.copyWith(pendingDrafts: updatedDrafts);
-      _activeDraftIds.remove(draftId);
-      _generatingDrafts.remove(draftId);
-      _genStartTimes.remove(draftId);
-      _stopGenElapsedTimer();
-      if (_generatingDrafts.isEmpty) {
-        _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
-      }
-      await save();
-      onError(e.toString());
-    } finally {
-      _cancelTokens.remove(draftId);
-    }
-  }
-
-  void cancelDraftGeneration(String draftId) {
-    _cancelTokens[draftId]?.cancel();
-    _activeDraftIds.remove(draftId);
-    _generatingDrafts.remove(draftId);
-    if (_generatingDrafts.isEmpty) {
-      _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
-    }
-  }
+  void cancelDraftGeneration(String draftId) =>
+      _draftGen.cancelDraftGeneration(draftId);
 
   Future<void> batchGenerate({
     required void Function() onStart,
     required void Function() onComplete,
     required void Function(String error) onError,
-  }) async {
-    if (_book == null) return;
-    final needsGen = _book!.pendingDrafts
-        .where(
-          (d) =>
-              d.content.isEmpty &&
-              (d.status == 'pending_generation' ||
-                  d.status == 'needs_regeneration') &&
-              !_activeDraftIds.contains(d.id),
-        )
-        .toList();
-    final batchSize = globalSettings.batchSize;
-    final toGenerate = needsGen.take(batchSize).toList();
-    if (toGenerate.isEmpty) return;
-
-    await Future.wait(
-      toGenerate.map(
-        (draft) => generateDraft(
-          draft.id,
-          onStart: onStart,
-          onComplete: () {},
-          onError: onError,
-        ),
-      ),
-    );
-    onComplete();
-  }
+  }) =>
+      _draftGen.batchGenerate(
+        onStart: onStart,
+        onComplete: onComplete,
+        onError: onError,
+      );
 
   Future<void> approveDraft(String draftId) async {
     if (_book == null) return;
@@ -364,6 +218,11 @@ class MemoryBookController {
       messageRange: draft.messageRange,
       status: 'active',
       createdAt: DateTime.now().millisecondsSinceEpoch,
+      // Phase 7: preserve the draft's provenance marker so the MemoryBook
+      // UI can tab agent-sourced entries ('agentic') separately from scan
+      // drafts ('scan_chat') and curated entries ('').
+      source: draft.source,
+      kind: draft.source == 'agentic' ? 'agent' : 'curated',
     );
 
     _book = _book!.copyWith(
@@ -406,62 +265,10 @@ class MemoryBookController {
     double vectorThreshold,
   ) async {
     final currentGlobal = globalSettings;
-    final newGlobal = MemoryGlobalSettings(
-      enabled: newSettings.enabled,
-      memoryMode: newSettings.memoryMode,
-      autoCreateEnabled: newSettings.autoCreateEnabled,
-      autoGenerateEnabled: newSettings.autoGenerateEnabled,
-      maxInjectedEntries: newSettings.maxInjectedEntries,
-      memoryExcerptingEnabled: newSettings.memoryExcerptingEnabled,
-      memoryPackingMode: newSettings.memoryPackingMode,
-      memoryExcerptTokensPerChunk: newSettings.memoryExcerptTokensPerChunk,
-      memoryExcerptChunksPerEntry: newSettings.memoryExcerptChunksPerEntry,
-      chunkFirstTopEntries: newSettings.chunkFirstTopEntries,
-      chunkFirstTopChunks: newSettings.chunkFirstTopChunks,
-      maxInjectedTokens: newSettings.maxInjectedTokens,
-      memoryBudgetPreset: newSettings.memoryBudgetPreset,
-      autoCreateInterval: newSettings.autoCreateInterval,
-      autoCreateLagMessages: newSettings.autoCreateLagMessages,
-      useDelayedAutomation: newSettings.useDelayedAutomation,
-      injectionTarget: newSettings.injectionTarget,
-      batchSize: newSettings.batchSize,
-      parallelJobs: currentGlobal.parallelJobs,
-      vectorSearchEnabled: newSettings.vectorSearchEnabled,
-      vectorThreshold: vectorThreshold,
-      keyMatchMode: newSettings.keyMatchMode,
-      generationSource: newSettings.generationSource,
-      generationModel: newSettings.generationModel,
-      generationUseCurrentModelOverride:
-          currentGlobal.generationUseCurrentModelOverride,
-      generationEndpoint: newSettings.generationEndpoint,
-      generationApiKey: newSettings.generationApiKey,
-      generationTemperature: newSettings.generationTemperature,
-      generationMaxTokens: newSettings.generationMaxTokens,
-      promptPreset: newSettings.promptPreset,
-      diversityAware: newSettings.diversityAware,
-      diversityPenalty: newSettings.diversityPenalty,
-      recencyBoost: newSettings.recencyBoost,
-      recencyHalfLifeDays: newSettings.recencyHalfLifeDays,
-      importanceBoost: newSettings.importanceBoost,
-      importanceWeight: newSettings.importanceWeight,
-      sourceWindowExclusion: newSettings.sourceWindowExclusion,
-      factualContinuityGuardEnabled: newSettings.factualContinuityGuardEnabled,
-      classifierEnabled: newSettings.classifierEnabled,
-      classifierSource: newSettings.classifierSource,
-      classifierModel: newSettings.classifierModel,
-      classifierEndpoint: newSettings.classifierEndpoint,
-      classifierApiKey: newSettings.classifierApiKey,
-      classifierTimeoutMs: newSettings.classifierTimeoutMs,
-      sidecarEnabled: newSettings.sidecarEnabled,
-      sidecarSource: newSettings.sidecarSource,
-      sidecarModel: newSettings.sidecarModel,
-      sidecarEndpoint: newSettings.sidecarEndpoint,
-      sidecarApiKey: newSettings.sidecarApiKey,
-      sidecarTimeoutMs: newSettings.sidecarTimeoutMs,
-      queryIncludeAssistant: newSettings.queryIncludeAssistant,
-      queryRecentTurns: newSettings.queryRecentTurns,
-      queryMaxChars: newSettings.queryMaxChars,
-      customPrompts: currentGlobal.customPrompts,
+    final newGlobal = _settingsMapper.bookToGlobal(
+      newSettings,
+      currentGlobal,
+      vectorThreshold,
     );
     await _ref.read(memoryGlobalSettingsProvider.notifier).save(newGlobal);
     if (_book != null) {
@@ -589,43 +396,17 @@ class MemoryBookController {
         );
   }
 
-  void _startGenElapsedTimer() {
-    _genElapsedTimer ??= Timer.periodic(
-      const Duration(milliseconds: 200),
-      (_) {},
-    );
-  }
-
-  void _stopGenElapsedTimer() {
-    if (_generatingDrafts.isEmpty) {
-      _genElapsedTimer?.cancel();
-      _genElapsedTimer = null;
-    }
-  }
-
-  void dispose() {
-    _genElapsedTimer?.cancel();
-  }
+  void dispose() => _draftGen.dispose();
 
   /// Updates the book state (called from UI when state changes).
   void updateBook(MemoryBook newBook) {
     _book = newBook;
   }
 
-  List<MemoryDraft> get draftsNeedingGeneration {
-    if (_book == null) return [];
-    return _book!.pendingDrafts
-        .where(
-          (d) =>
-              d.content.isEmpty &&
-              (d.status == 'pending_generation' ||
-                  d.status == 'needs_regeneration') &&
-              !_activeDraftIds.contains(d.id),
-        )
-        .toList();
-  }
+  List<MemoryDraft> get draftsNeedingGeneration =>
+      _draftGen.draftsNeedingGeneration;
 
-  bool get isGenerating => _generatingDrafts.values.any((v) => v);
+  bool get isGenerating => _draftGen.isGenerating;
 
   int get activeEntryCount =>
       _book?.entries.where((e) => e.status == 'active').length ?? 0;

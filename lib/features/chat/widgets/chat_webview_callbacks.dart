@@ -71,6 +71,10 @@ class ChatWebViewCallbacks {
     messageActions.onRegenerate?.call(id, mode);
   }
 
+  void onRerunCleaner(String id) {
+    messageActions.onRerunCleaner?.call(id);
+  }
+
   void onSelectionAction(String action, String text) {
     miscActions.onSelectionAction?.call(action, text);
   }
@@ -81,14 +85,6 @@ class ChatWebViewCallbacks {
 
   void onEditSave(String id, String text) {
     editActions.onEditSave?.call(id, text);
-  }
-
-  void onStudioOutputEdit(String outputId, String messageId) {
-    editActions.onStudioOutputEdit?.call(outputId, messageId);
-  }
-
-  void onStudioOutputRegen(String outputId, String messageId) {
-    editActions.onStudioOutputRegen?.call(outputId, messageId);
   }
 
   void onEditCancel(String id) {

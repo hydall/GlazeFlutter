@@ -246,6 +246,25 @@ class FakeInfoBlockStore implements SyncInfoBlockStore {
   }
 }
 
+class FakeTrackerSnapshotStore implements SyncTrackerSnapshotStore {
+  final Map<String, List<Map<String, dynamic>>> data = {};
+  @override
+  Future<List<String>> getAllSessionIds() async => data.keys.toList();
+  @override
+  Future<List<Map<String, dynamic>>> getBySessionId(String sid) async =>
+      data[sid] ?? [];
+  @override
+  Future<void> deleteBySessionId(String sid) async {
+    data.remove(sid);
+  }
+
+  @override
+  Future<void> insertRaw(Map<String, dynamic> snapshot) async {
+    final sid = snapshot['sessionId'] as String? ?? '';
+    data.putIfAbsent(sid, () => []).add(snapshot);
+  }
+}
+
 class FakeStudioConfigStore implements SyncStudioConfigStore {
   final Map<String, StudioConfig> data = {};
   @override
@@ -395,22 +414,25 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     SyncExtensionPresetStore? extensionPresetRepo,
     SyncExtensionsSettingsStore? extensionsSettingsStore,
     SyncInfoBlockStore? infoBlockStore,
+    SyncTrackerSnapshotStore? trackerSnapshotStore,
     SyncStudioConfigStore? studioConfigStore,
   }) : _builder = SyncManifestBuilder(
-         characterRepo: characterRepo,
-         chatRepo: chatRepo,
-         personaRepo: personaRepo,
-         presetRepo: presetRepo,
-         apiRepo: apiRepo,
-         memoryBookRepo: memoryBookRepo,
-         lorebookRepo: lorebookRepo,
-         themePresetRepo: themePresetRepo,
-         extensionPresetRepo: extensionPresetRepo ?? FakeExtensionPresetStore(),
-         extensionsSettingsStore:
-             extensionsSettingsStore ?? FakeExtensionsSettingsStore(),
-         infoBlockStore: infoBlockStore ?? FakeInfoBlockStore(),
-         studioConfigStore: studioConfigStore ?? FakeStudioConfigStore(),
-       );
+          characterRepo: characterRepo,
+          chatRepo: chatRepo,
+          personaRepo: personaRepo,
+          presetRepo: presetRepo,
+          apiRepo: apiRepo,
+          memoryBookRepo: memoryBookRepo,
+          lorebookRepo: lorebookRepo,
+          themePresetRepo: themePresetRepo,
+          extensionPresetRepo: extensionPresetRepo ?? FakeExtensionPresetStore(),
+          extensionsSettingsStore:
+              extensionsSettingsStore ?? FakeExtensionsSettingsStore(),
+          infoBlockStore: infoBlockStore ?? FakeInfoBlockStore(),
+          trackerSnapshotStore:
+              trackerSnapshotStore ?? FakeTrackerSnapshotStore(),
+          studioConfigStore: studioConfigStore ?? FakeStudioConfigStore(),
+        );
 
   @override
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) async {
@@ -508,6 +530,7 @@ class SyncWorld {
     FakeExtensionPresetStore(),
     FakeExtensionsSettingsStore(),
     FakeInfoBlockStore(),
+    FakeTrackerSnapshotStore(),
     FakeStudioConfigStore(),
     (_) async {},
   );
@@ -2195,7 +2218,7 @@ void main() {
   );
 
   test(
-    'memory_book with local generationApiKey does not false-conflict on pull',
+    'memory_book with local device-specific fields does not false-conflict on pull',
     () async {
       final deviceA = SyncWorld();
       final cloudMb = makeMemoryBook('s1', updatedAt: 1000);
@@ -2209,12 +2232,7 @@ void main() {
       final deviceB = SyncWorld();
       deviceB.cloud.files.addAll(deviceA.cloud.files);
       await deviceB.memoryBooks.put(
-        cloudMb.copyWith(
-          updatedAt: 999999,
-          settings: const MemoryBookSettings(
-            generationApiKey: 'sk-local-secret',
-          ),
-        ),
+        cloudMb.copyWith(updatedAt: 999999, lastProcessedMessageCount: 99),
       );
       await deviceB.chats.put(makeChat('s1', charId: 'char1'));
 
@@ -2239,8 +2257,9 @@ void main() {
         conflicts.where((c) => c.type == 'memory_book'),
         isEmpty,
         reason:
-            'Semantic memory_book hash ignores generation settings and '
-            'lastProcessedMessageCount',
+            'Semantic memory_book hash ignores device-local updatedAt and '
+            'lastProcessedMessageCount (generation LLM settings now live on '
+            'PipelineSettings, which is not synced)',
       );
     },
   );

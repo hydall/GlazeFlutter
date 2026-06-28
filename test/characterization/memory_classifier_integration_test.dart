@@ -2,14 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/llm/memory_needs_classifier_service.dart';
 import 'package:glaze_flutter/core/llm/memory_classifier_schema.dart';
-import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 
 void main() {
   group('MemoryNeedsClassifierService integration (Track 1)', () {
     test('disabled when classifierEnabled is false', () async {
       final service = MemoryNeedsClassifierService((_, _) async => '{}');
       final result = await service.classify(MemoryClassifierRequest(
-        settings: const MemoryBookSettings(classifierEnabled: false),
+        settings: const PipelineSettings(classifierEnabled: false),
         currentText: 'remember the bridge?',
       ));
       expect(result.status, 'disabled');
@@ -21,7 +21,7 @@ void main() {
 ''';
       final service = MemoryNeedsClassifierService((_, _) async => json);
       final result = await service.classify(MemoryClassifierRequest(
-        settings: const MemoryBookSettings(classifierEnabled: true),
+        settings: const PipelineSettings(classifierEnabled: true),
         currentText: 'remember the bridge?',
         candidateTitles: ['Bridge collapse'],
       ));
@@ -36,7 +36,7 @@ void main() {
       final service =
           MemoryNeedsClassifierService((_, _) async => 'not json');
       final result = await service.classify(MemoryClassifierRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           classifierEnabled: true,
           classifierTimeoutMs: 5000,
         ),
@@ -51,7 +51,7 @@ void main() {
         return '{}';
       });
       final result = await service.classify(MemoryClassifierRequest(
-        settings: const MemoryBookSettings(
+        settings: const PipelineSettings(
           classifierEnabled: true,
           classifierTimeoutMs: 50,
         ),

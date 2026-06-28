@@ -6,7 +6,7 @@ import '../state/post_cleaner_state_provider.dart';
 /// Floating card shown at the top of the chat while the POST-cleaner is
 /// running, and for a brief moment after it finishes (done/error).
 ///
-/// Mirrors the visual style of [_StudioRuntimeCard] in `chat_screen.dart`.
+/// Live status card shown over the chat while the POST-cleaner runs.
 /// Auto-dismisses 2.5s after the cleaner finishes.
 class PostCleanerStatusCard extends ConsumerStatefulWidget {
   const PostCleanerStatusCard({super.key});
@@ -106,6 +106,21 @@ class _PostCleanerStatusCardState
                 ),
               ),
             ),
+            if (isRunning)
+              IconButton(
+                onPressed: () {
+                  final token = ref.read(cleanerCancelTokenProvider);
+                  if (token != null && !token.isCancelled) {
+                    token.cancel('User aborted post-cleaner');
+                  }
+                },
+                icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                tooltip: 'Stop cleaner',
+                visualDensity: VisualDensity.compact,
+                style: IconButton.styleFrom(
+                  foregroundColor: cs.error,
+                ),
+              ),
           ],
         ),
       ),

@@ -1,30 +1,33 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/llm/studio_decomposition_service.dart';
-import '../../../core/llm/studio_request_preset.dart';
-import '../../../core/llm/transport/transport_factory.dart';
-import '../../../core/models/api_config.dart';
-import '../../../core/models/memory_book.dart';
-import '../../../core/models/preset.dart';
-import '../../../core/models/studio_config.dart';
-import '../../../core/state/active_selection_provider.dart';
-import '../../../core/state/db_provider.dart';
-import '../../../core/state/memory_agent_providers.dart';
-import '../../../core/utils/time_helpers.dart';
-import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/glaze_error_dialog.dart';
-import '../../settings/api_list_provider.dart';
-import '../chat_provider.dart';
 
-/// Studio Mode menu dialog. Session-bound.
+import '../../../core/models/studio_config.dart';
+import '../../../core/state/db_provider.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_toast.dart';
+import '../controllers/studio_menu_controller.dart';
+import 'post_building_menu_dialog.dart';
+
+/// Lightweight Studio tracker dialog (Phase 7.1).
 ///
-/// Flow:
-/// 1. User opens from MagicDrawer "Studio" item.
-/// 2. If no config exists → shows "Build Studio" button.
-/// 3. User clicks "Build Studio" → LLM decomposes the active preset into agents.
-/// 4. Menu shows: agent list with editable prompts + per-agent model config.
-/// 5. Toggle to enable/disable Studio for this session.
+/// Shows the Studio/tracker enable toggle, a compact list of active trackers
+/// with their `contextSize` / `runInterval` / model-override badges and the
+/// tracker's current value (if any), and a link to the advanced pipeline
+/// configuration in the Post-Building menu.
+///
+/// The full 8-controller editor that previously lived here was removed in
+/// Phase 2 of docs/PLAN_AGENTIC_STUDIO.md. Per Phase 7.1 this dialog is
+/// deliberately lightweight: it does NOT duplicate any LLM/pipeline settings
+/// (POST-cleaner, write-loop sidecar, model selectors) — those stay in
+/// [PostBuildingMenuDialog]. This dialog only surfaces tracker state and
+/// quick toggles.
+///
+/// Business logic (config load, read-modify-write, build/regenerate pipeline,
+/// API-config resolution) lives in [StudioMenuController]. The widget keeps
+/// `build`, the private `_TrackerRow`/`_StatusChip` widgets, and the
+/// bottom-sheet / dialog interactions (`_editAgentModel`, `_editAgentShard`,
+/// `_openAdvanced`).
 class StudioMenuDialog extends ConsumerStatefulWidget {
   final String charId;
   final String sessionId;
@@ -40,2608 +43,745 @@ class StudioMenuDialog extends ConsumerStatefulWidget {
 }
 
 class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
-  StudioConfig? _config;
-  List<StudioConfig> _profiles = const [];
-  _StudioContextInfo _contextInfo = const _StudioContextInfo();
-  String? _selectedProfileId;
-  String? _selectedAgentStudioPresetId;
-  String? _selectedFinalStudioPresetId;
-  String? _selectedBuildApiConfigId;
-  String? _selectedRunApiConfigId;
-  String? _bulkAgentApiConfigId;
-  String _bulkAgentModelOverride = '';
-  String _bulkAgentTemperature = '';
-  String _bulkAgentMaxTokens = '';
-  List<StudioPresetOverride> _studioPresetOverrides = const [];
-  String _builderPromptTemplate = '';
-  bool _agenticWriteEnabled = false;
-  bool _postCleanerEnabled = false;
-  String _routingMode = 'verbatim';
-  String _sidecarModel = '';
-  int _sidecarTimeoutMs = 60000;
-  double _postCleanerTemperature = 0.3;
-  int _postCleanerMaxTokens = 0;
-  bool _loading = true;
-  bool _building = false;
-  final Set<String> _regeneratingAgentIds = {};
-  final Map<String, List<String>> _modelsByApiConfigId = {};
-  final Set<String> _fetchingModelConfigIds = {};
-  String? _error;
+  late final StudioMenuController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _loadConfig();
+    _ctrl = StudioMenuController(ref, widget.sessionId, widget.charId);
+    _load();
   }
 
-  Future<void> _loadConfig() async {
-    try {
-      final config = await ref
-          .read(studioConfigRepoProvider)
-          .getBySessionId(widget.sessionId);
-      final profiles = await ref.read(studioConfigRepoProvider).getProfiles();
-      final contextInfo = await _loadContextInfo(config: config);
-      // Load MemoryBook settings for agentic features.
-      final book = await ref
-          .read(memoryBookRepoProvider)
-          .getBySessionId(widget.sessionId);
-      if (mounted) {
-        setState(() {
-          _config = config;
-          _profiles = profiles;
-          _selectedProfileId = config?.profileId;
-          _contextInfo = contextInfo;
-          _selectedAgentStudioPresetId = contextInfo.agentStudioPresetId;
-          _selectedFinalStudioPresetId = contextInfo.finalStudioPresetId;
-          _selectedBuildApiConfigId = contextInfo.buildApiConfig?.id;
-          _selectedRunApiConfigId = contextInfo.runApiConfig?.id;
-          _seedBulkAgentControls(config, contextInfo);
-          _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
-          _builderPromptTemplate = config?.builderPromptTemplate ?? '';
-          _agenticWriteEnabled = book?.settings.agenticWriteEnabled ?? false;
-          _postCleanerEnabled = book?.settings.postCleanerEnabled ?? false;
-          _sidecarModel = book?.settings.sidecarModel ?? '';
-          _sidecarTimeoutMs = book?.settings.sidecarTimeoutMs ?? 60000;
-          _postCleanerTemperature = book?.settings.postCleanerTemperature ?? 0.3;
-          _postCleanerMaxTokens = book?.settings.postCleanerMaxTokens ?? 0;
-          _routingMode = config?.routingMode ?? 'verbatim';
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
-      }
+  Future<void> _load() async {
+    await _ctrl.load();
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _toggleEnabled(bool enabled) async {
+    await _ctrl.toggleEnabled(enabled);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _toggleAgent(StudioAgent agent, bool enabled) async {
+    await _ctrl.toggleAgent(agent, enabled);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Edit a tracker's model override by picking from the provider's live model
+  /// list. Trackers run on the chat's resolved run API; the override only swaps
+  /// the model id (empty = use the chat model). We fetch the available models
+  /// from that provider's `/models` endpoint, exactly like the API settings
+  /// screen, and present them in a bottom sheet.
+  Future<void> _editAgentModel(StudioAgent agent) async {
+    final apiConfig = _ctrl.resolveTrackerApiConfig();
+    if (apiConfig == null) {
+      GlazeToast.show(
+        context,
+        'No chat API configured. Set one up in API settings first.',
+      );
+      return;
     }
+
+    final models = await _ctrl.fetchModelsForTrackerConfig();
+    if (!mounted) return;
+    setState(() {});
+
+    if (models.isEmpty) {
+      GlazeToast.show(
+        context,
+        'Could not fetch models from ${apiConfig.name.isEmpty ? "the provider" : apiConfig.name}. '
+        'Check the API endpoint and key in settings.',
+      );
+      return;
+    }
+
+    // Surface the current override (and the chat's own model) so the user sees
+    // what is active and can pin it even if it is missing from the live list.
+    final current = agent.modelOverride;
+    final chatModel = apiConfig.model;
+    if (current.isNotEmpty && !models.contains(current)) {
+      models.insert(0, current);
+    }
+    final selectedIndex = current.isNotEmpty ? models.indexOf(current) : -1;
+
+    if (!mounted) return;
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: agent.name.isEmpty ? agent.id : agent.name,
+      scrollToIndex: selectedIndex >= 0 ? selectedIndex : null,
+      items: [
+        // Sentinel option: clear the override and fall back to the chat model.
+        BottomSheetItem(
+          label: 'Use chat model',
+          hint: chatModel.isEmpty ? null : chatModel,
+          icon: current.isEmpty ? Icons.check : Icons.chat_bubble_outline,
+          iconColor: Theme.of(context).colorScheme.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _setAgentModelOverride(agent, '');
+          },
+        ),
+        ...models.map(
+          (m) => BottomSheetItem(
+            label: m,
+            icon: m == current ? Icons.check : null,
+            iconColor: Theme.of(context).colorScheme.primary,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _setAgentModelOverride(agent, m);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _setAgentModelOverride(
+    StudioAgent agent,
+    String modelOverride,
+  ) async {
+    await _ctrl.setAgentModelOverride(agent, modelOverride);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Open a multi-line editor for one tracker's `promptShard` (manual shard
+  /// editing). Persists on Save; Cancel discards. This complements the auto
+  /// [StudioDecompositionService.decompose] build — the user can hand-tune
+  /// any agent's instruction after a build.
+  Future<void> _editAgentShard(StudioAgent agent) async {
+    final controller = TextEditingController(text: agent.promptShard);
+    final result = await showDialog<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            agent.name.isEmpty ? 'Edit prompt shard' : 'Edit "${agent.name}"',
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: TextField(
+              controller: controller,
+              maxLines: 12,
+              autofocus: true,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Prompt shard for this tracker…',
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(controller.text),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    if (result == null) return;
+    await _setAgentPromptShard(agent, result);
+  }
+
+  Future<void> _setAgentPromptShard(StudioAgent agent, String shard) async {
+    await _ctrl.setAgentPromptShard(agent, shard);
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _buildStudio() async {
-    setState(() {
-      _building = true;
-      _error = null;
-    });
-
-    try {
-      final contextInfo = await _loadContextInfo(config: _config);
-      final preset = contextInfo.preset;
-      if (preset == null) {
-        throw Exception(
-          'No preset available. Create or select a preset first.',
-        );
-      }
-      final buildApiConfig = contextInfo.buildApiConfig;
-      if (buildApiConfig == null) {
-        throw Exception('No model selected for Studio build.');
-      }
-
-      final decompositionService = ref.read(studioDecompositionServiceProvider);
-      final agents = await decompositionService.decompose(
-        preset: preset,
-        sessionId: widget.sessionId,
-        apiConfig: buildApiConfig,
-        builderPromptTemplate: _builderPromptTemplate,
-        routingMode: _config?.routingMode ?? 'verbatim',
-      );
-
-      if (agents.isEmpty) {
-        throw Exception('Decomposition returned no agents');
-      }
-
-      // Capture cross-cutting "broadcast" blocks (output language + prose
-      // guards) verbatim so the POST-cleaner can apply the user's own rules.
-      final broadcastBlocks = decompositionService
-          .collectBroadcastBlocks(preset)
-          .map((b) {
-            final name = b.name.isNotEmpty ? b.name : b.id;
-            return '[Block: $name]\n${b.content.trim()}';
-          })
-          .where((s) => s.trim().isNotEmpty)
-          .toList();
-
-      final now = currentTimestampSeconds();
-      final profileId = _config?.profileId.isNotEmpty == true
-          ? _config!.profileId
-          : 'studio_${widget.sessionId}_$now';
-      final newConfig = StudioConfig(
-        sessionId: widget.sessionId,
-        profileId: profileId,
-        profileName: preset.name.isNotEmpty
-            ? 'Studio: ${preset.name}'
-            : 'Studio Profile',
-        enabled: true,
-        agents: agents,
-        sourcePresetId: preset.id,
-        finalPresetId: '',
-        agentStudioPresetId: contextInfo.agentStudioPresetId,
-        finalStudioPresetId: contextInfo.finalStudioPresetId,
-        studioPresetOverrides: _studioPresetOverrides,
-        sourcePresetHash: StudioDecompositionService.computePresetHash(
-          preset.blocks.where((b) => b.enabled).toList(),
-        ),
-        buildApiConfigId: buildApiConfig.id,
-        runApiConfigId: contextInfo.runApiConfig?.id ?? '',
-        builderPromptTemplate: _builderPromptTemplate,
-        broadcastBlocks: broadcastBlocks,
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      await ref.read(studioConfigRepoProvider).upsert(newConfig);
-      final profiles = await ref.read(studioConfigRepoProvider).getProfiles();
-
-      if (mounted) {
-        setState(() {
-          _config = newConfig;
-          _profiles = profiles;
-          _selectedProfileId = profileId;
-          _contextInfo = contextInfo;
-          _seedBulkAgentControls(newConfig, contextInfo);
-          _building = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _building = false;
-        });
-      }
-    }
+    setState(() {}); // show "Building Studio…" overlay immediately
+    final message = await _ctrl.buildStudio();
+    if (!mounted) return;
+    setState(() {});
+    if (message.isNotEmpty) GlazeToast.show(context, message);
   }
 
+  /// Regenerate one tracker's `promptShard` from its source preset blocks via
+  /// [StudioDecompositionService.regenerateAgentInstruction]. Uses the same
+  /// build API config as [_buildStudio]. Single-agent regen reuses the
+  /// deterministic keyword bucketing (no LLM router call); the build-time LLM
+  /// map only matters for a full decompose.
   Future<void> _regenerateAgentInstruction(StudioAgent agent) async {
-    if (_config == null || _regeneratingAgentIds.contains(agent.id)) return;
-    setState(() {
-      _regeneratingAgentIds.add(agent.id);
-      _error = null;
-    });
-
-    try {
-      final contextInfo = await _loadContextInfo(config: _config);
-      final preset = contextInfo.preset;
-      final buildApiConfig = contextInfo.buildApiConfig;
-      if (preset == null) {
-        throw Exception(
-          'No preset available. Create or select a preset first.',
-        );
-      }
-      if (buildApiConfig == null) {
-        throw Exception('No model selected for Studio build.');
-      }
-
-      final decompositionService = ref.read(studioDecompositionServiceProvider);
-      final updatedAgent = await decompositionService
-          .regenerateAgentInstruction(
-            preset: preset,
-            agent: agent,
-            apiConfig: buildApiConfig,
-            builderPromptTemplate: _builderPromptTemplate,
-            routingMode: _config?.routingMode ?? 'verbatim',
-          );
-
-      if (!mounted || _config == null) return;
-      final agents = _config!.agents.map((a) {
-        return a.id == agent.id ? updatedAgent.copyWith(order: a.order) : a;
-      }).toList();
-      final updatedConfig = _config!.copyWith(
-        agents: agents,
-        sourcePresetHash: StudioDecompositionService.computePresetHash(
-          preset.blocks.where((b) => b.enabled).toList(),
-        ),
-        buildApiConfigId: buildApiConfig.id,
-        builderPromptTemplate: _builderPromptTemplate,
-        updatedAt: currentTimestampSeconds(),
-      );
-      await ref.read(studioConfigRepoProvider).upsert(updatedConfig);
-      if (!mounted) return;
-      setState(() {
-        _config = updatedConfig;
-        _contextInfo = contextInfo;
-      });
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _regeneratingAgentIds.remove(agent.id));
-      }
-    }
-  }
-
-  Future<_StudioContextInfo> _loadContextInfo({StudioConfig? config}) async {
-    final chatState = ref.read(chatProvider(widget.charId)).value;
-    final session = chatState?.session;
-    final charId = session?.characterId ?? widget.charId;
-
-    final presetRepo = ref.read(presetRepoProvider);
-    final presets = await presetRepo.getAll();
-    final effectivePreset = getEffectivePreset(
-      presets,
-      charId,
-      session?.id ?? widget.sessionId,
-      ref.read(activePresetIdProvider),
-      ref.read(presetConnectionsProvider),
-    );
-
-    final preset = effectivePreset;
-    final agentStudioPresetId =
-        _selectedAgentStudioPresetId ??
-        (config?.agentStudioPresetId.isNotEmpty == true
-            ? config!.agentStudioPresetId
-            : null) ??
-        defaultAgentStudioPresetId;
-    final finalStudioPresetId =
-        _selectedFinalStudioPresetId ??
-        (config?.finalStudioPresetId.isNotEmpty == true
-            ? config!.finalStudioPresetId
-            : null) ??
-        defaultFinalStudioPresetId;
-
-    final apiConfigs = await ref.read(apiListProvider.future);
-    final activeApi = ref.read(activeApiConfigProvider);
-    final selectedBuildId =
-        _selectedBuildApiConfigId ??
-        (config?.buildApiConfigId.isNotEmpty == true
-            ? config!.buildApiConfigId
-            : null) ??
-        activeApi?.id;
-    final selectedRunId =
-        _selectedRunApiConfigId ??
-        (config?.runApiConfigId.isNotEmpty == true
-            ? config!.runApiConfigId
-            : null) ??
-        activeApi?.id;
-    final buildApiConfig =
-        apiConfigs
-            .where((c) => c.id == selectedBuildId && c.mode != 'embedding')
-            .firstOrNull ??
-        activeApi;
-    final runApiConfig =
-        apiConfigs
-            .where((c) => c.id == selectedRunId && c.mode != 'embedding')
-            .firstOrNull ??
-        activeApi;
-
-    return _StudioContextInfo(
-      apiConfigs: apiConfigs.where((c) => c.mode != 'embedding').toList(),
-      preset: preset,
-      presetLabel: preset?.name ?? 'No preset available',
-      agentStudioPresetId: agentStudioPresetId,
-      finalStudioPresetId: finalStudioPresetId,
-      buildApiConfig: buildApiConfig,
-      runApiConfig: runApiConfig,
-      buildModelLabel: _apiLabel(buildApiConfig),
-      runModelLabel: _apiLabel(runApiConfig),
-    );
-  }
-
-  Future<void> _applyProfile(String? profileId) async {
-    if (profileId == null || profileId.isEmpty) return;
-    final repo = ref.read(studioConfigRepoProvider);
-    await repo.bindSessionToProfile(
-      sessionId: widget.sessionId,
-      profileId: profileId,
-    );
-    final config = await repo.getBySessionId(widget.sessionId);
-    final profiles = await repo.getProfiles();
-    final contextInfo = await _loadContextInfo(config: config);
+    setState(() {}); // show regenerating chip immediately
+    final message = await _ctrl.regenerateAgentInstruction(agent);
     if (!mounted) return;
-    setState(() {
-      _config = config;
-      _profiles = profiles;
-      _selectedProfileId = profileId;
-      _contextInfo = contextInfo;
-      _studioPresetOverrides = config?.studioPresetOverrides ?? const [];
-      _seedBulkAgentControls(config, contextInfo);
-    });
+    setState(() {});
+    if (message.isNotEmpty) GlazeToast.show(context, message);
   }
 
-  void _seedBulkAgentControls(
-    StudioConfig? config,
-    _StudioContextInfo contextInfo,
-  ) {
-    final agents = config?.agents ?? const <StudioAgent>[];
-    _bulkAgentApiConfigId =
-        _commonAgentApiConfigId(agents) ??
-        contextInfo.runApiConfig?.id ??
-        contextInfo.apiConfigs.firstOrNull?.id;
-    _bulkAgentModelOverride = _commonAgentModelOverride(agents) ?? '';
-    _bulkAgentTemperature = _commonAgentTemperature(agents) ?? '';
-    _bulkAgentMaxTokens = _commonAgentMaxTokens(agents) ?? '';
-  }
-
-  String? _commonAgentApiConfigId(List<StudioAgent> agents) {
-    final customIds = agents
-        .where(
-          (agent) => agent.modelSource == 'custom' && agent.model.isNotEmpty,
-        )
-        .map((agent) => agent.model)
-        .toSet();
-    return customIds.length == 1 ? customIds.first : null;
-  }
-
-  String? _commonAgentModelOverride(List<StudioAgent> agents) {
-    if (agents.isEmpty) return null;
-    final values = agents.map((agent) => agent.modelOverride).toSet();
-    return values.length == 1 ? values.first : null;
-  }
-
-  String? _commonAgentTemperature(List<StudioAgent> agents) {
-    if (agents.isEmpty) return null;
-    final values = agents.map((agent) => agent.temperature).toSet();
-    return values.length == 1 ? values.first.toString() : null;
-  }
-
-  String? _commonAgentMaxTokens(List<StudioAgent> agents) {
-    if (agents.isEmpty) return null;
-    final values = agents.map((agent) => agent.maxTokens).toSet();
-    return values.length == 1 ? values.first.toString() : null;
-  }
-
-  String _apiLabel(ApiConfig? config) {
-    if (config == null) return 'No chat model selected';
-    final name = config.name.isNotEmpty ? config.name : config.model;
-    return config.model.isNotEmpty ? '$name (${config.model})' : name;
-  }
-
-  Future<void> _refreshContextInfo({bool persistSelection = false}) async {
-    final contextInfo = await _loadContextInfo(config: _config);
-    if (!mounted) return;
-    setState(() => _contextInfo = contextInfo);
-    if (persistSelection && _config != null) {
-      final updated = _config!.copyWith(
-        buildApiConfigId: contextInfo.buildApiConfig?.id ?? '',
-        runApiConfigId: contextInfo.runApiConfig?.id ?? '',
-        builderPromptTemplate: _builderPromptTemplate,
-        agentStudioPresetId: contextInfo.agentStudioPresetId,
-        finalStudioPresetId: contextInfo.finalStudioPresetId,
-        studioPresetOverrides: _studioPresetOverrides,
-        updatedAt: currentTimestampSeconds(),
-      );
-      await ref.read(studioConfigRepoProvider).upsert(updated);
-      if (mounted) setState(() => _config = updated);
-    }
+  Future<void> _openAdvanced() async {
+    Navigator.of(context).pop();
+    await showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      builder: (_) => PostBuildingMenuDialog(
+        charId: widget.charId,
+        sessionId: widget.sessionId,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final agents = _ctrl.config?.agents ?? const <StudioAgent>[];
+    final activeAgents = agents.where((a) => a.enabled).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final disabledAgents = agents.where((a) => !a.enabled).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 650, maxHeight: size.height - 48),
-        child: SizedBox(
-          width: size.width < 650 ? size.width - 32 : 650,
-          height: size.height < 820 ? size.height - 48 : 760,
-          child: Stack(
-            children: [
-              Column(
-                children: [
-                  _buildHeader(),
-                  Expanded(
-                    child: _loading
-                        ? const Center(child: CircularProgressIndicator())
-                        : _buildBody(),
-                  ),
-                ],
-              ),
-              if (_building) _buildBuildingOverlay(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBuildingOverlay() {
-    return Positioned.fill(
-      child: AbsorbPointer(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.28),
-            borderRadius: BorderRadius.circular(28),
-          ),
-          child: Center(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Building Studio...',
-                      style: TextStyle(
-                        color: context.cs.onSurface,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Icon(Icons.movie_filter_outlined, color: context.cs.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'menu_studio'.tr(),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          if (_config != null)
-            Switch(
-              value: _config!.enabled,
-              onChanged: (v) async {
-                final updated = _config!.copyWith(enabled: v);
-                await ref.read(studioConfigRepoProvider).upsert(updated);
-                setState(() => _config = updated);
-              },
-            ),
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () => setState(() => _error = null),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_config == null || _config!.agents.isEmpty) {
-      return _buildEmptyState();
-    }
-
-    return _buildAgentList();
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildContextInfoCard(),
-              const SizedBox(height: 12),
-              // Agentic memory works independently of Studio decomposition,
-              // so expose its toggles here before Studio is built. The preset
-              // routing mode lives in StudioConfig, so it's omitted until a
-              // config exists (shown in the agent list card instead).
-              _buildStandaloneAgenticCard(),
-              const SizedBox(height: 24),
-              Icon(
-                Icons.movie_filter_outlined,
-                size: 64,
-                color: context.cs.primary.withValues(alpha: 0.5),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Studio Mode decomposes your preset into agent tasks.\n'
-                'Each agent gets its own instructions and model config.\n'
-                'Agents collaborate to produce the final RP response.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: context.cs.onSurfaceVariant,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 32),
-              FilledButton.icon(
-                onPressed: _building ? null : _buildStudio,
-                icon: _building
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.auto_awesome),
-                label: Text(_building ? 'Building...' : 'Build Studio'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAgentList() {
-    return Column(
-      children: [
-        Flexible(
-          fit: FlexFit.loose,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: _buildContextInfoCard(),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        '${_config!.agents.length} agents',
-                        style: TextStyle(
-                          color: context.cs.onSurfaceVariant,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const Spacer(),
-                      FilledButton.tonalIcon(
-                        onPressed: _building ? null : _buildStudio,
-                        icon: const Icon(Icons.refresh, size: 18),
-                        label: const Text('Rebuild'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Expanded(
-          child: ReorderableListView.builder(
-            buildDefaultDragHandles: false,
-            itemCount: _config!.agents.length,
-            onReorderItem: (oldIndex, newIndex) {
-              final agents = List<StudioAgent>.from(_config!.agents);
-              final item = agents.removeAt(oldIndex);
-              agents.insert(newIndex, item);
-              for (var i = 0; i < agents.length; i++) {
-                agents[i] = agents[i].copyWith(order: i);
-              }
-              final updated = _config!.copyWith(agents: agents);
-              ref.read(studioConfigRepoProvider).upsert(updated);
-              setState(() => _config = updated);
-            },
-            itemBuilder: (context, index) {
-              final agent = _config!.agents[index];
-              return _buildAgentTile(agent, index);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildContextInfoCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: context.cs.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSourcePresetInfo(),
-          if (_profiles.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _profileSelector(),
-          ],
-          const SizedBox(height: 8),
-          _apiSelector(
-            label: 'Build model',
-            value: _selectedBuildApiConfigId,
-            fallback: _contextInfo.buildModelLabel,
-            onChanged: (value) async {
-              setState(() => _selectedBuildApiConfigId = value);
-              await _refreshContextInfo();
-            },
-          ),
-          const SizedBox(height: 8),
-          _apiSelector(
-            label: 'Run model',
-            value: _selectedRunApiConfigId,
-            fallback: _contextInfo.runModelLabel,
-            onChanged: (value) async {
-              setState(() => _selectedRunApiConfigId = value);
-              await _refreshContextInfo(persistSelection: true);
-            },
-          ),
-          const SizedBox(height: 8),
-          _buildStudioAdvancedSection(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStudioAdvancedSection() {
-    return Material(
-      type: MaterialType.transparency,
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        title: Row(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Stack(
           children: [
-            Icon(Icons.tune_outlined, size: 20, color: context.cs.primary),
-            const SizedBox(width: 8),
-            Text(
-              'Advanced',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: context.cs.onSurface,
-              ),
-            ),
-          ],
-        ),
-        subtitle: const Text(
-          'Builder prompt, agent bulk edits, routing, and sidecar settings.',
-          style: TextStyle(fontSize: 11),
-        ),
-        childrenPadding: const EdgeInsets.only(top: 4),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _showBuilderPromptDialog,
-                  icon: const Icon(Icons.article_outlined, size: 18),
-                  label: const Text('Builder prompt'),
-                ),
-                if (_config != null && _config!.agents.isNotEmpty)
-                  OutlinedButton.icon(
-                    onPressed: _showBulkAgentSettingsDialog,
-                    icon: const Icon(Icons.groups_2_outlined, size: 18),
-                    label: const Text('Bulk agents'),
-                  ),
-              ],
-            ),
-          ),
-          if (_config != null) ...[
-            const SizedBox(height: 12),
-            _finalHistoryLimitField(),
-            const SizedBox(height: 8),
-            _buildAgenticAdvancedSection(includeRoutingMode: true),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _finalHistoryLimitField() {
-    final value = _config!.maxFinalHistoryMessages;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Final history limit',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: context.cs.onSurface,
-                ),
-              ),
-              Text(
-                'Last U/A messages sent to the final agent. '
-                'Agents always see full history. 0 = unlimited.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: context.cs.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 84,
-          child: TextFormField(
-            key: ValueKey('final_history_limit_$value'),
-            initialValue: value.toString(),
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.center,
-            decoration: const InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 10,
-              ),
-            ),
-            onFieldSubmitted: _saveFinalHistoryLimit,
-            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _saveFinalHistoryLimit(String raw) async {
-    if (_config == null) return;
-    final parsed = int.tryParse(raw.trim());
-    if (parsed == null) return;
-    final clamped = parsed.clamp(0, 999);
-    if (clamped == _config!.maxFinalHistoryMessages) return;
-    final updated = _config!.copyWith(
-      maxFinalHistoryMessages: clamped,
-      updatedAt: currentTimestampSeconds(),
-    );
-    await ref.read(studioConfigRepoProvider).upsert(updated);
-    if (mounted) setState(() => _config = updated);
-  }
-
-  /// Standalone card shown in the empty state (before Studio is built), so
-  /// agentic memory can be toggled without building Studio first. Mirrors the
-  /// styling of [_buildContextInfoCard] for visual consistency.
-  Widget _buildStandaloneAgenticCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: context.cs.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      child: _buildAgenticAdvancedSection(includeRoutingMode: false),
-    );
-  }
-
-  Widget _buildAgenticAdvancedSection({required bool includeRoutingMode}) {
-    // Wrap in a transparent Material so ListTile ink splashes render correctly
-    // even when this section is placed inside a DecoratedBox (Container with
-    // background color) — otherwise the intermediate background hides them.
-    return Material(
-      type: MaterialType.transparency,
-      child: ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: Row(
-        children: [
-          Icon(Icons.psychology_outlined, size: 20, color: context.cs.primary),
-          const SizedBox(width: 8),
-          Text(
-            'Agentic memory (advanced)',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: context.cs.onSurface,
-            ),
-          ),
-        ],
-      ),
-      subtitle: const Text(
-        'Memory agent writes trackers + drafts. POST-cleaner rewrites clichés.',
-        style: TextStyle(fontSize: 11),
-      ),
-      children: [
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Write-loop (trackers + memory drafts)'),
-          subtitle: const Text(
-            'After each accepted turn, the memory agent writes '
-            'lightweight trackers and pending memory drafts.',
-          ),
-          value: _agenticWriteEnabled,
-          onChanged: (v) async {
-            await _saveMemoryBookSetting(
-              (s) => s.copyWith(agenticWriteEnabled: v),
-            );
-            if (mounted) setState(() => _agenticWriteEnabled = v);
-          },
-        ),
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('POST-cleaner (anti-cliché rewrite)'),
-          subtitle: const Text(
-            'After generation, silently rewrites the response to remove '
-            'clichés and repetition. Original preserved as a swipe.',
-          ),
-          value: _postCleanerEnabled,
-          onChanged: (v) async {
-            await _saveMemoryBookSetting(
-              (s) => s.copyWith(postCleanerEnabled: v),
-            );
-            if (mounted) setState(() => _postCleanerEnabled = v);
-          },
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: _buildSidecarModelSelector(),
-        ),
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Agent timeout'),
-          subtitle: Text(
-            '${(_sidecarTimeoutMs / 1000).toStringAsFixed(0)}s — how long to '
-            'wait for the sidecar agent before giving up.',
-          ),
-          trailing: const Icon(Icons.edit_outlined, size: 18),
-          onTap: _showSidecarTimeoutDialog,
-        ),
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Cleaner temperature'),
-          subtitle: Text(
-            '$_postCleanerTemperature — lower = more faithful rewrite, '
-            'higher = more creative.',
-          ),
-          trailing: const Icon(Icons.edit_outlined, size: 18),
-          onTap: _showCleanerTemperatureDialog,
-        ),
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Cleaner max tokens'),
-          subtitle: Text(
-            _postCleanerMaxTokens == 0
-                ? 'Auto (half of original length).'
-                : '$_postCleanerMaxTokens tokens.',
-          ),
-          trailing: const Icon(Icons.edit_outlined, size: 18),
-          onTap: _showCleanerMaxTokensDialog,
-        ),
-        if (includeRoutingMode)
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Preset routing mode'),
-            subtitle: const Text(
-              'Verbatim = blocks go to agents as-is (no LLM). '
-              'Compiled = LLM digests blocks into instructions.',
-            ),
-            trailing: DropdownButton<String>(
-              value: _routingMode,
-              items: const [
-                DropdownMenuItem(
-                  value: 'verbatim',
-                  child: Text('Verbatim'),
-                ),
-                DropdownMenuItem(
-                  value: 'compiled',
-                  child: Text('Compiled'),
-                ),
-              ],
-              onChanged: (v) async {
-                if (v == null || v == _routingMode) return;
-                await _saveRoutingMode(v);
-                if (mounted) setState(() => _routingMode = v);
-              },
-            ),
-          ),
-      ],
-      ),
-    );
-  }
-
-  Future<void> _saveMemoryBookSetting(
-    MemoryBookSettings Function(MemoryBookSettings) mutator,
-  ) async {
-    final repo = ref.read(memoryBookRepoProvider);
-    // Use ensureForSession (not getBySessionId): on the empty Studio screen the
-    // MemoryBook row may not exist yet. updateSettings is a bare UPDATE and
-    // silently no-ops on a missing row, so the toggle would not persist.
-    final book = await repo.ensureForSession(widget.sessionId);
-    final updated = mutator(book.settings);
-    await repo.updateSettings(widget.sessionId, updated);
-  }
-
-  /// Dropdown model selector for the agentic sidecar (write-loop +
-  /// POST-cleaner). The sidecar reuses the chat Run API config's endpoint/key
-  /// (sidecarSource='current'), so we fetch that provider's model list. An
-  /// empty selection falls back to the chat model — recommended for a cheaper
-  /// /faster agent model while the writer keeps the premium model.
-  Widget _buildSidecarModelSelector() {
-    final config = _contextInfo.runApiConfig;
-    if (config == null) {
-      return const Text(
-        'No chat API config available for the agent.',
-        style: TextStyle(fontSize: 12),
-      );
-    }
-    final fetched = _modelsByApiConfigId[config.id] ?? const <String>[];
-    final models = <String>{
-      ...fetched,
-      if (_sidecarModel.isNotEmpty && !fetched.contains(_sidecarModel))
-        _sidecarModel,
-    }.toList()
-      ..sort();
-    final isFetching = _fetchingModelConfigIds.contains(config.id);
-    // '' represents "use chat model" (sidecarModel empty).
-    final selected = _sidecarModel.isEmpty ? '' : _sidecarModel;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            initialValue: models.contains(selected) || selected.isEmpty
-                ? selected
-                : null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Agent model (sidecar)',
-              helperText: 'Empty = use chat model. A cheaper/faster model is '
-                  'recommended for trackers + cleaner.',
-              helperMaxLines: 2,
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: [
-              const DropdownMenuItem<String>(
-                value: '',
-                child: Text('(use chat model)'),
-              ),
-              ...models.map(
-                (m) => DropdownMenuItem<String>(
-                  value: m,
-                  child: Text(m, overflow: TextOverflow.ellipsis),
-                ),
-              ),
-            ],
-            onChanged: (m) async {
-              await _saveMemoryBookSetting(
-                (s) => s.copyWith(sidecarModel: m ?? ''),
-              );
-              if (mounted) setState(() => _sidecarModel = m ?? '');
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: IconButton.filledTonal(
-            tooltip: 'Fetch models',
-            onPressed: isFetching ? null : () => _fetchProviderModels(config),
-            icon: isFetching
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh, size: 18),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _showSidecarTimeoutDialog() async {
-    final controller = TextEditingController(
-      text: (_sidecarTimeoutMs / 1000).toStringAsFixed(0),
-    );
-    final result = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Agent timeout'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Seconds to wait for the sidecar agent before giving up. '
-              'Slower/larger models need more time (30–90s is typical).',
-              style: TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                suffixText: 'seconds',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final seconds = int.tryParse(controller.text.trim());
-              if (seconds == null || seconds <= 0) {
-                Navigator.of(ctx).pop();
-                return;
-              }
-              Navigator.of(ctx).pop(seconds * 1000);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result == null) return;
-    await _saveMemoryBookSetting((s) => s.copyWith(sidecarTimeoutMs: result));
-    if (mounted) setState(() => _sidecarTimeoutMs = result);
-  }
-
-  Future<void> _showCleanerTemperatureDialog() async {
-    final controller = TextEditingController(
-      text: _postCleanerTemperature.toStringAsFixed(2),
-    );
-    final result = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cleaner temperature'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Controls how creative the POST-cleaner rewrite is.\n'
-              '0.0 = almost identical to original\n'
-              '0.3 = default, light cleanup\n'
-              '0.7 = more aggressive rewrite',
-              style: TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final v = double.tryParse(controller.text.trim());
-              if (v == null || v < 0 || v > 2) {
-                Navigator.of(ctx).pop();
-                return;
-              }
-              Navigator.of(ctx).pop(v);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result == null) return;
-    await _saveMemoryBookSetting(
-      (s) => s.copyWith(postCleanerTemperature: result),
-    );
-    if (mounted) setState(() => _postCleanerTemperature = result);
-  }
-
-  Future<void> _showCleanerMaxTokensDialog() async {
-    final controller = TextEditingController(
-      text: _postCleanerMaxTokens == 0 ? '' : '$_postCleanerMaxTokens',
-    );
-    final result = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cleaner max tokens'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Maximum tokens for the cleaner rewrite.\n'
-              '0 = auto (half the original text length).\n'
-              'If the cleaner truncates responses, increase this.',
-              style: TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                hintText: '0 (auto)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final v = int.tryParse(controller.text.trim());
-              Navigator.of(ctx).pop(v ?? 0);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result == null) return;
-    await _saveMemoryBookSetting(
-      (s) => s.copyWith(postCleanerMaxTokens: result),
-    );
-    if (mounted) setState(() => _postCleanerMaxTokens = result);
-  }
-
-  Future<void> _saveRoutingMode(String mode) async {
-    if (_config == null) return;
-    final updated = _config!.copyWith(
-      routingMode: mode,
-      updatedAt: currentTimestampSeconds(),
-    );
-    await ref.read(studioConfigRepoProvider).upsert(updated);
-    if (mounted) setState(() => _config = updated);
-  }
-
-  Future<void> _showBuilderPromptDialog() async {
-    final controller = TextEditingController(
-      text: _builderPromptTemplate.trim().isNotEmpty
-          ? _builderPromptTemplate
-          : StudioDecompositionService.defaultBuilderPromptTemplate,
-    );
-    var useDefault = _builderPromptTemplate.trim().isEmpty;
-
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (dialogContext, dialogSetState) {
-              return AlertDialog(
-                title: const Text('Studio builder prompt'),
-                content: SizedBox(
-                  width: 760,
-                  height: 620,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'This template is sent to the build model when you rebuild Studio. Keep {{blocksSummary}} where the source preset blocks should be inserted.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.cs.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SwitchListTile(
-                        value: useDefault,
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Use default prompt'),
-                        subtitle: const Text(
-                          'Turn off to save a custom builder prompt in this Studio profile.',
-                        ),
-                        onChanged: (value) {
-                          dialogSetState(() {
-                            useDefault = value;
-                            if (value) {
-                              controller.text = StudioDecompositionService
-                                  .defaultBuilderPromptTemplate;
-                            }
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: TextFormField(
-                          controller: controller,
-                          enabled: !useDefault,
-                          expands: true,
-                          maxLines: null,
-                          minLines: null,
-                          textAlignVertical: TextAlignVertical.top,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                            labelText: 'Prompt template',
-                          ),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: () async {
-                      final next = useDefault ? '' : controller.text;
-                      setState(() => _builderPromptTemplate = next);
-                      if (_config != null) {
-                        final updated = _config!.copyWith(
-                          builderPromptTemplate: next,
-                          updatedAt: currentTimestampSeconds(),
-                        );
-                        await ref
-                            .read(studioConfigRepoProvider)
-                            .upsert(updated);
-                        if (mounted) setState(() => _config = updated);
-                      }
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop();
-                      }
-                    },
-                    child: const Text('Save'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      controller.dispose();
-    }
-  }
-
-  Widget _profileSelector() {
-    final value = _profiles.any((p) => p.profileId == _selectedProfileId)
-        ? _selectedProfileId
-        : null;
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: 'Studio profile',
-        isDense: true,
-        border: OutlineInputBorder(),
-      ),
-      items: _profiles
-          .map(
-            (profile) => DropdownMenuItem(
-              value: profile.profileId,
-              child: Text(
-                profile.profileName.isNotEmpty
-                    ? profile.profileName
-                    : profile.sourcePresetId.isNotEmpty
-                    ? 'Studio: ${profile.sourcePresetId}'
-                    : profile.profileId,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          )
-          .toList(),
-      onChanged: _applyProfile,
-    );
-  }
-
-  Widget _buildSourcePresetInfo() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: InputDecorator(
-            decoration: const InputDecoration(
-              labelText: 'Build source preset',
-              isDense: true,
-              border: OutlineInputBorder(),
-            ),
-            child: Text(
-              _contextInfo.presetLabel,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        IconButton.filledTonal(
-          tooltip: 'Preset settings',
-          onPressed: _showPresetSettingsDialog,
-          icon: const Icon(Icons.tune, size: 20),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _showPresetSettingsDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, dialogSetState) {
-            final presets = resolvedStudioRequestPresets(
-              _studioPresetOverrides,
-            );
-            return AlertDialog(
-              title: const Text('Studio preset settings'),
-              content: SizedBox(
-                width: 420,
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _studioRequestPresetSelector(
-                      label: 'Agent Studio preset',
-                      value: _selectedAgentStudioPresetId,
-                      fallbackId: _contextInfo.agentStudioPresetId,
-                      presets: presets,
-                      onChanged: (value) async {
-                        setState(() => _selectedAgentStudioPresetId = value);
-                        dialogSetState(() {});
-                        await _refreshContextInfo(persistSelection: true);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _studioRequestPresetSelector(
-                      label: 'Final Studio preset',
-                      value: _selectedFinalStudioPresetId,
-                      fallbackId: _contextInfo.finalStudioPresetId,
-                      presets: presets,
-                      onChanged: (value) async {
-                        setState(() => _selectedFinalStudioPresetId = value);
-                        dialogSetState(() {});
-                        await _refreshContextInfo(persistSelection: true);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: () => _showStudioPresetEditorDialog(
-                        parentDialogContext: dialogContext,
-                        parentSetState: dialogSetState,
-                      ),
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Edit Studio presets'),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Close'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _showStudioPresetEditorDialog({
-    required BuildContext parentDialogContext,
-    required StateSetter parentSetState,
-  }) async {
-    final presets = resolvedStudioRequestPresets(_studioPresetOverrides);
-    var editingId = _selectedFinalStudioPresetId?.isNotEmpty == true
-        ? _selectedFinalStudioPresetId!
-        : defaultFinalStudioPresetId;
-    var editing = presets.firstWhere(
-      (preset) => preset.id == editingId,
-      orElse: () => presets.first,
-    );
-    var editingBlocks = _orderedStudioBlocks(editing.blocks);
-    final nameController = TextEditingController(text: editing.name);
-
-    void loadPreset(StudioRequestPreset preset) {
-      editingId = preset.id;
-      editing = preset;
-      editingBlocks = _orderedStudioBlocks(preset.blocks);
-      nameController.text = preset.name;
-    }
-
-    try {
-      await showDialog<void>(
-        context: parentDialogContext,
-        builder: (editorContext) {
-          return StatefulBuilder(
-            builder: (editorContext, editorSetState) {
-              final available = resolvedStudioRequestPresets(
-                _studioPresetOverrides,
-              );
-              return AlertDialog(
-                title: const Text('Edit Studio preset'),
-                content: SizedBox(
-                  width: 720,
-                  height: 620,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      DropdownButtonFormField<String>(
-                        initialValue: editingId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Studio preset',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        items: available
-                            .map(
-                              (preset) => DropdownMenuItem(
-                                value: preset.id,
-                                child: Text(preset.name),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (id) {
-                          final preset = available.firstWhere(
-                            (p) => p.id == id,
-                            orElse: () => available.first,
-                          );
-                          editorSetState(() => loadPreset(preset));
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Name',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Text(
-                            'Prompt blocks',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const Spacer(),
-                          TextButton.icon(
-                            onPressed: () {
-                              editorSetState(() {
-                                editingBlocks = _reorderStudioBlocks([
-                                  _newCustomStudioBlock(editingBlocks.length),
-                                  ...editingBlocks,
-                                ]);
-                              });
-                            },
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text('Add block'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: ReorderableListView.builder(
-                          buildDefaultDragHandles: false,
-                          itemCount: editingBlocks.length,
-                          onReorderItem: (oldIndex, newIndex) {
-                            editorSetState(() {
-                              final blocks = [...editingBlocks];
-                              final item = blocks.removeAt(oldIndex);
-                              blocks.insert(newIndex, item);
-                              editingBlocks = _reorderStudioBlocks(blocks);
-                            });
-                          },
-                          itemBuilder: (context, index) {
-                            final block = editingBlocks[index];
-                            return Card(
-                              key: ValueKey(block.id),
-                              child: ExpansionTile(
-                                leading: ReorderableDragStartListener(
-                                  index: index,
-                                  child: const Icon(Icons.drag_handle),
-                                ),
-                                title: Text(
-                                  block.title.isNotEmpty
-                                      ? block.title
-                                      : block.kind,
-                                ),
-                                subtitle: Text('${block.kind} • ${block.role}'),
-                                trailing: Switch(
-                                  value: block.enabled,
-                                  onChanged: (value) {
-                                    editorSetState(() {
-                                      editingBlocks = _updateStudioBlock(
-                                        editingBlocks,
-                                        block.id,
-                                        (current) =>
-                                            current.copyWith(enabled: value),
-                                      );
-                                    });
-                                  },
-                                ),
-                                childrenPadding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  0,
-                                  16,
-                                  16,
-                                ),
-                                children: [
-                                  TextFormField(
-                                    key: ValueKey('${block.id}_title'),
-                                    initialValue: block.title,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Block title',
-                                      border: OutlineInputBorder(),
-                                      isDense: true,
-                                    ),
-                                    onChanged: (value) {
-                                      editingBlocks = _updateStudioBlock(
-                                        editingBlocks,
-                                        block.id,
-                                        (current) =>
-                                            current.copyWith(title: value),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: DropdownButtonFormField<String>(
-                                          initialValue: block.kind,
-                                          isExpanded: true,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Kind',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          items: _studioBlockKinds
-                                              .map(
-                                                (kind) => DropdownMenuItem(
-                                                  value: kind,
-                                                  child: Text(kind),
-                                                ),
-                                              )
-                                              .toList(),
-                                          onChanged: (value) {
-                                            if (value == null) return;
-                                            editorSetState(() {
-                                              editingBlocks =
-                                                  _updateStudioBlock(
-                                                    editingBlocks,
-                                                    block.id,
-                                                    (current) => current
-                                                        .copyWith(kind: value),
-                                                  );
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      SizedBox(
-                                        width: 150,
-                                        child: DropdownButtonFormField<String>(
-                                          initialValue: block.role,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Role',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: 'system',
-                                              child: Text('system'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'user',
-                                              child: Text('user'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'assistant',
-                                              child: Text('assistant'),
-                                            ),
-                                          ],
-                                          onChanged: (value) {
-                                            if (value == null) return;
-                                            editorSetState(() {
-                                              editingBlocks =
-                                                  _updateStudioBlock(
-                                                    editingBlocks,
-                                                    block.id,
-                                                    (current) => current
-                                                        .copyWith(role: value),
-                                                  );
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  TextFormField(
-                                    key: ValueKey('${block.id}_content'),
-                                    initialValue: block.content,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Content',
-                                      alignLabelWithHint: true,
-                                      border: OutlineInputBorder(),
-                                      helperText:
-                                          'Used by agent_instruction/custom_text. Context kinds inject live prompt data.',
-                                    ),
-                                    minLines: 3,
-                                    maxLines: 8,
-                                    onChanged: (value) {
-                                      editingBlocks = _updateStudioBlock(
-                                        editingBlocks,
-                                        block.id,
-                                        (current) =>
-                                            current.copyWith(content: value),
-                                      );
-                                    },
-                                  ),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: TextButton.icon(
-                                      onPressed: () {
-                                        editorSetState(() {
-                                          editingBlocks = _reorderStudioBlocks(
-                                            editingBlocks
-                                                .where((b) => b.id != block.id)
-                                                .toList(),
-                                          );
-                                        });
-                                      },
-                                      icon: const Icon(Icons.delete_outline),
-                                      label: const Text('Delete'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      final base = defaultStudioRequestPresetById(editingId);
-                      editorSetState(() => loadPreset(base));
-                    },
-                    child: const Text('Reset'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(editorContext).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: () async {
-                      final updated = StudioPresetOverride(
-                        id: editingId,
-                        name: nameController.text.trim(),
-                        blocks: _reorderStudioBlocks(editingBlocks),
-                      );
-                      await _saveStudioPresetOverride(updated);
-                      if (!mounted) return;
-                      parentSetState(() {});
-                      if (!editorContext.mounted) return;
-                      Navigator.of(editorContext).pop();
-                    },
-                    child: const Text('Save'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      nameController.dispose();
-    }
-  }
-
-  List<StudioPresetBlock> _orderedStudioBlocks(List<StudioPresetBlock> blocks) {
-    final next = [...blocks]..sort((a, b) => a.order.compareTo(b.order));
-    return _reorderStudioBlocks(next);
-  }
-
-  List<StudioPresetBlock> _reorderStudioBlocks(List<StudioPresetBlock> blocks) {
-    return [
-      for (var i = 0; i < blocks.length; i++) blocks[i].copyWith(order: i),
-    ];
-  }
-
-  StudioPresetBlock _newCustomStudioBlock(int existingCount) {
-    final id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
-    return StudioPresetBlock(
-      id: 'custom_$id',
-      title: 'Custom block ${existingCount + 1}',
-      kind: 'custom_text',
-      role: 'system',
-      content: '',
-    );
-  }
-
-  List<StudioPresetBlock> _updateStudioBlock(
-    List<StudioPresetBlock> blocks,
-    String id,
-    StudioPresetBlock Function(StudioPresetBlock current) update,
-  ) {
-    return [for (final block in blocks) block.id == id ? update(block) : block];
-  }
-
-  static const _studioBlockKinds = [
-    'agent_instruction',
-    'previous_agents',
-    'user_persona',
-    'char_card',
-    'scenario',
-    'char_personality',
-    'example_dialogue',
-    'authors_note',
-    'chat_history',
-    'worldInfoBefore',
-    'worldInfoAfter',
-    'memory',
-    'summary',
-    'guided_generation',
-    'static_context',
-    'dynamic_context',
-    'custom_text',
-  ];
-
-  Future<void> _saveStudioPresetOverride(StudioPresetOverride override) async {
-    final next = <StudioPresetOverride>[];
-    var replaced = false;
-    for (final item in _studioPresetOverrides) {
-      if (item.id == override.id) {
-        next.add(override);
-        replaced = true;
-      } else {
-        next.add(item);
-      }
-    }
-    if (!replaced) next.add(override);
-
-    setState(() => _studioPresetOverrides = next);
-    if (_config != null) {
-      final updated = _config!.copyWith(
-        studioPresetOverrides: next,
-        updatedAt: currentTimestampSeconds(),
-      );
-      await ref.read(studioConfigRepoProvider).upsert(updated);
-      if (mounted) setState(() => _config = updated);
-    }
-  }
-
-  Widget _studioRequestPresetSelector({
-    required String label,
-    required String? value,
-    required String fallbackId,
-    required List<StudioRequestPreset> presets,
-    required Future<void> Function(String?) onChanged,
-  }) {
-    final effectiveValue = presets.any((preset) => preset.id == value)
-        ? value
-        : fallbackId;
-    return DropdownButtonFormField<String>(
-      initialValue: effectiveValue,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        isDense: true,
-        border: const OutlineInputBorder(),
-      ),
-      items: presets
-          .map(
-            (preset) =>
-                DropdownMenuItem(value: preset.id, child: Text(preset.name)),
-          )
-          .toList(),
-      onChanged: onChanged,
-    );
-  }
-
-  Widget _apiSelector({
-    required String label,
-    required String? value,
-    required String fallback,
-    required Future<void> Function(String?) onChanged,
-  }) {
-    final effectiveValue = _contextInfo.apiConfigs.any((c) => c.id == value)
-        ? value
-        : null;
-    return DropdownButtonFormField<String>(
-      initialValue: effectiveValue,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        isDense: true,
-        border: const OutlineInputBorder(),
-      ),
-      items: _contextInfo.apiConfigs
-          .map(
-            (config) => DropdownMenuItem(
-              value: config.id,
-              child: Text(_apiLabel(config)),
-            ),
-          )
-          .toList(),
-      hint: Text(fallback),
-      onChanged: (value) {
-        onChanged(value);
-      },
-    );
-  }
-
-  Widget _modelHint(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
-      ),
-    );
-  }
-
-  Future<void> _showBulkAgentSettingsDialog() async {
-    var apiConfigId = _bulkAgentApiConfigId;
-    var modelOverride = _bulkAgentModelOverride;
-    var temperature = _bulkAgentTemperature;
-    var maxTokens = _bulkAgentMaxTokens;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, dialogSetState) {
-            final selectedConfig = _contextInfo.apiConfigs
-                .where((config) => config.id == apiConfigId)
-                .firstOrNull;
-            return AlertDialog(
-              title: const Text('Bulk agent settings'),
-              content: SizedBox(
-                width: 520,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Configure shared values, then press Apply to all. Individual agents can still be edited separately afterwards.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: context.cs.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _bulkAgentApiSelector(
-                      value: apiConfigId,
-                      onChanged: (id) => dialogSetState(() => apiConfigId = id),
-                    ),
-                    const SizedBox(height: 8),
-                    _bulkAgentProviderModelSelector(
-                      config: selectedConfig,
-                      modelOverride: modelOverride,
-                      onChanged: (model) {
-                        dialogSetState(() {
-                          modelOverride = model == selectedConfig?.model
-                              ? ''
-                              : model ?? '';
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        Expanded(
-                          child: TextFormField(
-                            initialValue: temperature,
-                            decoration: const InputDecoration(
-                              labelText: 'All temp',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            onChanged: (value) => temperature = value,
-                          ),
-                        ),
+                        Icon(Icons.tune, color: cs.primary),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            initialValue: maxTokens,
-                            decoration: const InputDecoration(
-                              labelText: 'All max tokens',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            keyboardType: TextInputType.number,
-                            onChanged: (value) => maxTokens = value,
-                          ),
+                        Text('Studio', style: tt.titleMedium),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close, size: 20),
+                          visualDensity: VisualDensity.compact,
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    if (_ctrl.loading)
+                      const Center(child: CircularProgressIndicator())
+                    else ...[
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Enable Studio trackers'),
+                        subtitle: Text(
+                          'Trackers run alongside the main generator. Batched by '
+                          '(provider, model). Configure prompts in the Post-Building menu.',
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        value: _ctrl.config?.enabled ?? false,
+                        onChanged: (v) => _toggleEnabled(v),
+                      ),
+                      const SizedBox(height: 12),
+                      if (activeAgents.isEmpty && disabledAgents.isEmpty)
+                        Text(
+                          'No trackers configured. Tap "Build Studio" to '
+                          'decompose the active preset into trackers, or add '
+                          'agents in the Post-Building menu.',
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        )
+                      else ...[
+                        Text(
+                          'Active trackers (${activeAgents.length})',
+                          style: tt.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        if (activeAgents.isEmpty)
+                          Text(
+                            '— none —',
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          )
+                        else
+                          ...activeAgents.map(
+                            (a) => _TrackerRow(
+                              agent: a,
+                              value: _ctrl.trackerValueFor(a.name),
+                              onToggle: (v) => _toggleAgent(a, v),
+                              onEditModel: () => _editAgentModel(a),
+                              onEditShard: () => _editAgentShard(a),
+                              onRegenerate: () =>
+                                  _regenerateAgentInstruction(a),
+                              regenerating: _ctrl.regeneratingAgentIds.contains(
+                                a.id,
+                              ),
+                            ),
+                          ),
+                        if (disabledAgents.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'Disabled (${disabledAgents.length})',
+                            style: tt.labelMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          ...disabledAgents.map(
+                            (a) => _TrackerRow(
+                              agent: a,
+                              value: _ctrl.trackerValueFor(a.name),
+                              onToggle: (v) => _toggleAgent(a, v),
+                              onEditModel: () => _editAgentModel(a),
+                              onEditShard: () => _editAgentShard(a),
+                              onRegenerate: () =>
+                                  _regenerateAgentInstruction(a),
+                              regenerating: _ctrl.regeneratingAgentIds.contains(
+                                a.id,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                      const SizedBox(height: 12),
+                      const _StudioTimeoutTile(),
+                      const SizedBox(height: 4),
+                      const _StudioMaxTokensTile(),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          FilledButton.tonalIcon(
+                            onPressed: _ctrl.building ? null : _buildStudio,
+                            icon: const Icon(Icons.auto_fix_high, size: 16),
+                            label: const Text('Build Studio'),
+                          ),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: _openAdvanced,
+                            icon: const Icon(Icons.open_in_new, size: 16),
+                            label: const Text('Advanced'),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton.icon(
-                  onPressed: () {
-                    _bulkAgentApiConfigId = apiConfigId;
-                    _bulkAgentModelOverride = modelOverride;
-                    _bulkAgentTemperature = temperature;
-                    _bulkAgentMaxTokens = maxTokens;
-                    _applyBulkAgentSettings();
-                    Navigator.of(dialogContext).pop();
-                  },
-                  icon: const Icon(Icons.done_all, size: 18),
-                  label: const Text('Apply to all'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _bulkAgentApiSelector({
-    required String? value,
-    required void Function(String?) onChanged,
-  }) {
-    final effectiveValue =
-        _contextInfo.apiConfigs.any((config) => config.id == value)
-        ? value
-        : null;
-    return DropdownButtonFormField<String>(
-      initialValue: effectiveValue,
-      isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: 'All agents model config',
-        border: OutlineInputBorder(),
-        isDense: true,
-      ),
-      items: _contextInfo.apiConfigs
-          .map(
-            (config) => DropdownMenuItem(
-              value: config.id,
-              child: Text(_apiLabel(config), overflow: TextOverflow.ellipsis),
             ),
-          )
-          .toList(),
-      onChanged: (id) {
-        final config = _contextInfo.apiConfigs
-            .where((item) => item.id == id)
-            .firstOrNull;
-        if (config == null) return;
-        onChanged(config.id);
-      },
-    );
-  }
-
-  Widget _bulkAgentProviderModelSelector({
-    required ApiConfig? config,
-    required String modelOverride,
-    required void Function(String?) onChanged,
-  }) {
-    if (config == null) return const SizedBox.shrink();
-    final fetched = _modelsByApiConfigId[config.id] ?? const <String>[];
-    final models = <String>[
-      if (config.model.isNotEmpty) config.model,
-      ...fetched,
-      if (modelOverride.isNotEmpty) modelOverride,
-    ].where((model) => model.trim().isNotEmpty).toSet().toList()..sort();
-    final selectedModel = modelOverride.isNotEmpty
-        ? modelOverride
-        : config.model.isNotEmpty
-        ? config.model
-        : null;
-    final isFetching = _fetchingModelConfigIds.contains(config.id);
-
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            initialValue:
-                selectedModel != null && models.contains(selectedModel)
-                ? selectedModel
-                : null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'All provider model',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: models
-                .map(
-                  (model) => DropdownMenuItem(
-                    value: model,
-                    child: Text(model, overflow: TextOverflow.ellipsis),
-                  ),
-                )
-                .toList(),
-            hint: Text(config.model.isNotEmpty ? config.model : 'Fetch models'),
-            onChanged: onChanged,
-          ),
-        ),
-        const SizedBox(width: 8),
-        IconButton.filledTonal(
-          tooltip: 'Fetch models',
-          onPressed: isFetching ? null : () => _fetchProviderModels(config),
-          icon: isFetching
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.refresh, size: 18),
-        ),
-      ],
-    );
-  }
-
-  void _applyBulkAgentSettings() {
-    final config = _contextInfo.apiConfigs
-        .where((item) => item.id == _bulkAgentApiConfigId)
-        .firstOrNull;
-    final temperature = double.tryParse(_bulkAgentTemperature);
-    final maxTokens = int.tryParse(_bulkAgentMaxTokens);
-    _updateAllAgents((agent) {
-      var next = agent;
-      if (config != null) {
-        next = next.copyWith(
-          modelSource: 'custom',
-          model: config.id,
-          modelOverride: _bulkAgentModelOverride,
-          endpoint: config.endpoint,
-        );
-      }
-      if (temperature != null) {
-        next = next.copyWith(temperature: temperature);
-      }
-      if (maxTokens != null) {
-        next = next.copyWith(maxTokens: maxTokens);
-      }
-      return next;
-    });
-  }
-
-  Widget _customApiSelector(StudioAgent agent) {
-    return DropdownButtonFormField<String>(
-      initialValue: _contextInfo.apiConfigs.any((c) => c.id == agent.model)
-          ? agent.model
-          : null,
-      isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: 'API config',
-        border: OutlineInputBorder(),
-        isDense: true,
-      ),
-      items: _contextInfo.apiConfigs
-          .map(
-            (config) => DropdownMenuItem(
-              value: config.id,
-              child: Text(_apiLabel(config)),
-            ),
-          )
-          .toList(),
-      onChanged: (id) {
-        final config = _contextInfo.apiConfigs
-            .where((c) => c.id == id)
-            .firstOrNull;
-        if (config == null) return;
-        _updateAgent(
-          agent.copyWith(
-            model: config.id,
-            modelOverride: '',
-            endpoint: config.endpoint,
-          ),
-        );
-      },
-    );
-  }
-
-  ApiConfig? _agentApiConfig(StudioAgent agent) {
-    if (agent.modelSource == 'custom') {
-      return _contextInfo.apiConfigs
-          .where((c) => c.id == agent.model)
-          .firstOrNull;
-    }
-    return _contextInfo.runApiConfig;
-  }
-
-  String _agentApiConfigLabel(StudioAgent agent) {
-    final config = _agentApiConfig(agent);
-    if (config != null) {
-      final label = _apiLabel(config);
-      return agent.modelOverride.isNotEmpty
-          ? '$label -> ${agent.modelOverride}'
-          : label;
-    }
-    if (agent.modelSource == 'custom') return 'custom not set';
-    return _contextInfo.runModelLabel;
-  }
-
-  Future<void> _fetchProviderModels(ApiConfig config) async {
-    setState(() => _fetchingModelConfigIds.add(config.id));
-    try {
-      final models = await pickChatTransport(
-        config.protocol,
-      ).fetchModels(endpoint: config.endpoint, apiKey: config.apiKey);
-      final ids =
-          models
-              .map((m) => m['id'])
-              .whereType<String>()
-              .where((id) => id.trim().isNotEmpty)
-              .toSet()
-              .toList()
-            ..sort();
-      if (config.model.isNotEmpty && !ids.contains(config.model)) {
-        ids.insert(0, config.model);
-      }
-      if (!mounted) return;
-      setState(() => _modelsByApiConfigId[config.id] = ids);
-    } catch (e) {
-      if (mounted) GlazeErrorDialog.show(context, e, prefix: 'Fetch models');
-    } finally {
-      if (mounted) setState(() => _fetchingModelConfigIds.remove(config.id));
-    }
-  }
-
-  Widget _providerModelSelector(StudioAgent agent) {
-    final config = _agentApiConfig(agent);
-    if (config == null) return const SizedBox.shrink();
-    final fetched = _modelsByApiConfigId[config.id] ?? const <String>[];
-    final models = <String>[
-      if (config.model.isNotEmpty) config.model,
-      ...fetched,
-      if (agent.modelOverride.isNotEmpty) agent.modelOverride,
-    ].where((m) => m.trim().isNotEmpty).toSet().toList()..sort();
-    final selectedModel = agent.modelOverride.isNotEmpty
-        ? agent.modelOverride
-        : config.model.isNotEmpty
-        ? config.model
-        : null;
-    final isFetching = _fetchingModelConfigIds.contains(config.id);
-
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            initialValue:
-                selectedModel != null && models.contains(selectedModel)
-                ? selectedModel
-                : null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Provider model',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: models
-                .map(
-                  (model) => DropdownMenuItem(
-                    value: model,
-                    child: Text(model, overflow: TextOverflow.ellipsis),
-                  ),
-                )
-                .toList(),
-            hint: Text(config.model.isNotEmpty ? config.model : 'Fetch models'),
-            onChanged: (model) {
-              _updateAgent(
-                agent.copyWith(
-                  modelOverride: model == config.model ? '' : model ?? '',
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        IconButton.filledTonal(
-          tooltip: 'Fetch models',
-          onPressed: isFetching ? null : () => _fetchProviderModels(config),
-          icon: isFetching
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.refresh, size: 18),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAgentTile(StudioAgent agent, int index) {
-    final isLast = index == _config!.agents.length - 1;
-    return Card(
-      key: ValueKey(agent.id),
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ExpansionTile(
-        title: Row(
-          children: [
-            ReorderableDragStartListener(
-              index: index,
-              child: const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: Icon(Icons.drag_handle, size: 20),
-              ),
-            ),
-            Icon(
-              isLast
-                  ? Icons.edit_outlined
-                  : index == 0
-                  ? Icons.psychology_outlined
-                  : Icons.tune_outlined,
-              size: 20,
-              color: context.cs.primary,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                agent.name,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-            if (isLast)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: context.cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'FINAL',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: context.cs.onPrimaryContainer,
+            // Blocking overlay while models are fetched or Studio is built.
+            if (_ctrl.loadingModels || _ctrl.building)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: cs.scrim.withValues(alpha: 0.4),
+                  child: Center(
+                    child: _ctrl.building
+                        ? const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 12),
+                              Text('Building Studio…'),
+                            ],
+                          )
+                        : const CircularProgressIndicator(),
                   ),
                 ),
               ),
-            Switch(
-              value: agent.enabled,
-              onChanged: (v) => _updateAgent(agent.copyWith(enabled: v)),
-            ),
           ],
         ),
-        subtitle: Text(
-          agent.sourceBlockNames.isNotEmpty
-              ? 'From: ${agent.sourceBlockNames} • Policy: ${isLast ? 'turn' : _normalizedRefreshPolicy(agent.refreshPolicy)} • Model: ${_agentApiConfigLabel(agent)}'
-              : 'Order: ${agent.order} • Policy: ${isLast ? 'turn' : _normalizedRefreshPolicy(agent.refreshPolicy)} • Model: ${_agentApiConfigLabel(agent)}',
-          style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
-        ),
-        children: [_buildAgentAdvancedDetails(agent)],
       ),
     );
   }
+}
 
-  Widget _buildAgentAdvancedDetails(StudioAgent agent) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Material(
-        type: MaterialType.transparency,
-        child: ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          title: Text(
-            'Advanced agent settings',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: context.cs.onSurfaceVariant,
-            ),
-          ),
-          subtitle: const Text(
-            'Prompt shard, refresh policy, model override, temperature, tokens, timeout.',
-            style: TextStyle(fontSize: 11),
-          ),
-          children: [_buildAgentDetails(agent)],
+/// Compact per-tracker row in the lightweight Studio dialog (Phase 7.1).
+/// Shows: enable switch (leading), name + role badge, compact status chips
+/// (`ctx:N`, `every:N`, model override), and the current tracker value
+/// (truncated) when present.
+class _TrackerRow extends StatelessWidget {
+  final StudioAgent agent;
+  final String? value;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onEditModel;
+  final VoidCallback onEditShard;
+  final VoidCallback onRegenerate;
+  final bool regenerating;
+
+  const _TrackerRow({
+    required this.agent,
+    required this.value,
+    required this.onToggle,
+    required this.onEditModel,
+    required this.onEditShard,
+    required this.onRegenerate,
+    required this.regenerating,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final chips = <_StatusChip>[
+      _StatusChip(label: 'ctx:${agent.contextSize}'),
+      if (agent.runInterval != 1)
+        _StatusChip(label: 'every ${agent.runInterval}'),
+      if (agent.runIndividually) _StatusChip(label: 'solo', emphasize: true),
+      if (agent.activationKeywords.isNotEmpty)
+        _StatusChip(
+          label: 'kw:${agent.activationKeywords.length}',
+          emphasize: true,
         ),
-      ),
-    );
-  }
-
-  Widget _buildAgentDetails(StudioAgent agent) {
-    final isFinal = _config?.agents.lastOrNull?.id == agent.id;
-    final regenerating = _regeneratingAgentIds.contains(agent.id);
+    ];
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Column(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Prompt shard:',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: context.cs.onSurfaceVariant,
+          Switch(value: agent.enabled, onChanged: onToggle),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        agent.name.isEmpty ? agent.id : agent.name,
+                        style: tt.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (agent.role.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        agent.role,
+                        style: tt.labelSmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      ...chips.map((c) => _chip(context, c.label, c.emphasize)),
+                      // Tappable model chip — the one piece of per-tracker
+                      // config the lightweight dialog edits inline.
+                      _modelChip(context),
+                      // Tappable prompt-shard chip — opens a multi-line
+                      // editor for the tracker's promptShard (manual shard
+                      // editing, Phase B).
+                      _shardChip(context),
+                    ],
                   ),
                 ),
-              ),
-              TextButton.icon(
-                onPressed: regenerating
-                    ? null
-                    : () => _regenerateAgentInstruction(agent),
-                icon: regenerating
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.auto_fix_high, size: 16),
-                label: Text(regenerating ? 'Regenerating...' : 'Regenerate'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          TextFormField(
-            key: ValueKey('${agent.id}_${agent.promptShard.hashCode}'),
-            initialValue: agent.promptShard,
-            maxLines: 6,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.all(12),
-            ),
-            style: const TextStyle(fontSize: 12),
-            onChanged: (value) =>
-                _updateAgent(agent.copyWith(promptShard: value)),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Refresh policy:',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: context.cs.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 4),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'static', label: Text('Static')),
-              ButtonSegment(value: 'scene', label: Text('Scene')),
-              ButtonSegment(value: 'turn', label: Text('Turn')),
-            ],
-            selected: {
-              isFinal ? 'turn' : _normalizedRefreshPolicy(agent.refreshPolicy),
-            },
-            onSelectionChanged: isFinal
-                ? null
-                : (s) => _updateAgent(agent.copyWith(refreshPolicy: s.first)),
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          ),
-          _modelHint(
-            isFinal
-                ? 'Final responder always runs every turn.'
-                : agent.invalidationSignals.isNotEmpty
-                ? 'Invalidates on: ${agent.invalidationSignals.join(', ')}'
-                : 'Static and scene agents may reuse cached briefs.',
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Model:',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: context.cs.onSurfaceVariant,
+                if (value != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      value!,
+                      style: tt.bodySmall?.copyWith(
+                        color: cs.primary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'current', label: Text('Current')),
-              ButtonSegment(value: 'custom', label: Text('Custom')),
-            ],
-            selected: {agent.modelSource},
-            onSelectionChanged: (s) =>
-                _updateAgent(agent.copyWith(modelSource: s.first)),
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          // Regenerate this tracker's instruction from its source preset
+          // blocks (Phase B). Spinner while the LLM build call is in flight.
+          IconButton(
+            onPressed: regenerating ? null : onRegenerate,
+            icon: regenerating
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(Icons.refresh, size: 18, color: cs.onSurfaceVariant),
+            tooltip: 'Regenerate instruction from preset',
+            visualDensity: VisualDensity.compact,
           ),
-          _modelHint(
-            agent.modelSource == 'custom'
-                ? 'Uses selected API config for this agent only.'
-                : 'Uses Studio Run model: ${_contextInfo.runModelLabel}',
-          ),
-          if (agent.modelSource == 'custom') ...[
-            const SizedBox(height: 8),
-            _customApiSelector(agent),
-            const SizedBox(height: 8),
-            _providerModelSelector(agent),
-          ],
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  initialValue: agent.temperature.toString(),
-                  decoration: const InputDecoration(
-                    labelText: 'Temp',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  style: const TextStyle(fontSize: 12),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  onChanged: (v) {
-                    final temp = double.tryParse(v);
-                    if (temp != null) {
-                      _updateAgent(agent.copyWith(temperature: temp));
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  initialValue: agent.maxTokens.toString(),
-                  decoration: const InputDecoration(
-                    labelText: 'Max tokens',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  style: const TextStyle(fontSize: 12),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) {
-                    final tokens = int.tryParse(v);
-                    if (tokens != null) {
-                      _updateAgent(agent.copyWith(maxTokens: tokens));
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  initialValue: agent.timeoutMs.toString(),
-                  decoration: const InputDecoration(
-                    labelText: 'Timeout ms',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  style: const TextStyle(fontSize: 12),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) {
-                    final ms = int.tryParse(v);
-                    if (ms != null) {
-                      _updateAgent(agent.copyWith(timeoutMs: ms));
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  void _updateAgent(StudioAgent updated) {
-    final agents = _config!.agents.map((a) {
-      return a.id == updated.id ? updated : a;
-    }).toList();
-    _saveAgents(agents);
-  }
-
-  void _updateAllAgents(StudioAgent Function(StudioAgent agent) update) {
-    if (_config == null) return;
-    _saveAgents(_config!.agents.map(update).toList());
-  }
-
-  void _saveAgents(List<StudioAgent> agents) {
-    if (_config == null) return;
-    final newConfig = _config!.copyWith(
-      agents: agents,
-      updatedAt: currentTimestampSeconds(),
+  Widget _modelChip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasOverride = agent.modelOverride.isNotEmpty;
+    final label = hasOverride ? agent.modelOverride : 'chat model';
+    return InkWell(
+      onTap: onEditModel,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: hasOverride ? cs.primaryContainer : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: cs.primary.withValues(alpha: 0.4),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.edit,
+              size: 11,
+              color: hasOverride ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: hasOverride
+                    ? cs.onPrimaryContainer
+                    : cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
-    ref.read(studioConfigRepoProvider).upsert(newConfig);
-    setState(() => _config = newConfig);
   }
 
-  String _normalizedRefreshPolicy(String policy) {
-    return switch (policy.trim().toLowerCase()) {
-      'static' || 'scene' || 'turn' => policy.trim().toLowerCase(),
-      _ => 'turn',
-    };
+  Widget _shardChip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasShard = agent.promptShard.trim().isNotEmpty;
+    return InkWell(
+      onTap: onEditShard,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: cs.primary.withValues(alpha: 0.4),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.edit_note, size: 12, color: cs.onSurfaceVariant),
+            const SizedBox(width: 3),
+            Text(
+              hasShard ? 'prompt' : 'add prompt',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(BuildContext context, String label, bool emphasize) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: emphasize ? cs.primaryContainer : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: emphasize ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+        ),
+      ),
+    );
   }
 }
 
-class _StudioContextInfo {
-  final List<ApiConfig> apiConfigs;
-  final Preset? preset;
-  final ApiConfig? buildApiConfig;
-  final ApiConfig? runApiConfig;
-  final String presetLabel;
-  final String agentStudioPresetId;
-  final String finalStudioPresetId;
-  final String buildModelLabel;
-  final String runModelLabel;
+class _StatusChip {
+  final String label;
+  final bool emphasize;
+  const _StatusChip({required this.label, this.emphasize = false});
+}
 
-  const _StudioContextInfo({
-    this.apiConfigs = const [],
-    this.preset,
-    this.buildApiConfig,
-    this.runApiConfig,
-    this.presetLabel = 'Loading preset...',
-    this.agentStudioPresetId = defaultAgentStudioPresetId,
-    this.finalStudioPresetId = defaultFinalStudioPresetId,
-    this.buildModelLabel = 'Loading model...',
-    this.runModelLabel = 'Loading model...',
-  });
+/// Idle timeout for Studio agents (pre-gen trackers + final generator).
+/// Reads/writes `PipelineSettings.studioTimeoutMs`. The timer fires only
+/// before the first chunk (text or reasoning) arrives — once any chunk
+/// arrives it is cancelled entirely (see AgentStreamRunner).
+class _StudioTimeoutTile extends ConsumerWidget {
+  const _StudioTimeoutTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final valueText = pipeline.studioTimeoutMs == 0
+        ? 'post_building_default_seconds'.tr(namedArgs: {'arg0': '90'})
+        : 'post_building_seconds_count'.tr(namedArgs: {
+            'arg0': (pipeline.studioTimeoutMs / 1000).toStringAsFixed(0),
+          });
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.timer_outlined, size: 20, color: cs.onSurfaceVariant),
+      title: Text(
+        'post_building_studio_timeout'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        '$valueText — ${'post_building_studio_timeout_desc'.tr()}',
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final current = (pipeline.studioTimeoutMs / 1000).round();
+        final controller = TextEditingController(text: '$current');
+        final v = await showDialog<int>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('post_building_studio_timeout'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'post_building_seconds_min'.tr(namedArgs: {'arg0': '0'}),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    suffixText: 'post_building_seconds_suffix'.tr(),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: Text('common_cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final s = int.tryParse(controller.text.trim());
+                  if (s == null || s < 0) {
+                    Navigator.of(c).pop();
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: Text('common_save'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (v != null) {
+          final updated = pipeline.copyWith(studioTimeoutMs: v * 1000);
+          await ref.read(pipelineSettingsProvider.notifier).save(updated);
+        }
+      },
+    );
+  }
+}
+
+/// Max tokens override for the Studio final generator (Main Responder).
+/// Reads/writes `PipelineSettings.studioFinalMaxTokens`. When 0, the
+/// per-agent default (8000) is used. Useful for reasoning models that
+/// spend most of the budget on thinking.
+class _StudioMaxTokensTile extends ConsumerWidget {
+  const _StudioMaxTokensTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioFinalMaxTokens;
+    final valueText = value == 0
+        ? 'post_building_default_tokens'.tr(namedArgs: {'arg0': '8000'})
+        : 'post_building_tokens_count'.tr(namedArgs: {'arg0': '$value'});
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.text_snippet_outlined, size: 20, color: cs.onSurfaceVariant),
+      title: Text(
+        'post_building_studio_max_tokens'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        '$valueText — ${'post_building_studio_max_tokens_desc'.tr()}',
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final controller = TextEditingController(text: '$value');
+        final v = await showDialog<int>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('post_building_studio_max_tokens'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'post_building_tokens_min'.tr(namedArgs: {'arg0': '0'}),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    suffixText: 'tokens',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: Text('common_cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final s = int.tryParse(controller.text.trim());
+                  if (s == null || s < 0) {
+                    Navigator.of(c).pop();
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: Text('common_save'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (v != null) {
+          final updated = pipeline.copyWith(studioFinalMaxTokens: v);
+          await ref.read(pipelineSettingsProvider.notifier).save(updated);
+        }
+      },
+    );
+  }
 }

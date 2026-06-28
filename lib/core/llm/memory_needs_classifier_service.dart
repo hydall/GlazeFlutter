@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
-import '../models/memory_book.dart';
+import '../models/pipeline_settings.dart';
 import 'memory_classifier_schema.dart';
 
 typedef MemoryClassifierTextClient =
@@ -13,7 +13,7 @@ typedef MemoryClassifierTextClient =
     );
 
 class MemoryClassifierRequest {
-  final MemoryBookSettings settings;
+  final PipelineSettings settings;
   final String currentText;
   final List<String> candidateTitles;
   final List<String> missingContextReasons;

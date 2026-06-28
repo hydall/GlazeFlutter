@@ -686,7 +686,10 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         onConfirm: (typed) async {
           if (typed.trim().toLowerCase() != providerLabel.toLowerCase()) {
             if (context.mounted) {
-              GlazeErrorDialog.show(context, "${'title_error'.tr()}: ${'sync_invalid_phrase'.tr()}");
+              GlazeErrorDialog.show(
+                context,
+                "${'title_error'.tr()}: ${'sync_invalid_phrase'.tr()}",
+              );
             }
             return;
           }
@@ -706,7 +709,11 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
           } catch (e) {
             if (mounted) {
               setState(() {});
-              GlazeErrorDialog.show(context, e, prefix: "${'title_error'.tr()}: ");
+              GlazeErrorDialog.show(
+                context,
+                e,
+                prefix: "${'title_error'.tr()}: ",
+              );
             }
           }
         },

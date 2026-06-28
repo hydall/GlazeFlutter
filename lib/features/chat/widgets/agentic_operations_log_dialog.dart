@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/agent_operation_record.dart';
+import '../../../core/models/tracker.dart';
+import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../state/agent_operations_log_provider.dart';
 import 'post_cleaner_diff_dialog.dart';
@@ -30,138 +32,173 @@ class AgenticOperationsLogDialog extends ConsumerStatefulWidget {
 
 class _AgenticOperationsLogDialogState
     extends ConsumerState<AgenticOperationsLogDialog> {
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: SizedBox(
+        width: 720,
+        height: 560,
+        child: DefaultTabController(
+          length: 2,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Icon(Icons.smart_toy_outlined, color: context.cs.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Agentic Operations Log',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, size: 20),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ),
+              const TabBar(
+                tabs: [
+                  Tab(
+                    icon: Icon(Icons.history_outlined, size: 16),
+                    text: 'Operations',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.track_changes_outlined, size: 16),
+                    text: 'Tracker values',
+                  ),
+                ],
+                tabAlignment: TabAlignment.fill,
+              ),
+              Expanded(
+                child: _SessionScope(
+                  sessionId: widget.sessionId,
+                  child: const TabBarView(
+                    children: [_OperationsTab(), _TrackerValuesTab()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OperationsTab extends ConsumerStatefulWidget {
+  const _OperationsTab();
+
+  @override
+  ConsumerState<_OperationsTab> createState() => _OperationsTabState();
+}
+
+class _OperationsTabState extends ConsumerState<_OperationsTab> {
   _LogFilter _filter = _LogFilter.all;
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(agentOperationsLogProvider);
-    final allRecords = state.forSession(widget.sessionId);
+    // The parent dialog passes the sessionId via a route arg we don't have
+    // here — pull it from the closest AgenticOperationsLogDialog ancestor.
+    // For the simple two-tab layout we instead rely on the parent's
+    // `widget.sessionId` via a shared `InheritedWidget` is overkill; the
+    // simplest correct fix is to read the global state and filter by the
+    // dialog's sessionId through a `_SessionScope` passed via constructor.
+    // We do that here:
+    final sessionId = _sessionIdOf(context);
+    final allRecords = state.forSession(sessionId);
     final filtered = switch (_filter) {
       _LogFilter.all => allRecords,
       _LogFilter.failed => allRecords.where((r) => r.status.isFailure).toList(),
-      _LogFilter.success =>
-        allRecords.where((r) => r.status.isOk).toList(),
+      _LogFilter.success => allRecords.where((r) => r.status.isOk).toList(),
     };
     filtered.sort((a, b) => b.finishedAtMs.compareTo(a.finishedAtMs));
 
-    return Dialog(
-      child: SizedBox(
-        width: 720,
-        height: 560,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Icon(Icons.smart_toy_outlined, color: context.cs.primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Agentic Operations Log',
-                    style: Theme.of(context).textTheme.titleMedium,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(
+            children: [
+              SegmentedButton<_LogFilter>(
+                segments: const [
+                  ButtonSegment(value: _LogFilter.all, label: Text('All')),
+                  ButtonSegment(
+                    value: _LogFilter.failed,
+                    label: Text('Failed'),
+                    icon: Icon(Icons.error_outline, size: 16),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${filtered.length} ops',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: context.cs.onSurfaceVariant,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (state.records.isNotEmpty)
-                    IconButton(
-                      onPressed: () => _confirmClear(context),
-                      icon: const Icon(Icons.delete_sweep_outlined, size: 20),
-                      tooltip: 'Clear log',
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, size: 20),
-                    visualDensity: VisualDensity.compact,
+                  ButtonSegment(
+                    value: _LogFilter.success,
+                    label: Text('Success'),
+                    icon: Icon(Icons.check_circle_outline, size: 16),
                   ),
                 ],
+                selected: {_filter},
+                onSelectionChanged: (s) => setState(() => _filter = s.first),
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  SegmentedButton<_LogFilter>(
-                    segments: const [
-                      ButtonSegment(
-                        value: _LogFilter.all,
-                        label: Text('All'),
-                      ),
-                      ButtonSegment(
-                        value: _LogFilter.failed,
-                        label: Text('Failed'),
-                        icon: Icon(Icons.error_outline, size: 16),
-                      ),
-                      ButtonSegment(
-                        value: _LogFilter.success,
-                        label: Text('Success'),
-                        icon: Icon(Icons.check_circle_outline, size: 16),
-                      ),
-                    ],
-                    selected: {_filter},
-                    onSelectionChanged: (s) =>
-                        setState(() => _filter = s.first),
-                    style: const ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (widget.sessionId != null)
-                    Expanded(
-                      child: Text(
-                        'Filtered to current chat',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: context.cs.onSurfaceVariant,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                ],
+              const SizedBox(width: 8),
+              Text(
+                '${filtered.length} ops',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.cs.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: filtered.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'No agentic operations recorded yet.\n\n'
-                          'Operations appear here when the POST-cleaner, '
-                          'memory sidecar reranker, or agentic memory '
-                          'search/write tools are invoked during generation.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: context.cs.onSurfaceVariant,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const Divider(
-                        height: 1,
-                        indent: 12,
-                        endIndent: 12,
-                      ),
-                      itemBuilder: (context, i) =>
-                          _OperationTile(record: filtered[i]),
-                    ),
-            ),
-          ],
+              const Spacer(),
+              if (state.records.isNotEmpty)
+                IconButton(
+                  onPressed: () => _confirmClear(context),
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                  tooltip: 'Clear log',
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
         ),
-      ),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'No agentic operations recorded yet.\n\n'
+                      'Operations appear here when the POST-cleaner, '
+                      'memory sidecar reranker, or agentic memory '
+                      'search/write tools are invoked during generation.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: context.cs.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, _) =>
+                      const Divider(height: 1, indent: 12, endIndent: 12),
+                  itemBuilder: (context, i) =>
+                      _OperationTile(record: filtered[i]),
+                ),
+        ),
+      ],
     );
+  }
+
+  /// Read the dialog's `sessionId` from the nearest ancestor. We use a
+  /// small `_SessionScope` inherited widget set by the dialog's state — see
+  /// the build method's wrapper in [_AgenticOperationsLogDialogState].
+  String? _sessionIdOf(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_SessionScope>();
+    return scope?.sessionId;
   }
 
   Future<void> _confirmClear(BuildContext context) async {
@@ -190,6 +227,226 @@ class _AgenticOperationsLogDialogState
           const AgentOperationsLogState();
     }
   }
+}
+
+/// Phase 7.5 — "Tracker values" tab. Lists the live [Tracker] store for the
+/// dialog's session, showing name / scope / value / provenance / updatedAt.
+/// Lets the user see what the trackers (memory tracker + post-turn
+/// write-loop) have written to the persistent tracker table — separate from
+/// the operations log (which shows *what ran*) and from the MemoryBook
+/// (which shows *what was remembered long-term*).
+class _TrackerValuesTab extends ConsumerStatefulWidget {
+  const _TrackerValuesTab();
+
+  @override
+  ConsumerState<_TrackerValuesTab> createState() => _TrackerValuesTabState();
+}
+
+class _TrackerValuesTabState extends ConsumerState<_TrackerValuesTab> {
+  List<Tracker>? _trackers;
+  bool _loaded = false;
+  bool _didLoad = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Read the inherited `_SessionScope` here (NOT in initState — inherited
+    // widgets are not safe to depend on before the first didChangeDependencies).
+    if (_didLoad) return;
+    _didLoad = true;
+    _load();
+  }
+
+  Future<void> _load() async {
+    final sessionId = _sessionIdOf(context);
+    if (sessionId == null) {
+      if (mounted) setState(() => _loaded = true);
+      return;
+    }
+    final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
+    final trackerRepo = ref.read(trackerRepoProvider);
+    final snapshot = await snapshotRepo.getLatest(sessionId);
+    final trackers =
+        snapshot?.trackers ?? await trackerRepo.getBySessionId(sessionId);
+    if (!mounted) return;
+    setState(() {
+      _trackers = trackers;
+      _loaded = true;
+    });
+  }
+
+  String? _sessionIdOf(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_SessionScope>();
+    return scope?.sessionId;
+  }
+
+  Future<void> _purgeTrackers() async {
+    final sessionId = _sessionIdOf(context);
+    if (sessionId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Purge tracker values?'),
+        content: const Text(
+          'This permanently deletes all tracker rows and snapshots for this '
+          'session. Use this to clear orphaned trackers left by deleted '
+          'messages or a Clear chat. The action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Purge'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(trackerRepoProvider).clearForSession(sessionId);
+    await ref.read(trackerSnapshotRepoProvider).deleteBySessionId(sessionId);
+    if (!mounted) return;
+    setState(() {
+      _trackers = const <Tracker>[];
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final trackers = _trackers ?? const <Tracker>[];
+    return Column(
+      children: [
+        if (trackers.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: [
+                Text(
+                  '${trackers.length} tracker${trackers.length == 1 ? '' : 's'}',
+                  style: TextStyle(
+                    color: context.cs.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _purgeTrackers,
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 16),
+                  label: const Text('Purge'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: context.cs.error,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: trackers.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'No tracker values recorded yet for this session.\n\n'
+                      'Trackers are written by the post-turn write-loop and the '
+                      'memory tracker. They hold lightweight state (scene, '
+                      'weather, relationship, ...) injected into later prompts '
+                      'via macros.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: context.cs.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  itemCount: trackers.length,
+                  separatorBuilder: (_, _) =>
+                      const Divider(height: 1, indent: 12, endIndent: 12),
+                  itemBuilder: (context, i) =>
+                      _TrackerTile(tracker: trackers[i]),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrackerTile extends StatelessWidget {
+  final Tracker tracker;
+  const _TrackerTile({required this.tracker});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.cs;
+    final tt = Theme.of(context).textTheme;
+    final value = tracker.value.trim();
+    final hasValue = value.isNotEmpty;
+    return ExpansionTile(
+      dense: true,
+      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+      leading: Icon(Icons.track_changes_outlined, color: cs.primary, size: 20),
+      title: Text(
+        tracker.name,
+        style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        '${tracker.scope} · ${tracker.provenance.isEmpty ? "no provenance" : tracker.provenance}',
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: hasValue
+          ? const Icon(Icons.expand_more, size: 18)
+          : const Text('—', style: TextStyle(color: Colors.grey)),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (hasValue)
+                SelectableText(
+                  value,
+                  style: tt.bodySmall?.copyWith(color: cs.onSurface),
+                )
+              else
+                Text(
+                  '(empty — the tracker exists but has no value yet)',
+                  style: tt.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              const SizedBox(height: 4),
+              Text(
+                'updatedAt: ${DateTime.fromMillisecondsSinceEpoch(tracker.updatedAt * 1000).toIso8601String()}',
+                style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Small inherited widget that exposes the dialog's `sessionId` to the
+/// two tabs without having to plumb it through constructors (the tabs are
+/// built inside a `TabBarView` whose `DefaultTabController` is stateless).
+class _SessionScope extends InheritedWidget {
+  final String? sessionId;
+  const _SessionScope({this.sessionId, required super.child});
+
+  @override
+  bool updateShouldNotify(_SessionScope oldWidget) =>
+      oldWidget.sessionId != sessionId;
 }
 
 class _OperationTile extends StatelessWidget {
@@ -335,10 +592,7 @@ class _OperationTile extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: 11,
-                color: context.cs.onSurface,
-              ),
+              style: TextStyle(fontSize: 11, color: context.cs.onSurface),
             ),
           ),
         ],
@@ -366,6 +620,7 @@ class _OperationTile extends StatelessWidget {
       AgentOperationKind.agenticWrite => Icons.edit_note,
       AgentOperationKind.classifier => Icons.category_outlined,
       AgentOperationKind.consolidation => Icons.merge_type_outlined,
+      AgentOperationKind.studioTracker => Icons.auto_awesome_outlined,
     };
   }
 

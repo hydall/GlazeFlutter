@@ -11,7 +11,9 @@ Widget buildSyncSectionHeader(BuildContext context, String title) {
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
-        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+        color: Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
         letterSpacing: 0.5,
       ),
     ),
@@ -106,7 +108,9 @@ Widget buildSyncDangerButton({
   bool light = false,
 }) {
   final disabled = onPressed == null;
-  final bg = light ? const Color(0xFFFF3B30).withValues(alpha: 0.05) : const Color(0xFFFF3B30).withValues(alpha: 0.1);
+  final bg = light
+      ? const Color(0xFFFF3B30).withValues(alpha: 0.05)
+      : const Color(0xFFFF3B30).withValues(alpha: 0.1);
   return Material(
     color: bg,
     borderRadius: BorderRadius.circular(14),
@@ -152,7 +156,11 @@ Widget buildSyncCountButton({required IconData icon, VoidCallback? onPressed}) {
           border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(icon, size: 16, color: onPressed == null ? Colors.white24 : Colors.white70),
+        child: Icon(
+          icon,
+          size: 16,
+          color: onPressed == null ? Colors.white24 : Colors.white70,
+        ),
       ),
     ),
   );
@@ -173,7 +181,11 @@ Widget buildSyncErrorCard(String error) {
         Expanded(
           child: Text(
             error,
-            style: const TextStyle(color: Color(0xFFFF3B30), fontSize: 13, height: 1.4),
+            style: const TextStyle(
+              color: Color(0xFFFF3B30),
+              fontSize: 13,
+              height: 1.4,
+            ),
           ),
         ),
       ],
@@ -203,7 +215,9 @@ Widget buildSyncResultCard(BuildContext context, Map<String, dynamic> result) {
     cardColor = context.colors.accent.withValues(alpha: 0.1);
     textColor = context.colors.accent;
   } else if (type == 'wipe') {
-    message = (total == 'all') ? 'Cloud data wiped' : 'Deleted: $deleted/${total ?? "?"} items';
+    message = (total == 'all')
+        ? 'Cloud data wiped'
+        : 'Deleted: $deleted/${total ?? "?"} items';
   } else {
     message = 'Full sync complete';
   }
@@ -235,12 +249,18 @@ Widget buildSyncResultCard(BuildContext context, Map<String, dynamic> result) {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               backgroundColor: Colors.orange.withValues(alpha: 0.15),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
             ),
             onPressed: () {},
             child: const Text(
               'Resolve',
-              style: TextStyle(fontSize: 12, color: Colors.orangeAccent, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orangeAccent,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
       ],
@@ -279,7 +299,9 @@ Widget buildSyncProgressBar(BuildContext context, SyncProgress p) {
           '${p.current}/${p.total}',
           style: TextStyle(
             fontSize: 11,
-            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
           ),
         ),
       ],

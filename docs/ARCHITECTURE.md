@@ -415,26 +415,152 @@ provider-specific `reasoning: { exclude: true }` or similar body fields unless
 the target provider documents the exact field and we intentionally support that
 contract.
 
-Studio Mode follows the same policy for its final agent: intermediate agents
-force reasoning off/omitted; the final agent inherits the resolved `ApiConfig`
+Studio Mode follows the same policy for its final agent: trackers force
+reasoning off/omitted; the final generator inherits the resolved `ApiConfig`
 reasoning settings. Studio also strips prompt-level hidden-reasoning directives
-from final-agent instructions when reasoning is disabled/omitted, but cannot
-disable model-internal thinking if the upstream model always performs it.
+from final-generator instructions when reasoning is disabled/omitted, but
+cannot disable model-internal thinking if the upstream model always performs
+it.
 
 ### Studio Mode Pipeline
+
+Studio Mode is a tracker-around-generator model (Phase 5 refactor — see
+`docs/PLAN_AGENTIC_STUDIO.md`). One main LLM (the generator) writes the visible
+reply; lightweight trackers run as sidecars and contribute notes/injections
+that shape the next prompt, never duplicating the generator's output.
 
 Studio settings are stored as reusable Studio profiles in `studio_config_rows`.
 Sessions bind to a profile by `profileId`; starting a new session can reuse an
 existing profile without rebuilding agents. Rebuilding only changes the selected
 profile's agent prompts/settings.
 
-At generation time, all enabled intermediate agents run in parallel. Their
-outputs are ephemeral briefs shown under the assistant message and passed to the
-final agent as `previous_agents`. A failed intermediate agent is captured as a
-Studio output with `status: error` and does not abort the whole Studio pipeline;
-the final agent still runs with the successful briefs plus an error marker for
-the failed agent. The final enabled agent runs after all intermediate agents
-settle and produces the visible assistant response.
+At generation time `MemoryStudioService.runTrackerCycle` runs:
+
+1. **Cache probe** (`_probeCache`): each due tracker is checked against
+   `_briefCache` keyed by refresh policy (`turn` / `scene` / `static`).
+   Cache hits are excluded from the LLM round-trip.
+2. **Batching** (`TrackerBatcher.groupAgents`): trackers with the same
+   `(provider, model)` and `!runIndividually` are packed into one LLM request
+   via `<agents><agent_task>` XML with a single system prompt that orders shared
+   context first (`<role>` + `<lore>` = static + dynamic + trimmed history) and
+   per-agent instructions last (`<agents>`) — a prompt-cache-friendly layout
+   (Phase 6.1). Heavy trackers (`expression` / `illustrator` / `lorebook` name
+   match, or explicit `StudioAgent.runIndividually`) are pulled out of the batch
+   and run as their own request.
+3. **Run phase** (`TrackerBatcher.runPhase`, concurrency limit 4): batch groups
+   + individual agents fire in parallel, subject to the concurrency cap. Each
+   batch is one LLM call → `parseBatchResponse` (`<result agent="id">` with
+   missing-close-tag tolerance + `<result_ID>` legacy fallback).
+4. **In-batch retry (layer 1)**: if any agent in the batch comes back failed,
+   re-request the whole batch ONCE.
+5. **Individual fallback (layer 2, concurrency limit 2)**: any agent still
+   failed from both attempts is re-run as its own LLM request.
+6. **Final generator** (`_runFinalGenerator`): runs every turn after all
+   trackers settle, using `maxFinalHistoryMessages` (default 15) for the
+   trimmed history; trackers receive their own `contextSize` (default 5,
+   hard-cap 200) via `_limitTrackerHistory` + `truncateAgentText`
+   (head 40% + tail 60%) + `stripHtmlTags`.
+
+`AgentRunFailedException` (Phase 5.7.5) wraps tracker failures so the
+generator still runs with the successful briefs plus an error marker. The
+generator's own failure aborts the turn.
+
+Per-tracker model override (`StudioAgent.modelSource = 'custom'` picks an
+`ApiConfig` by `agent.model`; `modelOverride` applied on top) and
+`runInterval` (every-N-th-turn scheduling) are respected. Concurrency caps:
+`_maxConcurrentGroups = 4`, `_maxConcurrentFallback = 2` (Phase 5.7.2,
+conservative defaults for desktop).
+
+POST-processing (Phase 1.3) stays separate from the tracker pipeline: the
+POST-cleaner runs after the full reply and writes a blue `'cleaned'` agent
+sub-swipe (`post_cleaner_service.dart`, `generation_pipeline.dart`),
+preserving the original `'final'` as the parent. Hold mode (Marinara) is not
+implemented. See INV-ST4.
+
+#### POST-cleaner swipe lifecycle (UX phase, "swipe-first streaming")
+
+The cleaned swipe is **pre-created at cleaner start** (empty content, tracker
+snapshot cloned from the parent `'final'`) so the blue sub-swipe switcher is
+visible immediately while the rewrite streams into the chat bubble for live
+preview (`generation_pipeline._runPostCleaner`). The cleaner's `onCleanedChunk`
+callback tracks the latest accumulated chunk in
+`GenerationPipeline._lastStreamedText` — `SidecarCallOutcome.text` is null on
+any failure, so partial text the user saw live is only reachable via the
+callback.
+
+On cleaner completion (`generation_pipeline.dart`):
+- `wasCleaned==true` → `ChatRepo.updateAgentSwipeContent` fills the pre-created
+  swipe with the cleaned text + per-swipe `genTime` (cleaner's own elapsed)
+  + `tokens` (estimateTokens of the cleaned text) — keeps the badge visible on
+  the blue sub-swipe.
+- `wasCleaned==false` AND partial text was streamed → keep the partial
+  (truncated) text in the swipe so the user doesn't lose what they saw live
+  (ops log summary marks `partialSaved (N chars)`).
+- `wasCleaned==false` AND nothing streamed → `ChatRepo.removeAgentSwipe`
+  deletes the pre-created empty swipe and reverts active to the parent
+  `'final'`.
+- Abort mid-cleaner → remove the pre-created empty swipe (no partial save on
+  abort by default).
+- Hard pipeline failure → best-effort remove + revert in the catch block.
+- Pre-create failed earlier → fall back to the legacy
+  `applyCleanedText` (append) path so the user still gets a `'cleaned'` swipe.
+
+`ChatRepo.updateAgentSwipeContent` / `removeAgentSwipe` are the atomic
+(transaction-wrapped) methods for in-place swipe edits; `appendAgentSwipe`
+remains the legacy append path. The character/world audit can use a
+**separate model** from the cleaner rewrite (`PipelineSettings.postCleanerAuditModel`,
+inheriting endpoint/key/source/protocol from the cleaner config — Fix 2).
+
+### Preset decomposition (auto + manual)
+
+`StudioDecompositionService.decompose()` builds the `StudioAgent` list from
+the chat's effective preset: enabled blocks are macro-expanded, reasoning
+blocks dropped, then routed (LLM router with keyword fallback) to stable
+controller lanes (continuity / agency / narrative / dialogue / guard / world
+/ meta / final). The last lane (`Main Responder`, `isFinal`) is the
+generator; all earlier lanes are trackers — the exact shape
+`runTrackerCycle` consumes. `routingMode = 'verbatim'` concatenates each
+agent's assigned blocks дословно (no LLM call); `'compiled'` asks the build
+LLM to synthesize a shard. `collectBroadcastBlocks` surfaces cross-cutting
+rules (output language, prose guards) for the POST-cleaner;
+`computePresetHash` detects preset changes.
+
+Manual editing: `studio_menu_dialog.dart` exposes a "Build Studio" button
+(auto decompose), a per-tracker prompt-shard editor (multi-line TextField),
+and a per-tracker "Regenerate instruction" button
+(`StudioDecompositionService.regenerateAgentInstruction`, single-agent,
+deterministic bucketing). Edits persist via `studioConfigRepo.upsert`.
+
+### Nested swipes (agentSwipes)
+
+`ChatMessage.agentSwipes` holds blue sub-swipes (`AgentSwipe` with `kind`:
+`'final'` | `'cleaned'`, `parentSwipeId` linking a cleaned swipe to its
+parent final). `ChatMessageService.setSwipe` saves/loads agentSwipes through
+`swipesMeta[swipeId]` so green-swipe round-trips preserve them;
+`setAgentSwipe` / `changeAgentSwipe` navigate blue sub-swipes. The WebView
+renders an `agent-switcher` (blue) control when `agentSwipes.length > 1`,
+dispatching `agent-swipe-left/right` → `onAgentSwipe`. A full regeneration
+resets `agentSwipes` to a single fresh `'final'`.
+
+Tracker snapshots (Phase 1, INV-TS4) are anchored at the same per-agent-swipe
+granularity `(messageId, swipeId, agentSwipeId)` — so swiping between blue
+sub-swipes also restores the matching tracker state (the read path returns
+the snapshot for the current anchor).
+
+### Live Studio status card (Phase 11)
+
+While the Studio tracker-cycle runs, a floating `StudioStatusCard` appears
+at the top of the chat (below the POST-cleaner status card — they never
+overlap in time: Studio runs during generation, POST-cleaner after). It is
+driven by `studioCycleStateProvider` through phases:
+
+  idle → running → writingFinal → done | agentErrors | error
+
+`StreamGenerationService` sets `running` when Studio intercepts, transitions
+to `writingFinal` on the first `onFinalResponseUpdate` callback (trackers
+done, final generator now streaming), and the terminal phase after
+`runTrackerCycle` returns. The card auto-dismisses 2.5s after the cycle
+finishes.
 
 ### Prompt Ordering (invariant — do not reorder)
 
@@ -634,7 +760,7 @@ expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` ar
 
 **File:** `lib/core/db/app_db.dart` + `lib/core/db/repositories/`
 
-### Tables (18 total, schema v42)
+### Tables (22 total, schema v51)
 
 | Table | Repo | Notes |
 |-------|------|-------|
@@ -650,9 +776,12 @@ expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` ar
 | `ChatSummaries` | `summary_repo.dart` | v30: `enabled`; one per session |
 | `MemoryBookRows` | `memory_book_repo.dart` | |
 | `MemoryCatalogRows` | `memory_catalog_repo.dart` | v29; rebuildable per-session Memory Catalog state |
+| `MemoryGraph*` | `memory_*_repo.dart` | v35; 4 tables (`memory_entity_rows`, `memory_salience_rows`, `memory_cadence_rows`, `memory_consolidation_rows`) |
 | `ExtensionPresets` | `extension_presets_repository.dart` | v20 |
 | `InfoBlocks` | `info_blocks_repository.dart` | v20; v22 adds `status` TEXT (default `'done'`) + `order` INTEGER (default 0); v27 adds `swipe_id` |
-| `StudioConfigRows` | `studio_config_repo.dart` | v36; reusable Studio profiles, v42 adds `profileId`/`profileName` for session-to-profile binding |
+| `StudioConfigRows` | `studio_config_repo.dart` | v36; reusable Studio profiles, v42 adds `profileId`/`profileName` for session-to-profile binding, v43 `builderPromptTemplate`, v44 `maxFinalHistoryMessages`, v46 `routingMode` |
+| `TrackerRows` | `tracker_repo.dart` | v45; lightweight key-value trackers (e.g. 'mood: happy'). Composite PK `{sessionId, name}`. Write-loop's internal mutable store — LLM upserts into it, then a snapshot is taken. |
+| `TrackerSnapshots` | `tracker_snapshot_repo.dart` | v50; per-agent-swipe immutable snapshots of all trackers (mirrors Marinara-Engine's `game_state_snapshots`). Composite PK `{sessionId, messageId, swipeId, agentSwipeId}`; `trackersJson`, `committed`, `createdAt`. See INV-TS1–7 in `docs/INVARIANTS.md`. |
 
 ### Write Rule
 **Never** do `getChat → mutate → saveChat`. Use `patchChatData` to serialize reads.
@@ -683,7 +812,7 @@ All service implementations live under `lib/features/cloud_sync/services/`.
 - `widgets/sync_sheet.dart` — Sync UI sheet
 
 ### What Is Synced
-Characters, sessions, presets, API configs, personas, lorebooks, theme presets, Studio profiles, active preset, selected app settings, extension presets/settings, and info-block rows. **Not synced:** generation state, UI state, embedding vectors, debug traces.
+Characters, sessions, presets, API configs, personas, lorebooks, theme presets, Studio profiles, active preset, selected app settings, extension presets/settings, info-block rows, and tracker snapshots (Phase 9 — per-session collection pattern, same as info blocks). **Not synced:** generation state, UI state, embedding vectors, debug traces, `tracker_rows` (legacy mutable store, kept as write-loop internal).
 
 ---
 
