@@ -351,6 +351,180 @@ class MemoryStudioService {
     }
   }
 
+  /// Tracker-only cycle: runs the pre-gen tracker phase and returns the
+  /// produced briefs WITHOUT firing the final generator or post-gen
+  /// trackers. Used by [TrackerMemoryRecoveryService] to restore lost
+  /// `studioOutputs` without burning the final-generator model (e.g.
+  /// Gemini Pro) on every historical message.
+  ///
+  /// Mirrors the pre-gen phase of [runTrackerCycle] verbatim (split,
+  /// runInterval/activation gate, cache probing, batching, brief assembly).
+  /// Returns only the `stageBriefs` (response/reasoning are empty).
+  Future<StudioPipelineResult> runTrackersOnly({
+    required StudioConfig config,
+    required PromptResult promptResult,
+    required PromptPayload promptPayload,
+    required ApiConfig apiConfig,
+    required String sessionId,
+    CancelToken? cancelToken,
+  }) async {
+    final token = cancelToken ?? CancelToken();
+    if (token.isCancelled) {
+      return const StudioPipelineResult(status: 'aborted', response: '');
+    }
+
+    try {
+      final agents = config.agents.where((a) => a.enabled).toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
+      if (agents.isEmpty) {
+        return const StudioPipelineResult(status: 'disabled', response: '');
+      }
+
+      if (token.isCancelled) {
+        return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+
+      final split = splitAgentsByPhase(agents);
+      final finalAgent = split.finalAgent;
+      if (finalAgent == null) {
+        return const StudioPipelineResult(status: 'disabled', response: '');
+      }
+      final preGenTrackers = split.preGenTrackers;
+
+      final sceneKey = _briefCache.sceneCacheKey(promptPayload);
+      final turnIndex = _briefCache.assistantTurnCount(promptPayload);
+
+      final historyForScan = promptResult.messages
+          .where((m) => m.isHistory)
+          .map((m) => m.content)
+          .toList();
+      final dueTrackers = preGenTrackers.where((a) {
+        final interval = a.runInterval <= 0 ? 1 : a.runInterval;
+        if (turnIndex % interval != 0) return false;
+        if (a.activationKeywords.isEmpty) return true;
+        return matchesActivationKeywords(
+          a.activationKeywords,
+          historyForScan,
+          a.activationScanDepth,
+        );
+      }).toList();
+
+      final cachedBriefs = <StudioStageBrief>[];
+      final fetchTrackers = <StudioAgent>[];
+      final cacheProbeByAgent = <String, CacheProbe>{};
+      for (final agent in dueTrackers) {
+        final probe = _briefCache.probeCache(
+          agent: agent,
+          config: config,
+          promptPayload: promptPayload,
+          sceneKey: sceneKey,
+          turnIndex: turnIndex,
+        );
+        cacheProbeByAgent[agent.id] = probe;
+        if (probe.hit && probe.brief != null) {
+          cachedBriefs.add(probe.brief!);
+        } else {
+          fetchTrackers.add(agent);
+        }
+      }
+
+      final batcher = _ref.read(trackerBatcherProvider);
+      final grouping = await batcher.groupAgents(
+        agents: fetchTrackers,
+        apiConfig: apiConfig,
+        sessionId: sessionId,
+      );
+
+      final fetchedResults = await batcher.runPhase(
+        batchGroups: grouping.batchGroups,
+        individualAgents: grouping.individualAgents,
+        runBatch: (group) => _batchCoordinator.runBatchGroup(
+          group: group,
+          config: config,
+          promptResult: promptResult,
+          promptPayload: promptPayload,
+          apiConfig: apiConfig,
+          sessionId: sessionId,
+          cancelToken: token,
+          batchContextSize: group.batchContextSize,
+        ),
+        runIndividual: (agent) => _executor.runIndividualTracker(
+          agent: agent,
+          config: config,
+          promptResult: promptResult,
+          promptPayload: promptPayload,
+          apiConfig: apiConfig,
+          sessionId: sessionId,
+          cancelToken: token,
+        ),
+      );
+
+      final fetchedBriefs = <StudioStageBrief>[];
+      for (final result in fetchedResults) {
+        final probe = cacheProbeByAgent[result.agentId];
+        final agent = dueTrackers.firstWhere((a) => a.id == result.agentId);
+        final sanitized = result.status == 'ok'
+            ? _briefParser.sanitizeIntermediateAgentOutput(agent, result.text)
+            : result.text;
+        final brief = StudioStageBrief(
+          agentId: result.agentId,
+          agentName: result.agentName,
+          brief: sanitized,
+          status: result.status,
+          error: result.error,
+          refreshPolicy: probe?.policy ?? 'turn',
+          cacheKey: _briefCache.isCacheablePolicy(probe?.policy ?? 'turn')
+              ? probe?.cacheKey
+              : null,
+          cacheHit: false,
+        );
+        _briefCache.persistCacheIfCacheable(
+          agent: agent,
+          brief: brief,
+          cacheKey: probe?.cacheKey ?? '',
+          policy: probe?.policy ?? 'turn',
+          turnIndex: turnIndex,
+          cancelToken: token,
+        );
+        fetchedBriefs.add(brief);
+      }
+
+      final briefs = <StudioStageBrief>[];
+      for (final agent in dueTrackers) {
+        final cached = cachedBriefs.where((b) => b.agentId == agent.id).firstOrNull;
+        if (cached != null) {
+          briefs.add(cached);
+          continue;
+        }
+        final fetched = fetchedBriefs.where((b) => b.agentId == agent.id).firstOrNull;
+        if (fetched != null) briefs.add(fetched);
+      }
+
+      if (token.isCancelled) {
+        return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+
+      return StudioPipelineResult(
+        status: 'ok',
+        response: '',
+        stageBriefs: briefs,
+      );
+    } on TimeoutException catch (e) {
+      _log('tracker-only cycle timeout session=$sessionId error=${e.message}');
+      return StudioPipelineResult(
+        status: 'timeout',
+        response: '',
+        error: e.message?.isNotEmpty == true ? e.message : 'Studio timed out',
+      );
+    } catch (e) {
+      if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
+        return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+      _log('tracker-only cycle error session=$sessionId error=$e');
+      return StudioPipelineResult(status: 'error', response: '', error: '$e');
+    }
+  }
+
   /// Keyword-activation gate for trackers (Marinara
   /// `agent-activation.ts:matchCustomAgentActivation` port). Returns true
   /// if at least one of [keywords] appears (case-insensitive substring

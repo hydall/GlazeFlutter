@@ -70,8 +70,13 @@ class TrackerMemoryRecoveryService {
     }
 
     // Collect assistant message indices (skip errors/typing/greeting).
+    // Greeting = the first message in the session (index 0) when it is an
+    // assistant message. Recovery must not re-run trackers/memory against it:
+    // there is no user turn to derive state from, and runTrackerCycle would
+    // fire the final generator (Gemini Pro) against an empty-user-turn context.
     final assistantIndices = <int>[];
     for (var i = 0; i < session.messages.length; i++) {
+      if (i == 0 && session.messages[i].role == 'assistant') continue;
       final m = session.messages[i];
       if (m.role == 'assistant' && !m.isError && !m.isTyping) {
         assistantIndices.add(i);
@@ -143,7 +148,7 @@ class TrackerMemoryRecoveryService {
           if (token.isCancelled) break;
           final promptResult = await buildPromptInIsolate(payload);
           if (token.isCancelled) break;
-          final result = await _ref.read(memoryStudioServiceProvider).runTrackerCycle(
+          final result = await _ref.read(memoryStudioServiceProvider).runTrackersOnly(
             config: studioConfig,
             promptResult: promptResult,
             promptPayload: payload,
