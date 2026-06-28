@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/studio_api_config_resolver.dart';
-import '../../../core/llm/studio_cleaner_rules_extractor.dart';
 import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
@@ -11,6 +10,7 @@ import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/preset_resolution.dart';
+import '../../../core/state/studio_build_provider.dart';
 import '../../../core/utils/time_helpers.dart';
 import '../../settings/api_list_provider.dart';
 
@@ -31,7 +31,6 @@ class StudioMenuController {
   List<Tracker> _trackers = const [];
   bool _loading = true;
   bool _loadingModels = false;
-  bool _building = false;
   final Set<String> _regeneratingAgentIds = {};
 
   StudioMenuController(this._ref, this._sessionId, this._charId);
@@ -40,14 +39,13 @@ class StudioMenuController {
   List<Tracker> get trackers => _trackers;
   bool get loading => _loading;
   bool get loadingModels => _loadingModels;
-  bool get building => _building;
-  Set<String> get regeneratingAgentIds => Set.unmodifiable(_regeneratingAgentIds);
 
-  /// Effective routing mode, falling back to `verbatim` when unset.
-  String get _effectiveRoutingMode =>
-      (_config?.routingMode.isNotEmpty ?? false)
-          ? _config!.routingMode
-          : 'verbatim';
+  /// Whether a Studio build is currently in flight for this session. Sourced
+  /// from [studioBuildProvider] (provider scope) so the state survives the
+  /// dialog being closed and re-opened mid-build.
+  bool get building =>
+      _ref.read(studioBuildProvider.notifier).isBuilding(_sessionId);
+  Set<String> get regeneratingAgentIds => Set.unmodifiable(_regeneratingAgentIds);
 
   Future<void> load() async {
     final repo = _ref.read(studioConfigRepoProvider);
@@ -184,118 +182,30 @@ class StudioMenuController {
     }
   }
 
-  /// Build Studio trackers from the chat's effective preset (auto
-  /// decomposition). Runs the [StudioDecompositionService] against the
-  /// resolved build API, then persists the resulting agents + broadcast
-  /// blocks + preset hash. The last agent (highest order) is the generator;
-  /// all earlier agents are pre-generation trackers — the exact shape
-  /// [MemoryStudioService.runTrackerCycle] consumes.
+  /// Start a Studio build for this session. Delegates to [studioBuildProvider]
+  /// (provider scope) so the build survives the dialog being closed and
+  /// re-opened: the actual LLM decomposition runs on the provider's [Ref], not
+  /// on this widget-bound controller. No-ops if a build is already in flight.
   ///
-  /// Returns the toast message to surface on success/failure. The widget owns
-  /// the actual `GlazeToast.show` call (UI concern).
-  Future<String> buildStudio() async {
-    _building = true;
-    try {
-      final preset = effectivePreset;
-      if (preset == null) {
-        return 'No preset available. Create or select a preset first.';
-      }
-      final apiConfig = resolveBuildApiConfig();
-      if (apiConfig == null) {
-        return 'No API configured. Set one up in API settings first.';
-      }
-
-      final decompositionService = _ref.read(studioDecompositionServiceProvider);
-      final agents = await decompositionService.decompose(
-        preset: preset,
-        sessionId: _sessionId,
-        apiConfig: apiConfig,
-        builderPromptTemplate: _config?.builderPromptTemplate ?? '',
-        routingMode: _effectiveRoutingMode,
-      );
-      if (agents.isEmpty) {
-        throw Exception('Decomposition returned no agents');
-      }
-
-      // Capture cross-cutting "broadcast" blocks (output language + prose
-      // guards) verbatim so the POST-cleaner can apply the user's own rules.
-      final broadcastBlocks = decompositionService
-          .collectBroadcastBlocks(preset)
-          .map((b) {
-            final name = b.name.isNotEmpty ? b.name : b.id;
-            return '[Block: $name]\n${b.content.trim()}';
-          })
-          .where((s) => s.trim().isNotEmpty)
-          .toList();
-
-      final now = currentTimestampSeconds();
-      final existing = _config;
-      final newConfig = (existing ?? StudioConfig(sessionId: _sessionId))
-          .copyWith(
-            agents: agents,
-            enabled: true,
-            sourcePresetId: preset.id,
-            sourcePresetHash: StudioDecompositionService.computePresetHash(
-              preset.blocks.where((b) => b.enabled).toList(),
-            ),
-            buildApiConfigId: apiConfig.id,
-            broadcastBlocks: broadcastBlocks,
-            updatedAt: now,
-            createdAt: existing?.createdAt ?? now,
-          );
-
-      await _ref.read(studioConfigRepoProvider).upsert(newConfig);
-      _config = newConfig;
-
-      // Second LLM call: extract POST-cleaner style rules from the preset and
-      // write them into PipelineSettings. Non-fatal: tracker build already
-      // succeeded; a failure here surfaces a toast but does not roll back.
-      final cleanerToast = await _extractCleanerRules(
-        preset: preset,
-        apiConfig: apiConfig,
-      );
-
-      return 'Studio built: ${agents.length} agents from "${preset.name}"$cleanerToast';
-    } catch (e) {
-      return 'Build failed: $e';
-    } finally {
-      _building = false;
-    }
+  /// Returns immediately. The widget watches [building] for the overlay and
+  /// drains the result toast via [consumeBuildResult] when the build finishes.
+  void buildStudio() {
+    _ref
+        .read(studioBuildProvider.notifier)
+        .startBuild(sessionId: _sessionId, charId: _charId);
   }
 
-  /// Second LLM call in [buildStudio]: extracts banned/avoid/style rules from
-  /// [preset] via [StudioCleanerRulesExtractor] and writes them into the three
-  /// `postCleaner*` string fields of `PipelineSettings`. Returns a toast
-  /// fragment describing the outcome (always non-empty, prefixed with a space
-  /// and a separator so it can be appended to the main build toast).
-  Future<String> _extractCleanerRules({
-    required Preset preset,
-    required ApiConfig apiConfig,
-  }) async {
-    final extractor = _ref.read(studioCleanerRulesExtractorProvider);
-    try {
-      final rules = await extractor.extract(
-        preset: preset,
-        apiConfig: apiConfig,
-      );
-      if (rules.isEmpty) {
-        // Should not happen — the extractor throws [NoCleanerRulesFoundException]
-        // for the empty case. Treat as a defensive no-op.
-        return '. No cleaner rules extracted.';
-      }
-      final pipeline = _ref.read(pipelineSettingsProvider);
-      final updated = pipeline.copyWith(
-        postCleanerBannedWords: rules.bannedWords,
-        postCleanerAvoidInstructions: rules.avoidInstructions,
-        postCleanerStyleInstructions: rules.styleInstructions,
-      );
-      await _ref.read(pipelineSettingsProvider.notifier).save(updated);
-      return '. Cleaner rules extracted.';
-    } on NoCleanerRulesFoundException {
-      return '. No cleaner rules found in preset.';
-    } catch (e) {
-      return '. Cleaner rules extraction failed: $e';
+  /// Drain the buffered build-result toast (empty if none / already shown).
+  /// Called by the widget after a build finishes; reloads the persisted config
+  /// so the freshly-built agents appear without re-running [load].
+  Future<String> consumeBuildResult() async {
+    final message = _ref.read(studioBuildProvider.notifier).consume(_sessionId);
+    if (message.isNotEmpty) {
+      _config = await _ref.read(studioConfigRepoProvider).getBySessionId(
+            _sessionId,
+          );
     }
+    return message;
   }
 
   /// Regenerate one tracker's `promptShard` from its source preset blocks via

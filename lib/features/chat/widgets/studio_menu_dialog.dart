@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/studio_config.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/studio_build_provider.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../controllers/studio_menu_controller.dart';
@@ -56,6 +57,11 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     await _ctrl.load();
     if (!mounted) return;
     setState(() {});
+    // A build may have finished while this dialog was closed: drain the
+    // buffered result toast (and reload the freshly-built config) on open. If
+    // a build is still running, the watched overlay shows and the `ref.listen`
+    // edge in `build()` will drain the toast when it finishes.
+    await _onBuildFinished();
   }
 
   Future<void> _toggleEnabled(bool enabled) async {
@@ -180,9 +186,20 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     setState(() {});
   }
 
-  Future<void> _buildStudio() async {
+  void _buildStudio() {
+    // Fire-and-forget: the build runs in [studioBuildProvider] (provider
+    // scope) and survives this dialog being closed. We only trigger it and let
+    // the overlay (driven by the watched provider state) reflect progress. The
+    // result toast is drained in [_onBuildFinished] when the build completes,
+    // whether or not this dialog is still open.
+    _ctrl.buildStudio();
     setState(() {}); // show "Building Studio…" overlay immediately
-    final message = await _ctrl.buildStudio();
+  }
+
+  /// Called via `ref.listen` when a build for this session transitions from
+  /// running -> finished. Drains the buffered toast and reloads the config.
+  Future<void> _onBuildFinished() async {
+    final message = await _ctrl.consumeBuildResult();
     if (!mounted) return;
     setState(() {});
     if (message.isNotEmpty) GlazeToast.show(context, message);
@@ -215,8 +232,21 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Re-attach to the provider-scoped build state so a build started in a
+    // previous instance of this dialog (then closed) still drives the overlay
+    // and fires its completion toast here. Watching keeps the overlay live;
+    // listening detects the running -> finished edge to drain the result.
+    final buildStatus =
+        ref.watch(studioBuildProvider.select((m) => m[widget.sessionId]));
+    ref.listen(
+      studioBuildProvider.select((m) => m[widget.sessionId]?.building ?? false),
+      (prev, next) {
+        if (prev == true && next == false) _onBuildFinished();
+      },
+    );
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final building = buildStatus?.building ?? false;
     final agents = _ctrl.config?.agents ?? const <StudioAgent>[];
     final activeAgents = agents.where((a) => a.enabled).toList()
       ..sort((a, b) => a.order.compareTo(b.order));
@@ -339,7 +369,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       Row(
                         children: [
                           FilledButton.tonalIcon(
-                            onPressed: _ctrl.building ? null : _buildStudio,
+                            onPressed: building ? null : _buildStudio,
                             icon: const Icon(Icons.auto_fix_high, size: 16),
                             label: const Text('Build Studio'),
                           ),
@@ -357,12 +387,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
               ),
             ),
             // Blocking overlay while models are fetched or Studio is built.
-            if (_ctrl.loadingModels || _ctrl.building)
+            if (_ctrl.loadingModels || building)
               Positioned.fill(
                 child: ColoredBox(
                   color: cs.scrim.withValues(alpha: 0.4),
                   child: Center(
-                    child: _ctrl.building
+                    child: building
                         ? const Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
