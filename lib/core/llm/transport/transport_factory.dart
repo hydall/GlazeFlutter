@@ -5,6 +5,7 @@ import 'anthropic_chat_transport.dart';
 import 'chat_transport.dart';
 import 'gemini_chat_transport.dart';
 import 'llm_protocol.dart';
+import 'llm_request_dump.dart';
 import 'openai_chat_transport.dart';
 import 'openrouter_chat_transport.dart';
 
@@ -17,18 +18,21 @@ import 'openrouter_chat_transport.dart';
 /// just `new`s on every call. If a transport ever needs shared HTTP-client
 /// state, register it as a singleton here.
 ChatTransport pickChatTransport(String protocol) {
+  final ChatTransport inner;
   switch (protocol) {
     case LlmProtocol.openai:
-      return OpenAiChatTransport();
+      inner = OpenAiChatTransport();
     case LlmProtocol.anthropic:
-      return AnthropicChatTransport();
+      inner = AnthropicChatTransport();
     case LlmProtocol.gemini:
-      return GeminiChatTransport();
+      inner = GeminiChatTransport();
     case LlmProtocol.openrouter:
-      return OpenRouterChatTransport();
+      inner = OpenRouterChatTransport();
     default:
-      return OpenAiChatTransport();
+      inner = OpenAiChatTransport();
   }
+  // Diagnostics: dump every outgoing request payload (no-op when disabled).
+  return LoggingChatTransport(inner, label: protocol);
 }
 
 ChatTransport pickChatTransportFor(ApiConfig config) =>
