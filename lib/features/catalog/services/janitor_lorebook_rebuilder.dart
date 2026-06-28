@@ -51,18 +51,46 @@ class NoActiveConnectionException implements Exception {
       'No active LLM connection. Configure one in Settings → API first.';
 }
 
-String _buildPrompt(String lorebookText, String card, String catalog) {
-  final parts = <String>[_systemPrompt];
-  if (card.trim().isNotEmpty) {
-    parts.add(
-        'CONTEXT — character card (for key inference only, not entries):\n\n$card');
+/// Assembles the exact chat messages sent to the build LLM: a `system` prompt
+/// plus a single `user` message bundling every selected context block followed
+/// by the raw lorebook text. Exposed so the UI can PREVIEW the prompt without
+/// spending a call. Port of JAR `extract.js` `buildExtractionMessages`.
+///
+/// Every context string is used ONLY to help the model infer better trigger
+/// keys — none of it is ever emitted as a lorebook entry.
+List<Map<String, String>> buildLorebookMessages(
+  String lorebookText, {
+  String card = '',
+  String catalog = '',
+  String scenario = '',
+  String greetings = '',
+  String lorebookDescs = '',
+  String extra = '',
+}) {
+  final userParts = <String>[];
+  void add(String value, String intro) {
+    if (value.trim().isNotEmpty) userParts.add('$intro\n\n${value.trim()}');
   }
-  if (catalog.trim().isNotEmpty) {
-    parts.add(
-        'CONTEXT — catalog/world description (for key inference only, not entries):\n\n$catalog');
-  }
-  parts.add('Raw lorebook text to convert into entries:\n\n$lorebookText');
-  return parts.join('\n\n---\n\n');
+
+  add(card,
+      'CONTEXT — the character card these entries accompany. Use it ONLY to infer better trigger keys and resolve names/aliases. Do NOT output any of this card text as entries:');
+  add(catalog,
+      'CONTEXT — the public catalog description for this character as shown on the site (setting, place and faction names). Use it ONLY to infer better trigger keys. Do NOT output any of this as entries:');
+  add(scenario,
+      'CONTEXT — the scenario / setup for this roleplay. Use it ONLY to infer better trigger keys (names, places, situations). Do NOT output any of this as entries:');
+  add(greetings,
+      "CONTEXT — the character's opening message(s) / greeting(s). Use them ONLY to infer better trigger keys (names, places, items mentioned). Do NOT output any of this as entries:");
+  add(lorebookDescs,
+      'CONTEXT — the public descriptions of lorebooks attached to this character (titles and descriptions only — the lorebook contents themselves are NOT included here). Use them ONLY to infer better trigger keys. Do NOT output any of this as entries:');
+  add(extra,
+      'CONTEXT — additional notes provided by the user (names, aliases, setting details). Use it ONLY to infer better trigger keys. Do NOT output any of this as entries:');
+
+  userParts.add('Raw lorebook text to convert into entries:\n\n$lorebookText');
+
+  return [
+    {'role': 'system', 'content': _systemPrompt},
+    {'role': 'user', 'content': userParts.join('\n\n---\n\n')},
+  ];
 }
 
 /// Strips markdown code fences and trims to the outermost JSON object/array.
@@ -143,6 +171,10 @@ Future<Lorebook> rebuildLorebookWithActiveLlm(
   required String name,
   String card = '',
   String catalog = '',
+  String scenario = '',
+  String greetings = '',
+  String lorebookDescs = '',
+  String extra = '',
   String? characterId,
 }) async {
   await ref.read(apiListProvider.future);
@@ -151,7 +183,15 @@ Future<Lorebook> rebuildLorebookWithActiveLlm(
     throw NoActiveConnectionException();
   }
 
-  final prompt = _buildPrompt(lorebookText, card, catalog);
+  final messages = buildLorebookMessages(
+    lorebookText,
+    card: card,
+    catalog: catalog,
+    scenario: scenario,
+    greetings: greetings,
+    lorebookDescs: lorebookDescs,
+    extra: extra,
+  );
   final completer = Completer<String>();
   final transport = pickChatTransport(config.protocol);
 
@@ -160,9 +200,7 @@ Future<Lorebook> rebuildLorebookWithActiveLlm(
       endpoint: config.endpoint,
       apiKey: config.apiKey,
       model: config.model,
-      messages: [
-        {'role': 'user', 'content': prompt},
-      ],
+      messages: messages,
       maxTokens: config.maxTokens > 0 ? config.maxTokens : 8192,
       temperature: 0.2,
       topP: 1.0,

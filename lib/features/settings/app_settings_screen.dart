@@ -209,6 +209,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(openCardAfterImport: v)),
             ),
+            MenuSwitchItem(
+              label: 'menu_extract_janitor_locally'.tr(),
+              description: 'desc_extract_janitor_locally'.tr(),
+              value: s.extractJanitorLocally,
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .save(s.copyWith(extractJanitorLocally: v)),
+            ),
           ],
         ),
         MenuGroup(
