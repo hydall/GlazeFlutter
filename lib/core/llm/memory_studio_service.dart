@@ -180,7 +180,6 @@ class MemoryStudioService {
         apiConfig: apiConfig,
         sessionId: sessionId,
       );
-
       final fetchedResults = await batcher.runPhase(
         batchGroups: grouping.batchGroups,
         individualAgents: grouping.individualAgents,

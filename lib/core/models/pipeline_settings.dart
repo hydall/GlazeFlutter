@@ -49,11 +49,17 @@ abstract class PipelineSettings with _$PipelineSettings {
 
     // ── Agentic write-loop ────────────────────────────────────────────────
     @Default(false) bool agenticWriteEnabled,
-    // Cadence: run the agentic write-loop every N assistant turns, not every
-    // turn. Mirrors Marinara's `runInterval: 8` for the lorebook-keeper agent.
-    // 1 = every turn (legacy behavior). Higher values reduce LLM cost / latency
-    // at the cost of slower memory propagation on long chats.
-    @Default(8) int runAgenticEveryN,
+    // Cadence: run the agentic write-loop every N assistant turns. 1 = every
+    // turn. Mirrors Marinara-Engine's tracker-agent model, where built-in
+    // trackers (`world-state`, `character-tracker`, `persona-stats`, `quest`,
+    // `custom-tracker`) run unconditionally every turn — no cadence gate.
+    // Higher values were considered for cost savings, but stale tracker
+    // values between runs degraded the final response (the final responder
+    // reads stale state, the post-cleaner audits against stale facts, and
+    // the user sees outdated Tracker Values in the UI for N-1 turns). The
+    // cadence knob is retained for users who want to opt back into the
+    // throttled behavior via the UI.
+    @Default(1) int runAgenticEveryN,
     // When true, agent writes land in `pendingDrafts` for manual user
     // approval instead of being auto-approved as `MemoryEntry`. The user
     // reviews drafts in the existing MemoryBook UI ("Pending drafts"

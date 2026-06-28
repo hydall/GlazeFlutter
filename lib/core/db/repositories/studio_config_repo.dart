@@ -240,30 +240,46 @@ class StudioConfigRepo implements SyncStudioConfigStore {
     ));
   }
 
-  /// Silent migration of loaded Studio configs (plan §Part 6): upgrade the
-  /// Meta-Weaver agent from the old `'static'` refresh policy + default
-  /// `contextSize` to the new Lumia architecture — `refreshPolicy: 'turn'`
-  /// (runs every turn so it can count assistant messages and apply the
-  /// period rule) and `contextSize: 15` (enough history to count periods up
-  /// to ~10). Returns [config] unchanged when no Meta-Weaver agent is present
-  /// or it already has the new values. This is a normalization in memory, so
-  /// existing configs benefit immediately without a rebuild. See
-  /// docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A + Migration.
+  /// Silent migration of loaded Studio configs:
+  ///
+  /// 1. Meta-Weaver (plan §Part 6): upgrade from the old `'static'` refresh
+  ///    policy + default `contextSize` to the new Lumia architecture —
+  ///    `refreshPolicy: 'turn'` (runs every turn so it can count assistant
+  ///    messages and apply the period rule) and `contextSize: 15` (enough
+  ///    history to count periods up to ~10).
+  ///
+  /// 2. All trackers run every turn (Marinara parity, see
+  ///    `studio_controller_ontology.dart`): any agent still carrying
+  ///    `refreshPolicy: 'scene'` or `'static'` from a pre-parity build is
+  ///    migrated to `'turn'`. The `'scene'` policy's gate was a regex over
+  ///    the last user message only — it missed real scene changes that
+  ///    weren't phrased with time-skip words, and stale scene-cached briefs
+  ///    degraded the final response. Running every turn is cheaper to reason
+  ///    about and matches upstream Marinara-Engine's `runInterval: 1`
+  ///    default for all tracker agents.
+  ///
+  /// Returns [config] unchanged when no agent needs migration. This is a
+  /// normalization in memory, so existing configs benefit immediately without
+  /// a rebuild.
   StudioConfig _normalizeLoadedConfig(StudioConfig config) {
     if (config.agents.isEmpty) return config;
     final migrated = <StudioAgent>[];
     var changed = false;
     for (final agent in config.agents) {
-      if (_isMetaWeaver(agent) &&
-          (agent.refreshPolicy != 'turn' || agent.contextSize < 15)) {
-        migrated.add(agent.copyWith(
+      var current = agent;
+      if (_isMetaWeaver(current) &&
+          (current.refreshPolicy != 'turn' || current.contextSize < 15)) {
+        current = current.copyWith(
           refreshPolicy: 'turn',
-          contextSize: agent.contextSize < 15 ? 15 : agent.contextSize,
-        ));
+          contextSize: current.contextSize < 15 ? 15 : current.contextSize,
+        );
         changed = true;
-      } else {
-        migrated.add(agent);
       }
+      if (current.refreshPolicy != 'turn') {
+        current = current.copyWith(refreshPolicy: 'turn');
+        changed = true;
+      }
+      migrated.add(current);
     }
     return changed ? config.copyWith(agents: migrated) : config;
   }

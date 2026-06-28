@@ -21,8 +21,8 @@ import 'chat_transport_request.dart';
 class LlmRequestDump {
   LlmRequestDump._();
 
-  /// Master switch. Flip to `false` to disable dumping entirely.
-  static bool enabled = true;
+  /// Master switch. Flip to `true` to enable dumping for diagnostics.
+  static bool enabled = false;
 
   /// Absolute path of the dump file. Defaults to the OS temp dir.
   static String filePath = '${Directory.systemTemp.path}${Platform.pathSeparator}glaze_llm_dump.jsonl';

@@ -204,6 +204,34 @@ class GenerationPipeline {
             return null;
           }
 
+          await _autoCreateMemoryDrafts(result.session);
+
+          // Stage 3.5: embed raw chat-message chunks (fire-and-forget),
+          // mirroring the normal-send path.
+          unawaited(
+            _embedChatMessages(
+              sessionId: result.session!.id,
+              messages: result.session!.messages,
+              genId: genId,
+            ),
+          );
+
+          // Stage 2: Agentic write-loop — MUST run on regen too. On regen,
+          // SavedMessageWriter resets agentSwipes to a single fresh 'final'
+          // (agentSwipeId=0), so the write-loop anchors the new snapshot to
+          // (messageId, swipeId, 0). The stale snapshot from the previous
+          // swipe is excluded via getLatestCommittedExcludingMessage using
+          // the real regenTargetId (NOT the null-ized copy passed to
+          // _runPostTextSide above).
+          unawaited(
+            _runAgenticWriteLoop(
+              sessionId: result.session!.id,
+              messages: result.session!.messages,
+              genId: genId,
+              regenTargetId: regenTargetId,
+            ),
+          );
+
           // POST-cleaner on regen: run after successful regen. The cleaner
           // rewrites the regenerated assistant message, preserving the
           // original as a swipe.
