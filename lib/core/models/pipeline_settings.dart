@@ -85,6 +85,10 @@ abstract class PipelineSettings with _$PipelineSettings {
     // (e.g. Gemini) that spend most of the budget on thinking and leave too
     // little for the actual reply. 0 = use the agent's own maxTokens.
     @Default(0) int studioFinalMaxTokens,
+    // Temperature for the Studio final generator (Main Responder). When
+    // >= 0, overrides the per-agent default (0.8 for the final agent, 0.3
+    // for trackers). Negative = use the agent's own temperature.
+    @Default(-1.0) double studioFinalTemperature,
 
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,

@@ -351,6 +351,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       const _StudioTimeoutTile(),
                       const SizedBox(height: 4),
                       const _StudioMaxTokensTile(),
+                      const SizedBox(height: 4),
+                      const _StudioTemperatureTile(),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -779,6 +781,96 @@ class _StudioMaxTokensTile extends ConsumerWidget {
         );
         if (v != null) {
           final updated = pipeline.copyWith(studioFinalMaxTokens: v);
+          await ref.read(pipelineSettingsProvider.notifier).save(updated);
+        }
+      },
+    );
+  }
+}
+
+/// Temperature override for the Studio final generator (Main Responder).
+/// Reads/writes `PipelineSettings.studioFinalTemperature`. When negative,
+/// the per-agent default (0.8) is used. Lets the user raise/lower the
+/// final responder's creativity without rebuilding the Studio agents.
+class _StudioTemperatureTile extends ConsumerWidget {
+  const _StudioTemperatureTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioFinalTemperature;
+    final valueText = value < 0
+        ? 'post_building_default'.tr(namedArgs: {'arg0': '0.8'})
+        : value.toStringAsFixed(2);
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.thermostat_outlined, size: 20, color: cs.onSurfaceVariant),
+      title: Text(
+        'post_building_studio_temperature'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        '$valueText — ${'post_building_studio_temperature_desc'.tr()}',
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final controller = TextEditingController(
+          text: value < 0 ? '' : value.toStringAsFixed(2),
+        );
+        final v = await showDialog<double>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('post_building_studio_temperature'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'post_building_temperature_hint'.tr(),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    suffixText: '0.0 – 2.0',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: Text('common_cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final text = controller.text.trim();
+                  if (text.isEmpty) {
+                    Navigator.of(c).pop(-1.0);
+                    return;
+                  }
+                  final s = double.tryParse(text);
+                  if (s == null || s < 0 || s > 2) {
+                    Navigator.of(c).pop();
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: Text('common_save'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (v != null) {
+          final updated = pipeline.copyWith(studioFinalTemperature: v);
           await ref.read(pipelineSettingsProvider.notifier).save(updated);
         }
       },

@@ -38,6 +38,7 @@ class AgentStreamRunner {
     required CancelToken cancelToken,
     required int timeoutMs,
     int? maxTokensOverride,
+    double? temperatureOverride,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
@@ -54,7 +55,7 @@ class AgentStreamRunner {
       model: resolved.model,
       messages: requestMessages,
       maxTokens: maxTokensOverride ?? agent.maxTokens,
-      temperature: agent.temperature,
+      temperature: temperatureOverride ?? agent.temperature,
       topP: resolved.topP,
       topK: resolved.topK,
       frequencyPenalty: resolved.frequencyPenalty,
