@@ -2,8 +2,10 @@ import 'dart:async';
 
 import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/memory_salience_repo.dart';
+import '../models/pipeline_settings.dart';
 import '../state/memory_settings_provider.dart';
 import 'memory_cadence_service.dart';
+import 'memory_consolidation_service.dart';
 import 'memory_graph_builder.dart';
 import 'memory_salience_scorer.dart';
 
@@ -23,14 +25,18 @@ class MemoryPostTurnService {
   final MemorySalienceRepo _salienceRepo;
   final MemoryCadenceService _cadenceService;
   final MemoryGraphBuilder _graphBuilder;
+  final MemoryConsolidationService _consolidationService;
   final MemoryGlobalSettings Function() _readGlobalSettings;
+  final PipelineSettings Function() _readPipelineSettings;
 
   MemoryPostTurnService(
     this._bookRepo,
     this._salienceRepo,
     this._cadenceService,
     this._graphBuilder,
+    this._consolidationService,
     this._readGlobalSettings,
+    this._readPipelineSettings,
   );
 
   /// Run post-turn memory work. Fire-and-forget; caller should not await.
@@ -87,7 +93,38 @@ class MemoryPostTurnService {
         }
       }
 
+      // Step 4: consolidation (Phase G5). Gated by cadence + settings.
+      // NOTE: must evaluate shouldConsolidate BEFORE markRun('graph'),
+      // because graph and consolidation share the same cadence counter —
+      // markRun('graph') resets assistantMessagesSinceLastRun to 0.
+      final settings = _readPipelineSettings();
+      var didConsolidate = false;
+      if (settings.consolidationEnabled) {
+        final shouldConsolidate = await _cadenceService.shouldRun(
+          sessionId,
+          'consolidation',
+          memoryMode: book.settings.memoryMode,
+          cadenceInterval: book.settings.cadenceInterval,
+        );
+        didConsolidate = shouldConsolidate;
+      }
+
       await _cadenceService.markRun(sessionId, 'graph');
+
+      if (didConsolidate) {
+        try {
+          await _consolidationService.consolidateSession(
+            sessionId,
+            book.entries,
+            settings: settings,
+          );
+          await _cadenceService.markRun(sessionId, 'consolidation');
+        } catch (_) {
+          // Decision G: consolidation errors surface to user via repo status
+          // (the service saves an error row on failure), not via exception
+          // propagation. Do not rethrow — post-turn is fire-and-forget.
+        }
+      }
     } catch (_) {
       // Post-turn failures are non-fatal; do not surface to user
     }

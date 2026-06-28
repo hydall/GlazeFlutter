@@ -75,7 +75,9 @@ final memoryPostTurnServiceProvider = Provider<MemoryPostTurnService>((ref) {
     ref.watch(memorySalienceRepoProvider),
     ref.watch(memoryCadenceServiceProvider),
     ref.watch(memoryGraphBuilderProvider),
+    ref.watch(memoryConsolidationServiceProvider),
     () => ref.read(memoryGlobalSettingsProvider),
+    () => ref.read(pipelineSettingsProvider),
   );
 });
 
