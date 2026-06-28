@@ -10,7 +10,8 @@ import 'janitor_webview_proxy.dart';
 /// Public lorebooks attached to a JanitorAI character.
 ///
 /// Dart port of JAR's `publiclore.js` + `worldinfo.js`. A character can have
-/// **public** lorebooks listed in its `scripts` metadata (`type:"lorebook"`).
+/// **public** lorebooks listed in its `scripts` metadata (`type:"lorebook"`,
+/// or the newer `type:"advanced"`).
 /// Unlike a *closed* lorebook — which only surfaces as triggered text inside a
 /// `generateAlpha` response and must be rebuilt by an LLM (see
 /// [JanitorExtractor]) — a public lorebook can be downloaded whole, in its
@@ -49,6 +50,15 @@ class PublicLorebook {
   final List<dynamic> rawEntries;
   final String? error;
 
+  /// True when the downloaded script is JavaScript (a JanitorAI "advanced" /
+  /// Nine API lorebook) rather than a JSON entries array. Such a book is public
+  /// (we have its source) but can't be mapped 1:1 — it must be rebuilt into
+  /// keyed entries with the build LLM ([JanitorExtractor.buildLorebookFromJs]).
+  final bool isJs;
+
+  /// The raw JavaScript source when [isJs] is true; empty otherwise.
+  final String jsSource;
+
   const PublicLorebook({
     required this.id,
     required this.title,
@@ -57,6 +67,8 @@ class PublicLorebook {
     this.entryCount = 0,
     this.rawEntries = const [],
     this.error,
+    this.isJs = false,
+    this.jsSource = '',
   });
 
   /// Convert to a Glaze [Lorebook]. When [characterId] is given the book is
@@ -81,7 +93,9 @@ List<JanitorScriptRef> lorebookScriptRefs(Map<String, dynamic>? meta) {
   if (scripts is! List) return const [];
   return scripts
       .whereType<Map<String, dynamic>>()
-      .where((s) => s['type'] == 'lorebook' && s['id'] != null)
+      .where((s) =>
+          (s['type'] == 'lorebook' || s['type'] == 'advanced') &&
+          s['id'] != null)
       .map((s) => JanitorScriptRef(
             id: s['id'].toString(),
             title: (s['title'] ?? '').toString(),
@@ -107,6 +121,74 @@ List<dynamic> parseScriptEntries(dynamic rec) {
   return const [];
 }
 
+/// The raw JavaScript source of a `/hampter/script/<id>` record when its
+/// `script` field is JS rather than a JSON entries array (a JanitorAI
+/// "advanced" / Nine API lorebook). Returns '' when the script is JSON, empty,
+/// or absent.
+String _jsScriptSource(dynamic rec) {
+  if (rec is! Map) return '';
+  final raw = rec['script'];
+  if (raw is! String) return '';
+  final s = raw.trim();
+  if (s.isEmpty) return '';
+  // If it parses as a JSON array it's the structured (non-JS) shape.
+  try {
+    final a = jsonDecode(s);
+    if (a is List) return '';
+  } catch (_) {
+    // Not JSON → treat as JS source.
+  }
+  return s;
+}
+
+/// The lorebook's human-readable description shown on its public page
+/// (`/scripts/{id}`). JanitorAI does **not** expose this through the `/hampter`
+/// API (its `description` there is usually empty) — it lives in the page's
+/// embedded store as `scriptPublishedContent.content` (with `script.description`
+/// as a fallback). The page embeds the store as escaped JSON inside a
+/// `window.mbxM.push(JSON.parse("…"))` call, so it is double-decoded here.
+/// Returns '' when the page is closed/unavailable or carries no content.
+String _parsePublishedContent(String html) {
+  final re = RegExp(r'JSON\.parse\("((?:[^"\\]|\\.)*)"\)');
+  for (final m in re.allMatches(html)) {
+    dynamic obj;
+    try {
+      final jsonText = jsonDecode('"${m.group(1)}"') as String;
+      obj = jsonDecode(jsonText);
+    } catch (_) {
+      continue;
+    }
+    if (obj is! Map) continue;
+    for (final v in obj.values) {
+      if (v is! Map) continue;
+      final spc = v['scriptPublishedContent'];
+      if (spc is Map) {
+        final c = spc['content'];
+        if (c is String && c.trim().isNotEmpty) return c;
+      }
+      final sc = v['script'];
+      if (sc is Map) {
+        final d = sc['description'];
+        if (d is String && d.trim().isNotEmpty) return d;
+      }
+    }
+  }
+  return '';
+}
+
+/// Fetch the lorebook's public page and pull out its description content.
+/// Never throws — returns '' when the page can't be read (e.g. closed page).
+Future<String> _fetchScriptDescription(String scriptId) async {
+  try {
+    final body =
+        await JanitorWebViewProxy.instance.fetch('$_origin/scripts/$scriptId');
+    return _parsePublishedContent(body);
+  } catch (e) {
+    debugPrint('[janitor-public-lore] scripts page $scriptId failed: $e');
+    return '';
+  }
+}
+
 /// Fetch a single public lorebook by script id. Never throws — on any failure
 /// it returns a record with `accessible:false` so the caller can flag it as
 /// "private / download-blocked" (those go through the closed-lorebook LLM path).
@@ -122,15 +204,35 @@ Future<PublicLorebook> fetchPublicLorebook(
       return PublicLorebook(
           id: scriptId, title: title, error: 'response was not JSON');
     }
+    // The real description lives on the lorebook's public /scripts page, not in
+    // the /hampter record (whose `description` is usually empty). Stored as
+    // plain text (closed pages fall back to the empty hampter description).
+    final pageDesc = await _fetchScriptDescription(scriptId);
+    final description = _stripHtml(
+        pageDesc.isNotEmpty ? pageDesc : (rec['description'] ?? '').toString());
     final entries = parseScriptEntries(rec);
     final usable = entries
         .whereType<Map<String, dynamic>>()
         .where((e) => (e['content'] ?? '').toString().trim().isNotEmpty)
         .length;
+    // A JanitorAI "advanced" / Nine API lorebook ships its `script` as JavaScript
+    // source, not a JSON entries array — so it yields no usable JSON entries even
+    // though the script IS public. Surface it as a JS book (rebuilt via the LLM)
+    // instead of silently flagging it private.
+    final jsSource = usable == 0 ? _jsScriptSource(rec) : '';
+    if (jsSource.isNotEmpty) {
+      return PublicLorebook(
+        id: (rec['id'] ?? scriptId).toString(),
+        title: (rec['title'] ?? title).toString(),
+        description: description,
+        isJs: true,
+        jsSource: jsSource,
+      );
+    }
     return PublicLorebook(
       id: (rec['id'] ?? scriptId).toString(),
       title: (rec['title'] ?? title).toString(),
-      description: (rec['description'] ?? '').toString(),
+      description: description,
       // Downloadable only if it actually yielded entries with content.
       accessible: usable > 0,
       entryCount: usable,
@@ -152,6 +254,44 @@ Future<List<PublicLorebook>> fetchPublicLorebooks(
     out.add(await fetchPublicLorebook(ref.id, title: ref.title));
   }
   return out;
+}
+
+/// Build the "lorebook descriptions" key-inference context from fetched public
+/// lorebooks. Each book contributes its page **title** and, when its page is
+/// accessible, its page **description** (`- Title: description`). A closed or
+/// description-less page contributes only its title (`- Title`). The lorebook
+/// *contents* are never included — only the public page description.
+///
+/// JanitorAI only exposes lorebook titles in the character's `scripts` metadata;
+/// the descriptions live on each lorebook's own `/hampter/script/{id}` page, so
+/// they must come from the fetched [PublicLorebook] records.
+String buildLorebookDescsContext(List<PublicLorebook> books) {
+  final lines = <String>[];
+  for (final b in books) {
+    final title = b.title.trim();
+    final desc = _stripHtml(b.description);
+    if (title.isEmpty && desc.isEmpty) continue;
+    lines.add(desc.isEmpty ? '- $title' : '- $title: $desc');
+  }
+  return lines.join('\n');
+}
+
+/// Minimal HTML → plain text for lorebook page descriptions (which may carry
+/// markup). Mirrors the extractor's `_htmlToText`.
+String _stripHtml(String html) {
+  return html
+      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'</(p|div|li|h\d)>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'<[^>]+>'), '')
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll(RegExp(r'&#39;|&apos;'), "'")
+      .replaceAll('&quot;', '"')
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+      .replaceAll(RegExp(r'[ \t]+'), ' ')
+      .trim();
 }
 
 /// The verbatim entry contents of accessible public lorebooks — subtracted from

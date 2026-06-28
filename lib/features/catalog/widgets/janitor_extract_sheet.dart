@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_toast.dart';
+import '../../../core/llm/tokenizer.dart';
 import '../services/janitor_extractor.dart';
 
 /// Dev tool: extract a JanitorAI character's **hidden card** + **closed
@@ -247,12 +248,14 @@ class _Preview extends StatelessWidget {
         children: [
           Text('Name: ${card.name}', style: label()),
           const SizedBox(height: 4),
-          Text('Card (description): ${card.description.length} chars',
+          Text('Card (description): ${estimateTokens(card.description)} tokens',
               style: value()),
-          Text('Scenario: ${card.scenario.length} chars', style: value()),
-          Text('First message: ${card.firstMes.length} chars', style: value()),
+          Text('Scenario: ${estimateTokens(card.scenario)} tokens',
+              style: value()),
+          Text('First message: ${estimateTokens(card.firstMes)} tokens',
+              style: value()),
           Text(
-            'Closed lorebook: ${result.hasLorebook ? '${result.entryBlockCount} block(s), ${result.lorebookText.length} chars' : 'none found'}',
+            'Closed lorebook: ${result.hasLorebook ? '${result.entryBlockCount} block(s), ${estimateTokens(result.lorebookText)} tokens' : 'none found'}',
             style: value(),
           ),
           if (result.hasLorebook) ...[

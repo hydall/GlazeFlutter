@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/services/file_export_service.dart';
 import '../../../core/state/lorebook_provider.dart';
@@ -95,7 +96,10 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
   /// the closed-lorebook controls.
   bool get _hasClosed =>
       _scriptRefs.any((r) => !r.isPublic) ||
-      _public.any((b) => !b.accessible);
+      _public.any((b) => !b.accessible && !b.isJs);
+
+  /// Id of the JS lorebook currently being rebuilt by the LLM (per-row spinner).
+  String? _jsBuildingId;
 
   @override
   void initState() {
@@ -141,6 +145,51 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
             Navigator.of(context, rootNavigator: true).pop();
             await _exportJson(book.toTavernJson(),
                 book.title.isNotEmpty ? book.title : 'lorebook');
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Rebuild a public **JavaScript** lorebook into keyed entries with the active
+  /// LLM, then offer the same Save/Export destinations as a public JSON book.
+  Future<void> _buildJs(PublicLorebook book) async {
+    setState(() => _jsBuildingId = book.id);
+    try {
+      final lb = await ref.read(janitorExtractorProvider).buildLorebookFromJs(
+            jsSource: book.jsSource,
+            name: book.title.isNotEmpty ? book.title : 'Janitor Lorebook',
+            meta: widget.args.meta,
+          );
+      if (!mounted) return;
+      setState(() => _jsBuildingId = null);
+      _offerSaveExport(lb);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _jsBuildingId = null);
+      GlazeToast.show(context, 'Build failed: $e');
+    }
+  }
+
+  /// Bottom sheet offering Save-to-Glaze / Export-.json for a built [Lorebook].
+  void _offerSaveExport(Lorebook book) {
+    GlazeBottomSheet.show<void>(
+      context,
+      items: [
+        BottomSheetItem(
+          icon: Icons.bookmark_add_outlined,
+          label: 'Save to Glaze',
+          onTap: () async {
+            Navigator.of(context, rootNavigator: true).pop();
+            await _saveLorebook(book);
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.download_outlined,
+          label: 'Export .json (SillyTavern)',
+          onTap: () async {
+            Navigator.of(context, rootNavigator: true).pop();
+            await _exportJson(glazeLorebookToTavernJson(book), book.name);
           },
         ),
       ],
@@ -316,6 +365,8 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
             loading: _loadingPublic,
             books: _public,
             onDownload: _downloadPublic,
+            onBuildJs: _buildJs,
+            buildingId: _jsBuildingId,
           ),
           if (!_loadingPublic && _hasClosed) ...[
             const SizedBox(height: 20),
@@ -407,7 +458,7 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
           Text(
             ex.hasLorebook
                 ? 'Captured ${ex.entryBlockCount} block(s), '
-                    '${ex.lorebookText.length} chars'
+                    '${estimateTokens(ex.lorebookText)} tokens'
                 : 'No closed lorebook text was found.',
             style: TextStyle(
                 fontSize: 12,
@@ -431,21 +482,12 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Context sent for key inference (never output as entries):',
+              'Context sent for key inference (never output as entries). '
+              'Tap a block to see exactly what will be sent:',
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
-            const SizedBox(height: 4),
-            _contextChecks(cs),
-            if (_sources.extra) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: _extraController,
-                maxLines: 3,
-                style: TextStyle(fontSize: 13, color: cs.onSurface),
-                decoration:
-                    _fieldDecoration(cs, 'Optional custom context…'),
-              ),
-            ],
+            const SizedBox(height: 8),
+            _contextBlocks(cs, ex),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -542,38 +584,57 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
     );
   }
 
-  Widget _contextChecks(ColorScheme cs) {
+  /// Context sources rendered as collapsible blocks: each keeps its on/off
+  /// toggle but also reveals the exact text that will be sent to the build LLM
+  /// (the recovered card, the catalog/scenario/greetings, the public lorebook
+  /// descriptions). A source with no content is shown disabled with a
+  /// "Content is empty" hint; custom text is always available (the user types
+  /// it).
+  Widget _contextBlocks(ColorScheme cs, ExtractionResult ex) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _CheckRow(
+        _ContextBlock(
           label: 'Character card',
+          content: ex.cardContext,
           value: _sources.card,
           onChanged: (v) => setState(() => _sources.card = v),
+          cs: cs,
         ),
-        _CheckRow(
+        _ContextBlock(
           label: 'Card description on site',
+          content: ex.catalogContext,
           value: _sources.catalog,
           onChanged: (v) => setState(() => _sources.catalog = v),
+          cs: cs,
         ),
-        _CheckRow(
+        _ContextBlock(
           label: 'Scenario',
+          content: ex.scenarioContext,
           value: _sources.scenario,
           onChanged: (v) => setState(() => _sources.scenario = v),
+          cs: cs,
         ),
-        _CheckRow(
+        _ContextBlock(
           label: 'First message(s)',
+          content: ex.greetingsContext,
           value: _sources.greetings,
           onChanged: (v) => setState(() => _sources.greetings = v),
+          cs: cs,
         ),
-        _CheckRow(
+        _ContextBlock(
           label: 'Lorebook descriptions',
+          content: ex.lorebookDescsContext,
           value: _sources.lorebookDescs,
           onChanged: (v) => setState(() => _sources.lorebookDescs = v),
+          cs: cs,
         ),
-        _CheckRow(
-          label: 'Custom text',
+        _CustomContextBlock(
           value: _sources.extra,
+          controller: _extraController,
           onChanged: (v) => setState(() => _sources.extra = v),
+          decoration: _fieldDecoration(cs, 'Optional custom context…'),
+          cs: cs,
         ),
       ],
     );
@@ -600,10 +661,14 @@ class _PublicSection extends StatelessWidget {
   final bool loading;
   final List<PublicLorebook> books;
   final void Function(PublicLorebook) onDownload;
+  final void Function(PublicLorebook) onBuildJs;
+  final String? buildingId;
   const _PublicSection({
     required this.loading,
     required this.books,
     required this.onDownload,
+    required this.onBuildJs,
+    required this.buildingId,
   });
 
   @override
@@ -627,17 +692,57 @@ class _PublicSection extends StatelessWidget {
       return Text('No public lorebooks attached.',
           style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant));
     }
+    // Three states:
+    //  - public JSON books map 1:1 and download whole (no LLM);
+    //  - public JS ("advanced" / Nine API) books are public but must be rebuilt
+    //    into entries with the LLM;
+    //  - the rest are private/locked and go through the closed-lorebook Extract
+    //    path below.
+    final public = books.where((b) => b.accessible && !b.isJs).toList();
+    final js = books.where((b) => b.isJs).toList();
+    final private = books.where((b) => !b.accessible && !b.isJs).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionTitle('Public lorebooks', cs: cs),
-        const SizedBox(height: 4),
-        Text('Downloaded whole from Janitor.AI — no LLM needed.',
-            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-        const SizedBox(height: 10),
-        for (final b in books) ...[
-          _PublicRow(book: b, onDownload: () => onDownload(b)),
-          const SizedBox(height: 8),
+        if (public.isNotEmpty) ...[
+          _SectionTitle('Public lorebooks', cs: cs),
+          const SizedBox(height: 4),
+          Text('Downloaded whole from Janitor.AI — no LLM needed.',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+          const SizedBox(height: 10),
+          for (final b in public) ...[
+            _PublicRow(book: b, onDownload: () => onDownload(b)),
+            const SizedBox(height: 8),
+          ],
+        ],
+        if (js.isNotEmpty) ...[
+          if (public.isNotEmpty) const SizedBox(height: 16),
+          _SectionTitle('Advanced lorebooks (JS)', cs: cs),
+          const SizedBox(height: 4),
+          Text('Public, but shipped as a script — rebuilt into keyed entries '
+              'with your active LLM.',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+          const SizedBox(height: 10),
+          for (final b in js) ...[
+            _PublicRow(
+              book: b,
+              onBuildJs: () => onBuildJs(b),
+              building: buildingId == b.id,
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+        if (private.isNotEmpty) ...[
+          if (public.isNotEmpty || js.isNotEmpty) const SizedBox(height: 16),
+          _SectionTitle('Private lorebooks', cs: cs),
+          const SizedBox(height: 4),
+          Text("Can't be downloaded directly — use Extract below.",
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+          const SizedBox(height: 10),
+          for (final b in private) ...[
+            _PublicRow(book: b),
+            const SizedBox(height: 8),
+          ],
         ],
       ],
     );
@@ -646,12 +751,32 @@ class _PublicSection extends StatelessWidget {
 
 class _PublicRow extends StatelessWidget {
   final PublicLorebook book;
-  final VoidCallback onDownload;
-  const _PublicRow({required this.book, required this.onDownload});
+  final VoidCallback? onDownload;
+  final VoidCallback? onBuildJs;
+  final bool building;
+  const _PublicRow({
+    required this.book,
+    this.onDownload,
+    this.onBuildJs,
+    this.building = false,
+  });
+
+  IconData get _icon {
+    if (book.isJs) return Icons.code_rounded;
+    return book.accessible ? Icons.menu_book_rounded : Icons.lock_outline;
+  }
+
+  String get _subtitle {
+    if (book.isJs) return 'JavaScript script — build to convert';
+    return book.accessible
+        ? '${book.entryCount} entries'
+        : 'Private — use Extract below';
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
+    final accent = (book.accessible || book.isJs);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -660,9 +785,8 @@ class _PublicRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(book.accessible ? Icons.menu_book_rounded : Icons.lock_outline,
-              size: 18,
-              color: book.accessible ? cs.primary : cs.onSurfaceVariant),
+          Icon(_icon,
+              size: 18, color: accent ? cs.primary : cs.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -676,15 +800,42 @@ class _PublicRow extends StatelessWidget {
                       color: cs.onSurface),
                 ),
                 Text(
-                  book.accessible
-                      ? '${book.entryCount} entries'
-                      : 'Private — use Extract below',
+                  _subtitle,
                   style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                 ),
+                if (book.description.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    book.description.trim(),
+                    maxLines: 6,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 11,
+                        height: 1.35,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.85)),
+                  ),
+                ],
               ],
             ),
           ),
-          if (book.accessible)
+          if (book.isJs)
+            building
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: cs.primary),
+                    ),
+                  )
+                : TextButton.icon(
+                    onPressed: onBuildJs,
+                    icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
+                    label: const Text('Build'),
+                    style: TextButton.styleFrom(foregroundColor: cs.primary),
+                  )
+          else if (book.accessible)
             IconButton(
               onPressed: onDownload,
               icon: const Icon(Icons.download_rounded, size: 20),
@@ -697,35 +848,168 @@ class _PublicRow extends StatelessWidget {
   }
 }
 
-class _CheckRow extends StatelessWidget {
+/// A context source rendered as a collapsible block: the header carries the
+/// include/exclude toggle and a char count; expanding it reveals the exact text
+/// that will be sent to the build LLM for this source.
+class _ContextBlock extends StatelessWidget {
   final String label;
+  final String content;
   final bool value;
   final ValueChanged<bool> onChanged;
-  const _CheckRow(
-      {required this.label, required this.value, required this.onChanged});
+  final ColorScheme cs;
+  const _ContextBlock({
+    required this.label,
+    required this.content,
+    required this.value,
+    required this.onChanged,
+    required this.cs,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final cs = context.cs;
-    return InkWell(
-      onTap: () => onChanged(!value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
+    final text = content.trim();
+    final empty = text.isEmpty;
+    // An empty source can't contribute anything, so it is shown disabled with a
+    // "Content is empty" hint and is not expandable.
+    if (empty) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 4, 12, 4),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  value: false,
+                  onChanged: null,
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(label,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.6))),
+              ),
+              Text('Content is empty',
+                  style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 6),
+          minTileHeight: 44,
+          // The Checkbox consumes its own taps, so toggling inclusion does not
+          // expand/collapse the tile.
+          leading: SizedBox(
+            width: 24,
+            height: 24,
+            child: Checkbox(
+              value: value,
+              onChanged: (v) => onChanged(v ?? false),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          title: Text(label,
+              style: TextStyle(fontSize: 13, color: cs.onSurface)),
+          subtitle: Text('${estimateTokens(text)} tokens',
+              style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
           children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: Checkbox(
-                value: value,
-                onChanged: (v) => onChanged(v ?? false),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 180),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  text,
+                  style: TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color: cs.onSurfaceVariant),
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            Text(label,
-                style: TextStyle(fontSize: 13, color: cs.onSurface)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Custom-text context source: like [_ContextBlock] but its body is an editable
+/// field (the user supplies the content rather than it being derived).
+class _CustomContextBlock extends StatelessWidget {
+  final bool value;
+  final TextEditingController controller;
+  final ValueChanged<bool> onChanged;
+  final InputDecoration decoration;
+  final ColorScheme cs;
+  const _CustomContextBlock({
+    required this.value,
+    required this.controller,
+    required this.onChanged,
+    required this.decoration,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 6),
+          minTileHeight: 44,
+          initiallyExpanded: value,
+          leading: SizedBox(
+            width: 24,
+            height: 24,
+            child: Checkbox(
+              value: value,
+              onChanged: (v) => onChanged(v ?? false),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          title: Text('Custom text',
+              style: TextStyle(fontSize: 13, color: cs.onSurface)),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          children: [
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              style: TextStyle(fontSize: 13, color: cs.onSurface),
+              decoration: decoration,
+            ),
           ],
         ),
       ),
@@ -810,7 +1094,7 @@ class _LlmDebugPanel extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('$label · ${body.length} chars',
+                  child: Text('$label · ${estimateTokens(body)} tokens',
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,

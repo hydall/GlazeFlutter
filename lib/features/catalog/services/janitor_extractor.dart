@@ -9,6 +9,7 @@ import '../catalog_models.dart';
 import '../catalog_provider.dart';
 import 'janitor_lorebook_rebuilder.dart';
 import 'janitor_provider.dart';
+import 'janitor_public_lorebook.dart';
 import 'janitor_separate.dart';
 import 'janitor_webview_proxy.dart';
 
@@ -145,7 +146,7 @@ class JanitorExtractor {
         catalogContext: catalog,
         scenarioContext: scenario,
         greetingsContext: greetings,
-        lorebookDescsContext: _buildLorebookDescs(meta),
+        lorebookDescsContext: await _lorebookDescs(meta),
       );
     } finally {
       proxy.setActive(false);
@@ -232,6 +233,29 @@ class JanitorExtractor {
         characterId: characterId,
       );
 
+  /// Rebuilds a public **JavaScript** lorebook (a JanitorAI "advanced" / Nine
+  /// API script) into a structured [Lorebook] with the active LLM. Unlike a JSON
+  /// lorebook — which maps 1:1 — a JS script must be interpreted, so its source
+  /// is sent to the build LLM (`fromJs`). Key-inference context (catalog,
+  /// scenario, lorebook descriptions) is derived from [meta] (the character's
+  /// `/hampter` metadata). [characterId] scopes the book when given.
+  Future<Lorebook> buildLorebookFromJs({
+    required String jsSource,
+    required String name,
+    Map<String, dynamic>? meta,
+    String? characterId,
+  }) async =>
+      rebuildLorebookWithActiveLlm(
+        _ref,
+        lorebookText: jsSource,
+        name: name,
+        catalog: _buildCatalogContext(meta),
+        scenario: _htmlToText((meta?['scenario'] ?? '').toString()),
+        lorebookDescs: await _lorebookDescs(meta),
+        fromJs: true,
+        characterId: characterId,
+      );
+
   String _parseCharacterId(String input) {
     final m = _uuid.firstMatch(input.trim());
     if (m == null) {
@@ -270,7 +294,7 @@ class JanitorExtractor {
     if (scripts is List) {
       final books = scripts
           .whereType<Map<String, dynamic>>()
-          .where((s) => s['type'] == 'lorebook')
+          .where((s) => s['type'] == 'lorebook' || s['type'] == 'advanced')
           .map((s) =>
               '- ${s['title'] ?? ''}${s['description'] != null ? ': ${s['description']}' : ''}')
           .toList();
@@ -282,18 +306,16 @@ class JanitorExtractor {
     return parts.join('\n\n');
   }
 
-  /// Titles + descriptions of the lorebooks attached to the character (contents
-  /// are hidden). Used as key-inference context for the build LLM.
-  String _buildLorebookDescs(Map<String, dynamic>? meta) {
-    final scripts = meta?['scripts'];
-    if (scripts is! List) return '';
-    final books = scripts
-        .whereType<Map<String, dynamic>>()
-        .where((s) => s['type'] == 'lorebook')
-        .map((s) =>
-            '- ${s['title'] ?? ''}${s['description'] != null ? ': ${s['description']}' : ''}')
-        .toList();
-    return books.isEmpty ? '' : books.join('\n');
+  /// Titles + page descriptions of the lorebooks attached to the character
+  /// (contents stay hidden). Used as key-inference context for the build LLM.
+  ///
+  /// JanitorAI's character metadata only carries lorebook *titles*; each
+  /// lorebook's description lives on its own `/hampter/script/{id}` page, so the
+  /// pages are fetched and [buildLorebookDescsContext] combines title +
+  /// description (title only when the page is closed/description-less).
+  Future<String> _lorebookDescs(Map<String, dynamic>? meta) async {
+    final books = await fetchPublicLorebooks(meta);
+    return buildLorebookDescsContext(books);
   }
 
   /// Minimal HTML → text (port of `htmlToText`).
