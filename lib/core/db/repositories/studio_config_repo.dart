@@ -213,7 +213,7 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       studioPresetOverrides = const [];
     }
 
-    return StudioConfig(
+    return _normalizeLoadedConfig(StudioConfig(
       sessionId: row.sessionId,
       profileId: row.profileId.isNotEmpty ? row.profileId : row.sessionId,
       profileName: row.profileName,
@@ -237,6 +237,48 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       selectedBlockIdsInitialized: row.selectedBlockIdsInitialized,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
-    );
+    ));
+  }
+
+  /// Silent migration of loaded Studio configs (plan §Part 6): upgrade the
+  /// Meta-Weaver agent from the old `'static'` refresh policy + default
+  /// `contextSize` to the new Lumia architecture — `refreshPolicy: 'turn'`
+  /// (runs every turn so it can count assistant messages and apply the
+  /// period rule) and `contextSize: 15` (enough history to count periods up
+  /// to ~10). Returns [config] unchanged when no Meta-Weaver agent is present
+  /// or it already has the new values. This is a normalization in memory, so
+  /// existing configs benefit immediately without a rebuild. See
+  /// docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A + Migration.
+  StudioConfig _normalizeLoadedConfig(StudioConfig config) {
+    if (config.agents.isEmpty) return config;
+    final migrated = <StudioAgent>[];
+    var changed = false;
+    for (final agent in config.agents) {
+      if (_isMetaWeaver(agent) &&
+          (agent.refreshPolicy != 'turn' || agent.contextSize < 15)) {
+        migrated.add(agent.copyWith(
+          refreshPolicy: 'turn',
+          contextSize: agent.contextSize < 15 ? 15 : agent.contextSize,
+        ));
+        changed = true;
+      } else {
+        migrated.add(agent);
+      }
+    }
+    return changed ? config.copyWith(agents: migrated) : config;
+  }
+
+  /// True if [agent] is the Meta-Weaver / Lumia Policy controller. Matches by
+  /// id/name (the controller spec id is `meta`, name is
+  /// `Meta-Weaver / Lumia Policy`). Falls back to substring contains so older
+  /// configs with slightly different names still migrate.
+  bool _isMetaWeaver(StudioAgent agent) {
+    final id = agent.id.toLowerCase();
+    final name = agent.name.toLowerCase();
+    return id.contains('_meta_') ||
+        id == 'meta' ||
+        name.contains('meta-weaver') ||
+        name.contains('meta weaver') ||
+        name.contains('lumia policy');
   }
 }

@@ -151,11 +151,15 @@ class PostCleanerService {
       // (ported from Marinara `text-rewrite-safety.ts`): if the original had
       // inline HTML/XML tags or fenced code blocks and the cleaned version no
       // longer has any, the cleaner stripped formatting it was told to
-      // preserve — keep the original. This guards against the common LLM
-      // failure mode of flattening formatting when asked to "rewrite for
+      // preserve — keep the original. Also protects `<lumiaooc>` blocks
+      // (Lumia meta-OOC commentary emitted by the Main Responder under the
+      // Studio Lumia architecture) — if the original had one and the cleaned
+      // version dropped it, keep the original. This guards against the common
+      // LLM failure mode of flattening formatting when asked to "rewrite for
       // clarity". Does NOT verify the *same* tags/fences survive, just that
       // *some* survive — structural equality is the cleaner prompt's job.
-      if (textRewriteDropsProtectedMarkup(assistantText, cleaned)) {
+      if (textRewriteDropsProtectedMarkup(assistantText, cleaned) ||
+          lumiaoocDropped(assistantText, cleaned)) {
         debugPrint(
           '[PostCleaner] skipped: rewrite dropped protected markup '
           '(HTML/XML tags or fenced code blocks present in original but '
@@ -222,6 +226,20 @@ class PostCleanerService {
 
   static bool _hasFencedBlock(String text) {
     return text.contains('```');
+  }
+
+  /// True if [original] contained a `<lumiaooc>` block (Lumia meta-OOC
+  /// commentary emitted by the Main Responder) and [edited] no longer has
+  /// any. The `<lumiaooc>` block is meta-commentary addressed to the user
+  /// outside the roleplay — it is NOT prose to be cleaned. The cleaner is
+  /// instructed to preserve it verbatim; this guard catches the case where
+  /// the cleaner stripped it anyway. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part C.
+  @visibleForTesting
+  static bool lumiaoocDropped(String original, String edited) {
+    final pattern = RegExp(r'<lumiaooc>', caseSensitive: false);
+    if (!pattern.hasMatch(original)) return false;
+    if (pattern.hasMatch(edited)) return false;
+    return true;
   }
 
   static String _statusLabel(AgentOperationStatus status) {
@@ -450,6 +468,14 @@ class PostCleanerService {
         'reformat, or alter OOC blocks in any way. Clean only the in-roleplay '
         'prose around them. If the entire response is an OOC block, return it '
         'unchanged.',
+      )
+      ..writeln(
+        '- PRESERVE `<lumiaooc>` blocks VERBATIM. A `<lumiaooc>` block is '
+        'Lumia meta-OOC commentary (wrapped in `<lumiaooc><font '
+        'color="#9370DB">...</font></lumiaooc>`). It is NOT narrative prose '
+        '— do not rewrite, move, rephrase, translate, reformat, or delete it. '
+        'Clean only the in-roleplay prose around it. If the response contains '
+        'a `<lumiaooc>` block, keep it exactly as-is in the same position.',
       )
       ..writeln(
         '- Return ONLY the cleaned text, no explanation. Inline HTML tags '

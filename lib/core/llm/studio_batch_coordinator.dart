@@ -52,7 +52,11 @@ class StudioBatchCoordinator {
     required CancelToken cancelToken,
     required int batchContextSize,
   }) async {
-    final context = _bucketizer.bucketize(promptResult, promptPayload: promptPayload);
+    final context = _bucketizer.bucketize(
+      promptResult,
+      promptPayload: promptPayload,
+      studioConfig: config,
+    );
     final sharedMessages = _messageBuilder.buildSharedBatchMessages(
       config: config,
       context: context,

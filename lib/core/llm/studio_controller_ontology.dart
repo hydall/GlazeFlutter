@@ -15,6 +15,7 @@ class StudioControllerSpec {
   final int timeoutMs;
   final bool isFinal;
   final String phase;
+  final int contextSize;
 
   const StudioControllerSpec({
     required this.id,
@@ -38,6 +39,11 @@ class StudioControllerSpec {
     // spec class again. See docs/PLAN_AGENTIC_STUDIO.md §5.7.1 + Feature 6.
     // ignore: unused_element_parameter
     this.phase = 'pre_generation',
+    // Default tracker context size (trailing chat messages forwarded to this
+    // agent). 0 = inherit the StudioAgent freezed default of 5. The
+    // Meta-Weaver overrides this to 15 so it can count Lumia periods up to
+    // ~10. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
+    this.contextSize = 0,
   });
 }
 
@@ -153,16 +159,20 @@ class StudioControllerOntology {
       id: 'meta',
       name: 'Meta-Weaver / Lumia Policy',
       purpose:
-          'Preserve Lumia/meta-weaver/OOC behavior as silent policy and OOC interface rules, not as a scene-writing agent.',
+          'Lumia/meta-weaver/OOC interface. Runs EVERY turn. Counts assistant messages in the history it sees, applies the period rule from the assigned `<lumia_ghost>` block (e.g. "Every 4 assistant responses"), and decides whether Lumia should emit an OOC note this turn, respond to an explicit OOC address, or stay silent.',
       outputContract:
-          'At chat time, output only meta-policy constraints if needed. Never write in-scene prose. Lumia remains silent during normal RP unless explicitly addressed OOC.',
+          'At chat time, output a compact Lumia brief ONLY. Decide one of: '
+          '`lumia_ooc: due | topic: <X>` (user addressed Lumia OOC), '
+          '`lumia_periodic_note: due | last_note: <N turns ago> | keep: 1-3 sentences, warm, maternal, useful, not scene-stealing` (the Nth assistant turn fired the period rule), '
+          'or `lumia: silent` (neither condition met). Never write in-scene prose, never write the actual `<lumiaooc>` reply — that is the Main Responder\'s job, guided by your brief.',
       fallbackPrompt:
-          'Apply configured meta-weaver or OOC persona rules silently during normal RP when such a persona exists. Do not expose hidden reasoning or write meta-persona scene prose. If no meta/OOC persona is configured, this controller should remain inert and may be disabled by the user.',
-      refreshPolicy: 'static',
-      invalidationSignals: ['preset_changed'],
+          'You are the Lumia/meta-weaver. Count the assistant messages in the history you see. Read the period rule from your assigned `<lumia_ghost>` block (e.g. "Every 4 assistant responses"). If the count since the last Lumia note matches the period, output `lumia_periodic_note: due` with guidance to keep it 1-3 sentences, warm, maternal, useful, and not scene-stealing. If the user explicitly addressed Lumia in OOC brackets (e.g. `((Lumia: ...))`, `[OOC: ...]`), output `lumia_ooc: due` with the detected topic. Otherwise output `lumia: silent`. Do NOT write the actual Lumia OOC reply — only the brief telling the Main Responder whether to emit one.',
+      refreshPolicy: 'turn',
+      invalidationSignals: ['last_user_message_changed', 'assistant_turn_count_changed'],
       temperature: 0.2,
       maxTokens: 1200,
       timeoutMs: 60000,
+      contextSize: 15,
     ),
     StudioControllerSpec(
       id: 'final',
