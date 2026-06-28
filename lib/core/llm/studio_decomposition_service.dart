@@ -254,7 +254,13 @@ class StudioDecompositionService {
       role: 'system',
       promptShard: promptShard,
       order: index,
-      enabled: true,
+      // Meta-Weaver: auto-disable when the preset has no Lumia/meta-weaver
+      // block. Without lumia blocks the agent would run every turn (refresh
+      // policy 'turn') on a bare fallback prompt and burn an LLM call to
+      // output "inert" — pointless latency. The user can still re-enable it
+      // manually in the Studio UI if they add a lumia block later. See
+      // docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
+      enabled: !(spec.id == 'meta' && !lumiaActive),
       modelSource: 'current',
       temperature: spec.temperature,
       maxTokens: spec.maxTokens,

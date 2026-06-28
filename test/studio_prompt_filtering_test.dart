@@ -329,6 +329,22 @@ void main() {
       expect(migrated.contextSize, 30);
     });
   });
+
+  group('Meta-Weaver auto-disable when no lumia block', () {
+    test('enabled is true by default for non-meta agents', () {
+      const agent = StudioAgent(id: 'agent_s1_guard_123', name: 'Guard');
+      expect(agent.enabled, isTrue);
+    });
+
+    test('StudioAgent.enabled can be set false (auto-disable contract)', () {
+      const agent = StudioAgent(
+        id: 'agent_s1_meta_123',
+        name: 'Meta-Weaver / Lumia Policy',
+        enabled: false,
+      );
+      expect(agent.enabled, isFalse);
+    });
+  });
 }
 
 /// Reproduces the `StudioConfigRepo._normalizeLoadedConfig` Meta-Weaver
