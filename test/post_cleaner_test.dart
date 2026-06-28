@@ -430,7 +430,10 @@ void main() {
       expect(prompt, contains('Lucy is described as speaking'));
       expect(prompt, contains('Menu is described as paper'));
       expect(prompt, contains('Apply minimal fixes for these issues'));
-      expect(prompt, contains('Prefer deletion or neutral rewording'));
+      expect(
+        prompt,
+        contains("Prefer rephrasing that preserves the prose's voice"),
+      );
     });
 
     test('omits CHARACTER CONSISTENCY NOTES when auditIssues is null', () {
