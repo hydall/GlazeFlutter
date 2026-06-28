@@ -73,7 +73,18 @@ MemoryClassifierTextClient buildClassifierClient(Ref ref) {
       },
     ));
 
-    return completer.future;
+    // §5: defensive timeout guard. The caller (MemoryNeedsClassifierService)
+    // wraps _client in a Future.timeout(classifierTimeoutMs), but if the
+    // transport silently drops the request (neither onComplete nor onError
+    // fires), the completer would hang forever without this guard. Use a
+    // fallback that is longer than the caller's timeout so we don't race
+    // it under normal conditions — 30s is a safe upper bound.
+    return completer.future.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => throw TimeoutException(
+        'Classifier transport did not respond within 30s',
+      ),
+    );
   };
 }
 

@@ -35,6 +35,19 @@ void main() {
       expect(s.failedAgentNames, ['lorebook']);
     });
 
+    test('cleaning is active', () {
+      const s = StudioCycleState.cleaning(
+        sessionId: 's1',
+        totalAgents: 3,
+        completedAgents: 3,
+        failedAgents: 0,
+        failedAgentNames: [],
+      );
+      expect(s.isActive, isTrue);
+      expect(s.isDone, isFalse);
+      expect(s.phase, StudioCyclePhase.cleaning);
+    });
+
     test('done is done, not active', () {
       const s = StudioCycleState.done(
         sessionId: 's1',

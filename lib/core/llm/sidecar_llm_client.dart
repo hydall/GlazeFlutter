@@ -188,6 +188,61 @@ class SidecarLlmClient {
       protocol: cleaner.protocol,
     );
   }
+  /// Resolves the API config for the memory consolidation LLM (Phase G5).
+  ///
+  /// `source='custom'` → use `consolidationEndpoint/ApiKey/Model`.
+  /// `source='current'` → read the active chat API config and use its
+  /// endpoint/key/protocol. `consolidationModel` overrides the model when
+  /// non-empty (same pattern as [resolveConfigForCleaner]).
+  Future<SidecarApiConfig> resolveConfigForConsolidation(
+    PipelineSettings settings, {
+    String errorLabel = 'consolidation',
+  }) async {
+    if (settings.consolidationSource == 'custom') {
+      if (settings.consolidationEndpoint.isEmpty ||
+          settings.consolidationModel.isEmpty) {
+        debugPrint(
+          '[Sidecar] consolidation custom config incomplete — '
+          "endpoint='${settings.consolidationEndpoint}' "
+          "model='${settings.consolidationModel}'",
+        );
+        throw Exception(
+          'Sidecar custom config incomplete for $errorLabel',
+        );
+      }
+      debugPrint(
+        '[Sidecar] resolved custom for $errorLabel '
+        'model=${settings.consolidationModel}',
+      );
+      return SidecarApiConfig(
+        endpoint: settings.consolidationEndpoint,
+        apiKey: settings.consolidationApiKey,
+        model: settings.consolidationModel,
+        protocol: LlmProtocol.openai,
+      );
+    }
+
+    await _ref.read(apiListProvider.future);
+    final chatConfig = _ref.read(activeApiConfigProvider);
+    if (chatConfig == null) {
+      debugPrint('[Sidecar] no active chat API config for $errorLabel');
+      throw Exception('No chat API config available for $errorLabel');
+    }
+    final model = settings.consolidationModel.isNotEmpty
+        ? settings.consolidationModel
+        : chatConfig.model;
+    debugPrint(
+      '[Sidecar] resolved chat-fallback for $errorLabel '
+      'model=$model endpoint=${chatConfig.endpoint}',
+    );
+    return SidecarApiConfig(
+      endpoint: chatConfig.endpoint,
+      apiKey: chatConfig.apiKey,
+      model: model,
+      protocol: chatConfig.protocol,
+    );
+  }
+
   int resolveCleanerTimeout(PipelineSettings settings) {
     return settings.postCleanerTimeoutMs > 0
         ? settings.postCleanerTimeoutMs

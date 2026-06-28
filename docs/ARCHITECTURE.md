@@ -754,6 +754,97 @@ per-candidate reasons include `chunk_rank_trimmed` / `chunk_budget_trimmed`;
 expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` are
 **chat message ranges** (`messageRange`), not chunk indices.
 
+### Memory system vs Marinara — intentional divergences + bug fixes
+
+A comprehensive comparison of GlazeFlutter's MemoryBook against the
+Marinara Engine memory system revealed 5 concrete bugs (now fixed) and
+several features that are **intentionally absent or deferred**. This
+section documents both.
+
+#### Bug fixes applied
+
+1. **Consolidation wired into `runPostTurn`** — `MemoryPostTurnService`
+   docstring claimed step 4 = "trigger consolidation" but the method body
+   only did graph + salience. Consolidation is now called after graph+salience,
+   gated by cadence + `PipelineSettings.consolidationEnabled`. Key detail:
+   `shouldConsolidate` is evaluated **before** `markRun('graph')` because
+   graph and consolidation share the same cadence counter.
+   See `lib/core/llm/memory_post_turn_service.dart`.
+
+2. **Consolidation `source='current'` resolution** —
+   `MemoryConsolidationService._callLlm` threw "requires caller to resolve
+   config" for `source='current'`, so consolidation only worked with a custom
+   endpoint. Now resolves via `SidecarLlmClient.resolveConfigForConsolidation`
+   (reads `activeApiConfigProvider`, `consolidationModel` overrides when
+   non-empty). See `lib/core/llm/memory_consolidation_service.dart` +
+   `lib/core/llm/sidecar_llm_client.dart`.
+
+3. **JSON-retry in agentic write-loop** —
+   `AgenticWriteRequestParser.askLlmForWrites` silently caught JSON parse
+   errors and returned `response: null` (silent memory loss). Now retries
+   ONCE with a strict JSON reminder on unparseable first response. Mirrors
+   Marinara's `buildInvalidJsonRetryMessages`.
+   See `lib/core/llm/agentic_write_request_parser.dart`.
+
+4. **`reindexAll` copy-paste bug** —
+   `MemoryBookController.reindexAll` had `vectorSearchEnabled ? 'content' : 'content'`
+   (both branches identical). Removed the pointless conditional; `reindexAll`
+   always targets `'content'`. See `lib/features/memory/controllers/memory_book_controller.dart`.
+
+5. **Classifier timeout guard** —
+   `MemoryClassifierHttpClient` returned `completer.future` without a
+   timeout. If the transport silently dropped the request (neither
+   `onComplete` nor `onError` fired), the completer would hang until the
+   caller's `Future.timeout` — or indefinitely if `classifierTimeoutMs`
+   were 0. Added a 30s defensive timeout on the completer.
+   See `lib/core/llm/memory_classifier_http_client.dart`.
+
+6. **MessageRecall dimension-mismatch detection** —
+   `MessageRecallService.recall` did not check that candidate embedding
+   dimensions matched the query embedding dimensions. If the user switched
+   embedding models, old stored vectors would produce garbage cosine scores
+   (silently 0, filtered by threshold) with no diagnostic. Now filters stale
+   candidates out of the scoring pool and logs a warning.
+   See `lib/core/llm/message_recall_service.dart`.
+
+#### Intentionally absent / deferred features
+
+The following Marinara features are **intentionally absent or deferred** —
+documented here so future contributors know the decisions are deliberate,
+not oversights:
+
+1. **Cross-chat recall** (Marinara: up to 50 chatIds) — our recall is
+   single-session. Defer: requires multi-session embedding index; not
+   needed for roleplay MVP.
+
+2. **Local embedder fallback** (Marinara: ONNX MiniLM / llama.cpp sidecar) —
+   we require a configured embedding endpoint. Defer: 23MB ONNX binary in
+   Flutter mobile builds is expensive (see `docs/plans/PLAN_MEMORY_CONTINUITY.md`).
+
+3. **Agent batching by provider+model** (Marinara: XML-delimited `<result>`
+   blocks) — our single JSON call is simpler. Defer: no per-agent model
+   selection yet.
+
+4. **Per-agent cadence** (Marinara: per-agent `runInterval`) — we use global
+   `runAgenticEveryN`. Defer: add when we have >8 agents with different cost
+   profiles.
+
+5. **Knowledge router** (Marinara: LLM-based catalog routing for lorebook
+   entries) — we use keyword + vector search. Defer: our
+   `fallbackThreshold`/`fallbackTopK` semantic fallback covers the
+   keyless-entry gap.
+
+6. **Multi-pass RAG for lorebook** (Marinara: chunked extraction +
+   consolidation) — defer: lorebook entries are short; multi-pass is for
+   oversized documents.
+
+7. **Head/tail truncation for recalled memories** (Marinara: 70% head + 30%
+   tail with marker) — we use a soft char cap. Defer: marginal improvement;
+   current cap works.
+
+8. **Per-day/per-week characterMemories bucketing** — CANCELLED. Doesn't fit
+   roleplay. See `docs/plans/PLAN_MEMORY_CONTINUITY.md`.
+
 ---
 
 ## 5. Database Layer

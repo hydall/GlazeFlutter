@@ -113,6 +113,7 @@ class AgentRunner {
     }
     final timeoutMs = effectiveTimeoutMs(agent, isFinalResponse);
     final maxTokensOverride = effectiveMaxTokens(agent, isFinalResponse);
+    final temperatureOverride = effectiveTemperature(agent, isFinalResponse);
     return _streamRunner.run(
       agent: agent,
       messages: messages,
@@ -122,6 +123,7 @@ class AgentRunner {
       cancelToken: cancelToken,
       timeoutMs: timeoutMs,
       maxTokensOverride: maxTokensOverride,
+      temperatureOverride: temperatureOverride,
       onFinalResponseUpdate: onFinalResponseUpdate,
       onIntermediateUpdate: onIntermediateUpdate,
     );
@@ -194,6 +196,22 @@ class AgentRunner {
     if (!isFinalResponse) return null;
     final global = _ref.read(pipelineSettingsProvider).studioFinalMaxTokens;
     if (global > 0) return global;
+    return null;
+  }
+
+  /// Temperature for the final generator. Resolution order:
+  /// 1. [PipelineSettings.studioFinalTemperature] (>= 0) — global user
+  ///    setting from the Studio menu. Lets the user raise/lower the final
+  ///    responder's creativity without rebuilding the Studio agents.
+  /// 2. [StudioAgent.temperature] — per-agent value set at Studio build
+  ///    time (default 0.8 for the final generator).
+  /// Returns null when the global override is negative and the caller
+  /// should use the agent's own value.
+  double? effectiveTemperature(StudioAgent agent, bool isFinalResponse) {
+    if (!isFinalResponse) return null;
+    final global =
+        _ref.read(pipelineSettingsProvider).studioFinalTemperature;
+    if (global >= 0) return global;
     return null;
   }
 

@@ -43,6 +43,7 @@ class SavedMessageWriter {
     List<TriggeredEntry> triggeredMemories = const [],
     String? regenTargetId,
     int visibleStartIndex = 0,
+    List<Map<String, dynamic>> studioOutputs = const [],
   }) {
     final persistedMemoryCoverage = stripEphemeralMemoryCoverage(
       memoryCoverage,
@@ -62,6 +63,7 @@ class SavedMessageWriter {
       'genTime': genTime,
       'reasoning': reasoning,
       'tokens': tokens,
+      if (studioOutputs.isNotEmpty) 'studioOutputs': studioOutputs,
       // Persist triggered entries per swipe so each variation shows its own
       // lorebook/memory activations (restored on swipe in ChatMessageService).
       if (triggeredLorebooks.isNotEmpty)
@@ -118,6 +120,7 @@ class SavedMessageWriter {
             reasoning: reasoning,
             genTime: genTime,
             tokens: tokens,
+            studioOutputs: studioOutputs,
           ),
         ];
         const agentSwipeId = 0;
@@ -150,6 +153,7 @@ class SavedMessageWriter {
           triggeredMemories: triggeredMemories,
           agentSwipes: agentSwipes,
           agentSwipeId: agentSwipeId,
+          studioOutputs: studioOutputs,
         );
         final updatedMessages = [...currentSession.messages];
         updatedMessages[idx] = updated;
@@ -184,6 +188,7 @@ class SavedMessageWriter {
         reasoning: reasoning,
         genTime: genTime,
         tokens: tokens,
+        studioOutputs: studioOutputs,
       ),
     ];
     final assistantMsg = ChatMessage(
@@ -203,6 +208,7 @@ class SavedMessageWriter {
       triggeredMemories: triggeredMemories,
       agentSwipes: newAgentSwipes,
       agentSwipeId: 0,
+      studioOutputs: studioOutputs,
     );
     final finalMessages = [...currentSession.messages, assistantMsg];
     final now = currentTimestampSeconds();

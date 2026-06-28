@@ -1734,6 +1734,10 @@
     "post_building_studio_timeout_desc": "Idle-таймаут до прихода любого чанка (текста или рассуждения). Как только модель отдаёт первый чанк, таймер отменяется и агент работает до завершения. 0 = по умолчанию (генератор 90с, трекеры 60с).",
     "post_building_studio_max_tokens": "Лимит токенов генератора",
     "post_building_studio_max_tokens_desc": "Бюджет токенов для Main Responder. Увеличите для моделей с рассуждениями (напр. Gemini), которые тратят бюджет на размышления и оставляют мало для ответа. 0 = по умолчанию (8000).",
+    "post_building_studio_temperature": "Температура генератора",
+    "post_building_studio_temperature_desc": "Температура для Main Responder. Повысьте для более креативного/разнообразного текста, понизьте для более детерминированных ответов. Отрицательное значение = по умолчанию агента (0.8).",
+    "post_building_temperature_hint": "Температура (0.0–2.0). Пусто = по умолчанию агента.",
+    "post_building_default": "По умолчанию ({arg0})",
     "post_building_default_tokens": "По умолчанию ({arg0} токенов)",
     "post_building_tokens_min": "Сколько токенов выделить. Мин: {arg0}. 0 = по умолчанию агента.",
     "post_building_sidecar_enabled": "Сайдкар вkeyён",
@@ -1783,5 +1787,16 @@
         "few": "{} сообщения вырезано из истории",
         "many": "{} сообщений вырезано из истории",
         "other": "{} сообщений вырезано из истории"
-    }
+    },
+    "post_building_recovery": "Восстановить трекеры и память",
+    "post_building_recovery_desc": "Заново запустить трекеры Studio и MemoryBook write-loop для каждого ответа ассистента в этой сессии. Используйте, если значения трекеров или записи памяти были потеряны.",
+    "post_building_recovery_button": "Восстановить",
+    "post_building_recovery_confirm": "Это перезапустит цикл трекеров Studio и агентский write-loop MemoryBook для каждого ответа ассистента в сессии. Это может занять время в зависимости от количества сообщений. Трекеры и записи памяти будут восстановлены (память — append-only, существующие записи сохраняются). Продолжить?",
+    "post_building_recovery_starting": "Запуск восстановления…",
+    "post_building_recovery_progress": "Обработка сообщения {arg0} из {arg1}…",
+    "post_building_recovery_trackers": "Трекеры: {arg0}",
+    "post_building_recovery_memories": "Память: {arg0}",
+    "post_building_recovery_failed": "Ошибок: {arg0}",
+    "post_building_recovery_done": "Готово — трекеры: {arg0}, память: {arg1}, ошибок: {arg2}",
+    "post_building_recovery_error": "Восстановление не удалось"
 }

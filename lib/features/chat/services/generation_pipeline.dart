@@ -1626,7 +1626,9 @@ class GenerationPipeline {
 /// Extracts recent conversation as plain text for the agentic write-loop
 /// prompt. Format: "Role: content" per line, last [maxMessages] messages.
 /// Skips error, typing, and empty-content messages.
-@visibleForTesting
+///
+/// Also used by [TrackerMemoryRecoveryService] to build the recent-history
+/// slice for each replayed turn during a recovery batch.
 String extractRecentHistoryText(
   List<ChatMessage> messages, {
   int maxMessages = 10,

@@ -311,9 +311,14 @@ class PostCleanerService {
 
     final buffer = StringBuffer()
       ..writeln(
-        'You are a conservative prose editor for a roleplay story. Your '
-        'primary job is to clean up the following assistant response by '
-        'removing clichés, repetitive phrasings, and common AI-isms.',
+        'You are a faithful prose editor for a roleplay story. Your job is to '
+        'clean up the following assistant response: remove clichés and common '
+        'AI-isms, smooth repetitive phrasings, and fix local continuity '
+        'errors — while PRESERVING the original voice, energy, imagery, and '
+        'emotional texture. The text you receive was written with intent; '
+        'your edits should refine it, not flatten it. Keep what is vivid, '
+        'specific, and alive; only strip what is generic, overused, or '
+        'contradictory.',
       )
       ..writeln();
 
@@ -339,8 +344,9 @@ class PostCleanerService {
           'Apply minimal fixes for these issues while also cleaning style.',
         )
         ..writeln(
-          'Do not add new content to resolve them. Prefer deletion or neutral '
-          'rewording.',
+          'Do not add new content to resolve them. Prefer rephrasing that '
+          'preserves the prose\'s voice; only delete or neutralize when '
+          'rephrasing would bloat the text.',
         )
         ..writeln();
     }
@@ -398,17 +404,31 @@ class PostCleanerService {
       ..writeln('Rules:')
       ..writeln('- Keep the same meaning, events, and character voices.')
       ..writeln(
-        '- Remove or rephrase overused phrases and AI-isms (e.g. "a shiver ran '
-        'down", "a dance of", "symphony of", "tapestry of", "couldn\'t help '
-        'but", "a mix of", "sent shivers", "palpable tension").',
+        '- PRESERVE vivid, original imagery and figurative language. '
+        'Metaphors, sensory details, and specific textures are NOT filler '
+        '— keep them.',
       )
-      ..writeln('- Remove redundant descriptions and filler.')
+      ..writeln(
+        '- Remove or rephrase ONLY overused AI-isms and clichés (e.g. "a '
+        'shiver ran down", "a dance of", "symphony of", "tapestry of", '
+        '"couldn\'t help but", "a mix of", "sent shivers", "palpable '
+        'tension"). Do NOT remove original metaphors or unique phrasings '
+        'just because they are figurative.',
+      )
+      ..writeln(
+        '- Remove redundant repetition of the SAME idea within a few '
+        'sentences — but do not compress distinct beats into one.',
+      )
       ..writeln('- Do NOT add new content, events, or dialogue.')
       ..writeln(
         '- Do NOT change the POV, tense, or the output language. Preserve the '
         'language and formatting required by the authoritative rules above.',
       )
-      ..writeln('- Keep the same approximate length.')
+      ..writeln(
+        '- Keep the same approximate length. Do not shorten the text by '
+        'removing imagery or descriptive passages — only by removing '
+        'genuine filler.',
+      )
       ..writeln(
         '- PRESERVE all inline HTML / formatting markup VERBATIM. This includes '
         '<font color="...">, <i>, <b>, <em>, <strong>, <mark>, <sub>, <sup>, '
@@ -460,8 +480,9 @@ class PostCleanerService {
           'motivations.',
         )
         ..writeln(
-          '- Prefer minimal edits: remove, shorten, or neutralize the '
-          'incorrect phrase.',
+          '- Prefer minimal edits: fix the contradiction while keeping the '
+          'sentence vivid. Rephrase rather than delete when possible; only '
+          'shorten or neutralize when rephrasing would bloat the text.',
         )
         ..writeln(
           '- If correcting a continuity issue requires adding a new '

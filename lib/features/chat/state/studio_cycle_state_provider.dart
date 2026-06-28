@@ -7,10 +7,12 @@ import 'package:flutter_riverpod/legacy.dart';
 /// finishes.
 ///
 /// The cycle phases are:
-///   idle → running → writingFinal → done | agentErrors | error
+///   idle → running → writingFinal → cleaning → done | agentErrors | error
 ///
 /// `running` covers the tracker-agents (intermediate agents) phase.
 /// `writingFinal` covers the final generator streaming its reply.
+/// `cleaning` covers the POST-cleaner rewrite (only when Studio was active —
+/// otherwise the cleaner shows its own [PostCleanerStatusCard]).
 /// `agentErrors` is the soft-fail outcome: some trackers failed but the
 /// final generator still produced a reply (or attempted to).
 /// `error` is the hard-fail outcome (timeout / uncaught error / empty
@@ -34,7 +36,8 @@ class StudioCycleState {
 
   bool get isActive =>
       phase == StudioCyclePhase.running ||
-      phase == StudioCyclePhase.writingFinal;
+      phase == StudioCyclePhase.writingFinal ||
+      phase == StudioCyclePhase.cleaning;
   bool get isDone =>
       phase == StudioCyclePhase.done || phase == StudioCyclePhase.agentErrors;
   bool get isError => phase == StudioCyclePhase.error;
@@ -63,6 +66,14 @@ class StudioCycleState {
     required this.failedAgentNames,
   }) : phase = StudioCyclePhase.writingFinal;
 
+  const StudioCycleState.cleaning({
+    required this.sessionId,
+    required this.totalAgents,
+    required this.completedAgents,
+    required this.failedAgents,
+    required this.failedAgentNames,
+  }) : phase = StudioCyclePhase.cleaning;
+
   const StudioCycleState.done({
     required this.sessionId,
     required this.totalAgents,
@@ -87,7 +98,15 @@ class StudioCycleState {
       failedAgentNames = const [];
 }
 
-enum StudioCyclePhase { idle, running, writingFinal, done, agentErrors, error }
+enum StudioCyclePhase {
+  idle,
+  running,
+  writingFinal,
+  cleaning,
+  done,
+  agentErrors,
+  error
+}
 
 /// Global Studio tracker-cycle live state. Set by
 /// `StreamGenerationService` before and after `runTrackerCycle`, and watched

@@ -1717,6 +1717,10 @@
     "post_building_studio_timeout_desc": "Idle timeout before any text or reasoning chunk arrives. Once the model emits its first chunk, the timer is cancelled and the agent runs to completion. 0 = use per-agent defaults (final generator 90s, trackers 60s).",
     "post_building_studio_max_tokens": "Final generator max tokens",
     "post_building_studio_max_tokens_desc": "Token budget for the Main Responder. Increase for reasoning models (e.g. Gemini) that spend most of the budget on thinking and leave too little for the actual reply. 0 = use the agent default (8000).",
+    "post_building_studio_temperature": "Final generator temperature",
+    "post_building_studio_temperature_desc": "Temperature for the Main Responder. Raise for more creative/varied prose, lower for more deterministic outputs. Negative = use the agent default (0.8).",
+    "post_building_temperature_hint": "Temperature (0.0–2.0). Leave empty = use agent default.",
+    "post_building_default": "Default ({arg0})",
     "post_building_default_tokens": "Default ({arg0} tokens)",
     "post_building_tokens_min": "Tokens to allocate. Min: {arg0}. 0 = use agent default.",
     "post_building_sidecar_enabled": "Sidecar enabled",
@@ -1758,5 +1762,16 @@
     "count_message_cut": {
         "one": "{} message cut from history",
         "other": "{} messages cut from history"
-    }
+    },
+    "post_building_recovery": "Recover trackers & memory",
+    "post_building_recovery_desc": "Re-run Studio trackers and MemoryBook write-loop for every assistant message in this session. Use when tracker values or memory entries were lost.",
+    "post_building_recovery_button": "Recover",
+    "post_building_recovery_confirm": "This will re-run the Studio tracker cycle and the MemoryBook agentic write-loop for every assistant message in the session. It may take a while depending on the number of messages. Trackers and memory entries will be restored (memory is append-only — existing entries are kept). Continue?",
+    "post_building_recovery_starting": "Starting recovery…",
+    "post_building_recovery_progress": "Processing message {arg0} of {arg1}…",
+    "post_building_recovery_trackers": "Trackers: {arg0}",
+    "post_building_recovery_memories": "Memories: {arg0}",
+    "post_building_recovery_failed": "Failed: {arg0}",
+    "post_building_recovery_done": "Done — trackers: {arg0}, memories: {arg1}, failed: {arg2}",
+    "post_building_recovery_error": "Recovery failed"
 }

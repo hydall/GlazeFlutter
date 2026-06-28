@@ -115,10 +115,41 @@ class MessageRecallService {
       final queryVecChunks = queryChunks
           .map((c) => VectorChunk(text: c.text, vector: c.vector))
           .toList();
+
+      // §6: dimension-mismatch detection. If the user switched embedding
+      // models after chunks were stored, the candidate vectors will have a
+      // different dimension from the query. cosineSimilarity silently
+      // returns 0 in that case (which the threshold filters out), but
+      // without a warning the user would see empty recall with no clue why.
+      // Filter out stale candidates and log a warning once per recall.
+      final queryDim = queryVecChunks.isEmpty
+          ? 0
+          : queryVecChunks.first.vector.length;
+      var mismatchLogged = false;
+      final dimFilteredCandidates = <VectorCandidate>[];
+      for (final candidate in candidates) {
+        final chunks = candidate.vectors ?? const <VectorChunk>[];
+        final allMatch = chunks.every((c) => c.vector.length == queryDim);
+        if (allMatch) {
+          dimFilteredCandidates.add(candidate);
+        } else if (!mismatchLogged && kDebugMode) {
+          debugPrint(
+            '[msg-recall] dimension mismatch: query=$queryDim '
+            'candidate has ${chunks.isNotEmpty ? chunks.first.vector.length : 0} '
+            '(entryId=${candidate.id}). Embedding model may have changed — '
+            're-index chat message embeddings to restore recall.',
+          );
+          mismatchLogged = true;
+        }
+      }
+      if (dimFilteredCandidates.isEmpty && mismatchLogged) {
+        return const MessageRecallResult();
+      }
+
       final results = findTopKMulti(
         queryVecChunks,
-        candidates,
-        candidates.length,
+        dimFilteredCandidates,
+        dimFilteredCandidates.length,
         0,
       );
 

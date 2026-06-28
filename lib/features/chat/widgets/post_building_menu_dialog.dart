@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,8 @@ import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../settings/api_list_provider.dart';
+import '../services/tracker_memory_recovery_service.dart';
+import '../state/recovery_state_provider.dart';
 
 /// Post-Building menu dialog. Session-bound.
 ///
@@ -169,6 +173,11 @@ class _PostBuildingMenuDialogState
                 modelsByApiConfigId: _modelsByApiConfigId,
                 fetchingModelConfigIds: _fetchingModelConfigIds,
                 onFetchModels: _fetchProviderModels,
+              ),
+              const SizedBox(height: 8),
+              _RecoverySection(
+                sessionId: widget.sessionId,
+                charId: widget.charId,
               ),
             ],
           ),
@@ -1819,4 +1828,205 @@ Future<String?> _editMultiline({
     ),
   );
   return result;
+}
+
+/// Recovery section: re-runs Studio tracker cycle + MemoryBook agentic
+/// write-loop for every assistant message in the session, restoring
+/// `studioOutputs` and memory entries that were lost due to the
+/// `writeAssistant` regression.
+///
+/// Shows live progress "processing message N of M" via [recoveryStateProvider].
+class _RecoverySection extends ConsumerWidget {
+  final String sessionId;
+  final String charId;
+
+  const _RecoverySection({required this.sessionId, required this.charId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(recoveryStateProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final isRunning = state.isActive;
+
+    return _SectionCard(
+      icon: Icons.restore,
+      titleKey: 'post_building_recovery',
+      subtitleKey: 'post_building_recovery_desc',
+      children: [
+        if (isRunning) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  state.totalMessages > 0
+                      ? 'post_building_recovery_progress'.tr(namedArgs: {
+                          'arg0': '${state.processedMessages}',
+                          'arg1': '${state.totalMessages}',
+                        })
+                      : 'post_building_recovery_starting'.tr(),
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ),
+              if (state.currentMessageId != null)
+                Text(
+                  '#${state.currentMessageIndex}',
+                  style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: state.totalMessages > 0
+                  ? state.processedMessages / state.totalMessages
+                  : null,
+              minHeight: 6,
+              backgroundColor: cs.surfaceContainerHighest,
+              color: cs.primary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              _StatChip(
+                label: 'post_building_recovery_trackers'.tr(
+                  namedArgs: {'arg0': '${state.trackersWritten}'},
+                ),
+              ),
+              const SizedBox(width: 8),
+              _StatChip(
+                label: 'post_building_recovery_memories'.tr(
+                  namedArgs: {'arg0': '${state.memoriesWritten}'},
+                ),
+              ),
+              if (state.failedMessages > 0) ...[
+                const SizedBox(width: 8),
+                _StatChip(
+                  label: 'post_building_recovery_failed'.tr(
+                    namedArgs: {'arg0': '${state.failedMessages}'},
+                  ),
+                  accent: cs.error,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => ref
+                  .read(trackerMemoryRecoveryServiceProvider)
+                  .cancel(),
+              icon: const Icon(Icons.stop_circle_outlined, size: 16),
+              label: Text('common_cancel'.tr()),
+              style: TextButton.styleFrom(foregroundColor: cs.error),
+            ),
+          ),
+        ] else if (state.isDone) ...[
+          Row(
+            children: [
+              Icon(Icons.check_circle_outline, size: 16, color: cs.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'post_building_recovery_done'.tr(namedArgs: {
+                    'arg0': '${state.trackersWritten}',
+                    'arg1': '${state.memoriesWritten}',
+                    'arg2': '${state.failedMessages}',
+                  }),
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FilledButton.tonalIcon(
+            onPressed: () => _startRecovery(ref, context),
+            icon: const Icon(Icons.restore, size: 16),
+            label: Text('post_building_recovery_button'.tr()),
+          ),
+        ] else if (state.isError) ...[
+          Row(
+            children: [
+              Icon(Icons.error_outline, size: 16, color: cs.error),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  state.error ?? 'post_building_recovery_error'.tr(),
+                  style: tt.bodySmall?.copyWith(color: cs.error),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FilledButton.tonalIcon(
+            onPressed: () => _startRecovery(ref, context),
+            icon: const Icon(Icons.restore, size: 16),
+            label: Text('post_building_recovery_button'.tr()),
+          ),
+        ] else ...[
+          FilledButton.tonalIcon(
+            onPressed: () => _startRecovery(ref, context),
+            icon: const Icon(Icons.restore, size: 16),
+            label: Text('post_building_recovery_button'.tr()),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _startRecovery(WidgetRef ref, BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('post_building_recovery'.tr()),
+        content: Text('post_building_recovery_confirm'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: Text('common_cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(c).pop(true),
+            child: Text('post_building_recovery_button'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    unawaited(
+      ref.read(trackerMemoryRecoveryServiceProvider).recover(
+            sessionId: sessionId,
+            charId: charId,
+          ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  final String label;
+  final Color? accent;
+
+  const _StatChip({required this.label, this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: (accent ?? cs.surfaceContainerHighest).withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: accent ?? cs.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
 }
