@@ -305,9 +305,21 @@ class ChatRepo implements SyncChatStore {
             );
           }
 
-          final parentSwipeId = kind == 'cleaned' && agentSwipes.isNotEmpty
-              ? agentSwipes.length - 1
+          // A 'cleaned' swipe's parent is always the original 'final' swipe,
+          // never a previous 'cleaned' swipe. This matters for Re-run cleaner:
+          // each re-run must re-clean the original final text, not a previous
+          // (already shortened) cleaned swipe. Find the last 'final' swipe in
+          // the list (the lazy-migration block above backfills one at index 0
+          // when needed). Fall back to the last swipe only if no 'final' is
+          // present at all (defensive — should not happen in practice).
+          var parentSwipeId = kind == 'cleaned' && agentSwipes.isNotEmpty
+              ? agentSwipes.lastIndexWhere((s) => s.kind == 'final')
               : null;
+          if (kind == 'cleaned' &&
+              parentSwipeId == null &&
+              agentSwipes.isNotEmpty) {
+            parentSwipeId = agentSwipes.length - 1;
+          }
 
           // Inherit studioOutputs from the parent 'final' swipe so that
           // switching to the 'cleaned' blue swipe keeps the Studio regen
