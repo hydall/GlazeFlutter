@@ -52,39 +52,36 @@ void main() {
     });
 
     group('verbatim shard format', () {
-      // The _synthesizeRoutedShard method produces:
-      // [Block: <name>]
-      // <content>
-      //
-      // ---
-      //
-      // [Block: <name>]
-      // <content>
-      //
-      // ---
-      //
-      // [Conflict resolution: ...]
-      //
-      // We verify this format via the public decompose path by creating a
-      // service instance. Since the verbatim path doesn't call LLM, we can
-      // test it without mocking transport.
+      // _synthesizeRoutedShard now produces List<PromptShardBlock> — one block
+      // per assigned preset block + a conflict-resolution block + optional
+      // Lumia suffix blocks. Each block carries role/content/blockName/blockId.
 
-      test('verbatim shard includes block name headers', () {
-        // Simulate what _synthesizeRoutedShard produces
+      test('verbatim shard produces one PromptShardBlock per preset block', () {
+        // Simulate what _synthesizeRoutedShard produces.
         final blocks = [
           _block(id: 'b1', name: 'Style Guide', content: 'Write in third person.'),
           _block(id: 'b2', name: 'NSFW Rules', content: 'Explicit content allowed.'),
         ];
-        final parts = blocks.map((b) {
+        final shard = <PromptShardBlock>[];
+        for (final b in blocks) {
           final content = b.content.trim();
-          return '[Block: ${b.name}]\n$content';
-        }).join('\n\n---\n\n');
-        final shard = '$parts\n\n---\n\n[Conflict resolution: if two blocks above contradict each other, follow the one that appears LAST.]';
+          if (content.isEmpty) continue;
+          shard.add(
+            PromptShardBlock(
+              role: b.role,
+              content: content,
+              blockName: b.name.isNotEmpty ? b.name : b.id,
+              blockId: b.id,
+            ),
+          );
+        }
 
-        expect(shard.contains('[Block: Style Guide]'), isTrue);
-        expect(shard.contains('[Block: NSFW Rules]'), isTrue);
-        expect(shard.contains('Write in third person.'), isTrue);
-        expect(shard.contains('Explicit content allowed.'), isTrue);
+        expect(shard.length, 2);
+        expect(shard[0].blockName, 'Style Guide');
+        expect(shard[0].blockId, 'b1');
+        expect(shard[0].content, 'Write in third person.');
+        expect(shard[1].blockName, 'NSFW Rules');
+        expect(shard[1].content, 'Explicit content allowed.');
       });
 
       test('verbatim shard preserves block order', () {
@@ -93,33 +90,34 @@ void main() {
           _block(id: 'b2', name: 'Second', content: 'BBB'),
           _block(id: 'b3', name: 'Third', content: 'CCC'),
         ];
-        final parts = blocks.map((b) {
-          return '[Block: ${b.name}]\n${b.content.trim()}';
-        }).join('\n\n---\n\n');
+        final shard = <PromptShardBlock>[];
+        for (final b in blocks) {
+          final content = b.content.trim();
+          if (content.isEmpty) continue;
+          shard.add(PromptShardBlock(content: content, blockName: b.name));
+        }
 
-        final firstIdx = parts.indexOf('AAA');
-        final secondIdx = parts.indexOf('BBB');
-        final thirdIdx = parts.indexOf('CCC');
-
-        expect(firstIdx < secondIdx, isTrue);
-        expect(secondIdx < thirdIdx, isTrue);
+        expect(shard[0].content, 'AAA');
+        expect(shard[1].content, 'BBB');
+        expect(shard[2].content, 'CCC');
       });
 
-      test('verbatim shard includes conflict resolution footer', () {
+      test('verbatim shard includes conflict resolution block', () {
         final blocks = [_block(id: 'b1', name: 'Test', content: 'content')];
-        final parts = blocks.map((b) {
-          return '[Block: ${b.name}]\n${b.content.trim()}';
-        }).join('\n\n---\n\n');
-        final shard = '$parts\n\n---\n\n[Conflict resolution: if two blocks above contradict each other, follow the one that appears LAST.]';
+        final shard = <PromptShardBlock>[
+          for (final b in blocks)
+            if (b.content.trim().isNotEmpty)
+              PromptShardBlock(content: b.content.trim(), blockName: b.name),
+          const PromptShardBlock(
+            content:
+                '[Conflict resolution: if two blocks above contradict each other, follow the one that appears LAST.]',
+            blockName: 'Conflict resolution',
+          ),
+        ];
 
-        expect(
-          shard.contains('[Conflict resolution:'),
-          isTrue,
-        );
-        expect(
-          shard.contains("follow the one that appears LAST"),
-          isTrue,
-        );
+        final conflict = shard.last;
+        expect(conflict.blockName, 'Conflict resolution');
+        expect(conflict.content, contains('follow the one that appears LAST'));
       });
 
       test('verbatim shard skips empty-content blocks', () {
@@ -127,31 +125,30 @@ void main() {
           _block(id: 'b1', name: 'Has Content', content: 'real content'),
           _block(id: 'b2', name: 'Empty', content: '   '),
         ];
-        final parts = <String>[];
-        for (final block in blocks) {
-          final content = block.content.trim();
+        final shard = <PromptShardBlock>[];
+        for (final b in blocks) {
+          final content = b.content.trim();
           if (content.isEmpty) continue;
-          parts.add('[Block: ${block.name}]\n$content');
+          shard.add(PromptShardBlock(content: content, blockName: b.name));
         }
-        final shard = parts.join('\n\n---\n\n');
 
-        expect(shard.contains('Has Content'), isTrue);
-        expect(shard.contains('Empty'), isFalse);
+        expect(shard.length, 1);
+        expect(shard[0].blockName, 'Has Content');
       });
 
       test('verbatim shard uses block id when name is empty', () {
         final blocks = [
           _block(id: 'custom_id', name: '', content: 'content here'),
         ];
-        final parts = <String>[];
-        for (final block in blocks) {
-          final name = block.name.isNotEmpty ? block.name : block.id;
-          final content = block.content.trim();
+        final shard = <PromptShardBlock>[];
+        for (final b in blocks) {
+          final content = b.content.trim();
           if (content.isEmpty) continue;
-          parts.add('[Block: $name]\n$content');
+          final name = b.name.isNotEmpty ? b.name : b.id;
+          shard.add(PromptShardBlock(content: content, blockName: name));
         }
 
-        expect(parts.first.contains('[Block: custom_id]'), isTrue);
+        expect(shard[0].blockName, 'custom_id');
       });
     });
 

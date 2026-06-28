@@ -120,7 +120,8 @@ lib/
 │   │   ├── chat_transport.dart       # Abstract ChatTransport interface
 │   │   ├── chat_transport_request.dart # Shared request value object
 │   │   ├── llm_protocol.dart         # Protocol enum (openai/anthropic/gemini/openrouter)
-│   │   ├── transport_factory.dart    # ApiConfig.protocol → ChatTransport
+│   │   ├── transport_factory.dart    # ApiConfig.protocol → ChatTransport (wraps in LoggingChatTransport)
+│   │   ├── llm_request_dump.dart     # Diagnostics: dump every outgoing LLM request to JSONL (off by default)
 │   │   ├── openai_chat_transport.dart
 │   │   ├── anthropic_chat_transport.dart
 │   │   ├── gemini_chat_transport.dart
@@ -753,6 +754,19 @@ for this path to run.
 per-candidate reasons include `chunk_rank_trimmed` / `chunk_budget_trimmed`;
 expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` are
 **chat message ranges** (`messageRange`), not chunk indices.
+
+**LLM request dump** (`core/llm/transport/llm_request_dump.dart`): a debug-only
+diagnostics aid for inspecting every outgoing LLM request made while answering a
+single chat turn — studio shards, the main model, the post-cleaner audit +
+cleaner passes, and the agentic-memory writer. `transport_factory.dart` wraps
+every transport from `pickChatTransport` in a `LoggingChatTransport` decorator;
+when enabled it appends one JSON object per line (JSONL) to a temp file
+(`glaze_llm_dump.jsonl`, overwritten on app start) before delegating to the
+inner transport. **Off by default** (`LlmRequestDump.enabled = false`): when
+off, the decorator delegates with zero overhead. Flip `enabled = true` to
+capture full prompts for debugging; it is NOT a production logging facility (the
+dump contains full prompt text). `LlmRequestDump.filePath` overrides the output
+location.
 
 ### Memory system vs Marinara — intentional divergences + bug fixes
 

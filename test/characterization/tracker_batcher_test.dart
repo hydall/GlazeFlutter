@@ -16,8 +16,8 @@ void main() {
         key: 'openai|gpt-4',
         resolved: _stubResolved(),
         agents: [
-          StudioAgent(id: 'a1', name: 'Continuity', promptShard: 'track facts'),
-          StudioAgent(id: 'a2', name: 'Director', promptShard: 'pace the reply'),
+          StudioAgent(id: 'a1', name: 'Continuity', promptShard: [PromptShardBlock(content: 'track facts')]),
+          StudioAgent(id: 'a2', name: 'Director', promptShard: [PromptShardBlock(content: 'pace the reply')]),
         ],
         batchMaxTokens: 8000,
         batchTemperature: 0.3,
@@ -63,7 +63,7 @@ void main() {
         key: 'openai|gpt-4',
         resolved: _stubResolved(),
         agents: [
-          StudioAgent(id: 'a<b>', name: 'Name & Co', promptShard: ''),
+          StudioAgent(id: 'a<b>', name: 'Name & Co', promptShard: const []),
         ],
         batchMaxTokens: 1000,
         batchTemperature: 0.3,
@@ -93,7 +93,7 @@ void main() {
         key: 'anthropic|claude',
         resolved: _stubResolved(model: 'claude-3-5-sonnet'),
         agents: [
-          StudioAgent(id: 'a1', name: 'Continuity', promptShard: 'track facts'),
+          StudioAgent(id: 'a1', name: 'Continuity', promptShard: [PromptShardBlock(content: 'track facts')]),
         ],
         batchMaxTokens: 1000,
         batchTemperature: 0.3,
@@ -138,9 +138,9 @@ void main() {
         key: 'openai|gpt-4',
         resolved: _stubResolved(),
         agents: [
-          StudioAgent(id: 'a1', name: 'Continuity', promptShard: ''),
-          StudioAgent(id: 'a2', name: 'Director', promptShard: ''),
-          StudioAgent(id: 'a3', name: 'Guard', promptShard: ''),
+          StudioAgent(id: 'a1', name: 'Continuity', promptShard: const []),
+          StudioAgent(id: 'a2', name: 'Director', promptShard: const []),
+          StudioAgent(id: 'a3', name: 'Guard', promptShard: const []),
         ],
         batchMaxTokens: 1000,
         batchTemperature: 0.3,
@@ -176,8 +176,8 @@ Focus: anti-loop
         key: 'openai|gpt-4',
         resolved: _stubResolved(),
         agents: [
-          StudioAgent(id: 'a1', name: 'A', promptShard: ''),
-          StudioAgent(id: 'a2', name: 'B', promptShard: ''),
+          StudioAgent(id: 'a1', name: 'A', promptShard: const []),
+          StudioAgent(id: 'a2', name: 'B', promptShard: const []),
         ],
         batchMaxTokens: 1000,
         batchTemperature: 0.3,
@@ -203,7 +203,7 @@ Focus: anti-loop
         key: 'openai|gpt-4',
         resolved: _stubResolved(),
         agents: [
-          StudioAgent(id: 'a1', name: 'A', promptShard: ''),
+          StudioAgent(id: 'a1', name: 'A', promptShard: const []),
         ],
         batchMaxTokens: 1000,
         batchTemperature: 0.3,
@@ -224,8 +224,8 @@ Focus: anti-loop
         key: 'openai|gpt-4',
         resolved: _stubResolved(),
         agents: [
-          StudioAgent(id: 'a1', name: 'A', promptShard: ''),
-          StudioAgent(id: 'a2', name: 'B', promptShard: ''),
+          StudioAgent(id: 'a1', name: 'A', promptShard: const []),
+          StudioAgent(id: 'a2', name: 'B', promptShard: const []),
         ],
         batchMaxTokens: 1000,
         batchTemperature: 0.3,
@@ -316,8 +316,8 @@ Focus: anti-loop
         key: 'openai|gpt-4',
         resolved: _stubResolved(),
         agents: [
-          StudioAgent(id: 'a1', name: 'A', promptShard: '', maxParallelJobs: 1),
-          StudioAgent(id: 'a2', name: 'B', promptShard: '', maxParallelJobs: 1),
+          StudioAgent(id: 'a1', name: 'A', promptShard: const [], maxParallelJobs: 1),
+          StudioAgent(id: 'a2', name: 'B', promptShard: const [], maxParallelJobs: 1),
         ],
         batchMaxTokens: 1000,
         batchTemperature: 0.3,
@@ -333,10 +333,10 @@ Focus: anti-loop
         key: 'openai|gpt-4',
         resolved: _stubResolved(),
         agents: [
-          StudioAgent(id: 'a1', name: 'A', promptShard: '', maxParallelJobs: 2),
-          StudioAgent(id: 'a2', name: 'B', promptShard: '', maxParallelJobs: 2),
-          StudioAgent(id: 'a3', name: 'C', promptShard: '', maxParallelJobs: 2),
-          StudioAgent(id: 'a4', name: 'D', promptShard: '', maxParallelJobs: 2),
+          StudioAgent(id: 'a1', name: 'A', promptShard: const [], maxParallelJobs: 2),
+          StudioAgent(id: 'a2', name: 'B', promptShard: const [], maxParallelJobs: 2),
+          StudioAgent(id: 'a3', name: 'C', promptShard: const [], maxParallelJobs: 2),
+          StudioAgent(id: 'a4', name: 'D', promptShard: const [], maxParallelJobs: 2),
         ],
         batchMaxTokens: 8000,
         batchTemperature: 0.3,
@@ -365,3 +365,4 @@ ResolvedAgentConfig _stubResolved({String model = 'gpt-4'}) {
 /// Pure prompt-building / parsing tests construct the batcher WITHOUT a
 /// runner — `TrackerBatcher()` is a no-arg constructor. Only `groupAgents` /
 /// `runPhase` require a runner; we don't touch them here.
+

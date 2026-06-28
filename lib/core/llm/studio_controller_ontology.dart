@@ -79,7 +79,7 @@ class StudioControllerOntology {
           'At chat time, output actionable constraints for user agency and character behavior. No scene prose, no drafted actions, no dialogue. You may add an optional "Options" list of 1-3 branchable character-behavior approaches the final writer can pick from (describe the approach only, e.g. "let the character deflect" vs "let a crack of honesty show"); never write ready-made lines or actions.',
       fallbackPrompt:
           'Enforce user autonomy and character authenticity. Never write the user\'s dialogue, actions, thoughts, feelings, intentions, or decisions. Characters act only from established knowledge, psychology, history, physical limits, and current pressure. Produce constraints only, not prose.',
-      refreshPolicy: 'scene',
+      refreshPolicy: 'turn',
       invalidationSignals: ['active_cast_changed', 'relationship_state_changed'],
       temperature: 0.3,
       maxTokens: 1400,
@@ -94,7 +94,7 @@ class StudioControllerOntology {
           'At chat time, output a brief with target length, paragraph budget, POV/camera, style mode, sensory budget, beat structure, dialogue/action balance, opening constraint, and stopping point. No scene prose. Choose the paragraph budget by reading the current scene tempo: default 6-8 paragraphs; fewer (around 2-4) in fast/dynamic/action/quick-dialogue beats to hand the turn back to the user; more (8+) in slow, atmospheric, or descriptive beats. Always state both the chosen number and why this tempo warrants it in one short note. You may add an optional "Options" list of 1-3 branchable structural/style approaches the final writer can pick from (describe the approach only, e.g. "open on a physical action" vs "open on a single line of dialogue"); never write ready-made prose.',
       fallbackPrompt:
           'Extract narrative mode, pacing, style, length, POV, tone, genre, and sensory budget into a concise response contract. Set length adaptively to scene tempo: default target 6-8 paragraphs; shorten to about 2-4 in fast, dynamic, action, or rapid-dialogue scenes so the user can react; lengthen to 8+ in slow, descriptive, or introspective scenes. Include dialogue/action balance and where the response should stop. Do not draft the reply.',
-      refreshPolicy: 'scene',
+      refreshPolicy: 'turn',
       invalidationSignals: ['scene_changed', 'tone_changed', 'pacing_changed'],
       temperature: 0.3,
       maxTokens: 1600,
@@ -145,7 +145,7 @@ class StudioControllerOntology {
           'At chat time, output world/NPC guidance only: active NPCs, off-focus thread, environmental pressure, and what not to add. No prose. You may add an optional "Options" list of 1-3 branchable world-texture approaches the final writer can pick from (describe the approach only, e.g. "let an offscreen sound intrude" vs "keep the world still and pressureless"); never write ready-made prose.',
       fallbackPrompt:
           'Guide living-world and NPC activity. NPCs should act only when the scene supports it and should affect the scene without stealing focus. Produce practical world-state guidance only.',
-      refreshPolicy: 'scene',
+      refreshPolicy: 'turn',
       invalidationSignals: [
         'scene_changed',
         'location_changed',
