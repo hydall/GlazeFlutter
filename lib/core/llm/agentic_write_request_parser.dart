@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
@@ -111,45 +112,33 @@ Rules:
         totalElapsedMs: outcome.totalElapsedMs,
       );
     }
-    AgenticWriteResponse? response;
-    try {
-      final decoded = jsonDecode(outcome.text!);
-      if (decoded is! Map<String, dynamic>) {
-        response = null;
-      } else {
-        final trackerRequests = <TrackerWriteRequest>[];
-        final trackerRaw = decoded['trackers'];
-        if (trackerRaw is List) {
-          for (final item in trackerRaw) {
-            if (item is Map<String, dynamic>) {
-              final req = TrackerWriteRequest.fromJson(item);
-              if (req.name.isNotEmpty && req.value.isNotEmpty) {
-                trackerRequests.add(req);
-              }
-            }
-          }
-        }
+    AgenticWriteResponse? response = _parseWriteResponse(outcome.text!);
 
-        final memoryRequests = <MemoryWriteRequest>[];
-        final memoryRaw = decoded['memories'];
-        if (memoryRaw is List) {
-          for (final item in memoryRaw) {
-            if (item is Map<String, dynamic>) {
-              final req = MemoryWriteRequest.fromJson(item);
-              if (req.title.isNotEmpty && req.content.isNotEmpty) {
-                memoryRequests.add(req);
-              }
-            }
-          }
-        }
-
-        response = AgenticWriteResponse(
-          trackerRequests: trackerRequests,
-          memoryRequests: memoryRequests,
-        );
+    // §3: JSON-retry. If the first response was unparseable, retry ONCE with
+    // a strict JSON reminder (mirrors Marinara buildInvalidJsonRetryMessages).
+    // Transient LLM formatting errors caused silent memory loss before this
+    // retry — the catch block returned null with no second attempt.
+    if (response == null) {
+      final retryPrompt = '$prompt\n\n'
+          'IMPORTANT: Your previous response was not valid JSON. '
+          'Return ONLY a JSON object now — no markdown fences, no prose, '
+          'no explanation. Start with `{` and end with `}`.';
+      final retryOutcome = await _llm.callOnceWithLog(
+        config: config,
+        prompt: retryPrompt,
+        maxTokens: 1000,
+        temperature: 0.2,
+        timeoutMs: settings.sidecarTimeoutMs,
+        cancelToken: cancelToken,
+      );
+      if (retryOutcome.isOk && retryOutcome.text != null) {
+        response = _parseWriteResponse(retryOutcome.text!);
       }
-    } catch (_) {
-      response = null;
+      return AgenticWriteLlmOutcome(
+        response: response,
+        attempts: [...outcome.attempts, ...retryOutcome.attempts],
+        totalElapsedMs: outcome.totalElapsedMs + retryOutcome.totalElapsedMs,
+      );
     }
     return AgenticWriteLlmOutcome(
       response: response,
@@ -157,6 +146,52 @@ Rules:
       totalElapsedMs: outcome.totalElapsedMs,
     );
   }
+
+  /// Parses the LLM's JSON response into an [AgenticWriteResponse]. Returns
+  /// null if the text is not valid JSON or not the expected shape.
+  @visibleForTesting
+  static AgenticWriteResponse? parseWriteResponse(String text) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map<String, dynamic>) return null;
+
+      final trackerRequests = <TrackerWriteRequest>[];
+      final trackerRaw = decoded['trackers'];
+      if (trackerRaw is List) {
+        for (final item in trackerRaw) {
+          if (item is Map<String, dynamic>) {
+            final req = TrackerWriteRequest.fromJson(item);
+            if (req.name.isNotEmpty && req.value.isNotEmpty) {
+              trackerRequests.add(req);
+            }
+          }
+        }
+      }
+
+      final memoryRequests = <MemoryWriteRequest>[];
+      final memoryRaw = decoded['memories'];
+      if (memoryRaw is List) {
+        for (final item in memoryRaw) {
+          if (item is Map<String, dynamic>) {
+            final req = MemoryWriteRequest.fromJson(item);
+            if (req.title.isNotEmpty && req.content.isNotEmpty) {
+              memoryRequests.add(req);
+            }
+          }
+        }
+      }
+
+      return AgenticWriteResponse(
+        trackerRequests: trackerRequests,
+        memoryRequests: memoryRequests,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  AgenticWriteResponse? _parseWriteResponse(String text) =>
+      parseWriteResponse(text);
 }
 
 /// Parsed LLM response: the tracker + memory write requests the model
