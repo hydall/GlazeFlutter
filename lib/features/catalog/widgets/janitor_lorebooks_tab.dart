@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/lorebook.dart';
@@ -79,6 +80,7 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
   final _nameController = TextEditingController();
   bool _building = false;
   String? _buildError;
+  LorebookBuildException? _buildDebug;
   Lorebook? _built;
   List<Map<String, String>>? _previewMessages;
   Timer? _timer;
@@ -87,10 +89,11 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
   List<JanitorScriptRef> get _scriptRefs =>
       lorebookScriptRefs(widget.args.meta);
 
-  /// There is hidden lore to recover when the card itself is closed or the
-  /// character lists a non-public lorebook.
+  /// There is hidden lore to recover only when the character actually lists a
+  /// non-public lorebook (or a fetched book turned out inaccessible). A closed
+  /// card *definition* alone is not a closed lorebook, so it must not surface
+  /// the closed-lorebook controls.
   bool get _hasClosed =>
-      !widget.args.definitionPublic ||
       _scriptRefs.any((r) => !r.isPublic) ||
       _public.any((b) => !b.accessible);
 
@@ -181,6 +184,7 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
       _built = null;
       _previewMessages = null;
       _buildError = null;
+      _buildDebug = null;
     });
     try {
       final result = await ref.read(janitorExtractorProvider).extract(
@@ -210,6 +214,7 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
     setState(() {
       _building = true;
       _buildError = null;
+      _buildDebug = null;
       _built = null;
       _elapsed = 0;
     });
@@ -232,7 +237,12 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
           );
       if (mounted) setState(() => _built = book);
     } catch (e) {
-      if (mounted) setState(() => _buildError = e.toString());
+      if (mounted) {
+        setState(() {
+          _buildError = e.toString();
+          _buildDebug = e is LorebookBuildException ? e : null;
+        });
+      }
     } finally {
       _timer?.cancel();
       if (mounted) setState(() => _building = false);
@@ -255,17 +265,40 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
     });
   }
 
+  /// Raw (keyless) lorebook: one entry per blank-line block, no trigger keys or
+  /// rules. Offers the same two destinations as a public lorebook.
   void _downloadRaw() {
     final ex = _extraction;
     if (ex == null) return;
-    _exportJson(
-      {
-        'name': _nameController.text.trim().isEmpty
-            ? 'Janitor Lorebook (raw)'
-            : _nameController.text.trim(),
-        'rawText': ex.lorebookText,
-      },
-      'janitor-lorebook-raw',
+    final name = _nameController.text.trim().isEmpty
+        ? '${ex.character.charData.name} — Closed Lorebook (raw)'
+        : _nameController.text.trim();
+    final entries = rawLorebookEntries(ex.lorebookText);
+    if (entries.isEmpty) {
+      GlazeToast.show(context, 'No lorebook text to download.');
+      return;
+    }
+    GlazeBottomSheet.show<void>(
+      context,
+      items: [
+        BottomSheetItem(
+          icon: Icons.bookmark_add_outlined,
+          label: 'Save to Glaze',
+          onTap: () async {
+            Navigator.of(context, rootNavigator: true).pop();
+            await _saveLorebook(convertJanitorScript(entries, name: name));
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.download_outlined,
+          label: 'Export .json (SillyTavern)',
+          onTap: () async {
+            Navigator.of(context, rootNavigator: true).pop();
+            await _exportJson(
+                janitorScriptToTavernJson(entries, name: name), name);
+          },
+        ),
+      ],
     );
   }
 
@@ -284,7 +317,7 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
             books: _public,
             onDownload: _downloadPublic,
           ),
-          if (_hasClosed) ...[
+          if (!_loadingPublic && _hasClosed) ...[
             const SizedBox(height: 20),
             _SectionTitle('Closed lorebook', cs: cs),
             const SizedBox(height: 4),
@@ -448,6 +481,10 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
                   style:
                       const TextStyle(color: Colors.redAccent, fontSize: 12)),
             ],
+            if (_buildDebug != null) ...[
+              const SizedBox(height: 8),
+              _LlmDebugPanel(error: _buildDebug!, cs: cs),
+            ],
             if (_previewMessages != null) ...[
               const SizedBox(height: 12),
               _PromptPreview(messages: _previewMessages!, cs: cs),
@@ -581,7 +618,7 @@ class _PublicSection extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
           ),
           const SizedBox(width: 12),
-          Text('Loading public lorebooks…',
+          Text('Loading lorebooks…',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
         ],
       );
@@ -733,6 +770,87 @@ class _PromptPreview extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Collapsible diagnostics for a failed LLM build: the raw provider payload,
+/// the assistant text and any reasoning stream — so the cause (empty content,
+/// reasoning-only response, content filter, truncation) is visible in-app.
+class _LlmDebugPanel extends StatelessWidget {
+  final LorebookBuildException error;
+  final ColorScheme cs;
+  const _LlmDebugPanel({required this.error, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = <(String, String)>[
+      if ((error.rawResponseJson ?? '').isNotEmpty)
+        ('Raw provider payload', error.rawResponseJson!),
+      if (error.rawText.trim().isNotEmpty)
+        ('Assistant text', error.rawText)
+      else
+        ('Assistant text', '(empty)'),
+      if ((error.reasoning ?? '').isNotEmpty)
+        ('Reasoning stream', error.reasoning!),
+    ];
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        initiallyExpanded: true,
+        leading: Icon(Icons.bug_report_outlined, size: 18, color: cs.primary),
+        title: Text('LLM response (debug)',
+            style: TextStyle(fontSize: 12, color: cs.onSurface)),
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        children: [
+          for (final (label, body) in sections) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text('$label · ${body.length} chars',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurfaceVariant)),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Copy',
+                  icon: const Icon(Icons.copy_rounded, size: 14),
+                  color: cs.onSurfaceVariant,
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: body));
+                    if (context.mounted) {
+                      GlazeToast.show(context, 'Copied $label');
+                    }
+                  },
+                ),
+              ],
+            ),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 200),
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  body,
+                  style: TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color: cs.onSurfaceVariant,
+                      fontFamily: 'monospace'),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

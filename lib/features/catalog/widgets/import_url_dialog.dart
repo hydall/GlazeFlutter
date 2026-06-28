@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_toast.dart';
@@ -8,7 +9,7 @@ import '../../settings/app_settings_provider.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
 import '../services/datacat_provider.dart';
-import '../services/janitor_extractor.dart';
+import 'catalog_detail_launcher.dart';
 
 class ImportUrlDialog extends ConsumerStatefulWidget {
   const ImportUrlDialog({super.key});
@@ -127,21 +128,20 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
     final url = _controller.text.trim();
     if (url.isEmpty) return;
 
+    // JanitorAI links open the catalog card instead of extracting from here:
+    // the card handles the public-vs-closed decision, the Lorebooks tab, and the
+    // toggle-gated local extraction (its Import button). Other hosts keep the
+    // DataCat path below.
+    if (_isJanitorUrl(url)) {
+      await _openJanitorCard(url);
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
       _phase = null;
     });
-
-    // Opt-in: for janitorai.com URLs, capture the card + closed lorebook locally
-    // through the logged-in proxy instead of DataCat. Other hosts (and the
-    // toggle off) keep the DataCat extraction below.
-    final extractLocally =
-        ref.read(appSettingsProvider).value?.extractJanitorLocally ?? false;
-    if (extractLocally && _isJanitorUrl(url)) {
-      await _extractLocally(url);
-      return;
-    }
 
     try {
       final result = await datacatExtractAndPoll(
@@ -188,37 +188,59 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
     return host == 'janitorai.com' || host.endsWith('.janitorai.com');
   }
 
-  /// Local JanitorAI extraction path (proxy capture + LLM lorebook rebuild),
-  /// used when the "extract locally" toggle is on for a janitorai.com URL.
-  Future<void> _extractLocally(String url) async {
-    try {
-      final extractor = ref.read(janitorExtractorProvider);
-      final extraction = await extractor.extract(
-        url,
-        onPhase: (p) {
-          if (mounted) setState(() => _phase = p);
-        },
-      );
-      final commit = await extractor.commit(
-        extraction,
-        onPhase: (p) {
-          if (mounted) setState(() => _phase = p);
-        },
-      );
-      if (!mounted) return;
-      Navigator.pop(context);
-      final msg = commit.lorebookError != null
-          ? 'Imported ${commit.characterName} (lorebook failed: ${commit.lorebookError})'
-          : 'Imported ${commit.characterName}'
-              '${commit.lorebookEntryCount > 0 ? ' + ${commit.lorebookEntryCount} lorebook entries' : ''}';
-      GlazeToast.show(context, msg);
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = e.toString();
-        });
-      }
+  static final _uuidRe = RegExp(
+    r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+    caseSensitive: false,
+  );
+
+  String? _janitorCharacterId(String url) => _uuidRe.firstMatch(url)?.group(0);
+
+  /// Slug suffix from a `…/characters/{id}_{slug}` URL, if present.
+  String? _janitorSlug(String url, String id) {
+    final idx = url.indexOf(id);
+    if (idx < 0) return null;
+    final after = url.substring(idx + id.length);
+    final m = RegExp(r'^_([^/?#]+)').firstMatch(after);
+    return m?.group(1);
+  }
+
+  /// Closes this dialog and opens the JanitorAI catalog card for the pasted
+  /// link, mirroring a tap in the catalog grid (preview + Import FAB + Lorebooks
+  /// tab). The card itself decides whether to import directly (public) or run a
+  /// local extraction (closed + toggle on).
+  Future<void> _openJanitorCard(String url) async {
+    final id = _janitorCharacterId(url);
+    if (id == null) {
+      setState(() => _error = 'Could not find a character id in that link.');
+      return;
     }
+    final item = CatalogItem(id: id, name: '', slug: _janitorSlug(url, id));
+    // The root navigator's context outlives this dialog, so the card sheet and
+    // any post-import navigation keep a valid context after we pop.
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final openCard =
+        ref.read(appSettingsProvider).value?.openCardAfterImport ?? true;
+    Navigator.pop(context);
+
+    final importedCharId = await showModalBottomSheet<String>(
+      context: rootContext,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CatalogDetailLauncher(
+        item: item,
+        provider: CatalogProvider.janitor,
+      ),
+    );
+    if (!rootContext.mounted ||
+        importedCharId == null ||
+        importedCharId.isEmpty) {
+      return;
+    }
+    GlazeToast.show(rootContext, 'Imported');
+    if (!openCard) return;
+    rootContext.go(
+      '/characters?open=${Uri.encodeQueryComponent(importedCharId)}',
+    );
   }
 }

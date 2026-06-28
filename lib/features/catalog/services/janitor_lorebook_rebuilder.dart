@@ -51,6 +51,33 @@ class NoActiveConnectionException implements Exception {
       'No active LLM connection. Configure one in Settings → API first.';
 }
 
+/// Thrown when the build LLM call returns nothing usable. Carries the raw
+/// provider output so the UI can show a debug panel and the user can see what
+/// actually came back (empty content, a reasoning-only response, a content
+/// filter, etc.).
+class LorebookBuildException implements Exception {
+  final String message;
+
+  /// The assistant text the transport surfaced (often empty on failure).
+  final String rawText;
+
+  /// Separate reasoning/thinking stream, if the model emitted one.
+  final String? reasoning;
+
+  /// The raw provider JSON payload (the most useful field for diagnosis).
+  final String? rawResponseJson;
+
+  LorebookBuildException(
+    this.message, {
+    this.rawText = '',
+    this.reasoning,
+    this.rawResponseJson,
+  });
+
+  @override
+  String toString() => message;
+}
+
 /// Assembles the exact chat messages sent to the build LLM: a `system` prompt
 /// plus a single `user` message bundling every selected context block followed
 /// by the raw lorebook text. Exposed so the UI can PREVIEW the prompt without
@@ -195,19 +222,28 @@ Future<Lorebook> rebuildLorebookWithActiveLlm(
   final completer = Completer<String>();
   final transport = pickChatTransport(config.protocol);
 
+  String? reasoningOut;
+  String? rawJsonOut;
   unawaited(transport.stream(
     request: ChatTransportRequest(
       endpoint: config.endpoint,
       apiKey: config.apiKey,
       model: config.model,
       messages: messages,
-      maxTokens: config.maxTokens > 0 ? config.maxTokens : 8192,
+      // Do NOT cap output tokens (0 → the transport omits `max_tokens`, like
+      // JAR). On reasoning models `max_tokens` bounds the COMBINED reasoning +
+      // content output, so any finite cap can be spent entirely on the thinking
+      // stream — leaving `content` empty (finish_reason "length") before the
+      // model ever emits the JSON. Let the provider's full budget apply.
+      maxTokens: 0,
       temperature: 0.2,
       topP: 1.0,
       stream: false,
     ),
     cancelToken: CancelToken(),
-    onComplete: (text, _, {rawResponseJson}) {
+    onComplete: (text, reasoning, {rawResponseJson}) {
+      reasoningOut = reasoning;
+      rawJsonOut = rawResponseJson;
       if (!completer.isCompleted) completer.complete(text);
     },
     onError: (error) {
@@ -217,12 +253,46 @@ Future<Lorebook> rebuildLorebookWithActiveLlm(
 
   final raw = await completer.future;
 
+  String clip(String? s, int n) =>
+      s == null ? '' : (s.length > n ? '${s.substring(0, n)}…' : s);
+
+  debugPrint('[janitor-rebuilder] model=${config.model} '
+      'protocol=${config.protocol} endpoint=${config.endpoint}');
+  debugPrint('[janitor-rebuilder] response text (${raw.length} chars): '
+      '${clip(raw, 1000)}');
+  if ((reasoningOut ?? '').isNotEmpty) {
+    debugPrint('[janitor-rebuilder] reasoning (${reasoningOut!.length} chars): '
+        '${clip(reasoningOut, 500)}');
+  }
+  if ((rawJsonOut ?? '').isNotEmpty) {
+    debugPrint(
+        '[janitor-rebuilder] rawResponseJson (${rawJsonOut!.length} chars): '
+        '${clip(rawJsonOut, 2000)}');
+  }
+
+  if (raw.trim().isEmpty) {
+    throw LorebookBuildException(
+      'LLM returned an empty response. The model may have spent its token '
+      'budget on reasoning, the response may have been filtered, or the '
+      'transport could not read the content field. Open the details below to '
+      'see the raw provider payload.',
+      rawText: raw,
+      reasoning: reasoningOut,
+      rawResponseJson: rawJsonOut,
+    );
+  }
+
   dynamic parsed;
   try {
     parsed = jsonDecode(_stripFences(raw));
   } catch (_) {
     final preview = raw.length > 300 ? raw.substring(0, 300) : raw;
-    throw Exception('LLM did not return valid JSON. First 300 chars:\n$preview');
+    throw LorebookBuildException(
+      'LLM did not return valid JSON. First 300 chars:\n$preview',
+      rawText: raw,
+      reasoning: reasoningOut,
+      rawResponseJson: rawJsonOut,
+    );
   }
 
   final rawEntries = _coerceEntries(parsed);
@@ -235,7 +305,12 @@ Future<Lorebook> rebuildLorebookWithActiveLlm(
     entries.add(entry);
   }
   if (entries.isEmpty) {
-    throw Exception('LLM produced no usable lorebook entries.');
+    throw LorebookBuildException(
+      'LLM produced no usable lorebook entries.',
+      rawText: raw,
+      reasoning: reasoningOut,
+      rawResponseJson: rawJsonOut,
+    );
   }
 
   debugPrint('[janitor-extractor] rebuilt ${entries.length} lorebook entries');

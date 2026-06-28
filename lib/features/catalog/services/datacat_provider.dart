@@ -270,7 +270,7 @@ Future<DownloadedCharacter> datacatGetCharacter(String uuid) async {
       systemPrompt: (raw['system_prompt'] ?? '') as String,
       postHistoryInstructions: (raw['post_history_instructions'] ?? '') as String,
       alternateGreetings: raw['alternate_greetings'] is List
-          ? (raw['alternate_greetings'] as List).cast<String>()
+          ? (raw['alternate_greetings'] as List).whereType<String>().toList()
           : <String>[],
       tags: [],
       creator: (meta['janitor_creator_name'] ?? raw['creator'] ?? '') as String,

@@ -171,6 +171,23 @@ List<String> publicEntryContents(List<PublicLorebook> books) {
   return out;
 }
 
+/// Split raw captured lorebook text into keyless entries (one per blank-line
+/// separated block), in JanitorAI's native shape. Used by the "download raw"
+/// path so the same [convertJanitorScript] / [janitorScriptToTavernJson]
+/// builders produce a Glaze [Lorebook] or a SillyTavern `.json` with no trigger
+/// keys/rules. Port of JAR `app.js` `downloadRaw`.
+List<Map<String, dynamic>> rawLorebookEntries(String text) {
+  final blocks = text
+      .split(RegExp(r'\n\s*\n'))
+      .map((b) => b.trim())
+      .where((b) => b.isNotEmpty)
+      .toList();
+  return [
+    for (var i = 0; i < blocks.length; i++)
+      {'content': blocks[i], 'comment': 'Entry ${i + 1}', 'key': <String>[]},
+  ];
+}
+
 // ─── Conversion ──────────────────────────────────────────────────────────────
 
 List<String> _asKeys(dynamic v) {

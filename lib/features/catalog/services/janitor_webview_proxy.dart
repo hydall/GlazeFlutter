@@ -239,6 +239,23 @@ class JanitorWebViewProxy {
 
   static final WebUri _origin = WebUri('https://janitorai.com');
 
+  static const String _profileUrl =
+      'https://janitorai.com/hampter/profiles/mine';
+
+  /// A self-owned proxy preset injected for the duration of a capture. The URL
+  /// is intentionally unreachable: we capture the `/generateAlpha` RESPONSE (the
+  /// assembled prompt) BEFORE the client ever POSTs to the proxy, so the proxy
+  /// never needs to answer. Fixed id so a crashed run never leaves duplicates.
+  static const String _dummyPresetId = 'a1b2c3d4-0000-4000-8000-000000000001';
+  static const Map<String, dynamic> _dummyPreset = {
+    'apiKey': 'x',
+    'apiUrl': 'http://127.0.0.1:9/v1/chat/completions',
+    'id': _dummyPresetId,
+    'jailbreakPrompt': '',
+    'model': 'gpt-4o',
+    'name': 'glaze-lorebook-extractor (auto)',
+  };
+
   HeadlessInAppWebView? _webView;
   InAppWebViewController? _controller;
   Completer<void>? _starting;
@@ -344,67 +361,147 @@ class JanitorWebViewProxy {
       throw Exception('Not logged into JanitorAI — log in first (Menu → JanitorAI).');
     }
 
-    // 1) Create a fresh chat for this character.
-    phase('creating chat');
-    final chatBody = await _fetchLocked(
-      'https://janitorai.com/hampter/chats',
-      method: 'POST',
-      body: jsonEncode({'character_id': characterId}),
-    );
-    final chatJson = jsonDecode(chatBody);
-    final chatId = (chatJson is Map ? chatJson['id'] : null)?.toString();
-    if (chatId == null || chatId.isEmpty) {
-      throw Exception('Could not create chat (no id in response).');
-    }
-
-    final controller = _controller;
-    if (controller == null) throw Exception('WebView not available.');
-
-    // 2) Install the capture hook at document start, then open the chat.
-    phase('opening chat');
-    await controller.removeAllUserScripts();
-    await controller.addUserScript(
-      userScript: UserScript(
-        source: _captureUserScript,
-        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-      ),
-    );
+    // Force the account into proxy mode against an unreachable dummy preset (and
+    // context_length 0) so the captured `/generateAlpha` prompt keeps its
+    // wrappers and isn't truncated/reordered. Restored in the finally below.
+    // Without this, an account on JLLM ("janitor") never assembles a proxy
+    // prompt — the send just runs on Janitor's own model.
+    phase('configuring proxy');
+    final profileSnapshot = await _enterExtractionMode();
     try {
-      _loadStop = Completer<void>();
-      await controller.loadUrl(
-        urlRequest: URLRequest(
-          url: WebUri('https://janitorai.com/chats/$chatId'),
+      // 1) Create a fresh chat for this character.
+      phase('creating chat');
+      final chatBody = await _fetchLocked(
+        'https://janitorai.com/hampter/chats',
+        method: 'POST',
+        body: jsonEncode({'character_id': characterId}),
+      );
+      final chatJson = jsonDecode(chatBody);
+      final chatId = (chatJson is Map ? chatJson['id'] : null)?.toString();
+      if (chatId == null || chatId.isEmpty) {
+        throw Exception('Could not create chat (no id in response).');
+      }
+
+      final controller = _controller;
+      if (controller == null) throw Exception('WebView not available.');
+
+      // 2) Install the capture hook at document start, then open the chat.
+      phase('opening chat');
+      await controller.removeAllUserScripts();
+      await controller.addUserScript(
+        userScript: UserScript(
+          source: _captureUserScript,
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
         ),
       );
-      await _awaitLoad();
-      await _waitForClearance();
-      // Give the React chat app time to hydrate before driving the input.
-      await Future<void>.delayed(const Duration(milliseconds: 2500));
-
-      // 3) Send "." → capture the card.
-      phase('triggering (card)');
-      final dot = await _captureOneSend('.', const Duration(seconds: 60));
-      final card = dot != null ? extractCard(dot) : '';
-
-      // 4) Send card (+ first message) → maximise lorebook triggers.
-      final parts = <String>[
-        if (card.isNotEmpty) card,
-        if (triggerText.trim().isNotEmpty) triggerText.trim(),
-      ];
-      final trigger = parts.isEmpty ? '.' : parts.join('\n\n');
-      phase('triggering (lorebook)');
-      await _resetCapture();
-      final full = await _captureOneSend(trigger, const Duration(seconds: 120));
-      final result = full ?? dot;
-      if (result == null) {
-        throw Exception('Timed out waiting for a generateAlpha capture.');
-      }
-      phase('captured');
-      return result;
-    } finally {
       try {
-        await controller.removeAllUserScripts();
-      } catch (_) {}
+        _loadStop = Completer<void>();
+        await controller.loadUrl(
+          urlRequest: URLRequest(
+            url: WebUri('https://janitorai.com/chats/$chatId'),
+          ),
+        );
+        await _awaitLoad();
+        await _waitForClearance();
+        // Give the React chat app time to hydrate before driving the input.
+        await Future<void>.delayed(const Duration(milliseconds: 2500));
+
+        // 3) Send "." → capture the card.
+        phase('triggering (card)');
+        final dot = await _captureOneSend('.', const Duration(seconds: 60));
+        final card = dot != null ? extractCard(dot) : '';
+
+        // 4) Send card (+ first message) → maximise lorebook triggers.
+        final parts = <String>[
+          if (card.isNotEmpty) card,
+          if (triggerText.trim().isNotEmpty) triggerText.trim(),
+        ];
+        final trigger = parts.isEmpty ? '.' : parts.join('\n\n');
+        phase('triggering (lorebook)');
+        await _resetCapture();
+        final full =
+            await _captureOneSend(trigger, const Duration(seconds: 120));
+        final result = full ?? dot;
+        if (result == null) {
+          throw Exception('Timed out waiting for a generateAlpha capture.');
+        }
+        phase('captured');
+        return result;
+      } finally {
+        try {
+          await controller.removeAllUserScripts();
+        } catch (_) {}
+      }
+    } finally {
+      if (profileSnapshot != null) {
+        phase('restoring profile');
+        await _restoreProfile(profileSnapshot);
+      }
+    }
+  }
+
+  /// Reshapes the JanitorAI profile so a capture yields a clean, tag-wrapped
+  /// prompt, returning the ORIGINAL `config` snapshot to restore afterwards.
+  /// Port of JAR `profile.js`. Two things must hold:
+  ///  1. a custom OpenAI-compatible PROXY preset must be selected (not JLLM) —
+  ///     only then does the client assemble the prompt for a proxy and fire
+  ///     `/generateAlpha` with the `<…Persona>` / `<Scenario>` wrappers that
+  ///     [separate] relies on;
+  ///  2. `generation_settings.context_length` must be 0, or the server
+  ///     compresses/reorders the prompt to fit and unwraps the persona block.
+  /// Returns null if the profile could not be read/patched (capture proceeds
+  /// against whatever the account has selected).
+  Future<Map<String, dynamic>?> _enterExtractionMode() async {
+    try {
+      final body = await _fetchLocked(_profileUrl);
+      final profile = jsonDecode(body);
+      final original = (profile is Map && profile['config'] is Map)
+          ? Map<String, dynamic>.from(profile['config'] as Map)
+          : null;
+      if (original == null) {
+        _log('extraction mode skipped — profile has no config');
+        return null;
+      }
+
+      final next =
+          jsonDecode(jsonEncode(original)) as Map<String, dynamic>;
+      final presets = (next['proxyConfigurations'] is List)
+          ? List<dynamic>.from(next['proxyConfigurations'] as List)
+          : <dynamic>[];
+      if (!presets.any((p) => p is Map && p['id'] == _dummyPresetId)) {
+        presets.add(Map<String, dynamic>.from(_dummyPreset));
+      }
+      next['proxyConfigurations'] = presets;
+      next['selectedProxyConfigId'] = _dummyPresetId;
+      next['api'] = 'openai';
+      next['open_ai_mode'] = 'proxy';
+      next['open_ai_reverse_proxy'] = _dummyPreset['apiUrl'];
+      next['openAiModel'] = _dummyPreset['model'];
+      next['generation_settings'] = {
+        ...(next['generation_settings'] is Map
+            ? Map<String, dynamic>.from(next['generation_settings'] as Map)
+            : <String, dynamic>{}),
+        'context_length': 0,
+      };
+
+      await _fetchLocked(_profileUrl,
+          method: 'PATCH', body: jsonEncode({'config': next}));
+      _log('extraction mode on (dummy proxy selected, context_length 0)');
+      return original;
+    } catch (e) {
+      _log('enterExtractionMode failed (capture proceeds anyway): $e');
+      return null;
+    }
+  }
+
+  /// PATCHes the original `config` snapshot back (also drops the dummy preset).
+  Future<void> _restoreProfile(Map<String, dynamic> original) async {
+    try {
+      await _fetchLocked(_profileUrl,
+          method: 'PATCH', body: jsonEncode({'config': original}));
+      _log('restored original profile config');
+    } catch (e) {
+      _log('restoreProfile failed: $e');
     }
   }
 

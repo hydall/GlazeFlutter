@@ -446,7 +446,7 @@ DownloadedCharacter _convertToGlaze(Map<String, dynamic> m) {
       systemPrompt: '',
       postHistoryInstructions: '',
       alternateGreetings: m['first_messages'] is List
-          ? (m['first_messages'] as List).cast<String>()
+          ? (m['first_messages'] as List).whereType<String>().toList()
           : <String>[],
       tags: tags.toSet().toList(),
       creator: (m['creator_name'] ?? m['creator'] ?? '') as String,

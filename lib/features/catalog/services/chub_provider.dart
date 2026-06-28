@@ -161,7 +161,7 @@ CharacterData _convertToGlaze(Map<String, dynamic> node) {
     systemPrompt: (def['system_prompt'] ?? '') as String,
     postHistoryInstructions: (def['post_history_instructions'] ?? '') as String,
     alternateGreetings: def['alternate_greetings'] is List
-        ? (def['alternate_greetings'] as List).cast<String>()
+        ? (def['alternate_greetings'] as List).whereType<String>().toList()
         : <String>[],
     tags: [isTopicNsfw ? 'NSFW' : 'SFW', ...cleanTopics],
     creator: creator,
