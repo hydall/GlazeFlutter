@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/memory_studio_service.dart';
+import '../../../core/llm/studio_stage_brief.dart';
 import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/transport/chat_transport_request.dart';
 import '../../../core/llm/transport/transport_factory.dart';
@@ -283,6 +284,7 @@ class StreamGenerationService {
                 triggeredMemories: triggeredMemories,
                 regenTargetId: regenTargetId,
                 visibleStartIndex: vsi,
+                studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
               )
               .copyWith(promptPayload: payload);
           return finalState;
@@ -360,6 +362,7 @@ class StreamGenerationService {
               triggeredMemories: triggeredMemories,
               regenTargetId: regenTargetId,
               visibleStartIndex: vsi,
+              studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
             )
             .copyWith(promptPayload: payload);
         if (memoryDiagnostics is Map<String, dynamic> &&
@@ -631,6 +634,17 @@ class StreamGenerationService {
 
   static void _log(String message) {
     debugPrint('[StudioGen] $message');
+  }
+
+  /// Convert Studio stage briefs into the compact JSON format stored on
+  /// `ChatMessage.studioOutputs` / `AgentSwipe.studioOutputs` and read by the
+  /// UI (Agentic Ops panel). Format: `{'id','name','content'}` per brief.
+  static List<Map<String, dynamic>> _studioOutputsToJson(
+    List<StudioStageBrief> briefs,
+  ) {
+    return briefs
+        .map((b) => {'id': b.agentId, 'name': b.agentName, 'content': b.brief})
+        .toList(growable: false);
   }
 
   /// Records a memory sidecar reranker operation in the agentic operations log

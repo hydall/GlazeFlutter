@@ -1762,5 +1762,16 @@
     "count_message_cut": {
         "one": "{} message cut from history",
         "other": "{} messages cut from history"
-    }
+    },
+    "post_building_recovery": "Recover trackers & memory",
+    "post_building_recovery_desc": "Re-run Studio trackers and MemoryBook write-loop for every assistant message in this session. Use when tracker values or memory entries were lost.",
+    "post_building_recovery_button": "Recover",
+    "post_building_recovery_confirm": "This will re-run the Studio tracker cycle and the MemoryBook agentic write-loop for every assistant message in the session. It may take a while depending on the number of messages. Trackers and memory entries will be restored (memory is append-only — existing entries are kept). Continue?",
+    "post_building_recovery_starting": "Starting recovery…",
+    "post_building_recovery_progress": "Processing message {arg0} of {arg1}…",
+    "post_building_recovery_trackers": "Trackers: {arg0}",
+    "post_building_recovery_memories": "Memories: {arg0}",
+    "post_building_recovery_failed": "Failed: {arg0}",
+    "post_building_recovery_done": "Done — trackers: {arg0}, memories: {arg1}, failed: {arg2}",
+    "post_building_recovery_error": "Recovery failed"
 }
