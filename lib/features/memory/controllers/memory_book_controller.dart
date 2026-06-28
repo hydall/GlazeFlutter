@@ -297,9 +297,7 @@ class MemoryBookController {
         charId: _charId,
         sessionId: _sessionId,
         config: config,
-        embeddingTarget: globalSettings.vectorSearchEnabled
-            ? 'content'
-            : 'content',
+        embeddingTarget: 'content',
       );
       return 'memory_books_reindex_result'.tr(
         namedArgs: {
