@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_toast.dart';
+import '../../settings/app_settings_provider.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
 import '../services/datacat_provider.dart';
+import '../services/janitor_extractor.dart';
 
 class ImportUrlDialog extends ConsumerStatefulWidget {
   const ImportUrlDialog({super.key});
@@ -131,6 +133,16 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
       _phase = null;
     });
 
+    // Opt-in: for janitorai.com URLs, capture the card + closed lorebook locally
+    // through the logged-in proxy instead of DataCat. Other hosts (and the
+    // toggle off) keep the DataCat extraction below.
+    final extractLocally =
+        ref.read(appSettingsProvider).value?.extractJanitorLocally ?? false;
+    if (extractLocally && _isJanitorUrl(url)) {
+      await _extractLocally(url);
+      return;
+    }
+
     try {
       final result = await datacatExtractAndPoll(
         url,
@@ -161,6 +173,45 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
           GlazeToast.show(context, 'Imported ${result.charData!.name}');
         }
       }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  bool _isJanitorUrl(String url) {
+    final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+    return host == 'janitorai.com' || host.endsWith('.janitorai.com');
+  }
+
+  /// Local JanitorAI extraction path (proxy capture + LLM lorebook rebuild),
+  /// used when the "extract locally" toggle is on for a janitorai.com URL.
+  Future<void> _extractLocally(String url) async {
+    try {
+      final extractor = ref.read(janitorExtractorProvider);
+      final extraction = await extractor.extract(
+        url,
+        onPhase: (p) {
+          if (mounted) setState(() => _phase = p);
+        },
+      );
+      final commit = await extractor.commit(
+        extraction,
+        onPhase: (p) {
+          if (mounted) setState(() => _phase = p);
+        },
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      final msg = commit.lorebookError != null
+          ? 'Imported ${commit.characterName} (lorebook failed: ${commit.lorebookError})'
+          : 'Imported ${commit.characterName}'
+              '${commit.lorebookEntryCount > 0 ? ' + ${commit.lorebookEntryCount} lorebook entries' : ''}';
+      GlazeToast.show(context, msg);
     } catch (e) {
       if (mounted) {
         setState(() {

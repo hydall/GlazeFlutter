@@ -236,9 +236,32 @@ Future<CatalogSearchResult> janitorSearch({
   );
 }
 
-Future<DownloadedCharacter> janitorFetchCharacter(String id) async {
+/// Fetches the raw `/hampter/characters/{id}` metadata map. Exposed so callers
+/// (catalog preview, lorebook tab) can read `scripts`, `showdefinition`, etc.
+/// without a second request.
+Future<Map<String, dynamic>> janitorFetchCharacterMeta(String id) async {
   final charUrl = '$_hampterUrl/$id';
-  final data = await _janitorFetch(charUrl) as Map<String, dynamic>;
+  return await _janitorFetch(charUrl) as Map<String, dynamic>;
+}
+
+/// Builds a [DownloadedCharacter] from already-fetched [meta].
+DownloadedCharacter janitorCharacterFromMeta(Map<String, dynamic> meta) =>
+    _convertToGlaze(meta);
+
+/// Whether the creator left the character definition PUBLIC (`showdefinition`).
+/// When true, `/hampter/characters/{id}` returns the real card fields, so the
+/// card can be taken verbatim with NO generateAlpha extraction. Mirrors JAR's
+/// `isCardPublic`.
+bool janitorDefinitionPublic(Map<String, dynamic> meta) {
+  final shows = meta['showdefinition'] == true;
+  if (!shows) return false;
+  final personality = (meta['personality'] ?? '').toString().trim();
+  final scenario = (meta['scenario'] ?? '').toString().trim();
+  return personality.isNotEmpty || scenario.isNotEmpty;
+}
+
+Future<DownloadedCharacter> janitorFetchCharacter(String id) async {
+  final data = await janitorFetchCharacterMeta(id);
   return _convertToGlaze(data);
 }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/lorebook.dart';
 import '../../../core/state/db_provider.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
@@ -24,6 +25,12 @@ class ExtractionResult {
   final String cardContext;
   final String catalogContext;
 
+  /// Extra context the lorebook-build LLM may use to infer better trigger keys
+  /// (never emitted as entries). See `buildLorebookMessages`.
+  final String scenarioContext;
+  final String greetingsContext;
+  final String lorebookDescsContext;
+
   const ExtractionResult({
     required this.characterId,
     required this.sourceUrl,
@@ -32,6 +39,9 @@ class ExtractionResult {
     required this.entryBlockCount,
     required this.cardContext,
     required this.catalogContext,
+    this.scenarioContext = '',
+    this.greetingsContext = '',
+    this.lorebookDescsContext = '',
   });
 
   bool get hasLorebook => lorebookText.trim().isNotEmpty;
@@ -120,6 +130,11 @@ class JanitorExtractor {
         avatarUrl: avatar,
       );
 
+      final greetings = [
+        firstMes,
+        ...downloaded.charData.alternateGreetings,
+      ].where((g) => g.trim().isNotEmpty).join('\n\n---\n\n');
+
       return ExtractionResult(
         characterId: characterId,
         sourceUrl: url,
@@ -128,6 +143,9 @@ class JanitorExtractor {
         entryBlockCount: sep.entries.length,
         cardContext: card,
         catalogContext: catalog,
+        scenarioContext: scenario,
+        greetingsContext: greetings,
+        lorebookDescsContext: _buildLorebookDescs(meta),
       );
     } finally {
       proxy.setActive(false);
@@ -163,6 +181,9 @@ class JanitorExtractor {
         name: '${result.character.charData.name} — Closed Lorebook',
         card: result.cardContext,
         catalog: result.catalogContext,
+        scenario: result.scenarioContext,
+        greetings: result.greetingsContext,
+        lorebookDescs: result.lorebookDescsContext,
         characterId: glazeId,
       );
       onPhase?.call('saving lorebook');
@@ -182,6 +203,34 @@ class JanitorExtractor {
       );
     }
   }
+
+  /// Rebuilds [lorebookText] into a structured [Lorebook] with the active LLM,
+  /// using the selected context strings for key inference. Used by the catalog
+  /// Lorebooks tab's "Build" action (the extractor owns the provider [Ref] that
+  /// `rebuildLorebookWithActiveLlm` needs). [characterId] scopes the book.
+  Future<Lorebook> buildLorebook({
+    required String lorebookText,
+    required String name,
+    String card = '',
+    String catalog = '',
+    String scenario = '',
+    String greetings = '',
+    String lorebookDescs = '',
+    String extra = '',
+    String? characterId,
+  }) =>
+      rebuildLorebookWithActiveLlm(
+        _ref,
+        lorebookText: lorebookText,
+        name: name,
+        card: card,
+        catalog: catalog,
+        scenario: scenario,
+        greetings: greetings,
+        lorebookDescs: lorebookDescs,
+        extra: extra,
+        characterId: characterId,
+      );
 
   String _parseCharacterId(String input) {
     final m = _uuid.firstMatch(input.trim());
@@ -231,6 +280,20 @@ class JanitorExtractor {
       }
     }
     return parts.join('\n\n');
+  }
+
+  /// Titles + descriptions of the lorebooks attached to the character (contents
+  /// are hidden). Used as key-inference context for the build LLM.
+  String _buildLorebookDescs(Map<String, dynamic>? meta) {
+    final scripts = meta?['scripts'];
+    if (scripts is! List) return '';
+    final books = scripts
+        .whereType<Map<String, dynamic>>()
+        .where((s) => s['type'] == 'lorebook')
+        .map((s) =>
+            '- ${s['title'] ?? ''}${s['description'] != null ? ': ${s['description']}' : ''}')
+        .toList();
+    return books.isEmpty ? '' : books.join('\n');
   }
 
   /// Minimal HTML → text (port of `htmlToText`).

@@ -15,6 +15,7 @@ import '../../core/models/character.dart';
 import '../../core/services/chat_import_export.dart';
 import '../catalog/services/janitor_provider.dart';
 import '../catalog/widgets/janitor_comments_section.dart';
+import '../catalog/widgets/janitor_lorebooks_tab.dart';
 import '../../core/services/persona_character_converter.dart';
 import '../../core/utils/html_to_markdown.dart';
 import '../../core/utils/platform_paths.dart';
@@ -60,12 +61,21 @@ Border _detailHeaderBorder(BuildContext context, ThemePreset preset) {
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
 
-List<GlazeTabItem> _detailTabs(BuildContext context, {bool withComments = false}) => [
+List<GlazeTabItem> _detailTabs(
+  BuildContext context, {
+  bool withLorebooks = false,
+  bool withComments = false,
+}) => [
   GlazeTabItem(label: 'section_info'.tr(), icon: Icons.info_outline_rounded),
   GlazeTabItem(
     label: 'section_prompt_blocks'.tr(),
     icon: Icons.description_outlined,
   ),
+  if (withLorebooks)
+    GlazeTabItem(
+      label: 'section_lorebooks'.tr(),
+      icon: Icons.menu_book_outlined,
+    ),
   if (withComments)
     GlazeTabItem(
       label: 'section_comments'.tr(),
@@ -154,8 +164,16 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
   /// for JanitorAI catalog previews; when non-null a "Comments" tab is shown
   /// and its pages are loaded lazily as the sheet scrolls.
   final String? janitorReviewCharId;
+
+  /// JanitorAI catalog-preview lorebook context. When non-null a "Lorebooks"
+  /// tab is shown listing public lorebooks (downloadable) and offering local
+  /// extraction + LLM build of the closed lorebook.
+  final JanitorLorebookArgs? janitorLorebookArgs;
   final Future<void> Function()? onImport;
   final bool importing;
+
+  /// Current phase label while [importing] (e.g. local extraction progress).
+  final String? importPhase;
 
   const CharacterDetailScreen({
     super.key,
@@ -165,8 +183,10 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
     this.previewSourceUrl,
     this.previewAuthorUrl,
     this.janitorReviewCharId,
+    this.janitorLorebookArgs,
     this.onImport,
     this.importing = false,
+    this.importPhase,
   });
 
   bool get isPreview => previewCharacter != null;
@@ -192,7 +212,11 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
   Object? _commentsError;
 
   bool get _hasComments => widget.janitorReviewCharId != null;
-  int get _commentsTabIndex => 2;
+  bool get _hasLorebooks => widget.janitorLorebookArgs != null;
+
+  /// Lorebooks (when present) sits right after Prompt Blocks; Comments follows.
+  int get _lorebooksTabIndex => 2;
+  int get _commentsTabIndex => _hasComments ? 2 + (_hasLorebooks ? 1 : 0) : -1;
 
   @override
   void initState() {
@@ -569,6 +593,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
           : widget.isPreview
               ? _ImportFab(
                   importing: widget.importing,
+                  phase: widget.importPhase,
                   onTap: () => widget.onImport?.call(),
                 )
               : _ChatFab(onTap: () => _openChat(context, char.id)),
@@ -608,7 +633,11 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: GlazeTabBar(
-                tabs: _detailTabs(context, withComments: _hasComments),
+                tabs: _detailTabs(
+                  context,
+                  withLorebooks: _hasLorebooks,
+                  withComments: _hasComments,
+                ),
                 activeIndex: _activeTabIndex,
                 onChanged: _onTabChanged,
               ),
@@ -635,6 +664,12 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         hasMore: _commentsHasMore,
         error: _commentsError,
         onRetry: _loadMoreComments,
+      );
+    }
+    if (_hasLorebooks && _activeTabIndex == _lorebooksTabIndex) {
+      return JanitorLorebooksTab(
+        key: const ValueKey('lorebooks'),
+        args: widget.janitorLorebookArgs!,
       );
     }
     if (_activeTabIndex == 0) {
@@ -726,8 +761,9 @@ class _ChatFab extends StatelessWidget {
 
 class _ImportFab extends StatelessWidget {
   final bool importing;
+  final String? phase;
   final VoidCallback onTap;
-  const _ImportFab({required this.importing, required this.onTap});
+  const _ImportFab({required this.importing, this.phase, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -761,7 +797,9 @@ class _ImportFab extends StatelessWidget {
               const Icon(Icons.download_rounded, color: Colors.white, size: 20),
             const SizedBox(width: 8),
             Text(
-              'catalog_import'.tr(),
+              importing && phase != null && phase!.isNotEmpty
+                  ? phase!
+                  : 'catalog_import'.tr(),
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,

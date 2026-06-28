@@ -61,6 +61,7 @@ abstract class AppSettings with _$AppSettings {
     @Default(false) bool addBlockAtTop,
     @Default(true) bool openCardAfterImport,
     @Default(true) bool hapticFeedback,
+    @Default(false) bool extractJanitorLocally,
   }) = _AppSettings;
 }
 
@@ -129,6 +130,11 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
         defaultValue: true,
       ),
       hapticFeedback: hapticFeedback,
+      extractJanitorLocally: _readBoolPref(
+        prefs,
+        'extractJanitorLocally',
+        defaultValue: false,
+      ),
     );
   }
 
@@ -163,6 +169,10 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setBool('addBlockAtTop', normalized.addBlockAtTop);
     await prefs.setBool('openCardAfterImport', normalized.openCardAfterImport);
     await prefs.setBool('hapticFeedback', normalized.hapticFeedback);
+    await prefs.setBool(
+      'extractJanitorLocally',
+      normalized.extractJanitorLocally,
+    );
     Haptics.configure(enabled: normalized.hapticFeedback);
     state = AsyncData(normalized);
   }
