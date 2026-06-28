@@ -110,6 +110,10 @@ class StudioDecompositionService {
 
     final now = currentTimestampSeconds();
     final assignments = _assignBlocks(enabledBlocks, routingMapResult);
+    // Lumia detection (plan §Part A/B): if any block routed to the `meta`
+    // bucket is a Lumia/meta-weaver block, the Meta-Weaver gets a counting
+    // duty suffix and the Main Responder gets a compact Lumia output contract.
+    final lumiaActive = _bucketHasLumia(assignments['meta'] ?? const []);
     final agents = <StudioAgent>[];
     for (final spec in StudioControllerOntology.specs) {
       final blocks = assignments[spec.id] ?? const <PresetBlock>[];
@@ -124,6 +128,7 @@ class StudioDecompositionService {
           builderPromptTemplate: builderPromptTemplate,
           routingMode: routingMode,
           cancelToken: cancelToken,
+          lumiaActive: lumiaActive,
         ),
       );
     }
@@ -216,6 +221,7 @@ class StudioDecompositionService {
         sourceBlockNames: _synthesizer.sourceBlockNames(blocks),
         refreshPolicy: spec.refreshPolicy,
         invalidationSignals: spec.invalidationSignals,
+        contextSize: spec.contextSize > 0 ? spec.contextSize : agent.contextSize,
       ),
       isFinal: spec.isFinal,
     );
@@ -231,6 +237,7 @@ class StudioDecompositionService {
     String builderPromptTemplate = '',
     String routingMode = 'verbatim',
     CancelToken? cancelToken,
+    bool lumiaActive = false,
   }) async {
     final promptShard = await _synthesizer.synthesizePromptShard(
       spec: spec,
@@ -239,6 +246,7 @@ class StudioDecompositionService {
       builderPromptTemplate: builderPromptTemplate,
       routingMode: routingMode,
       cancelToken: cancelToken,
+      lumiaActive: lumiaActive,
     );
     return StudioAgent(
       id: 'agent_${sessionId}_${spec.id}_$now',
@@ -255,6 +263,7 @@ class StudioDecompositionService {
       refreshPolicy: spec.refreshPolicy,
       invalidationSignals: spec.invalidationSignals,
       phase: spec.phase,
+      contextSize: spec.contextSize > 0 ? spec.contextSize : 5,
     );
   }
 
@@ -331,6 +340,24 @@ class StudioDecompositionService {
 
   String _bucketForBlock(PresetBlock block) =>
       StudioBlockClassifier.bucketForBlock(block);
+
+  /// True if any block in [blocks] is a Lumia/meta-weaver/OOC block (by name,
+  /// id, or content keyword). Used to decide whether to append the Meta-Weaver
+  /// counting duty suffix and the Main Responder compact Lumia contract.
+  /// Mirrors the `meta` bucket keyword in `StudioBlockClassifier.bucketForBlock`.
+  bool _bucketHasLumia(List<PresetBlock> blocks) {
+    for (final block in blocks) {
+      final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();
+      if (text.contains('lumia') ||
+          text.contains('ghost in the machine') ||
+          text.contains('meta-weaver') ||
+          text.contains('ooc interface') ||
+          text.contains('weaver')) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /// Compute a hash of enabled blocks to detect preset changes.
   static String computePresetHash(List<PresetBlock> blocks) {

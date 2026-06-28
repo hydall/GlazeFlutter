@@ -1,6 +1,8 @@
 import '../models/preset.dart';
+import '../models/studio_config.dart';
 import 'history_assembler.dart';
 import 'prompt_builder.dart';
+import 'studio_block_classifier.dart';
 
 const _mandatoryBlockIds = {'char_card', 'char_personality', 'user_persona'};
 
@@ -55,6 +57,7 @@ class StudioContextBucketizer {
   StudioContextBuckets bucketize(
     PromptResult promptResult, {
     required PromptPayload promptPayload,
+    StudioConfig? studioConfig,
   }) {
     final staticIds = <String>{
       'char_card',
@@ -102,6 +105,29 @@ class StudioContextBucketizer {
         dynamicContext.add(message);
       } else {
         staticContext.add(message);
+      }
+    }
+
+    // Studio prompt filtering (plan §1): when Studio is enabled, drop from
+    // `staticContext` any message whose backing preset block (a) is a
+    // reasoning/CoT template (the multi-agent pipeline IS the externalized
+    // reasoning) or (b) was already routed into some agent's `promptShard`
+    // (it would be duplicated, and for private rules it should arrive at the
+    // final responder only via that agent's brief, not via the raw preset).
+    // What remains is the true context: char_card, char_personality,
+    // user_persona, scenario, example_dialogue, authors_note + the mandatory
+    // fallback. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md.
+    if (studioConfig != null) {
+      final dropNames = _collectStaticContextDropNames(
+        promptPayload.preset,
+        studioConfig,
+      );
+      if (dropNames.isNotEmpty) {
+        staticContext.removeWhere((m) {
+          final name = (m.blockName ?? '').toLowerCase();
+          final id = (m.blockId ?? '').toLowerCase();
+          return dropNames.contains(name) || dropNames.contains(id);
+        });
       }
     }
 
@@ -234,5 +260,43 @@ class StudioContextBucketizer {
     final trimmed = text.trim();
     if (trimmed.length <= maxChars) return trimmed;
     return '${trimmed.substring(0, maxChars)}...';
+  }
+
+  /// Collects the set of block names/ids that must NOT appear in
+  /// `staticContext` when Studio is enabled: reasoning/CoT blocks (dropped
+  /// by the pipeline) + every block already routed into some agent's shard
+  /// (duplicated). Matching is case-insensitive on the display name; the
+  /// bucketizer message carries `blockName` (display name) and `blockId`
+  /// (normalized id), and routed names are display names, so we compare both
+  /// case-insensitively and also include the backing preset block ids for
+  /// robustness. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §1.
+  Set<String> _collectStaticContextDropNames(
+    Preset? preset,
+    StudioConfig config,
+  ) {
+    final drop = <String>{};
+
+    // (a) Reasoning/CoT blocks — dropped by the pipeline, must not leak.
+    if (preset != null) {
+      for (final block in preset.blocks) {
+        if (StudioBlockClassifier.isReasoningBlock(block)) {
+          final name = block.name.trim();
+          if (name.isNotEmpty) drop.add(name.toLowerCase());
+          drop.add(block.id.toLowerCase());
+        }
+      }
+    }
+
+    // (b) Blocks already routed into any agent's shard — duplicated.
+    for (final agent in config.agents) {
+      final sourceNames = agent.sourceBlockNames;
+      if (sourceNames.isEmpty) continue;
+      for (final raw in sourceNames.split(',')) {
+        final name = raw.trim();
+        if (name.isNotEmpty) drop.add(name.toLowerCase());
+      }
+    }
+
+    return drop;
   }
 }

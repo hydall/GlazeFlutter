@@ -34,14 +34,19 @@ class StudioShardSynthesizer {
     String builderPromptTemplate = '',
     String routingMode = 'verbatim',
     CancelToken? cancelToken,
+    bool lumiaActive = false,
   }) async {
-    if (blocks.isEmpty) return spec.fallbackPrompt;
+    if (blocks.isEmpty && !lumiaActive) return spec.fallbackPrompt;
 
     // Stage 3: verbatim routing — concatenate blocks directly, no LLM call.
     // The preset is the source of truth; the agent sees its assigned blocks
     // дословно. See docs/PLAN_AGENTIC_STUDIO.md §11.
     if (routingMode == 'verbatim') {
-      return _synthesizeRoutedShard(spec: spec, blocks: blocks);
+      return _synthesizeRoutedShard(
+        spec: spec,
+        blocks: blocks,
+        lumiaActive: lumiaActive,
+      );
     }
 
     // Legacy: LLM-compiled shard (переваривание).
@@ -85,6 +90,7 @@ class StudioShardSynthesizer {
   String _synthesizeRoutedShard({
     required StudioControllerSpec spec,
     required List<PresetBlock> blocks,
+    bool lumiaActive = false,
   }) {
     final parts = <String>[];
     for (final block in blocks) {
@@ -93,7 +99,7 @@ class StudioShardSynthesizer {
       if (content.isEmpty) continue;
       parts.add('[Block: $name]\n$content');
     }
-    if (parts.isEmpty) return spec.fallbackPrompt;
+    if (parts.isEmpty && !lumiaActive) return spec.fallbackPrompt;
 
     final body = parts.join('\n\n---\n\n');
     // Conflict resolution footer (§12): when two blocks contradict, the one
@@ -102,8 +108,51 @@ class StudioShardSynthesizer {
         '\n\n---\n\n[Conflict resolution: if two blocks above contradict each '
         'other, follow the one that appears LAST.]';
 
-    return '$body$conflictFooter';
+    // Lumia architecture (plan §Part A/B): the Meta-Weaver counts turns and
+    // emits a brief; the Main Responder writes the actual `<lumiaooc>` reply
+    // guided by a COMPACT contract (format + voice), not the full
+    // `<lumia_ghost>` block (which lives in Meta-Weaver's shard).
+    final lumiaSuffix = lumiaActive
+        ? (spec.id == 'meta'
+            ? _metaWeaverCountingDuty
+            : (spec.id == 'final' ? _mainResponderLumiaContract : ''))
+        : '';
+
+    return '$body$conflictFooter$lumiaSuffix';
   }
+
+  /// Appended to the Meta-Weaver's shard when a `<lumia_ghost>` block is
+  /// assigned to it. Emphasizes the counting duty: the Meta-Weaver must count
+  /// assistant messages, apply the period rule from the block, and emit a
+  /// brief — NOT the actual `<lumiaooc>` reply (the Main Responder writes
+  /// that). See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
+  static const _metaWeaverCountingDuty = '\n\n---\n\n[Lumia counting duty]\n'
+      'You run EVERY turn. Count the assistant messages in the chat history you '
+      'see. Read the period rule from the assigned `<lumia_ghost>` block above '
+      '(e.g. "Every 4 assistant responses"). Decide one of:\n'
+      '- `lumia_ooc: due | topic: <X>` — the user explicitly addressed Lumia in OOC brackets (e.g. `((Lumia: ...))`, `[OOC: ...]`).\n'
+      '- `lumia_periodic_note: due | last_note: <N turns ago> | keep: 1-3 sentences, warm, maternal, useful, not scene-stealing` — the period rule fired this turn.\n'
+      '- `lumia: silent` — neither condition met.\n'
+      'Output ONLY the brief line above. Do NOT write the actual `<lumiaooc>` '
+      'reply — the Main Responder writes that, guided by your brief.';
+
+  /// Appended to the Main Responder's shard when a `<lumia_ghost>` block exists
+  /// in the preset (routed to Meta-Weaver, not to the final responder). This is
+  /// a COMPACT Lumia output contract: format + voice + emit-when-brief-says-due.
+  /// The Main Responder never sees the full `<lumia_ghost>` block — only this
+  /// contract + the Meta-Weaver's brief. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part B.
+  static const _mainResponderLumiaContract = '\n\n---\n\n[Lumia output contract]\n'
+      'A separate Meta-Weaver agent runs every turn and sends you a brief. '
+      'When the brief says `lumia_ooc: due` or `lumia_periodic_note: due`, '
+      'append a Lumia OOC note AFTER your narrative reply, wrapped EXACTLY '
+      'like this:\n'
+      '`<lumiaooc><font color="#9370DB"><i>Lumia: <your 1-3 sentence note here></i></font></lumiaooc>`\n'
+      'Voice: warm, maternal, useful, not scene-stealing. Never advance the '
+      'plot or speak for the characters. Keep it to 1-3 sentences. When the '
+      'brief says `lumia: silent`, do NOT emit any `<lumiaooc>` block — just '
+      'write the narrative reply. The `<lumiaooc>` block is meta-commentary '
+      'addressed to the user outside the roleplay; the POST-cleaner preserves '
+      'it verbatim.';
 
   String _buildControllerPrompt({
     required StudioControllerSpec spec,

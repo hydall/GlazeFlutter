@@ -48,6 +48,7 @@ class StudioMessageBuilder {
     final context = _bucketizer.bucketize(
       promptResult,
       promptPayload: promptPayload,
+      studioConfig: config,
     );
     final blocks = studioPreset.blocks.where((b) => b.enabled).toList()
       ..sort((a, b) => a.order.compareTo(b.order));
