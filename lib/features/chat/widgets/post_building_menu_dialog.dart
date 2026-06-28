@@ -463,6 +463,21 @@ class _CleanerSection extends StatelessWidget {
           onSaved: (v) =>
               onSaved((p) => p.copyWith(postCleanerStyleInstructions: v)),
         ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text('post_building_cleaner_disable_reasoning'.tr()),
+          subtitle: Text(
+            'post_building_cleaner_disable_reasoning_desc'.tr(),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          value: pipeline.postCleanerDisableReasoning,
+          onChanged: (v) =>
+              onSaved((p) => p.copyWith(postCleanerDisableReasoning: v)),
+        ),
       ],
     );
   }

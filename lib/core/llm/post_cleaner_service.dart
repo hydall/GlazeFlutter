@@ -291,6 +291,7 @@ class PostCleanerService {
         timeoutMs: _llm.resolveCleanerTimeout(settings),
         cancelToken: cancelToken,
         onChunk: onCleanedChunk,
+        omitReasoning: settings.postCleanerDisableReasoning,
       );
     }
 
@@ -301,6 +302,7 @@ class PostCleanerService {
       temperature: settings.postCleanerTemperature,
       timeoutMs: _llm.resolveCleanerTimeout(settings),
       cancelToken: cancelToken,
+      omitReasoning: settings.postCleanerDisableReasoning,
     );
   }
 
