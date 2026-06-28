@@ -1,16 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:dio/dio.dart';
-
 import '../db/repositories/memory_consolidation_repo.dart';
 import '../models/memory_book.dart';
 import '../models/memory_graph.dart';
 import '../models/pipeline_settings.dart';
 import '../utils/time_helpers.dart';
-import 'transport/chat_transport_request.dart';
-import 'transport/llm_protocol.dart';
-import 'transport/transport_factory.dart';
+import 'sidecar_llm_client.dart';
 
 /// Consolidation service (Phase G5). Tier 1 = scene summaries, Tier 2 = arc summaries.
 ///
@@ -19,8 +15,9 @@ import 'transport/transport_factory.dart';
 /// fallback, NO silent skip.
 class MemoryConsolidationService {
   final MemoryConsolidationRepo _repo;
+  final SidecarLlmClient _llm;
 
-  MemoryConsolidationService(this._repo);
+  MemoryConsolidationService(this._repo, this._llm);
 
   /// Consolidate unconsolidated entries for a session.
   /// Returns the number of consolidations created (0 if none or disabled).
@@ -204,52 +201,16 @@ $content''';
     String prompt,
     PipelineSettings settings,
   ) async {
-    final isCustom = settings.consolidationSource == 'custom';
-    String endpoint;
-    String apiKey;
-    String model;
-    String protocol;
+    final config = await _llm.resolveConfigForConsolidation(settings);
 
-    if (isCustom) {
-      endpoint = settings.consolidationEndpoint;
-      apiKey = settings.consolidationApiKey;
-      model = settings.consolidationModel;
-      protocol = LlmProtocol.openai;
-    } else {
-      throw Exception('Consolidation with source "current" requires caller to resolve config');
-    }
+    final raw = await _llm.callOnce(
+      config: config,
+      prompt: prompt,
+      maxTokens: 1000,
+      temperature: 0.3,
+      timeoutMs: settings.consolidationTimeoutMs,
+    );
 
-    if (endpoint.isEmpty || model.isEmpty) {
-      throw Exception('Consolidation API not configured');
-    }
-
-    final completer = Completer<String>();
-    final transport = pickChatTransport(protocol);
-
-    unawaited(transport.stream(
-      request: ChatTransportRequest(
-        endpoint: endpoint,
-        apiKey: apiKey,
-        model: model,
-        messages: [
-          {'role': 'user', 'content': prompt},
-        ],
-        maxTokens: 1000,
-        temperature: 0.3,
-        topP: 1.0,
-        stream: false,
-      ),
-      cancelToken: CancelToken(),
-      onComplete: (text, _, {rawResponseJson}) {
-        if (!completer.isCompleted) completer.complete(text);
-      },
-      onError: (error) {
-        if (!completer.isCompleted) completer.completeError(error);
-      },
-    ));
-
-    final raw = await completer.future
-        .timeout(Duration(milliseconds: settings.consolidationTimeoutMs));
     final decoded = jsonDecode(raw);
     if (decoded is Map<String, dynamic>) return decoded;
     return null;

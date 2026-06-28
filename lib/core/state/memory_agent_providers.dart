@@ -19,6 +19,7 @@ import '../llm/studio_cleaner_rules_extractor.dart';
 import '../llm/studio_build_llm_client.dart';
 import '../llm/post_cleaner_service.dart';
 import 'memory_settings_provider.dart';
+import '../llm/sidecar_llm_client.dart';
 
 /// Provider for the memory needs classifier service.
 /// Returns a no-op service when classifier is not configured.
@@ -81,7 +82,10 @@ final memoryPostTurnServiceProvider = Provider<MemoryPostTurnService>((ref) {
 /// Consolidation service (Phase G5). Opt-in LLM feature.
 final memoryConsolidationServiceProvider =
     Provider<MemoryConsolidationService>((ref) {
-  return MemoryConsolidationService(ref.watch(memoryConsolidationRepoProvider));
+  return MemoryConsolidationService(
+    ref.watch(memoryConsolidationRepoProvider),
+    SidecarLlmClient(ref),
+  );
 });
 
 /// Agentic memory service (Phase 10). Read-only searchMemory tool.
