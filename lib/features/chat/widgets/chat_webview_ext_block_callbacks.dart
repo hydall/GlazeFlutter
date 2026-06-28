@@ -57,6 +57,7 @@ class ChatWebViewExtBlockCallbacks {
             sessionId: sessionId,
             messageId: messageId,
             swipeId: _swipeIdFor(chatState.messages, messageId),
+            agentSwipeId: _agentSwipeIdFor(chatState.messages, messageId),
             messages: chatState.messages,
             character: character,
             persona: persona,
@@ -89,6 +90,7 @@ class ChatWebViewExtBlockCallbacks {
             blockId: blockId,
             messageId: messageId,
             swipeId: _swipeIdFor(chatState.messages, messageId),
+            agentSwipeId: _agentSwipeIdFor(chatState.messages, messageId),
             sessionId: sessionId,
             charId: charId,
             messages: chatState.messages,
@@ -116,6 +118,7 @@ class ChatWebViewExtBlockCallbacks {
             blockId: blockId,
             messageId: messageId,
             swipeId: _swipeIdFor(chatState.messages, messageId),
+            agentSwipeId: _agentSwipeIdFor(chatState.messages, messageId),
             sessionId: sessionId,
             charId: charId,
             character: character,
@@ -139,6 +142,7 @@ class ChatWebViewExtBlockCallbacks {
             (b) =>
                 b.messageId == messageId &&
                 b.swipeId == _swipeIdForChat(messageId) &&
+                b.agentSwipeId == _agentSwipeIdForChat(messageId) &&
                 b.blockId == blockId,
           )
           .toList();
@@ -174,6 +178,7 @@ class ChatWebViewExtBlockCallbacks {
             (b) =>
                 b.messageId == messageId &&
                 b.swipeId == _swipeIdForChat(messageId) &&
+                b.agentSwipeId == _agentSwipeIdForChat(messageId) &&
                 b.blockId == blockId,
           )
           .toList();
@@ -207,10 +212,25 @@ class ChatWebViewExtBlockCallbacks {
     return _swipeIdFor(chatState.messages, messageId);
   }
 
+  int _agentSwipeIdForChat(String messageId) {
+    final chatState = ref.read(chatProvider(charId)).value;
+    if (chatState == null) return -1;
+    return _agentSwipeIdFor(chatState.messages, messageId);
+  }
+
   static int _swipeIdFor(List<dynamic> messages, String messageId) {
     for (final message in messages) {
       if (message.id == messageId) return message.swipeId as int;
     }
     return 0;
+  }
+
+  static int _agentSwipeIdFor(List<dynamic> messages, String messageId) {
+    for (final message in messages) {
+      if (message.id == messageId) {
+        return message.agentSwipeId as int;
+      }
+    }
+    return -1;
   }
 }

@@ -41,6 +41,7 @@ class BlockPanelUpdater {
     String sessionId,
     String messageId,
     int swipeId,
+    int agentSwipeId,
   ) {
     _enqueuePanelJs(() async {
       final bridge = _ref.read(chatBridgeRegistryProvider(charId));
@@ -58,6 +59,7 @@ class BlockPanelUpdater {
         sessionId: sessionId,
         messageId: messageId,
         swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
       );
       if (blocks.isEmpty) {
         await bridge.hideExtBlocksPanel(messageId);
@@ -77,6 +79,7 @@ class BlockPanelUpdater {
     required String messageId,
     required String blockId,
     required int swipeId,
+    required int agentSwipeId,
     required String content,
     required String status,
   }) async {
@@ -89,7 +92,7 @@ class BlockPanelUpdater {
       status: status,
     );
     if (patched) return;
-    refreshForMessage(charId, sessionId, messageId, swipeId);
+    refreshForMessage(charId, sessionId, messageId, swipeId, agentSwipeId);
   }
 
   void publishStreamingContent({
@@ -123,6 +126,7 @@ class BlockPanelUpdater {
         messageId: messageId,
         blockId: placeholder.blockId,
         swipeId: placeholder.swipeId,
+        agentSwipeId: placeholder.agentSwipeId,
         content: _expandContent(content, charId, sessionId),
         status: BlockRunStatus.running.name,
       ),

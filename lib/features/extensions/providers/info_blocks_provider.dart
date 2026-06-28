@@ -15,6 +15,7 @@ extension InfoBlockBridgeMap on InfoBlock {
     'id': id,
     'blockId': blockId,
     'swipeId': swipeId,
+    'agentSwipeId': agentSwipeId,
     'blockName': blockName,
     'name': blockName,
     'type': blockType,
@@ -88,12 +89,14 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
     required String messageId,
     required String blockId,
     int? swipeId,
+    int? agentSwipeId,
   }) {
     state = state
         .where((b) =>
             !(b.messageId == messageId &&
                 b.blockId == blockId &&
-                (swipeId == null || b.swipeId == swipeId)))
+                (swipeId == null || b.swipeId == swipeId) &&
+                (agentSwipeId == null || b.agentSwipeId == agentSwipeId)))
         .toList();
   }
 
@@ -117,18 +120,28 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
   }
 
   /// Removes all blocks for [messageId] from in-memory state.
-  void removeByMessageId(String messageId, {int? swipeId}) {
+  void removeByMessageId(String messageId, {int? swipeId, int? agentSwipeId}) {
     state = state
         .where((b) =>
             !(b.messageId == messageId &&
-                (swipeId == null || b.swipeId == swipeId)))
+                (swipeId == null || b.swipeId == swipeId) &&
+                (agentSwipeId == null || b.agentSwipeId == agentSwipeId)))
         .toList();
   }
 
   /// Deletes all blocks for [messageId] from DB and state.
-  Future<void> deleteByMessageId(String messageId, {int? swipeId}) async {
-    await _repo.deleteByMessageId(sessionId, messageId, swipeId: swipeId);
-    removeByMessageId(messageId, swipeId: swipeId);
+  Future<void> deleteByMessageId(
+    String messageId, {
+    int? swipeId,
+    int? agentSwipeId,
+  }) async {
+    await _repo.deleteByMessageId(
+      sessionId,
+      messageId,
+      swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
+    );
+    removeByMessageId(messageId, swipeId: swipeId, agentSwipeId: agentSwipeId);
   }
 
   Future<void> delete(String id) async {
@@ -147,9 +160,12 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
 
   /// Returns all blocks for a specific message, sorted by order.
   /// When duplicates exist for the same preset block, keeps the newest row.
-  List<InfoBlock> getByMessageId(String messageId, {int swipeId = 0}) {
+  List<InfoBlock> getByMessageId(String messageId, {int swipeId = 0, int agentSwipeId = -1}) {
     final blocks = state
-        .where((b) => b.messageId == messageId && b.swipeId == swipeId)
+        .where((b) =>
+            b.messageId == messageId &&
+            b.swipeId == swipeId &&
+            b.agentSwipeId == agentSwipeId)
         .toList();
     final byBlockId = <String, InfoBlock>{};
     for (final block in blocks) {
@@ -167,8 +183,8 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
   /// - 'error' if any block errored (and none running)
   /// - 'done' if all blocks done/stopped
   /// - null if no blocks
-  String? aggregatedStatus(String messageId, {int swipeId = 0}) {
-    final blocks = getByMessageId(messageId, swipeId: swipeId);
+  String? aggregatedStatus(String messageId, {int swipeId = 0, int agentSwipeId = -1}) {
+    final blocks = getByMessageId(messageId, swipeId: swipeId, agentSwipeId: agentSwipeId);
     if (blocks.isEmpty) return null;
     if (blocks.any((b) => b.status == BlockRunStatus.running)) return 'running';
     if (blocks.any((b) => b.status == BlockRunStatus.error)) return 'error';

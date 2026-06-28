@@ -77,6 +77,7 @@ class JsBlockExecutor {
           context.sessionId,
           context.messageId,
           context.swipeId,
+          context.agentSwipeId,
         );
         return stopped;
       }
@@ -91,6 +92,7 @@ class JsBlockExecutor {
         sessionId: context.sessionId,
         messageId: context.messageId,
         swipeId: context.swipeId,
+        agentSwipeId: context.agentSwipeId,
         blockId: blockConfig.id,
         blockName: blockConfig.name,
         blockType: blockConfig.type.name,
@@ -107,6 +109,7 @@ class JsBlockExecutor {
         context.sessionId,
         context.messageId,
         context.swipeId,
+        context.agentSwipeId,
       );
       return done;
     } catch (e) {
@@ -123,6 +126,7 @@ class JsBlockExecutor {
           context.sessionId,
           context.messageId,
           context.swipeId,
+          context.agentSwipeId,
         );
         return stopped;
       }

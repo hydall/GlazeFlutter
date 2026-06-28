@@ -42,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 52;
+  int get schemaVersion => 53;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -765,6 +765,21 @@ class AppDatabase extends _$AppDatabase {
         // payload is unaffected; PipelineSettings.fromJson reads the same
         // fields, with new cleaner fields defaulting to their @Default values.
         await m.deleteTable('pipeline_settings_rows');
+      }
+      if (from < 53) {
+        // InfoBlock.agentSwipeId: bind ext blocks to the blue cleaned
+        // sub-swipe so blocks launched after the POST-cleaner target the
+        // cleaned text, not the raw streamed final. Default -1 = "no agent
+        // swipe" (legacy blocks written before the cleaner existed or when
+        // the cleaner is disabled — these match by (messageId, swipeId)
+        // only, preserving prior behavior).
+        final cols = await customSelect(
+          'PRAGMA table_info("info_blocks")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('agent_swipe_id')) {
+          await m.addColumn(infoBlocks, infoBlocks.agentSwipeId);
+        }
       }
     },
   );

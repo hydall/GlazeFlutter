@@ -43,6 +43,7 @@ class ImagePixelRenderer {
       sessionId: context.sessionId,
       messageId: context.messageId,
       swipeId: context.swipeId,
+      agentSwipeId: context.agentSwipeId,
       blockConfig: context.blockConfig,
       character: context.character,
       persona: context.persona,
@@ -58,6 +59,7 @@ class ImagePixelRenderer {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required BlockConfig blockConfig,
     required Character character,
     required Persona? persona,
@@ -75,7 +77,7 @@ class ImagePixelRenderer {
         status: BlockRunStatus.done,
       );
       ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(done);
-      refreshPanelForMessage(charId, sessionId, messageId, swipeId);
+      refreshPanelForMessage(charId, sessionId, messageId, swipeId, agentSwipeId);
       return done;
     }
 
@@ -92,6 +94,7 @@ class ImagePixelRenderer {
           sessionId: sessionId,
           messageId: messageId,
           swipeId: swipeId,
+          agentSwipeId: agentSwipeId,
           blockConfig: blockConfig,
           character: character,
           persona: persona,
@@ -112,6 +115,7 @@ class ImagePixelRenderer {
           sessionId: sessionId,
           messageId: messageId,
           swipeId: swipeId,
+          agentSwipeId: agentSwipeId,
           blockConfig: blockConfig,
           character: character,
           persona: persona,
@@ -204,6 +208,7 @@ class ImagePixelRenderer {
         sessionId: sessionId,
         messageId: messageId,
         swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
         blockId: blockConfig.id,
         blockName: blockConfig.name,
         blockType: blockConfig.type.name,
@@ -213,7 +218,7 @@ class ImagePixelRenderer {
         status: BlockRunStatus.done,
       );
       ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(done);
-      refreshPanelForMessage(charId, sessionId, messageId, swipeId);
+      refreshPanelForMessage(charId, sessionId, messageId, swipeId, agentSwipeId);
       return done;
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {
@@ -226,6 +231,7 @@ class ImagePixelRenderer {
           sessionId: sessionId,
           messageId: messageId,
           swipeId: swipeId,
+          agentSwipeId: agentSwipeId,
           blockConfig: blockConfig,
           character: character,
           persona: persona,
@@ -242,6 +248,7 @@ class ImagePixelRenderer {
           sessionId: sessionId,
           messageId: messageId,
           swipeId: swipeId,
+          agentSwipeId: agentSwipeId,
           blockConfig: blockConfig,
           character: character,
           persona: persona,
@@ -259,6 +266,7 @@ class ImagePixelRenderer {
     required String sessionId,
     required String messageId,
     required int swipeId,
+    required int agentSwipeId,
     required BlockConfig blockConfig,
     required Character character,
     required Persona? persona,
@@ -271,6 +279,7 @@ class ImagePixelRenderer {
       sessionId: sessionId,
       messageId: messageId,
       swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
       messages: const [],
       blockConfig: blockConfig,
       preset: null,

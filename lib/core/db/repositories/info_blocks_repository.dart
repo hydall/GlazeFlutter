@@ -19,6 +19,7 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
       sessionId: block.sessionId,
       messageId: block.messageId,
       swipeId: Value(block.swipeId),
+      agentSwipeId: Value(block.agentSwipeId),
       blockId: block.blockId,
       blockType: block.blockType,
       blockName: block.blockName,
@@ -67,12 +68,16 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
     String sessionId,
     String messageId, {
     int swipeId = 0,
+    int? agentSwipeId,
   }) async {
     final rows = await (select(infoBlocks)
-          ..where((tbl) =>
-              tbl.sessionId.equals(sessionId) &
-              tbl.messageId.equals(messageId) &
-              tbl.swipeId.equals(swipeId))
+          ..where((tbl) {
+            final base = tbl.sessionId.equals(sessionId) &
+                tbl.messageId.equals(messageId) &
+                tbl.swipeId.equals(swipeId);
+            if (agentSwipeId == null) return base;
+            return base & tbl.agentSwipeId.equals(agentSwipeId);
+          })
           ..orderBy([(t) => OrderingTerm.asc(t.order_)]))
         .get();
 
@@ -122,12 +127,17 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
     String sessionId,
     String messageId, {
     int? swipeId,
+    int? agentSwipeId,
   }) async {
     await (delete(infoBlocks)
           ..where((tbl) {
-            final base =
-                tbl.sessionId.equals(sessionId) & tbl.messageId.equals(messageId);
-            return swipeId == null ? base : base & tbl.swipeId.equals(swipeId);
+            var base = tbl.sessionId.equals(sessionId) &
+                tbl.messageId.equals(messageId);
+            if (swipeId != null) base = base & tbl.swipeId.equals(swipeId);
+            if (agentSwipeId != null) {
+              base = base & tbl.agentSwipeId.equals(agentSwipeId);
+            }
+            return base;
           }))
         .go();
   }
@@ -138,6 +148,7 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
       sessionId: row.sessionId,
       messageId: row.messageId,
       swipeId: row.swipeId,
+      agentSwipeId: row.agentSwipeId,
       blockId: row.blockId,
       blockName: row.blockName,
       blockType: row.blockType,

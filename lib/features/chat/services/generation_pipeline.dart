@@ -19,8 +19,10 @@ import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/services/generation_notification_service.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/character_provider.dart';
 import '../../../core/utils/time_helpers.dart';
 import '../../cloud_sync/sync_provider.dart' show notifySyncMessageGenerated;
+import '../../extensions/services/extension_post_gen_service.dart';
 import '../../chat_history/chat_history_provider.dart';
 import '../abort_handler.dart';
 import '../chat_generation_service.dart';
@@ -211,6 +213,7 @@ class GenerationPipeline {
               messages: result.session!.messages,
               genId: genId,
               promptPayload: result.promptPayload,
+              character: character,
             ),
           );
         }
@@ -307,6 +310,7 @@ class GenerationPipeline {
             messages: result.session!.messages,
             genId: genId,
             promptPayload: result.promptPayload,
+            character: character,
           ),
         );
       }
@@ -458,12 +462,27 @@ class GenerationPipeline {
     final hasGenerationError = lastMessage?.isError == true;
 
     if (character != null && result.session != null && !hasGenerationError) {
-      await service.processExtensions(
-        charId: charId,
-        session: result.session!,
-        character: character,
-      );
-      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      // Defer extension blocks when the POST-cleaner is enabled: the
+      // cleaner rewrites the trailing assistant message into a new blue
+      // sub-swipe, and ext blocks must bind to that cleaned swipe (see
+      // _executeAndApplyCleaner's wasCleaned branch). Launching them here
+      // on the raw streamed text would create blocks bound to the 'final'
+      // swipe that the user never sees after the cleaner runs. When the
+      // cleaner is disabled (or skipped/failed), _runPostCleaner's else
+      // branch launches extensions with agentSwipeId=-1 (legacy binding
+      // to the top-level swipe, identical to the pre-patch behavior).
+      final pipeline = ref.read(pipelineSettingsProvider);
+      final bookRepo = ref.read(memoryBookRepoProvider);
+      final book = await bookRepo.getBySessionId(result.session!.id);
+      final cleanerEnabled = pipeline.postCleanerEnabled && book != null;
+      if (!cleanerEnabled) {
+        await service.processExtensions(
+          charId: charId,
+          session: result.session!,
+          character: character,
+        );
+        if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      }
     }
 
     if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
@@ -481,6 +500,39 @@ class GenerationPipeline {
           : null,
       avatarPath: character?.avatarPath,
     );
+  }
+
+  /// Launch extension blocks for the trailing assistant message, bound to
+  /// [agentSwipeId]. Called from `_executeAndApplyCleaner` after the cleaner
+  /// finalizes (or skips/fails) so blocks always target the swipe the user
+  /// will actually see:
+  /// - `agentSwipeId >= 0` → cleaned blue sub-swipe (post-cleaner path).
+  /// - `agentSwipeId = -1` → original 'final' swipe (cleaner disabled or
+  ///   skipped/fallback branches — legacy binding, identical to pre-patch
+  ///   behavior when the cleaner was off).
+  /// See docs/plans/PLAN_EXT_BLOCKS_AFTER_CLEANER.md.
+  Future<void> _launchExtensionsForSwipe({
+    required ChatSession session,
+    required Character character,
+    required int agentSwipeId,
+  }) async {
+    if (session.id.isEmpty || session.messages.isEmpty) return;
+    final lastMessage = session.messages.last;
+    if (lastMessage.role == 'user' || lastMessage.isError) return;
+    try {
+      final extensionService = ref.read(extensionPostGenServiceProvider);
+      await extensionService.processAfterGeneration(
+        charId: charId,
+        session: session,
+        character: character,
+        persona: null,
+        agentSwipeId: agentSwipeId,
+      );
+    } catch (e) {
+      debugPrint(
+        '[GenerationPipeline] extension launch for swipe=$agentSwipeId failed: $e',
+      );
+    }
   }
 
   Future<void> _handlePipelineError(
@@ -815,6 +867,7 @@ class GenerationPipeline {
     required List<ChatMessage> messages,
     required int genId,
     PromptPayload? promptPayload,
+    Character? character,
   }) async {
     if (!ref.mounted) return;
 
@@ -900,6 +953,7 @@ class GenerationPipeline {
         broadcastBlocks: broadcastBlocks,
         pipeline: pipeline,
         promptPayload: promptPayload,
+        character: character,
       );
     } catch (e) {
       debugPrint('[PostCleaner] failed session=$sessionId error=$e');
@@ -979,6 +1033,7 @@ class GenerationPipeline {
     required List<String> broadcastBlocks,
     required PipelineSettings pipeline,
     PromptPayload? promptPayload,
+    Character? character,
   }) async {
     final isManualRerun = genId < 0;
     bool abortCheck() =>
@@ -1269,6 +1324,11 @@ class GenerationPipeline {
     final chatRepo = ref.read(chatRepoProvider);
 
     if (result.wasCleaned) {
+      final cleanedAgentSwipeId = _preCreatedCleanerSwipeId >= 0
+          ? _preCreatedCleanerSwipeId
+          : (targetMessage.agentSwipes.isNotEmpty
+              ? targetMessage.agentSwipes.length - 1
+              : 0);
       if (_preCreatedCleanerSwipeId >= 0) {
         await chatRepo.updateAgentSwipeContent(
           sessionId: sessionId,
@@ -1289,6 +1349,22 @@ class GenerationPipeline {
           tokens: estimateTokens(result.cleanedText),
         );
       }
+      // Launch extension blocks bound to the NEW cleaned swipe. Extensions
+      // were deferred in _runPostTextSide when the cleaner is enabled, so
+      // this is the only place they start for the cleaned path. Blocks are
+      // bound to (messageId, swipeId, agentSwipeId=cleanedAgentSwipeId) so
+      // switching to a different blue swipe shows its own blocks. See
+      // docs/plans/PLAN_EXT_BLOCKS_AFTER_CLEANER.md.
+      if (character != null && ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await _launchExtensionsForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: cleanedAgentSwipeId,
+          );
+        }
+      }
     } else if (result.status == 'skipped') {
       // The cleaner ran to completion but the result was DELIBERATELY
       // rejected by a safety guard (length-ratio out of bounds, or the
@@ -1303,6 +1379,20 @@ class GenerationPipeline {
           messageId: targetMessage.id,
           agentSwipeId: _preCreatedCleanerSwipeId,
         );
+      }
+      // Cleaner skipped → no cleaned swipe exists. Launch extensions bound
+      // to the original 'final' swipe (agentSwipeId=-1 = legacy binding).
+      // These blocks were deferred in _runPostTextSide and must still run
+      // even though the cleaner produced no output.
+      if (character != null && ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await _launchExtensionsForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: -1,
+          );
+        }
       }
     } else if (_lastStreamedText.trim().isNotEmpty) {
       // Cleaner failed mid-stream (error/timeout/aborted) but produced
@@ -1327,6 +1417,19 @@ class GenerationPipeline {
           tokens: estimateTokens(_lastStreamedText),
         );
       }
+      // Partial cleaned swipe was persisted — bind extensions to it.
+      if (character != null && ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await _launchExtensionsForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: _preCreatedCleanerSwipeId >= 0
+                ? _preCreatedCleanerSwipeId
+                : -1,
+          );
+        }
+      }
     } else if (_preCreatedCleanerSwipeId >= 0) {
       // Nothing useful was produced — delete the pre-created empty swipe
       // and revert to the parent 'final'.
@@ -1335,6 +1438,17 @@ class GenerationPipeline {
         messageId: targetMessage.id,
         agentSwipeId: _preCreatedCleanerSwipeId,
       );
+      // No swipe to bind to → launch extensions on the original (agentSwipeId=-1).
+      if (character != null && ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await _launchExtensionsForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: -1,
+          );
+        }
+      }
     }
 
     // Reset the streaming state so the WebView stops treating the bubble
@@ -1465,6 +1579,7 @@ class GenerationPipeline {
     // context is gone), so the character-audit pass is skipped — the
     // cleaner runs without CHARACTER CONSISTENCY NOTES. This matches the
     // auto path's graceful-degradation case (audit timeout / failure).
+    final character = ref.read(characterByIdProvider(charId));
     try {
       await _executeAndApplyCleaner(
         sessionId: sessionId,
@@ -1475,6 +1590,7 @@ class GenerationPipeline {
         broadcastBlocks: broadcastBlocks,
         pipeline: pipeline,
         promptPayload: null,
+        character: character,
       );
     } catch (e) {
       debugPrint('[PostCleaner] rerun failed session=$sessionId error=$e');
