@@ -287,6 +287,7 @@ class SidecarLlmClient {
     required double temperature,
     required int timeoutMs,
     CancelToken? cancelToken,
+    bool omitReasoning = false,
   }) async {
     if (config.endpoint.isEmpty || config.model.isEmpty) {
       throw Exception('Sidecar API not configured');
@@ -301,6 +302,7 @@ class SidecarLlmClient {
         temperature: temperature,
         timeoutMs: timeoutMs,
         cancelToken: cancelToken,
+        omitReasoning: omitReasoning,
       ),
     );
   }
@@ -328,6 +330,7 @@ class SidecarLlmClient {
     required int timeoutMs,
     CancelToken? cancelToken,
     void Function(String accumulatedText)? onChunk,
+    bool omitReasoning = false,
   }) async {
     if (config.endpoint.isEmpty || config.model.isEmpty) {
       throw Exception('Sidecar API not configured');
@@ -343,6 +346,7 @@ class SidecarLlmClient {
         timeoutMs: timeoutMs,
         cancelToken: cancelToken,
         onChunk: onChunk,
+        omitReasoning: omitReasoning,
       ),
     );
   }
@@ -377,6 +381,7 @@ class SidecarLlmClient {
     required double temperature,
     required int timeoutMs,
     CancelToken? cancelToken,
+    bool omitReasoning = false,
   }) async {
     final completer = Completer<String>();
     final transport = pickChatTransport(config.protocol);
@@ -394,6 +399,7 @@ class SidecarLlmClient {
           temperature: temperature,
           topP: 1.0,
           stream: false,
+          omitReasoning: omitReasoning,
         ),
         cancelToken: cancelToken,
         onComplete: (text, _, {rawResponseJson}) {
@@ -419,6 +425,7 @@ class SidecarLlmClient {
     required int timeoutMs,
     CancelToken? cancelToken,
     void Function(String accumulatedText)? onChunk,
+    bool omitReasoning = false,
   }) async {
     final completer = Completer<String>();
     final transport = pickChatTransport(config.protocol);
@@ -437,6 +444,7 @@ class SidecarLlmClient {
           temperature: temperature,
           topP: 1.0,
           stream: true,
+          omitReasoning: omitReasoning,
         ),
         cancelToken: cancelToken,
         onUpdate: (delta, _) {

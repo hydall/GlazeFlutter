@@ -186,6 +186,76 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     setState(() {});
   }
 
+  /// Edit the shared tracker model override (applies to all 7 pre-gen
+  /// controllers). Fetches the live model list from the resolved tracker API
+  /// config's provider and writes the selection to
+  /// [PipelineSettings.studioTrackerModelOverride].
+  Future<void> _editTrackerModel() async {
+    final apiConfig = _ctrl.resolveTrackerApiConfig();
+    if (apiConfig == null) {
+      GlazeToast.show(
+        context,
+        'No chat API configured. Set one up in API settings first.',
+      );
+      return;
+    }
+    final models = await _ctrl.fetchModelsForTrackerConfig();
+    if (!mounted) return;
+    setState(() {});
+    if (models.isEmpty) {
+      GlazeToast.show(
+        context,
+        'Could not fetch models from ${apiConfig.name.isEmpty ? "the provider" : apiConfig.name}. '
+        'Check the API endpoint and key in settings.',
+      );
+      return;
+    }
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final current = pipeline.studioTrackerModelOverride;
+    final chatModel = apiConfig.model;
+    if (current.isNotEmpty && !models.contains(current)) {
+      models.insert(0, current);
+    }
+    final selectedIndex = current.isNotEmpty ? models.indexOf(current) : -1;
+    if (!mounted) return;
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'post_building_studio_tracker_model'.tr(),
+      scrollToIndex: selectedIndex >= 0 ? selectedIndex : null,
+      items: [
+        BottomSheetItem(
+          label: 'Use each agent\'s own model',
+          hint: chatModel.isEmpty ? null : 'chat: $chatModel',
+          icon: current.isEmpty ? Icons.check : Icons.chat_bubble_outline,
+          iconColor: Theme.of(context).colorScheme.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _setTrackerModelOverride('');
+          },
+        ),
+        ...models.map(
+          (m) => BottomSheetItem(
+            label: m,
+            icon: m == current ? Icons.check : null,
+            iconColor: Theme.of(context).colorScheme.primary,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _setTrackerModelOverride(m);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _setTrackerModelOverride(String modelOverride) async {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final updated = pipeline.copyWith(studioTrackerModelOverride: modelOverride);
+    await ref.read(pipelineSettingsProvider.notifier).save(updated);
+    if (!mounted) return;
+    setState(() {});
+  }
+
   void _buildStudio() {
     // Fire-and-forget: the build runs in [studioBuildProvider] (provider
     // scope) and survives this dialog being closed. We only trigger it and let
@@ -305,66 +375,31 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                           ),
                         )
                       else ...[
-                        Text(
-                          'Active trackers (${activeAgents.length})',
-                          style: tt.labelMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
+                        // ── Trackers section (7 pre-gen controllers) ──
+                        _TrackersSection(
+                          activeAgents: activeAgents.where((a) => !a.id.contains('final')).toList(),
+                          disabledAgents: disabledAgents.where((a) => !a.id.contains('final')).toList(),
+                          trackerValueFor: _ctrl.trackerValueFor,
+                          onToggle: _toggleAgent,
+                          onEditModel: _editAgentModel,
+                          onEditShard: _editAgentShard,
+                          onRegenerate: _regenerateAgentInstruction,
+                          regeneratingAgentIds: _ctrl.regeneratingAgentIds,
+                          onEditSharedModel: _editTrackerModel,
                         ),
-                        const SizedBox(height: 4),
-                        if (activeAgents.isEmpty)
-                          Text(
-                            '— none —',
-                            style: tt.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          )
-                        else
-                          ...activeAgents.map(
-                            (a) => _TrackerRow(
-                              agent: a,
-                              value: _ctrl.trackerValueFor(a.name),
-                              onToggle: (v) => _toggleAgent(a, v),
-                              onEditModel: () => _editAgentModel(a),
-                              onEditShard: () => _editAgentShard(a),
-                              onRegenerate: () =>
-                                  _regenerateAgentInstruction(a),
-                              regenerating: _ctrl.regeneratingAgentIds.contains(
-                                a.id,
-                              ),
-                            ),
-                          ),
-                        if (disabledAgents.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            'Disabled (${disabledAgents.length})',
-                            style: tt.labelMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          ...disabledAgents.map(
-                            (a) => _TrackerRow(
-                              agent: a,
-                              value: _ctrl.trackerValueFor(a.name),
-                              onToggle: (v) => _toggleAgent(a, v),
-                              onEditModel: () => _editAgentModel(a),
-                              onEditShard: () => _editAgentShard(a),
-                              onRegenerate: () =>
-                                  _regenerateAgentInstruction(a),
-                              regenerating: _ctrl.regeneratingAgentIds.contains(
-                                a.id,
-                              ),
-                            ),
-                          ),
-                        ],
+                        const SizedBox(height: 12),
+                        // ── Finalizer section (Main Responder) ──
+                        _FinalizerSection(
+                          activeFinalAgents: activeAgents.where((a) => a.id.contains('final')).toList(),
+                          disabledFinalAgents: disabledAgents.where((a) => a.id.contains('final')).toList(),
+                          trackerValueFor: _ctrl.trackerValueFor,
+                          onToggle: _toggleAgent,
+                          onEditModel: _editAgentModel,
+                          onEditShard: _editAgentShard,
+                          onRegenerate: _regenerateAgentInstruction,
+                          regeneratingAgentIds: _ctrl.regeneratingAgentIds,
+                        ),
                       ],
-                      const SizedBox(height: 12),
-                      const _StudioTimeoutTile(),
-                      const SizedBox(height: 4),
-                      const _StudioMaxTokensTile(),
-                      const SizedBox(height: 4),
-                      const _StudioTemperatureTile(),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -885,6 +920,472 @@ class _StudioTemperatureTile extends ConsumerWidget {
           final updated = pipeline.copyWith(studioFinalTemperature: v);
           await ref.read(pipelineSettingsProvider.notifier).save(updated);
         }
+      },
+    );
+  }
+}
+
+/// Disable-reasoning toggle for the Studio final generator (Main Responder).
+/// Reads/writes `PipelineSettings.studioFinalDisableReasoning`. When on, the
+/// final generator's request forces requestReasoning=false and
+/// omitReasoning=true regardless of the ApiConfig. Targeted at Gemini Flash
+/// thinking models that burn the token budget on a think-block and truncate
+/// the visible prose mid-sentence.
+class _StudioDisableReasoningTile extends ConsumerWidget {
+  const _StudioDisableReasoningTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioFinalDisableReasoning;
+    return SwitchListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        'post_building_studio_disable_reasoning'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        'post_building_studio_disable_reasoning_desc'.tr(),
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      value: value,
+      onChanged: (v) async {
+        final updated = pipeline.copyWith(studioFinalDisableReasoning: v);
+        await ref.read(pipelineSettingsProvider.notifier).save(updated);
+      },
+    );
+  }
+}
+
+/// Trackers section: groups the 7 pre-gen controllers behind an ExpansionTile
+/// with a shared model chip and tracker-specific pipeline tiles. Trackers emit
+/// compact JSON briefs, so a cheap fast model is usually enough — the subtitle
+/// surfaces this hint.
+class _TrackersSection extends ConsumerWidget {
+  final List<StudioAgent> activeAgents;
+  final List<StudioAgent> disabledAgents;
+  final String? Function(String) trackerValueFor;
+  final Future<void> Function(StudioAgent, bool) onToggle;
+  final Future<void> Function(StudioAgent) onEditModel;
+  final Future<void> Function(StudioAgent) onEditShard;
+  final Future<void> Function(StudioAgent) onRegenerate;
+  final Set<String> regeneratingAgentIds;
+  final VoidCallback onEditSharedModel;
+
+  const _TrackersSection({
+    required this.activeAgents,
+    required this.disabledAgents,
+    required this.trackerValueFor,
+    required this.onToggle,
+    required this.onEditModel,
+    required this.onEditShard,
+    required this.onRegenerate,
+    required this.regeneratingAgentIds,
+    required this.onEditSharedModel,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final pipeline = ref.watch(pipelineSettingsProvider);
+    final sharedModel = pipeline.studioTrackerModelOverride;
+    final modelLabel = sharedModel.isNotEmpty
+        ? sharedModel
+        : 'studio_trackers_section_hint'.tr();
+    return ExpansionTile(
+      title: Text('studio_trackers_section'.tr(), style: tt.titleSmall),
+      subtitle: Text(
+        'studio_trackers_section_desc'.tr(),
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      initiallyExpanded: true,
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: EdgeInsets.zero,
+      children: [
+        const SizedBox(height: 8),
+        // Shared model chip for all 7 trackers.
+        InkWell(
+          onTap: onEditSharedModel,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: sharedModel.isNotEmpty
+                  ? cs.primaryContainer
+                  : cs.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: cs.primary.withValues(alpha: 0.4),
+                width: 0.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.edit,
+                  size: 14,
+                  color: sharedModel.isNotEmpty
+                      ? cs.onPrimaryContainer
+                      : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'post_building_studio_tracker_model'.tr(),
+                        style: tt.labelSmall?.copyWith(
+                          color: sharedModel.isNotEmpty
+                              ? cs.onPrimaryContainer
+                              : cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        modelLabel,
+                        style: tt.bodySmall?.copyWith(
+                          color: sharedModel.isNotEmpty
+                              ? cs.onPrimaryContainer
+                              : cs.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (activeAgents.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(
+              '— none —',
+              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          )
+        else
+          ...activeAgents.map(
+            (a) => _TrackerRow(
+              agent: a,
+              value: trackerValueFor(a.name),
+              onToggle: (v) => onToggle(a, v),
+              onEditModel: () => onEditModel(a),
+              onEditShard: () => onEditShard(a),
+              onRegenerate: () => onRegenerate(a),
+              regenerating: regeneratingAgentIds.contains(a.id),
+            ),
+          ),
+        if (disabledAgents.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Disabled (${disabledAgents.length})',
+            style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          ...disabledAgents.map(
+            (a) => _TrackerRow(
+              agent: a,
+              value: trackerValueFor(a.name),
+              onToggle: (v) => onToggle(a, v),
+              onEditModel: () => onEditModel(a),
+              onEditShard: () => onEditShard(a),
+              onRegenerate: () => onRegenerate(a),
+              regenerating: regeneratingAgentIds.contains(a.id),
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        const _StudioTimeoutTile(),
+        const SizedBox(height: 4),
+        const _StudioTrackerMaxTokensTile(),
+        const SizedBox(height: 4),
+        const _StudioTrackerTemperatureTile(),
+        const SizedBox(height: 4),
+        const _StudioTrackerDisableReasoningTile(),
+      ],
+    );
+  }
+}
+
+/// Finalizer section: the Main Responder. Groups the final agent row + the
+/// final-specific pipeline tiles behind an ExpansionTile with a hint to use a
+/// high-quality model here (it writes the visible reply).
+class _FinalizerSection extends StatelessWidget {
+  final List<StudioAgent> activeFinalAgents;
+  final List<StudioAgent> disabledFinalAgents;
+  final String? Function(String) trackerValueFor;
+  final Future<void> Function(StudioAgent, bool) onToggle;
+  final Future<void> Function(StudioAgent) onEditModel;
+  final Future<void> Function(StudioAgent) onEditShard;
+  final Future<void> Function(StudioAgent) onRegenerate;
+  final Set<String> regeneratingAgentIds;
+
+  const _FinalizerSection({
+    required this.activeFinalAgents,
+    required this.disabledFinalAgents,
+    required this.trackerValueFor,
+    required this.onToggle,
+    required this.onEditModel,
+    required this.onEditShard,
+    required this.onRegenerate,
+    required this.regeneratingAgentIds,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return ExpansionTile(
+      title: Text('studio_finalizer_section'.tr(), style: tt.titleSmall),
+      subtitle: Text(
+        'studio_finalizer_section_desc'.tr(),
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      initiallyExpanded: true,
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: EdgeInsets.zero,
+      children: [
+        const SizedBox(height: 8),
+        ...activeFinalAgents.map(
+          (a) => _TrackerRow(
+            agent: a,
+            value: trackerValueFor(a.name),
+            onToggle: (v) => onToggle(a, v),
+            onEditModel: () => onEditModel(a),
+            onEditShard: () => onEditShard(a),
+            onRegenerate: () => onRegenerate(a),
+            regenerating: regeneratingAgentIds.contains(a.id),
+          ),
+        ),
+        ...disabledFinalAgents.map(
+          (a) => _TrackerRow(
+            agent: a,
+            value: trackerValueFor(a.name),
+            onToggle: (v) => onToggle(a, v),
+            onEditModel: () => onEditModel(a),
+            onEditShard: () => onEditShard(a),
+            onRegenerate: () => onRegenerate(a),
+            regenerating: regeneratingAgentIds.contains(a.id),
+          ),
+        ),
+        const SizedBox(height: 8),
+        const _StudioMaxTokensTile(),
+        const SizedBox(height: 4),
+        const _StudioTemperatureTile(),
+        const SizedBox(height: 4),
+        const _StudioDisableReasoningTile(),
+      ],
+    );
+  }
+}
+
+/// Max tokens override for all Studio trackers (the 7 pre-gen controllers).
+/// Reads/writes `PipelineSettings.studioTrackerMaxTokens`. When 0, the
+/// per-agent default (1600) is used. Lets the user tighten/loosen the compact
+/// JSON brief budget for all 7 pre-gen agents at once.
+class _StudioTrackerMaxTokensTile extends ConsumerWidget {
+  const _StudioTrackerMaxTokensTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioTrackerMaxTokens;
+    final valueText = value == 0
+        ? 'post_building_default_tokens'.tr(namedArgs: {'arg0': '1600'})
+        : 'post_building_tokens_count'.tr(namedArgs: {'arg0': '$value'});
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.text_snippet_outlined, size: 20, color: cs.onSurfaceVariant),
+      title: Text(
+        'post_building_studio_tracker_max_tokens'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        '$valueText — ${'post_building_studio_tracker_max_tokens_desc'.tr()}',
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final controller = TextEditingController(text: '$value');
+        final v = await showDialog<int>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('post_building_studio_tracker_max_tokens'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'post_building_tokens_min'.tr(namedArgs: {'arg0': '0'}),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    suffixText: 'tokens',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: Text('common_cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final s = int.tryParse(controller.text.trim());
+                  if (s == null || s < 0) {
+                    Navigator.of(c).pop();
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: Text('common_save'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (v != null) {
+          final updated = pipeline.copyWith(studioTrackerMaxTokens: v);
+          await ref.read(pipelineSettingsProvider.notifier).save(updated);
+        }
+      },
+    );
+  }
+}
+
+/// Temperature override for all Studio trackers (the 7 pre-gen controllers).
+/// Reads/writes `PipelineSettings.studioTrackerTemperature`. When negative,
+/// the per-agent default (0.3) is used. Lets the user tune the creativity of
+/// all 7 pre-gen agents at once without rebuilding the Studio agents.
+class _StudioTrackerTemperatureTile extends ConsumerWidget {
+  const _StudioTrackerTemperatureTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioTrackerTemperature;
+    final valueText = value < 0
+        ? 'post_building_default'.tr(namedArgs: {'arg0': '0.3'})
+        : value.toStringAsFixed(2);
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.thermostat_outlined, size: 20, color: cs.onSurfaceVariant),
+      title: Text(
+        'post_building_studio_tracker_temperature'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        '$valueText — ${'post_building_studio_tracker_temperature_desc'.tr()}',
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final controller = TextEditingController(
+          text: value < 0 ? '' : value.toStringAsFixed(2),
+        );
+        final v = await showDialog<double>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('post_building_studio_tracker_temperature'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'post_building_temperature_hint'.tr(),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    suffixText: '0.0 – 2.0',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: Text('common_cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final text = controller.text.trim();
+                  if (text.isEmpty) {
+                    Navigator.of(c).pop(-1.0);
+                    return;
+                  }
+                  final s = double.tryParse(text);
+                  if (s == null || s < 0 || s > 2) {
+                    Navigator.of(c).pop();
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: Text('common_save'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (v != null) {
+          final updated = pipeline.copyWith(studioTrackerTemperature: v);
+          await ref.read(pipelineSettingsProvider.notifier).save(updated);
+        }
+      },
+    );
+  }
+}
+
+/// Disable-reasoning toggle for all Studio trackers (the 7 pre-gen
+/// controllers). Reads/writes `PipelineSettings.studioTrackerDisableReasoning`.
+/// Trackers emit compact JSON briefs, so a hidden think-block wastes tokens
+/// without improving the brief.
+class _StudioTrackerDisableReasoningTile extends ConsumerWidget {
+  const _StudioTrackerDisableReasoningTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioTrackerDisableReasoning;
+    return SwitchListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        'post_building_studio_tracker_disable_reasoning'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        'post_building_studio_tracker_disable_reasoning_desc'.tr(),
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      value: value,
+      onChanged: (v) async {
+        final updated = pipeline.copyWith(studioTrackerDisableReasoning: v);
+        await ref.read(pipelineSettingsProvider.notifier).save(updated);
       },
     );
   }

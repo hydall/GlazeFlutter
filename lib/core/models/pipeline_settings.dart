@@ -95,6 +95,35 @@ abstract class PipelineSettings with _$PipelineSettings {
     // >= 0, overrides the per-agent default (0.8 for the final agent, 0.3
     // for trackers). Negative = use the agent's own temperature.
     @Default(-1.0) double studioFinalTemperature,
+    // When true, the final generator's request forces requestReasoning=false
+    // and omitReasoning=true regardless of the ApiConfig. Targeted at Gemini
+    // Flash thinking models that spend most of the token budget on a
+    // think-block and leave too little for the actual reply, truncating the
+    // visible prose mid-sentence. Intermediate agents are unaffected (they
+    // still reason when the ApiConfig asks them to). Only effective for
+    // Gemini-protocol endpoints; other transports ignore the override.
+    @Default(false) bool studioFinalDisableReasoning,
+
+    // ── Studio trackers (intermediate agents) ───────────────────────────
+    // The 7 pre-gen controllers (continuity / agency / narrative / dialogue /
+    // guard / world / meta) share one logical batch — they all produce compact
+    // JSON briefs, not prose, so a cheap fast model is usually enough. These
+    // four fields let the user configure them as a group from the Studio menu
+    // instead of editing each of the 7 agents individually.
+    // Model id override applied to ALL non-final Studio agents when non-empty.
+    // Empty = use each agent's own `modelOverride` or the chat's run model.
+    @Default('') String studioTrackerModelOverride,
+    // Max tokens for ALL non-final Studio agents. When > 0, overrides the
+    // per-agent default (1600). 0 = use the agent's own maxTokens.
+    @Default(0) int studioTrackerMaxTokens,
+    // Temperature for ALL non-final Studio agents. When >= 0, overrides the
+    // per-agent default (0.3). Negative = use the agent's own temperature.
+    @Default(-1.0) double studioTrackerTemperature,
+    // When true, all non-final Studio agent requests force
+    // requestReasoning=false and omitReasoning=true. Trackers emit compact
+    // JSON briefs, so a hidden think-block wastes tokens without improving the
+    // brief. Only effective for Gemini-protocol endpoints.
+    @Default(false) bool studioTrackerDisableReasoning,
 
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,
@@ -125,6 +154,10 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default('') String postCleanerBannedWords,
     @Default('') String postCleanerAvoidInstructions,
     @Default('') String postCleanerStyleInstructions,
+    // When true, the POST-cleaner request forces omitReasoning=true so
+    // Gemini Flash thinking models cannot spend the rewrite budget on a
+    // think-block. Only affects the cleaner LLM call, not the audit.
+    @Default(false) bool postCleanerDisableReasoning,
 
     // ── Consolidation LLM ────────────────────────────────────────────────
     @Default(false) bool consolidationEnabled,
