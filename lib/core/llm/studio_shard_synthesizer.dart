@@ -117,34 +117,40 @@ class StudioShardSynthesizer {
       );
     }
 
-    // Conflict resolution footer (§12): when two blocks contradict, the one
-    // later in the preset wins (higher priority = closer to the end).
+    // Conflict resolution footer (§12): a soft precedence hint. The preset's
+    // own block order already implies priority (later = higher priority in
+    // verbatim mode). This footer just makes the default explicit so the model
+    // knows how to resolve contradictions when two blocks disagree. A preset
+    // that wants a different precedence model (e.g. "character card wins") can
+    // express it in its own blocks; this footer is a fallback, not an override.
     shardBlocks.add(
       const PromptShardBlock(
         content:
-            '[Conflict resolution: if two blocks above contradict each other, '
-            'follow the one that appears LAST.]',
+            '[Conflict resolution: if two blocks above contradict each other '
+            'and neither explicitly claims precedence, follow the one that '
+            'appears LAST.]',
         blockName: 'Conflict resolution',
       ),
     );
 
-    // Lumia architecture (plan §Part A/B): the Meta-Weaver counts turns and
-    // emits a brief; the Main Responder writes the actual `<lumiaooc>` reply
-    // guided by a COMPACT contract (format + voice), not the full
-    // `<lumia_ghost>` block (which lives in Meta-Weaver's shard).
+    // Meta-weaver architecture (plan §Part A/B): the Meta-Weaver counts turns
+    // and emits a brief; the Main Responder writes the actual OOC reply guided
+    // by a COMPACT contract, not the full meta block (which lives in the
+    // Meta-Weaver's shard). Persona name, voice, length, format, and wrapper
+    // all come from the user's meta block via the brief — not hardcoded here.
     if (lumiaActive) {
       if (spec.id == 'meta') {
         shardBlocks.add(
           const PromptShardBlock(
             content: _metaWeaverCountingDuty,
-            blockName: 'Lumia counting duty',
+            blockName: 'Meta-weaver counting duty',
           ),
         );
       } else if (spec.id == 'final') {
         shardBlocks.add(
           const PromptShardBlock(
-            content: _mainResponderLumiaContract,
-            blockName: 'Lumia output contract',
+            content: _mainResponderMetaContract,
+            blockName: 'Meta-weaver output contract',
           ),
         );
       }
@@ -153,38 +159,47 @@ class StudioShardSynthesizer {
     return shardBlocks;
   }
 
-  /// Appended to the Meta-Weaver's shard when a `<lumia_ghost>` block is
-  /// assigned to it. Emphasizes the counting duty: the Meta-Weaver must count
-  /// assistant messages, apply the period rule from the block, and emit a
-  /// brief — NOT the actual `<lumiaooc>` reply (the Main Responder writes
-  /// that). See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
-  static const _metaWeaverCountingDuty = '[Lumia counting duty]\n'
+  /// Appended to the Meta-Weaver's shard when a meta/OOC block is assigned to
+  /// it. Emphasizes the counting duty: the Meta-Weaver must count assistant
+  /// messages, apply the period rule from the block, and emit a brief — NOT
+  /// the actual OOC reply (the Main Responder writes that). Persona name,
+  /// voice, length, format, and wrapper are all defined by the user's meta
+  /// block above — the controller does NOT hardcode any persona.
+  /// See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
+  static const _metaWeaverCountingDuty = '[Meta-weaver counting duty]\n'
       'You run EVERY turn. Count the assistant messages in the chat history you '
-      'see. Read the period rule from the assigned `<lumia_ghost>` block above '
-      '(e.g. "Every 4 assistant responses"). Decide one of:\n'
-      '- `lumia_ooc: due | topic: <X>` — the user explicitly addressed Lumia in OOC brackets (e.g. `((Lumia: ...))`, `[OOC: ...]`).\n'
-      '- `lumia_periodic_note: due | last_note: <N turns ago> | keep: 1-3 sentences, warm, maternal, useful, not scene-stealing` — the period rule fired this turn.\n'
-      '- `lumia: silent` — neither condition met.\n'
-      'Output ONLY the brief line above. Do NOT write the actual `<lumiaooc>` '
-      'reply — the Main Responder writes that, guided by your brief.';
+      'see. Read the period rule, persona name, voice, length, format, and '
+      'wrapper from the assigned meta block above (e.g. period "Every 4 '
+      'assistant responses", persona "Lumia" / "Sister" / "DM", voice "warm, '
+      'maternal" / "playful" / "cold", wrapper "<lumiaooc>...</lumiaooc>" / '
+      '"<oocnote>...</oocnote>", length "1-3 sentences"). The persona name and '
+      'voice come entirely from the block — do NOT assume any specific name or '
+      'voice. Decide one of:\n'
+      '- `meta_ooc: due | topic: <X>` — the user explicitly addressed the meta-persona in OOC brackets (e.g. `((<persona>: ...))`, `[OOC: ...]`).\n'
+      '- `meta_periodic_note: due | last_note: <N turns ago> | persona: <from block> | voice: <from block> | length: <from block> | wrapper: <from block>` — the period rule fired this turn. Relay the block\'s persona/voice/length/wrapper so the Main Responder writes the note in the user\'s chosen style.\n'
+      '- `meta: silent` — neither condition met.\n'
+      'Output ONLY the brief line above. Do NOT write the actual OOC reply — '
+      'the Main Responder writes that, guided by your brief.';
 
-  /// Appended to the Main Responder's shard when a `<lumia_ghost>` block exists
-  /// in the preset (routed to Meta-Weaver, not to the final responder). This is
-  /// a COMPACT Lumia output contract: format + voice + emit-when-brief-says-due.
-  /// The Main Responder never sees the full `<lumia_ghost>` block — only this
-  /// contract + the Meta-Weaver's brief. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part B.
-  static const _mainResponderLumiaContract = '[Lumia output contract]\n'
+  /// Appended to the Main Responder's shard when a meta/OOC block exists in
+  /// the preset (routed to Meta-Weaver, not to the final responder). This is a
+  /// COMPACT meta output contract: when to emit. Persona name, voice, length,
+  /// format, and wrapper are NOT hardcoded here — they come from the meta
+  /// block via the Meta-Weaver brief. The Main Responder reads only this
+  /// contract + the brief, so the brief is the carrier of the user's meta
+  /// persona. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part B.
+  static const _mainResponderMetaContract = '[Meta-weaver output contract]\n'
       'A separate Meta-Weaver agent runs every turn and sends you a brief. '
-      'When the brief says `lumia_ooc: due` or `lumia_periodic_note: due`, '
-      'append a Lumia OOC note AFTER your narrative reply, wrapped EXACTLY '
-      'like this:\n'
-      '`<lumiaooc><font color="#9370DB"><i>Lumia: <your 1-3 sentence note here></i></font></lumiaooc>`\n'
-      'Voice: warm, maternal, useful, not scene-stealing. Never advance the '
-      'plot or speak for the characters. Keep it to 1-3 sentences. When the '
-      'brief says `lumia: silent`, do NOT emit any `<lumiaooc>` block — just '
-      'write the narrative reply. The `<lumiaooc>` block is meta-commentary '
-      'addressed to the user outside the roleplay; the POST-cleaner preserves '
-      'it verbatim.';
+      'When the brief says `meta_ooc: due` or `meta_periodic_note: due`, '
+      'append a meta OOC note AFTER your narrative reply. The brief carries '
+      'the persona name, voice, length, format, and wrapper from the user\'s '
+      'meta block — follow them exactly. If the brief specifies a wrapper '
+      '(e.g. `<lumiaooc>...</lumiaooc>`, `<oocnote>...</oocnote>`), use it. If '
+      'it does not specify a wrapper, emit the note as plain text after the '
+      'narrative. Never advance the plot or speak for the characters. When the '
+      'brief says `meta: silent`, do NOT emit any meta OOC note — just write '
+      'the narrative reply. The meta note is meta-commentary addressed to the '
+      'user outside the roleplay; the POST-cleaner preserves it verbatim.';
 
   String _buildControllerPrompt({
     required StudioControllerSpec spec,
@@ -220,7 +235,7 @@ Rules:
 - The later agent will prepare guidance for the roleplay game. It must not act as a character, narrator, player, or final responder unless this is the Main Responder controller.
 - Preserve enforceable rules from assigned blocks, but compress duplicates.
 - Do not include hidden chain-of-thought directives, <think> tags, or instructions to reveal reasoning.
-- If assigned blocks contain Lumia/meta-weaver/OOC behavior, convert it to silent final-model policy or OOC interface rules; do not make this controller write Lumia scene prose.
+- If assigned blocks contain meta-weaver/OOC behavior, convert it to silent final-model policy or OOC interface rules; do not make this controller write meta-persona scene prose.
 - Intermediate controllers must produce operational briefs only, never in-scene prose or dialogue.
 - ${spec.outputContract}
 
@@ -321,7 +336,7 @@ Controller rules:
 - Convert style, pacing, dialogue, world, agency, guard, or meta rules into instructions for the later chat-time controller.
 - Intermediate controllers must produce operational briefs only, never in-scene prose or dialogue.
 - Do not include hidden chain-of-thought directives, <think> tags, or instructions to reveal reasoning.
-- If assigned blocks contain Lumia/meta-weaver/OOC behavior, preserve it as silent meta-policy/OOC interface rules. Do not make the controller write Lumia scene prose.
+- If assigned blocks contain meta-weaver/OOC behavior, preserve it as silent meta-policy/OOC interface rules. Do not make the controller write meta-persona scene prose.
 - The final responder controller is the only controller allowed to produce the final visible RP response at chat time.
 
 Assigned preset blocks:
@@ -382,8 +397,8 @@ Assigned preset blocks:
   }
 
   static const _intermediateBriefGuard =
-      "When giving style guidance, you may include brief do/don't examples derived from the user's preset, but never draft or continue the current scene, never write in-scene dialogue/actions as if it were the final reply, and never output hidden reasoning.";
+      "When giving style guidance, you may include brief do/don't examples derived from the user's preset, but never draft or continue the current scene, and never write in-scene dialogue/actions as if it were the final reply.";
 
   static const _finalResponderGuard =
-      'Do not output or request hidden reasoning blocks; generate only the final visible reply.';
+      'Generate the final visible reply. Do not output hidden reasoning blocks unless the user\'s preset explicitly requests visible reasoning in the reply.';
 }

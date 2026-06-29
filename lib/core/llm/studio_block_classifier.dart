@@ -132,8 +132,8 @@ class StudioBlockClassifier {
   }
 
   /// Deterministic keyword bucketing: maps a block to one of the controller
-  /// ids (`meta`, `agency`, `guard`, `dialogue`, `world`, `narrative`,
-  /// `continuity`, `final`). Used when the LLM router is unavailable or did not
+  /// ids (`meta`, `agency`, `guard`, `dialogue`, `world`, `beauty`,
+  /// `narrative`, `continuity`, `final`). Used when the LLM router is unavailable or did not
   /// classify the block.
   static String bucketForBlock(PresetBlock block) {
     final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();
@@ -143,7 +143,9 @@ class StudioBlockClassifier {
       'lumia',
       'ghost in the machine',
       'meta-weaver',
+      'meta weaver',
       'ooc interface',
+      'ooc policy',
       'weaver',
       'diagnostic',
     ])) {
@@ -185,6 +187,9 @@ class StudioBlockClassifier {
       'hard slop ban',
     ])) {
       return 'guard';
+    }
+    if (_isBeautySettingsBlock(text)) {
+      return 'beauty';
     }
     if (_containsAny(text, const [
       'dialogue',
@@ -262,8 +267,6 @@ class StudioBlockClassifier {
     if (_containsAny(text, const [
       'language',
       'format',
-      'html',
-      'colored',
       'relationship metrics',
       'comics',
       'nsfw',
@@ -281,5 +284,88 @@ class StudioBlockClassifier {
 
   static bool _containsAny(String text, List<String> needles) {
     return needles.any(text.contains);
+  }
+
+  /// Beauty Shard owns reusable styling variables, not concrete widgets.
+  /// Route color/font/palette/CSS settings there, but keep one-off HTML
+  /// artifacts (phone screens, taxi menus, terminals), trackers/infoblocks,
+  /// and image-gen blocks out of Beauty.
+  static bool _isBeautySettingsBlock(String text) {
+    if (_containsAny(text, const [
+      '<infoblock',
+      '<general_stats',
+      '<secondary_infoblock',
+      '<loomledger',
+      'tracker',
+      'stats panel',
+      'relationship metrics',
+      'pregnancy',
+      'cycle',
+      'topbar',
+      'infoboard',
+      '[inbd:',
+      '[tpbr:',
+      '[img:gen',
+      'data-iig-instruction',
+      '<illustration',
+      '<comics',
+      'image generation',
+      'image prompt',
+      'visual html card',
+    ])) {
+      return false;
+    }
+    if (_containsAny(text, const [
+      'phone screen',
+      'smartphone',
+      'taxi',
+      'call menu',
+      'terminal',
+      'hud',
+      'scroll',
+      'sign, a button, a note',
+      'scene-object',
+      'artifact protocol',
+      'diegetic html',
+      'screen, hud, scroll, sign',
+      'checkbox hack',
+      'carousel',
+      'page flip',
+    ])) {
+      return false;
+    }
+    return _containsAny(text, const [
+      'glaze_beauty_state',
+      'beauty shard',
+      'styling state',
+      'color scheme',
+      'colour scheme',
+      'speaker color',
+      'speaker colour',
+      'dialogue color',
+      'dialogue colour',
+      'thought color',
+      'thought colour',
+      'reuse colors',
+      'reuse colours',
+      'reuse the color',
+      'font color',
+      'font-family',
+      'font family',
+      '<font color',
+      '<font style',
+      'background color',
+      'background-color',
+      'palette',
+      'gradient',
+      'text-shadow',
+      'letter-spacing',
+      'typography',
+      'visual text effects',
+      'text transforms',
+      'signature micro-text',
+      'reserved color',
+      'bunnymo <font',
+    ]);
   }
 }

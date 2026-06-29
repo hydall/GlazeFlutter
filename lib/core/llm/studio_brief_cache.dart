@@ -191,7 +191,7 @@ class StudioBriefCache {
       return 'static';
     }
     if (RegExp(
-      r'lumia|ghost in the machine',
+      r'lumia|ghost in the machine|meta-weaver|meta weaver|ooc interface|ooc policy|weaver',
       caseSensitive: false,
     ).hasMatch(text)) {
       return 'scene';
@@ -203,7 +203,7 @@ class StudioBriefCache {
       return 'turn';
     }
     if (RegExp(
-      r'tone|genre|style|romantic|fluff|comfort|lumia|ghost|director',
+      r'tone|genre|style|romantic|fluff|comfort|lumia|ghost|meta-weaver|meta weaver|director',
       caseSensitive: false,
     ).hasMatch(text)) {
       return 'scene';

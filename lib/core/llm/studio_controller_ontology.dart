@@ -1,4 +1,5 @@
 import '../models/studio_config.dart';
+import 'beauty_shard_instruction.dart';
 
 /// One hard-coded Studio controller slot. The decomposition engine assigns
 /// preset blocks to these stable slots and synthesizes one agent per slot.
@@ -41,7 +42,7 @@ class StudioControllerSpec {
     this.phase = 'pre_generation',
     // Default tracker context size (trailing chat messages forwarded to this
     // agent). 0 = inherit the StudioAgent freezed default of 5. The
-    // Meta-Weaver overrides this to 15 so it can count Lumia periods up to
+    // Meta-Weaver overrides this to 15 so it can count meta-persona periods up to
     // ~10. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
     this.contextSize = 0,
   });
@@ -80,7 +81,10 @@ class StudioControllerOntology {
       fallbackPrompt:
           'Enforce user autonomy and character authenticity. Never write the user\'s dialogue, actions, thoughts, feelings, intentions, or decisions. Characters act only from established knowledge, psychology, history, physical limits, and current pressure. Produce constraints only, not prose.',
       refreshPolicy: 'turn',
-      invalidationSignals: ['active_cast_changed', 'relationship_state_changed'],
+      invalidationSignals: [
+        'active_cast_changed',
+        'relationship_state_changed',
+      ],
       temperature: 0.3,
       maxTokens: 1400,
       timeoutMs: 60000,
@@ -89,11 +93,18 @@ class StudioControllerOntology {
       id: 'narrative',
       name: 'Narrative / Pacing / Style Controller',
       purpose:
-          'Convert narrative mode, style, length, POV, pacing, sensory budget, tone, and genre rules into a controllable response contract. Set response length adaptively to scene tempo: the default target is 6-8 paragraphs; shorten in fast, dynamic, action, or rapid back-and-forth dialogue scenes so the user can react sooner; lengthen toward and beyond the default in slow, descriptive, introspective, or transitional scenes.',
+          'Convert narrative mode, style, POV, pacing, sensory budget, tone, and genre rules into a controllable response contract. Classify the scene beat type and set a tempo (short / medium / long) — but DO NOT hardcode paragraph counts. The user\'s preset (dynamic or fixed-length) owns the actual numbers; your job is to tell the final writer what KIND of beat this is and roughly how dense it should feel, so the preset\'s length rules can apply correctly.',
       outputContract:
-          'At chat time, output a brief with target length, paragraph budget, POV/camera, style mode, sensory budget, beat structure, dialogue/action balance, opening constraint, and stopping point. No scene prose. Choose the paragraph budget by reading the current scene tempo: default 6-8 paragraphs; fewer (around 2-4) in fast/dynamic/action/quick-dialogue beats to hand the turn back to the user; more (8+) in slow, atmospheric, or descriptive beats. Always state both the chosen number and why this tempo warrants it in one short note. You may add an optional "Options" list of 1-3 branchable structural/style approaches the final writer can pick from (describe the approach only, e.g. "open on a physical action" vs "open on a single line of dialogue"); never write ready-made prose.',
+          'At chat time, output a brief with beat type, tempo (short / medium / long), POV/camera, style mode, sensory budget, dialogue/action balance, opening constraint, and stopping point. No scene prose. No hardcoded paragraph counts — those come from the user\'s preset.\n\nBEAT-TYPE RUBRIC — classify the user\'s last turn into exactly one of these, in priority order:\n'
+          '1. ACTION — physical movement, travel, combat, pursuit, escape, riding/driving, object manipulation, a decision that is physically executed (mounting a bike, drawing a weapon, taking an object, putting on a helmet, entering a room). Even if accompanied by one or two lines of dialogue, the dominant content is physical. Tempo: medium-to-long (the physical beat needs room to land).\n'
+          '2. CONVERSATIONAL — two or more characters exchange dialogue with little or no physical progression; the scene stays in one place and the turn is mostly speech/reaction/thought. Tempo: short-to-medium.\n'
+          '3. ATMOSPHERIC / INTROSPECTIVE — slow description, mood, inner reflection, environmental scene-setting, time/scene transitions, sensory immersion. Tempo: medium-to-long.\n'
+          '4. DYNAMIC / MIXED — the turn blends physical action with meaningful dialogue and reaction in comparable weight (e.g. character acts AND talks through the action, or a short exchange resolves into a physical decision). Tempo: medium.\n\n'
+          'DO NOT collapse a turn that contains physical movement, travel, object handling, or executed decisions into "conversational" just because it also has dialogue. Dialogue inside an action beat does NOT make it conversational. When in doubt between action and conversational, prefer action.\n\n'
+          'CRITICAL: do NOT invent paragraph numbers. State the beat type and a qualitative tempo (short / medium / long). The final writer\'s preset supplies the exact paragraph/word budget — your tempo hint helps the preset apply the right tier. If the preset is dynamic, the final writer maps your tempo to its own tiers. If the preset is fixed-length, the final writer just writes to that length with your beat-type guidance.\n\n'
+          'Always state the chosen beat type, the tempo word, and a one-line note on why this tempo warrants it. You may add an optional "Options" list of 1-3 branchable structural/style approaches the final writer can pick from (describe the approach only, e.g. "open on a physical action" vs "open on a single line of dialogue"); never write ready-made prose.',
       fallbackPrompt:
-          'Extract narrative mode, pacing, style, length, POV, tone, genre, and sensory budget into a concise response contract. Set length adaptively to scene tempo: default target 6-8 paragraphs; shorten to about 2-4 in fast, dynamic, action, or rapid-dialogue scenes so the user can react; lengthen to 8+ in slow, descriptive, or introspective scenes. Include dialogue/action balance and where the response should stop. Do not draft the reply.',
+          'Extract narrative mode, pacing, style, POV, tone, genre, and sensory budget into a concise response contract. Classify the user\'s last turn as ACTION (physical movement, travel, object handling, executed decision — even when dialogue is present), CONVERSATIONAL (mostly speech, no physical progression), ATMOSPHERIC (slow/reflective), or DYNAMIC/MIXED (action + dialogue comparable). Set a qualitative tempo: short, medium, or long. Do NOT invent paragraph counts — the user\'s preset owns the numbers. When in doubt between action and conversational, prefer action. Include dialogue/action balance and where the response should stop. Do not draft the reply.',
       refreshPolicy: 'turn',
       invalidationSignals: ['scene_changed', 'tone_changed', 'pacing_changed'],
       temperature: 0.3,
@@ -104,11 +115,11 @@ class StudioControllerOntology {
       id: 'dialogue',
       name: 'Dialogue Controller',
       purpose:
-          'Control dialogue cadence, speech texture, monologue segmentation, interaction balance, and when silence is appropriate.',
+          'Control dialogue cadence, speech texture, monologue segmentation, interaction balance, and when silence is appropriate. Your job is dialogue RATIO and TEXTURE — you do NOT decide beat type or paragraph budget (that is the Narrative Controller\'s lane). Provide a dialogue ratio that is compatible with the scene\'s actual beat: action beats can still be dialogue-heavy (characters talk while moving/riding/fighting); a high dialogue ratio does NOT downgrade an action beat into a short conversational one.',
       outputContract:
-          'At chat time, output dialogue guidance only: who may plausibly speak, desired dialogue ratio, speech constraints, and silence constraints. No drafted lines. You may add an optional "Options" list of 1-3 branchable dialogue approaches the final writer can pick from (describe the approach only, e.g. "answer with silence and a gesture" vs "give one clipped deflecting line"); never write the actual dialogue.',
+          'At chat time, output dialogue guidance only: who may plausibly speak, desired dialogue ratio (low / medium / high — relative to the beat, not absolute), speech constraints, and silence constraints. State the ratio as a proportion of the response that should be spoken lines vs physical action/narration, compatible with whatever beat type the Narrative Controller chose. No drafted lines. You may add an optional "Options" list of 1-3 branchable dialogue approaches the final writer can pick from (describe the approach only, e.g. "answer with silence and a gesture" vs "give one clipped deflecting line"); never write the actual dialogue.',
       fallbackPrompt:
-          'Guide dialogue cadence and interaction. Prefer purposeful speech when characters can plausibly speak; segment monologues naturally; preserve character voice and subtext. Do not draft dialogue.',
+          'Guide dialogue cadence and interaction. Prefer purposeful speech when characters can plausibly speak; segment monologues naturally; preserve character voice and subtext. Set a dialogue ratio compatible with the current beat (action beats can be dialogue-heavy; a high ratio does not make an action beat "conversational"). Do not draft dialogue.',
       refreshPolicy: 'turn',
       invalidationSignals: [
         'last_user_message_changed',
@@ -157,22 +168,39 @@ class StudioControllerOntology {
     ),
     StudioControllerSpec(
       id: 'meta',
-      name: 'Meta-Weaver / Lumia Policy',
+      name: 'Meta-Weaver / OOC Policy',
       purpose:
-          'Lumia/meta-weaver/OOC interface. Runs EVERY turn. Counts assistant messages in the history it sees, applies the period rule from the assigned `<lumia_ghost>` block (e.g. "Every 4 assistant responses"), and decides whether Lumia should emit an OOC note this turn, respond to an explicit OOC address, or stay silent.',
+          'Meta-weaver / OOC interface controller. Runs EVERY turn when the preset has a meta/OOC block assigned. Counts assistant messages in the history it sees, applies the period rule from the assigned meta block (e.g. "Every 4 assistant responses"), and decides whether the meta-persona should emit an OOC note this turn, respond to an explicit OOC address, or stay silent. The meta-persona\'s name, voice, length, and format are all defined by the user\'s preset block — the controller does NOT hardcode any persona.',
       outputContract:
-          'At chat time, output a compact Lumia brief ONLY. Decide one of: '
-          '`lumia_ooc: due | topic: <X>` (user addressed Lumia OOC), '
-          '`lumia_periodic_note: due | last_note: <N turns ago> | keep: 1-3 sentences, warm, maternal, useful, not scene-stealing` (the Nth assistant turn fired the period rule), '
-          'or `lumia: silent` (neither condition met). Never write in-scene prose, never write the actual `<lumiaooc>` reply — that is the Main Responder\'s job, guided by your brief.',
+          'At chat time, output a compact meta brief ONLY. Decide one of: '
+          '`meta_ooc: due | topic: <X>` (user addressed the meta-persona OOC), '
+          '`meta_periodic_note: due | last_note: <N turns ago> | voice: <from block> | length: <from block> | format: <from block>` (the Nth assistant turn fired the period rule — relay the voice/length/format/wrapper from the assigned meta block so the Main Responder writes in the user\'s chosen style), '
+          'or `meta: silent` (neither condition met). Never write in-scene prose, never write the actual OOC reply — that is the Main Responder\'s job, guided by your brief.',
       fallbackPrompt:
-          'You are the Lumia/meta-weaver. Count the assistant messages in the history you see. Read the period rule from your assigned `<lumia_ghost>` block (e.g. "Every 4 assistant responses"). If the count since the last Lumia note matches the period, output `lumia_periodic_note: due` with guidance to keep it 1-3 sentences, warm, maternal, useful, and not scene-stealing. If the user explicitly addressed Lumia in OOC brackets (e.g. `((Lumia: ...))`, `[OOC: ...]`), output `lumia_ooc: due` with the detected topic. Otherwise output `lumia: silent`. Do NOT write the actual Lumia OOC reply — only the brief telling the Main Responder whether to emit one.',
+          'You are the meta-weaver / OOC interface. Count the assistant messages in the history you see. Read the period rule, persona name, voice, length, format, and wrapper from your assigned meta block (e.g. period "Every 4 assistant responses", voice "warm, maternal", wrapper "<lumiaooc>...</lumiaooc>", length "1-3 sentences"). The persona name and voice come entirely from the block — do NOT assume any specific name or voice. If the count since the last meta note matches the period, output `meta_periodic_note: due` and relay the block\'s persona/voice/length/wrapper instructions so the Main Responder writes the note correctly. If the user explicitly addressed the meta-persona in OOC brackets (e.g. `((<persona>: ...))`, `[OOC: ...]`), output `meta_ooc: due` with the detected topic. Otherwise output `meta: silent`. Do NOT write the actual OOC reply — only the brief telling the Main Responder whether to emit one.',
       refreshPolicy: 'turn',
-      invalidationSignals: ['last_user_message_changed', 'assistant_turn_count_changed'],
+      invalidationSignals: [
+        'last_user_message_changed',
+        'assistant_turn_count_changed',
+      ],
       temperature: 0.2,
       maxTokens: 1200,
       timeoutMs: 60000,
       contextSize: 15,
+    ),
+    StudioControllerSpec(
+      id: 'beauty',
+      name: 'Beauty Shard',
+      purpose:
+          'Track reusable visual styling state only: HTML/CSS palette, background, text/font colors, speaker colors, typography, gradients, and art-style labels. Skip concrete HTML widgets, trackers, infoblocks, and image-generation instructions.',
+      outputContract:
+          'At chat time, output a compact beauty-state brief only: current reusable style variables, constraints for preserving/updating them, and items to avoid. Do NOT write scene prose. Do NOT handle concrete UI artifacts (phone screens, taxi menus, terminals), trackers, infoblocks, topbars, or image-gen blocks.',
+      fallbackPrompt: beautyShardTrackerFallbackPrompt,
+      refreshPolicy: 'turn',
+      invalidationSignals: ['last_user_message_changed', 'style_state_changed'],
+      temperature: 0.2,
+      maxTokens: 1200,
+      timeoutMs: 60000,
     ),
     StudioControllerSpec(
       id: 'final',

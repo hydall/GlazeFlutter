@@ -1,4 +1,5 @@
 import '../models/studio_config.dart';
+import 'beauty_shard_instruction.dart';
 import 'history_assembler.dart';
 import 'macro_engine.dart';
 import 'prompt_builder.dart';
@@ -69,7 +70,7 @@ class StudioMessageBuilder {
             ).trim();
             if (expanded.isEmpty) continue;
             messages.add({
-              'role': _normalizeRole(
+              'role': _normalizeInstructionRole(
                 shard.role.isNotEmpty ? shard.role : agent.role,
               ),
               'content': expanded,
@@ -101,11 +102,29 @@ class StudioMessageBuilder {
                 ..writeln()
                 ..writeln(styleContract);
             }
+            if (_hasEnabledBeautyShard(config)) {
+              final macroCtx = MacroContext(
+                charName: promptPayload.character.name,
+                userName: promptPayload.persona?.name ?? 'User',
+                personaPrompt: promptPayload.persona?.prompt,
+                sessionVars: promptPayload.sessionVars,
+                globalVars: promptPayload.globalVars,
+                charId: promptPayload.character.id,
+                sessionId: promptPayload.sessionId ?? '',
+              );
+              final expanded = replaceMacros(
+                beautyShardFinalMarkerContract,
+                macroCtx,
+              ).text;
+              control
+                ..writeln()
+                ..writeln(expanded);
+            }
           }
           final controlText = control.toString().trim();
           if (controlText.isNotEmpty) {
             messages.add({
-              'role': _normalizeRole(
+              'role': _normalizeInstructionRole(
                 block.role.isNotEmpty ? block.role : agent.role,
               ),
               'content': controlText,
@@ -124,7 +143,7 @@ class StudioMessageBuilder {
                 .where((b) => b.brief.trim().isNotEmpty)
                 .map(
                   (b) => {
-                    'role': _normalizeRole(block.role),
+                    'role': _normalizeInstructionRole(block.role),
                     'content': 'Studio agent brief: ${b.agentName}\n${b.brief}',
                   },
                 ),
@@ -156,7 +175,7 @@ class StudioMessageBuilder {
           ).trim();
           if (content.isNotEmpty) {
             messages.add({
-              'role': _normalizeRole(block.role),
+              'role': _normalizeInstructionRole(block.role),
               'content': content,
             });
           }
@@ -228,10 +247,11 @@ class StudioMessageBuilder {
       finalPreset: false,
       overrides: config.studioPresetOverrides,
     );
-    final blocks = studioPreset.blocks
-        .where((b) => b.enabled && b.kind == 'agent_instruction')
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final blocks =
+        studioPreset.blocks
+            .where((b) => b.enabled && b.kind == 'agent_instruction')
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
     final buf = StringBuffer();
     final shardParts = <String>[];
     for (final shard in agent.promptShard) {
@@ -279,13 +299,14 @@ class StudioMessageBuilder {
       finalPreset: false,
       overrides: config.studioPresetOverrides,
     );
-    final blocks = studioPreset.blocks
-        .where((b) => b.enabled && b.kind != 'agent_instruction')
-        .where((b) => b.kind != 'static_context')
-        .where((b) => b.kind != 'chat_history')
-        .where((b) => b.kind != 'dynamic_context')
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final blocks =
+        studioPreset.blocks
+            .where((b) => b.enabled && b.kind != 'agent_instruction')
+            .where((b) => b.kind != 'static_context')
+            .where((b) => b.kind != 'chat_history')
+            .where((b) => b.kind != 'dynamic_context')
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
     final buf = StringBuffer();
     for (final block in blocks) {
       final promptMessages = context.messagesForKind(block.kind);
@@ -346,18 +367,22 @@ class StudioMessageBuilder {
     final normalized = contextSize.clamp(1, maxTrackerContextSize);
     if (history.length <= normalized) {
       return history
-          .map((m) => PromptMessage(
-                role: m.role,
-                content: truncateAgentText(stripHtmlTags(m.content), 2000),
-              ))
+          .map(
+            (m) => PromptMessage(
+              role: m.role,
+              content: truncateAgentText(stripHtmlTags(m.content), 2000),
+            ),
+          )
           .toList();
     }
     final trimmed = history.sublist(history.length - normalized);
     return trimmed
-        .map((m) => PromptMessage(
-              role: m.role,
-              content: truncateAgentText(stripHtmlTags(m.content), 2000),
-            ))
+        .map(
+          (m) => PromptMessage(
+            role: m.role,
+            content: truncateAgentText(stripHtmlTags(m.content), 2000),
+          ),
+        )
         .toList();
   }
 
@@ -365,7 +390,8 @@ class StudioMessageBuilder {
   /// [maxChars], keeps the head (40%) + a trim marker + the tail (60%),
   /// preserving both the beginning and the end of the message. Character
   /// counting uses `String.runes` for Unicode/emoji safety.
-  static const _trimMarker = '\n\n[Trimmed to keep this agent request compact]\n\n';
+  static const _trimMarker =
+      '\n\n[Trimmed to keep this agent request compact]\n\n';
 
   String truncateAgentText(String text, int maxChars) {
     if (text.length <= maxChars) return text;
@@ -435,9 +461,41 @@ class StudioMessageBuilder {
     return replaceMacros(content, macroCtx).text;
   }
 
-  String _normalizeRole(String role) {
-    const allowed = {'system', 'user', 'assistant'};
-    return allowed.contains(role) ? role : 'system';
+  /// Normalize the role of a preset/shard INSTRUCTION block (not a chat
+  /// history message). Preset blocks sometimes carry `role: "user"` (e.g. the
+  /// Shino preset marks all instruction blocks as user), but in the Studio
+  /// pipeline these are INSTRUCTIONS to the model, not user dialogue turns.
+  /// Treating them as user messages can confuse models (especially Claude,
+  /// which treats user messages as human turns to respond to, not instructions
+  /// to follow). Force instruction blocks to `system` so the model treats them
+  /// as authoritative directives.
+  ///
+  /// Assistant-role blocks (prefill) are always forced to `system` here too.
+  /// They are already dropped from routing at build time
+  /// (`studio_decomposition_service.dart`), but if any slip through (e.g. via
+  /// a preset override or request-preset block), they must NOT become
+  /// assistant messages mid-conversation — that would break the conversation
+  /// flow. Assistant prefill is a transport-layer concern (API config prefix
+  /// field), not a preset-block concern.
+  ///
+  /// Chat history (`chat_history` kind) and dynamic context (`dynamic_context`
+  /// kind) go through `toApiMap()` and preserve their original user/assistant
+  /// roles — those ARE conversation turns, not instructions.
+  String _normalizeInstructionRole(String role) {
+    return 'system';
+  }
+
+  bool _hasEnabledBeautyShard(StudioConfig config) {
+    return config.agents.any((agent) {
+      if (!agent.enabled) return false;
+      final id = agent.id.toLowerCase();
+      final name = agent.name.toLowerCase();
+      final text = '$id\n$name';
+      return id == 'beauty' ||
+          text.contains('_beauty_') ||
+          text.contains('beauty shard') ||
+          name == 'beauty';
+    });
   }
 }
 

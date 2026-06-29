@@ -3,7 +3,7 @@ import 'dart:convert';
 import '../models/studio_config.dart';
 import 'json_repair.dart';
 
-const _studioMetaPolicyAgentName = 'Meta-Weaver / Lumia Policy';
+const _studioMetaPolicyAgentName = 'Meta-Weaver / OOC Policy';
 
 /// Parses a raw intermediate-agent LLM response into a clean, typed Studio
 /// brief — or a safe controller fallback when the model leaked scene prose.
@@ -17,11 +17,13 @@ class StudioBriefParser {
 
   StudioBriefParser(this._log);
 
-  /// True if [agent] is the meta-weaver / Lumia policy controller.
+  /// True if [agent] is the meta-weaver / OOC policy controller.
   bool isMetaPolicyAgent(StudioAgent agent) {
     final text = '${agent.id}\n${agent.name}\n${agent.sourceBlockNames}'
         .toLowerCase();
     return text.contains('meta-weaver') ||
+        text.contains('meta weaver') ||
+        text.contains('ooc policy') ||
         text.contains('lumia') ||
         text.contains('ghost in the machine');
   }
@@ -37,7 +39,7 @@ class StudioBriefParser {
         '- Apply only as hidden policy for continuity, tone, and OOC routing.',
       )
       ..writeln(
-        '- If the user explicitly addresses OOC/Lumia/meta, answer as an OOC interface; otherwise stay invisible.',
+        '- If the user explicitly addresses OOC / the meta-persona / meta, answer as an OOC interface; otherwise stay invisible.',
       );
     return buffer.toString().trim();
   }
@@ -338,7 +340,10 @@ class StudioBriefParser {
 
   bool isMetaBriefName(String name) {
     final lower = name.toLowerCase();
-    return lower.contains('meta-weaver') || lower.contains('lumia');
+    return lower.contains('meta-weaver') ||
+        lower.contains('meta weaver') ||
+        lower.contains('ooc policy') ||
+        lower.contains('lumia');
   }
 
   String sanitizeMetaBrief(String brief) {

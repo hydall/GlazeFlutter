@@ -151,10 +151,11 @@ class PostCleanerService {
       // (ported from Marinara `text-rewrite-safety.ts`): if the original had
       // inline HTML/XML tags or fenced code blocks and the cleaned version no
       // longer has any, the cleaner stripped formatting it was told to
-      // preserve — keep the original. Also protects `<lumiaooc>` blocks
-      // (Lumia meta-OOC commentary emitted by the Main Responder under the
-      // Studio Lumia architecture) — if the original had one and the cleaned
-      // version dropped it, keep the original. This guards against the common
+      // preserve — keep the original. Also protects meta-OOC blocks
+      // (e.g. `<lumiaooc>`, `<oocnote>`, any `<*ooc*>` — meta-commentary
+      // emitted by the Main Responder under the Studio meta-weaver
+      // architecture) — if the original had one and the cleaned version
+      // dropped it, keep the original. This guards against the common
       // LLM failure mode of flattening formatting when asked to "rewrite for
       // clarity". Does NOT verify the *same* tags/fences survive, just that
       // *some* survive — structural equality is the cleaner prompt's job.
@@ -228,15 +229,18 @@ class PostCleanerService {
     return text.contains('```');
   }
 
-  /// True if [original] contained a `<lumiaooc>` block (Lumia meta-OOC
-  /// commentary emitted by the Main Responder) and [edited] no longer has
-  /// any. The `<lumiaooc>` block is meta-commentary addressed to the user
-  /// outside the roleplay — it is NOT prose to be cleaned. The cleaner is
-  /// instructed to preserve it verbatim; this guard catches the case where
-  /// the cleaner stripped it anyway. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part C.
+  /// True if [original] contained a meta-OOC block (e.g. `<lumiaooc>`,
+  /// `<oocnote>`, `<metaooc>`, or any tag whose name contains "ooc") and
+  /// [edited] no longer has any. The meta-OOC block is meta-commentary
+  /// addressed to the user outside the roleplay — it is NOT prose to be
+  /// cleaned. The cleaner is instructed to preserve it verbatim; this guard
+  /// catches the case where the cleaner stripped it anyway. The detection is
+  /// generalized: any `<...ooc...>` tag (case-insensitive) counts, so custom
+  /// meta-personas with custom wrappers are preserved too. See
+  /// docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part C.
   @visibleForTesting
   static bool lumiaoocDropped(String original, String edited) {
-    final pattern = RegExp(r'<lumiaooc>', caseSensitive: false);
+    final pattern = RegExp(r'<\w*ooc\w*>', caseSensitive: false);
     if (!pattern.hasMatch(original)) return false;
     if (pattern.hasMatch(edited)) return false;
     return true;
@@ -472,12 +476,13 @@ class PostCleanerService {
         'unchanged.',
       )
       ..writeln(
-        '- PRESERVE `<lumiaooc>` blocks VERBATIM. A `<lumiaooc>` block is '
-        'Lumia meta-OOC commentary (wrapped in `<lumiaooc><font '
-        'color="#9370DB">...</font></lumiaooc>`). It is NOT narrative prose '
-        '— do not rewrite, move, rephrase, translate, reformat, or delete it. '
+        '- PRESERVE meta-OOC blocks VERBATIM. A meta-OOC block is any tag '
+        'whose name contains "ooc" (e.g. `<lumiaooc>`, `<oocnote>`, '
+        '`<metaooc>`, `<sisterooc>`). It is meta-commentary from the '
+        'meta-persona to the user outside the roleplay — NOT narrative prose. '
+        'Do not rewrite, move, rephrase, translate, reformat, or delete it. '
         'Clean only the in-roleplay prose around it. If the response contains '
-        'a `<lumiaooc>` block, keep it exactly as-is in the same position.',
+        'a meta-OOC block, keep it exactly as-is in the same position.',
       )
       ..writeln(
         '- Return ONLY the cleaned text, no explanation. Inline HTML tags '

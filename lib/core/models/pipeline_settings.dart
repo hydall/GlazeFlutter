@@ -167,6 +167,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default('') String consolidationEndpoint,
     @Default('') String consolidationApiKey,
     @Default(4000) int consolidationTimeoutMs,
+
   }) = _PipelineSettings;
 
   factory PipelineSettings.fromJson(Map<String, dynamic> json) =>

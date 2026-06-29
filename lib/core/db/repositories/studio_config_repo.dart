@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../models/studio_config.dart';
+import '../../llm/studio_controller_ontology.dart';
 import '../../utils/time_helpers.dart';
 import '../app_db.dart';
 import '../../../features/cloud_sync/sync_repo_interfaces.dart';
@@ -213,37 +214,39 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       studioPresetOverrides = const [];
     }
 
-    return _normalizeLoadedConfig(StudioConfig(
-      sessionId: row.sessionId,
-      profileId: row.profileId.isNotEmpty ? row.profileId : row.sessionId,
-      profileName: row.profileName,
-      enabled: row.enabled,
-      agents: agents,
-      sourcePresetId: row.sourcePresetId,
-      finalPresetId: row.finalPresetId,
-      agentStudioPresetId: row.agentStudioPresetId,
-      finalStudioPresetId: row.finalStudioPresetId,
-      studioPresetOverrides: studioPresetOverrides,
-      sourcePresetHash: row.sourcePresetHash,
-      buildApiConfigId: row.buildApiConfigId,
-      runApiConfigId: row.runApiConfigId,
-      buildModelOverride: row.buildModelOverride,
-      runModelOverride: row.runModelOverride,
-      builderPromptTemplate: row.builderPromptTemplate,
-      maxFinalHistoryMessages: row.maxFinalHistoryMessages,
-      routingMode: row.routingMode,
-      broadcastBlocks: broadcastBlocks,
-      selectedBlockIds: selectedBlockIds,
-      selectedBlockIdsInitialized: row.selectedBlockIdsInitialized,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    ));
+    return _normalizeLoadedConfig(
+      StudioConfig(
+        sessionId: row.sessionId,
+        profileId: row.profileId.isNotEmpty ? row.profileId : row.sessionId,
+        profileName: row.profileName,
+        enabled: row.enabled,
+        agents: agents,
+        sourcePresetId: row.sourcePresetId,
+        finalPresetId: row.finalPresetId,
+        agentStudioPresetId: row.agentStudioPresetId,
+        finalStudioPresetId: row.finalStudioPresetId,
+        studioPresetOverrides: studioPresetOverrides,
+        sourcePresetHash: row.sourcePresetHash,
+        buildApiConfigId: row.buildApiConfigId,
+        runApiConfigId: row.runApiConfigId,
+        buildModelOverride: row.buildModelOverride,
+        runModelOverride: row.runModelOverride,
+        builderPromptTemplate: row.builderPromptTemplate,
+        maxFinalHistoryMessages: row.maxFinalHistoryMessages,
+        routingMode: row.routingMode,
+        broadcastBlocks: broadcastBlocks,
+        selectedBlockIds: selectedBlockIds,
+        selectedBlockIdsInitialized: row.selectedBlockIdsInitialized,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      ),
+    );
   }
 
   /// Silent migration of loaded Studio configs:
   ///
   /// 1. Meta-Weaver (plan §Part 6): upgrade from the old `'static'` refresh
-  ///    policy + default `contextSize` to the new Lumia architecture —
+  ///    policy + default `contextSize` to the meta-weaver architecture —
   ///    `refreshPolicy: 'turn'` (runs every turn so it can count assistant
   ///    messages and apply the period rule) and `contextSize: 15` (enough
   ///    history to count periods up to ~10).
@@ -281,12 +284,73 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       }
       migrated.add(current);
     }
-    return changed ? config.copyWith(agents: migrated) : config;
+    final withBeauty = _ensureBeautyShardAgent(config, migrated);
+    if (!identical(withBeauty, migrated)) changed = true;
+    return changed ? config.copyWith(agents: withBeauty) : config;
   }
 
-  /// True if [agent] is the Meta-Weaver / Lumia Policy controller. Matches by
+  List<StudioAgent> _ensureBeautyShardAgent(
+    StudioConfig config,
+    List<StudioAgent> agents,
+  ) {
+    if (agents.any(_isBeautyShard)) return agents;
+    final spec = StudioControllerOntology.specs.firstWhere(
+      (s) => s.id == 'beauty',
+      orElse: () => throw StateError('Beauty Shard spec missing'),
+    );
+    final finalIdx = agents.indexWhere(_isFinalResponder);
+    final insertAt = finalIdx >= 0 ? finalIdx : agents.length;
+    final beauty = StudioAgent(
+      id: 'agent_${config.sessionId}_beauty_migrated',
+      name: spec.name,
+      role: 'system',
+      promptShard: [PromptShardBlock(content: spec.fallbackPrompt)],
+      order: insertAt,
+      enabled: true,
+      modelSource: 'current',
+      temperature: spec.temperature,
+      maxTokens: spec.maxTokens,
+      timeoutMs: spec.timeoutMs,
+      sourceBlockNames:
+          'Beauty Shard fallback (rebuild Studio to route preset style blocks)',
+      refreshPolicy: spec.refreshPolicy,
+      invalidationSignals: spec.invalidationSignals,
+      phase: spec.phase,
+      contextSize: spec.contextSize > 0 ? spec.contextSize : 5,
+    );
+    final updated = <StudioAgent>[
+      ...agents.take(insertAt),
+      beauty,
+      ...agents.skip(insertAt),
+    ];
+    return [
+      for (var i = 0; i < updated.length; i++) updated[i].copyWith(order: i),
+    ];
+  }
+
+  bool _isBeautyShard(StudioAgent agent) {
+    final id = agent.id.toLowerCase();
+    final name = agent.name.toLowerCase();
+    final text = '$id\n$name';
+    return id == 'beauty' ||
+        text.contains('_beauty_') ||
+        text.contains('beauty shard') ||
+        name == 'beauty';
+  }
+
+  bool _isFinalResponder(StudioAgent agent) {
+    final id = agent.id.toLowerCase();
+    final name = agent.name.toLowerCase();
+    final text = '$id\n$name';
+    return id == 'final' ||
+        text.contains('_final_') ||
+        text.contains('main responder') ||
+        name == 'final';
+  }
+
+  /// True if [agent] is the Meta-Weaver / OOC Policy controller. Matches by
   /// id/name (the controller spec id is `meta`, name is
-  /// `Meta-Weaver / Lumia Policy`). Falls back to substring contains so older
+  /// `Meta-Weaver / OOC Policy`). Falls back to substring contains so older
   /// configs with slightly different names still migrate.
   bool _isMetaWeaver(StudioAgent agent) {
     final id = agent.id.toLowerCase();
@@ -295,6 +359,7 @@ class StudioConfigRepo implements SyncStudioConfigStore {
         id == 'meta' ||
         name.contains('meta-weaver') ||
         name.contains('meta weaver') ||
+        name.contains('ooc policy') ||
         name.contains('lumia policy');
   }
 }

@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -11,6 +11,7 @@ import '../models/studio_config.dart';
 import '../utils/time_helpers.dart';
 import 'studio_block_classifier.dart';
 import 'studio_block_expander.dart';
+import 'studio_beauty_extractor.dart';
 import 'studio_block_router.dart';
 import 'studio_build_llm_client.dart';
 import 'studio_controller_ontology.dart';
@@ -32,16 +33,22 @@ import 'studio_shard_synthesizer.dart';
 class StudioDecompositionService {
   final StudioBuildLlmClient _buildLlm;
   final StudioShardSynthesizer _synthesizer;
+  final StudioBeautyExtractor _beautyExtractor;
 
   factory StudioDecompositionService(Ref ref) {
     final buildLlm = StudioBuildLlmClient(ref);
     return StudioDecompositionService._(
       buildLlm,
       StudioShardSynthesizer(buildLlm, _logStatic),
+      StudioBeautyExtractor(buildLlm.call),
     );
   }
 
-  StudioDecompositionService._(this._buildLlm, this._synthesizer);
+  StudioDecompositionService._(
+    this._buildLlm,
+    this._synthesizer,
+    this._beautyExtractor,
+  );
 
   static void _logStatic(String message) {
     debugPrint('[StudioBuild] $message');
@@ -70,12 +77,21 @@ class StudioDecompositionService {
 
     // CoT / reasoning / thinking blocks are NOT routed to any agent: the
     // multi-agent pipeline IS the externalized chain-of-thought, so a per-turn
-    // <think> directive inside an agent is redundant and conflicts with the
+    // ilda directive inside an agent is redundant and conflicts with the
     // "produce a brief, not prose / no hidden reasoning" contract. Drop them
     // after macro expansion. See docs/PLAN_AGENTIC_STUDIO.md §11.
     final reasoningBlocks = expandedBlocks.where(isReasoningBlock).toList();
+    // Assistant-role blocks (prefill) are NOT routed to any agent in Studio
+    // mode. In SillyTavern these act as assistant prefill (the model continues
+    // from this text), but in the Studio pipeline they would land mid-conversation
+    // as orphan assistant turns, breaking the conversation flow. Assistant
+    // prefill is a transport-layer concern (API config prefix field), not a
+    // preset-block concern. Drop them from routing.
+    final droppedRoleBlocks = expandedBlocks
+        .where((b) => b.role == 'assistant')
+        .toList();
     final enabledBlocks = expandedBlocks
-        .where((b) => !isReasoningBlock(b))
+        .where((b) => !isReasoningBlock(b) && b.role != 'assistant')
         .toList();
     if (reasoningBlocks.isNotEmpty) {
       _log(
@@ -83,36 +99,99 @@ class StudioDecompositionService {
         '${reasoningBlocks.map((b) => b.name.isNotEmpty ? b.name : b.id).join(', ')}',
       );
     }
-    if (enabledBlocks.isEmpty) return const [];
+    if (droppedRoleBlocks.isNotEmpty) {
+      _log(
+        'dropped ${droppedRoleBlocks.length} assistant-role/prefill block(s) '
+        'from routing (Studio does not support prefill in shards): '
+        '${droppedRoleBlocks.map((b) => b.name.isNotEmpty ? b.name : b.id).join(', ')}',
+      );
+    }
 
-    final totalChars = enabledBlocks.fold<int>(
+    // Length-hint extraction: when a dropped CoT/reasoning block contains a
+    // length instruction (word count / word budget / paragraph target) and NO
+    // enabled non-reasoning block already carries one, extract the length line
+    // from the dropped block and add it as a standalone block so the final
+    // agent still sees the length guidance. Without this, presets whose ONLY
+    // length rule lives inside the CoT template (e.g. Fawnie's "fawn's cot"
+    // block: "Word budget is {{getvar::length}}") would lose all length
+    // guidance when the CoT block is dropped.
+    final lengthHint = _extractLengthHintFromReasoning(
+      reasoningBlocks: reasoningBlocks,
+      enabledBlocks: enabledBlocks,
+    );
+    final enabledBlocksWithLength = lengthHint != null
+        ? [...enabledBlocks, lengthHint]
+        : enabledBlocks;
+    if (lengthHint != null) {
+      _log(
+        'extracted length hint from dropped CoT block: '
+        '"${lengthHint.content.substring(0, lengthHint.content.length.clamp(0, 120))}"',
+      );
+    }
+    if (enabledBlocksWithLength.isEmpty) return const [];
+
+    final totalChars = enabledBlocksWithLength.fold<int>(
       0,
       (sum, b) => sum + b.content.length,
     );
     _log(
       'build start session=$sessionId preset="${preset.name}" '
-      'blocks=${enabledBlocks.length} chars=$totalChars '
+      'blocks=${enabledBlocksWithLength.length} chars=$totalChars '
       'model=${apiConfig?.model ?? '<active>'}',
     );
+
+    final beautyExtraction = await _beautyExtractor.extract(
+      blocks: enabledBlocksWithLength,
+      apiConfig: apiConfig,
+      cancelToken: cancelToken,
+    );
+    final beautyBlockIds = beautyExtraction.beautyBlockIds;
+    final beautyBlocks = enabledBlocksWithLength
+        .where((b) => beautyBlockIds.contains(b.id))
+        .toList();
+    final routableBlocks = enabledBlocksWithLength
+        .where((b) => !beautyBlockIds.contains(b.id))
+        .toList();
+    if (beautyBlocks.isNotEmpty ||
+        beautyExtraction.syntheticContract.isNotEmpty) {
+      _log(
+        'beauty pre-pass: selected ${beautyBlocks.length} reusable style block(s); '
+        'routing remaining ${routableBlocks.length}',
+      );
+    }
 
     // §11: LLM router classifies block -> agent ONCE at build-time. Falls back
     // to deterministic keyword bucketing if the LLM is unavailable/refuses, so
     // Studio always builds. Skipped only when there is no build model.
     final routingMapResult = await _routeBlocks(
-      blocks: enabledBlocks,
+      blocks: routableBlocks,
       apiConfig: apiConfig,
       cancelToken: cancelToken,
     );
     _log(
       'routing: ${routingMapResult.fromLlm ? 'LLM' : 'keyword-fallback'} '
-      '(${routingMapResult.blockToBucket.length}/${enabledBlocks.length} mapped)',
+      '(${routingMapResult.blockToBucket.length}/${routableBlocks.length} mapped)',
     );
 
     final now = currentTimestampSeconds();
-    final assignments = _assignBlocks(enabledBlocks, routingMapResult);
-    // Lumia detection (plan §Part A/B): if any block routed to the `meta`
-    // bucket is a Lumia/meta-weaver block, the Meta-Weaver gets a counting
-    // duty suffix and the Main Responder gets a compact Lumia output contract.
+    final assignments = _assignBlocks(routableBlocks, routingMapResult);
+    if (beautyBlocks.isNotEmpty ||
+        beautyExtraction.syntheticContract.isNotEmpty) {
+      assignments['beauty'] = [
+        if (beautyExtraction.syntheticContract.isNotEmpty)
+          PresetBlock(
+            id: '_beauty_extractor_contract',
+            name: 'Beauty extractor normalized contract',
+            role: 'system',
+            content: beautyExtraction.syntheticContract,
+          ),
+        ...beautyBlocks,
+        ...?assignments['beauty'],
+      ];
+    }
+    // Meta-weaver detection (plan §Part A/B): if any block routed to the
+    // `meta` bucket is a meta-weaver/OOC block, the Meta-Weaver gets a counting
+    // duty suffix and the Main Responder gets a compact meta output contract.
     final lumiaActive = _bucketHasLumia(assignments['meta'] ?? const []);
     final agents = <StudioAgent>[];
     for (final spec in StudioControllerOntology.specs) {
@@ -153,7 +232,12 @@ class StudioDecompositionService {
     final allEnabled = preset.blocks.where((b) => b.enabled).toList();
     final expanded = expandBlocksForRouting(allEnabled);
     return expanded
-        .where((b) => !isReasoningBlock(b) && isBroadcastBlock(b))
+        .where(
+          (b) =>
+              !isReasoningBlock(b) &&
+              b.role != 'assistant' &&
+              isBroadcastBlock(b),
+        )
         .toList();
   }
 
@@ -194,12 +278,10 @@ class StudioDecompositionService {
     String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
-    final allEnabled = preset.blocks
-        .where((b) => b.enabled)
-        .toList();
-    final expandedBlocks = expandBlocksForRouting(allEnabled)
-        .where((b) => !isReasoningBlock(b))
-        .toList();
+    final allEnabled = preset.blocks.where((b) => b.enabled).toList();
+    final expandedBlocks = expandBlocksForRouting(
+      allEnabled,
+    ).where((b) => !isReasoningBlock(b)).toList();
     final spec = StudioControllerOntology.specForAgent(agent);
     // Single-agent regen reuses deterministic bucketing (no LLM router call);
     // the build-time LLM map only matters for a full decompose().
@@ -221,7 +303,9 @@ class StudioDecompositionService {
         sourceBlockNames: _synthesizer.sourceBlockNames(blocks),
         refreshPolicy: spec.refreshPolicy,
         invalidationSignals: spec.invalidationSignals,
-        contextSize: spec.contextSize > 0 ? spec.contextSize : agent.contextSize,
+        contextSize: spec.contextSize > 0
+            ? spec.contextSize
+            : agent.contextSize,
       ),
       isFinal: spec.isFinal,
     );
@@ -254,11 +338,11 @@ class StudioDecompositionService {
       role: 'system',
       promptShard: promptShard,
       order: index,
-      // Meta-Weaver: auto-disable when the preset has no Lumia/meta-weaver
-      // block. Without lumia blocks the agent would run every turn (refresh
+      // Meta-Weaver: auto-disable when the preset has no meta-weaver/OOC
+      // block. Without a meta block the agent would run every turn (refresh
       // policy 'turn') on a bare fallback prompt and burn an LLM call to
       // output "inert" — pointless latency. The user can still re-enable it
-      // manually in the Studio UI if they add a lumia block later. See
+      // manually in the Studio UI if they add a meta block later. See
       // docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
       enabled: !(spec.id == 'meta' && !lumiaActive),
       modelSource: 'current',
@@ -292,7 +376,10 @@ class StudioDecompositionService {
     BlockRoutingMap routing,
   ) {
     final validIds = StudioControllerOntology.specs.map((s) => s.id).toSet();
-    final map = {for (final spec in StudioControllerOntology.specs) spec.id: <PresetBlock>[]};
+    final map = {
+      for (final spec in StudioControllerOntology.specs)
+        spec.id: <PresetBlock>[],
+    };
     for (final block in blocks) {
       // Honor an explicit LLM drop decision (reasoning/CoT template).
       if (routing.isDropped(block.id)) continue;
@@ -347,17 +434,21 @@ class StudioDecompositionService {
   String _bucketForBlock(PresetBlock block) =>
       StudioBlockClassifier.bucketForBlock(block);
 
-  /// True if any block in [blocks] is a Lumia/meta-weaver/OOC block (by name,
-  /// id, or content keyword). Used to decide whether to append the Meta-Weaver
-  /// counting duty suffix and the Main Responder compact Lumia contract.
+  /// True if any block in [blocks] is a meta-weaver/OOC block (by name, id, or
+  /// content keyword). Used to decide whether to append the Meta-Weaver
+  /// counting duty suffix and the Main Responder compact meta contract.
   /// Mirrors the `meta` bucket keyword in `StudioBlockClassifier.bucketForBlock`.
+  /// Detection is generalized: any block mentioning meta-weaver / OOC / weaver
+  /// / a specific meta-persona name (e.g. "lumia", "ghost in the machine") counts.
   bool _bucketHasLumia(List<PresetBlock> blocks) {
     for (final block in blocks) {
       final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();
       if (text.contains('lumia') ||
           text.contains('ghost in the machine') ||
           text.contains('meta-weaver') ||
+          text.contains('meta weaver') ||
           text.contains('ooc interface') ||
+          text.contains('ooc policy') ||
           text.contains('weaver')) {
         return true;
       }
@@ -387,11 +478,54 @@ class StudioDecompositionService {
     String prompt, {
     ApiConfig? apiConfig,
     CancelToken? cancelToken,
-  }) =>
-      _buildLlm.call(prompt, apiConfig: apiConfig, cancelToken: cancelToken);
+  }) => _buildLlm.call(prompt, apiConfig: apiConfig, cancelToken: cancelToken);
 
   void _log(String message) {
     debugPrint('[StudioBuild] $message');
   }
-}
 
+  /// Regex matching a length instruction line: word budget/count/length,
+  /// paragraph target, "N-M words", "minimum N words", "maximum N words",
+  /// "Response length: N-M words", "Always write N-M words".
+  static final _lengthInstructionRegex = RegExp(
+    r'^(?:.*(?:word\s+(?:budget|count|length|target|limit)|response\s+length|always\s+write|length\s*:|paragraph\s+(?:budget|count|target|limit))\s*:?\s*.*)$|'
+    r'.{0,40}(?:\d+-\d+\s*words?|\d+\s*words?\s*(?:min|max|minimum|maximum|target|hard|soft)).{0,40}',
+    caseSensitive: false,
+    multiLine: true,
+    unicode: true,
+  );
+
+  /// Extract a length hint from dropped CoT/reasoning blocks when no enabled
+  /// block already carries one. Returns a new [PresetBlock] with the extracted
+  /// length line as content, or null when:
+  /// - no reasoning block contains a length instruction, or
+  /// - an enabled non-reasoning block already contains one (no duplication).
+  PresetBlock? _extractLengthHintFromReasoning({
+    required List<PresetBlock> reasoningBlocks,
+    required List<PresetBlock> enabledBlocks,
+  }) {
+    // Check if any enabled block already has a length instruction.
+    final enabledHasLength = enabledBlocks.any(
+      (b) => _lengthInstructionRegex.hasMatch(b.content),
+    );
+    if (enabledHasLength) return null;
+
+    // Scan reasoning blocks for length instruction lines.
+    for (final block in reasoningBlocks) {
+      final lines = block.content.split('\n');
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        if (_lengthInstructionRegex.hasMatch(trimmed)) {
+          return PresetBlock(
+            id: '_extracted_length_hint',
+            name: 'Length hint (extracted from CoT)',
+            role: 'system',
+            content: trimmed,
+          );
+        }
+      }
+    }
+    return null;
+  }
+}
