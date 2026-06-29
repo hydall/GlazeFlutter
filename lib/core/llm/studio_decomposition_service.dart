@@ -99,15 +99,37 @@ class StudioDecompositionService {
         '${droppedRoleBlocks.map((b) => b.name.isNotEmpty ? b.name : b.id).join(', ')}',
       );
     }
-    if (enabledBlocks.isEmpty) return const [];
 
-    final totalChars = enabledBlocks.fold<int>(
+    // Length-hint extraction: when a dropped CoT/reasoning block contains a
+    // length instruction (word count / word budget / paragraph target) and NO
+    // enabled non-reasoning block already carries one, extract the length line
+    // from the dropped block and add it as a standalone block so the final
+    // agent still sees the length guidance. Without this, presets whose ONLY
+    // length rule lives inside the CoT template (e.g. Fawnie's "fawn's cot"
+    // block: "Word budget is {{getvar::length}}") would lose all length
+    // guidance when the CoT block is dropped.
+    final lengthHint = _extractLengthHintFromReasoning(
+      reasoningBlocks: reasoningBlocks,
+      enabledBlocks: enabledBlocks,
+    );
+    final enabledBlocksWithLength = lengthHint != null
+        ? [...enabledBlocks, lengthHint]
+        : enabledBlocks;
+    if (lengthHint != null) {
+      _log(
+        'extracted length hint from dropped CoT block: '
+        '"${lengthHint.content.substring(0, lengthHint.content.length.clamp(0, 120))}"',
+      );
+    }
+    if (enabledBlocksWithLength.isEmpty) return const [];
+
+    final totalChars = enabledBlocksWithLength.fold<int>(
       0,
       (sum, b) => sum + b.content.length,
     );
     _log(
       'build start session=$sessionId preset="${preset.name}" '
-      'blocks=${enabledBlocks.length} chars=$totalChars '
+      'blocks=${enabledBlocksWithLength.length} chars=$totalChars '
       'model=${apiConfig?.model ?? '<active>'}',
     );
 
@@ -115,17 +137,17 @@ class StudioDecompositionService {
     // to deterministic keyword bucketing if the LLM is unavailable/refuses, so
     // Studio always builds. Skipped only when there is no build model.
     final routingMapResult = await _routeBlocks(
-      blocks: enabledBlocks,
+      blocks: enabledBlocksWithLength,
       apiConfig: apiConfig,
       cancelToken: cancelToken,
     );
     _log(
       'routing: ${routingMapResult.fromLlm ? 'LLM' : 'keyword-fallback'} '
-      '(${routingMapResult.blockToBucket.length}/${enabledBlocks.length} mapped)',
+      '(${routingMapResult.blockToBucket.length}/${enabledBlocksWithLength.length} mapped)',
     );
 
     final now = currentTimestampSeconds();
-    final assignments = _assignBlocks(enabledBlocks, routingMapResult);
+    final assignments = _assignBlocks(enabledBlocksWithLength, routingMapResult);
     // Meta-weaver detection (plan §Part A/B): if any block routed to the
     // `meta` bucket is a meta-weaver/OOC block, the Meta-Weaver gets a counting
     // duty suffix and the Main Responder gets a compact meta output contract.
@@ -417,6 +439,48 @@ class StudioDecompositionService {
 
   void _log(String message) {
     debugPrint('[StudioBuild] $message');
+  }
+
+  /// Regex matching a length instruction line: word budget/count/length,
+  /// paragraph target, "N-M words", "minimum N words", "maximum N words",
+  /// "Response length: N-M words", "Always write N-M words".
+  static final _lengthInstructionRegex = RegExp(
+    r'(?imu)^(?:.*(?:word\s+(?:budget|count|length|target|limit)|response\s+length|always\s+write|length\s*:|paragraph\s+(?:budget|count|target|limit))\s*:?\s*.*)$|'
+        r'(?imu).{0,40}(?:\d+-\d+\s*words?|\d+\s*words?\s*(?:min|max|minimum|maximum|target|hard|soft)).{0,40}',
+  );
+
+  /// Extract a length hint from dropped CoT/reasoning blocks when no enabled
+  /// block already carries one. Returns a new [PresetBlock] with the extracted
+  /// length line as content, or null when:
+  /// - no reasoning block contains a length instruction, or
+  /// - an enabled non-reasoning block already contains one (no duplication).
+  PresetBlock? _extractLengthHintFromReasoning({
+    required List<PresetBlock> reasoningBlocks,
+    required List<PresetBlock> enabledBlocks,
+  }) {
+    // Check if any enabled block already has a length instruction.
+    final enabledHasLength = enabledBlocks.any(
+      (b) => _lengthInstructionRegex.hasMatch(b.content),
+    );
+    if (enabledHasLength) return null;
+
+    // Scan reasoning blocks for length instruction lines.
+    for (final block in reasoningBlocks) {
+      final lines = block.content.split('\n');
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        if (_lengthInstructionRegex.hasMatch(trimmed)) {
+          return PresetBlock(
+            id: '_extracted_length_hint',
+            name: 'Length hint (extracted from CoT)',
+            role: 'system',
+            content: trimmed,
+          );
+        }
+      }
+    }
+    return null;
   }
 }
 
