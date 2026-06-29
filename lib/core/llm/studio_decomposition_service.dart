@@ -70,17 +70,33 @@ class StudioDecompositionService {
 
     // CoT / reasoning / thinking blocks are NOT routed to any agent: the
     // multi-agent pipeline IS the externalized chain-of-thought, so a per-turn
-    // <think> directive inside an agent is redundant and conflicts with the
+    // ilda directive inside an agent is redundant and conflicts with the
     // "produce a brief, not prose / no hidden reasoning" contract. Drop them
     // after macro expansion. See docs/PLAN_AGENTIC_STUDIO.md §11.
     final reasoningBlocks = expandedBlocks.where(isReasoningBlock).toList();
+    // Assistant-role blocks (prefill) are NOT routed to any agent in Studio
+    // mode. In SillyTavern these act as assistant prefill (the model continues
+    // from this text), but in the Studio pipeline they would land mid-conversation
+    // as orphan assistant turns, breaking the conversation flow. Assistant
+    // prefill is a transport-layer concern (API config prefix field), not a
+    // preset-block concern. Drop them from routing.
+    final droppedRoleBlocks = expandedBlocks
+        .where((b) => b.role == 'assistant')
+        .toList();
     final enabledBlocks = expandedBlocks
-        .where((b) => !isReasoningBlock(b))
+        .where((b) => !isReasoningBlock(b) && b.role != 'assistant')
         .toList();
     if (reasoningBlocks.isNotEmpty) {
       _log(
         'dropped ${reasoningBlocks.length} reasoning/CoT block(s) from routing: '
         '${reasoningBlocks.map((b) => b.name.isNotEmpty ? b.name : b.id).join(', ')}',
+      );
+    }
+    if (droppedRoleBlocks.isNotEmpty) {
+      _log(
+        'dropped ${droppedRoleBlocks.length} assistant-role/prefill block(s) '
+        'from routing (Studio does not support prefill in shards): '
+        '${droppedRoleBlocks.map((b) => b.name.isNotEmpty ? b.name : b.id).join(', ')}',
       );
     }
     if (enabledBlocks.isEmpty) return const [];
@@ -153,7 +169,12 @@ class StudioDecompositionService {
     final allEnabled = preset.blocks.where((b) => b.enabled).toList();
     final expanded = expandBlocksForRouting(allEnabled);
     return expanded
-        .where((b) => !isReasoningBlock(b) && isBroadcastBlock(b))
+        .where(
+          (b) =>
+              !isReasoningBlock(b) &&
+              b.role != 'assistant' &&
+              isBroadcastBlock(b),
+        )
         .toList();
   }
 
