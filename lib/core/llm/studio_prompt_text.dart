@@ -137,23 +137,25 @@ Notes:
         )
         .join('\n\n');
     final rules = <String>[];
-    // Intent-based em-dash ban: a ban verb near "dash" / "тире".
+    // Intent-based em-dash ban: a ban verb near the WORDS "em dash" / "long
+    // dash" / "тире" (NOT the bare — character, which appears in prose
+    // everywhere and causes false positives like "Not joy — this IS naming").
     // Matches: "do not use em dashes", "avoid long dashes", "no em dashes",
-    // "never use —", "без тире", "не используй тире", "избегай тире".
+    // "без тире", "не используй тире", "избегай тире".
     if (RegExp(
-      r"(?:do not|don't|never|avoid|no|ban|без|не\s+используй|избегай|запрет).{0,30}(?:em\s*dash|long\s*dash|тире|—)",
+      r"(?:do not|don't|never|avoid|no|ban|без|не\s+используй|избегай|запрет).{0,30}(?:em\s*dash(?:es)?|long\s*dash(?:es)?|тире)",
       caseSensitive: false,
     ).hasMatch(sources)) {
       rules.add('- Do not use em dashes / long dashes: avoid "—".');
     }
-    // Intent-based quote-wrapping directive: a directive verb near
-    // "quote" / "кавычк". Matches: "wrap dialogue in quotes",
+    // Intent-based quote-wrapping directive: a directive verb near the FULL
+    // phrase "quotation marks" / "кавычки" (NOT the bare "quot" substring,
+    // which appears in "quoting", "quotes BAN", etc. and causes false
+    // positives). Matches: "wrap dialogue in quotation marks",
     // "use quotation marks", "оборачивай реплики в кавычки",
-    // "прямая речь в кавычках". Does NOT match mere mentions of the word
-    // "quote" in non-directive contexts (e.g. "do NOT use quotes", "examples
-    // use asterisks not quotes").
+    // "прямая речь в кавычках".
     if (RegExp(
-      r'(?:wrap|use|оборачивай|используй|прямая\s+речь.{0,15}в\s+кавычках|dialogue.{0,15}(?:in|with)\s+quotation|in\s+quotation\s+marks).{0,30}(?:quot|кавыч)',
+      r'(?:wrap|use|оборачивай|используй|прямая\s+речь.{0,15}в\s+кавычках|dialogue.{0,15}(?:in|with)\s+quotation\s+marks|in\s+quotation\s+marks|в\s+кавычках).{0,30}(?:quotation\s+marks|кавычк)',
       caseSensitive: false,
     ).hasMatch(sources)) {
       rules.add(
