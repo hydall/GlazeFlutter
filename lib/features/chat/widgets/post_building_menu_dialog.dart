@@ -134,6 +134,7 @@ class _PostBuildingMenuDialogState
               _PipelineLlmSection(
                 titleKey: 'post_building_generation_llm',
                 icon: Icons.auto_fix_high_outlined,
+                modelHintKey: 'post_building_model_hint_memory',
                 source: _pipeline.generationSource,
                 model: _pipeline.generationModel,
                 endpoint: _pipeline.generationEndpoint,
@@ -258,6 +259,7 @@ class _CleanerSection extends StatelessWidget {
       icon: Icons.cleaning_services_outlined,
       titleKey: 'post_building_cleaner_title',
       subtitleKey: 'post_building_cleaner_subtitle',
+      modelHintKey: 'post_building_model_hint_cleaner',
       children: [
         SwitchListTile(
           dense: true,
@@ -618,6 +620,7 @@ class _WriteLoopSection extends StatelessWidget {
       icon: Icons.psychology_outlined,
       titleKey: 'post_building_agentic_advanced',
       subtitleKey: 'post_building_agentic_advanced_desc',
+      modelHintKey: 'post_building_model_hint_sidecar',
       children: [c],
     );
   }
@@ -642,6 +645,7 @@ class _PipelineLlmSection extends StatelessWidget {
   final Future<void> Function(String) onApiKeyChanged;
   final Future<void> Function(double?) onTemperatureChanged;
   final Future<void> Function(int?) onMaxTokensChanged;
+  final String? modelHintKey;
 
   const _PipelineLlmSection({
     required this.titleKey,
@@ -661,6 +665,7 @@ class _PipelineLlmSection extends StatelessWidget {
     required this.onApiKeyChanged,
     required this.onTemperatureChanged,
     required this.onMaxTokensChanged,
+    this.modelHintKey,
   });
 
   @override
@@ -745,6 +750,7 @@ class _PipelineLlmSection extends StatelessWidget {
     return _SectionCard(
       icon: icon,
       titleKey: titleKey,
+      modelHintKey: modelHintKey,
       children: [c],
     );
   }
@@ -844,6 +850,7 @@ class _ClassifierSection extends StatelessWidget {
     return _SectionCard(
       icon: Icons.category_outlined,
       titleKey: 'post_building_classifier_llm',
+      modelHintKey: 'post_building_model_hint_classifier',
       children: [c],
     );
   }
@@ -990,6 +997,7 @@ class _ConsolidationSection extends StatelessWidget {
     return _SectionCard(
       icon: Icons.merge_outlined,
       titleKey: 'post_building_consolidation_llm',
+      modelHintKey: 'post_building_model_hint_consolidation',
       children: [c],
     );
   }
@@ -1000,12 +1008,14 @@ class _SectionCard extends StatelessWidget {
   final IconData icon;
   final String titleKey;
   final String? subtitleKey;
+  final String? modelHintKey;
   final List<Widget> children;
 
   const _SectionCard({
     required this.icon,
     required this.titleKey,
     this.subtitleKey,
+    this.modelHintKey,
     required this.children,
   });
 
@@ -1054,6 +1064,31 @@ class _SectionCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (modelHintKey != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.lightbulb_outline,
+                      size: 13,
+                      color: context.cs.tertiary,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        modelHintKey!.tr(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          color: context.cs.tertiary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             ...children,
           ],
