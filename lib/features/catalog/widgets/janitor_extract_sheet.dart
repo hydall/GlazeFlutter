@@ -255,7 +255,7 @@ class _Preview extends StatelessWidget {
           Text('First message: ${estimateTokens(card.firstMes)} tokens',
               style: value()),
           Text(
-            'Closed lorebook: ${result.hasLorebook ? '${result.entryBlockCount} block(s), ${estimateTokens(result.lorebookText)} tokens' : 'none found'}',
+            'Closed lorebook: ${result.hasLorebook ? '${result.entryBlockCount} block(s), ${estimateTokens(result.lorebookText)} tokens' : result.hasAdvancedLorebook ? 'advanced (inline) — full prompt ${estimateTokens(result.fullPromptText)} tokens' : 'none found'}',
             style: value(),
           ),
           if (result.hasLorebook) ...[

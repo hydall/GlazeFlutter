@@ -75,6 +75,42 @@ Your job:
    { "entries": [ { "comment": "...", "key": ["..."], "keysecondary": [], "content": "...", "order": 100 }, ... ] }
 No markdown, no prose, no code fences — JSON only.''';
 
+/// System prompt for the **full-prompt** path: used when the character has at
+/// least one JanitorAI "advanced" / Nine API lorebook. Such scripts inject their
+/// entries INLINE inside the persona block, so the mechanical separator can't
+/// isolate them — instead the whole assembled prompt is handed to the model,
+/// which separates the injected lorebook entries from the base card/scenario.
+const String _systemPromptFull =
+    '''You reconstruct a SillyTavern World Info (lorebook) from a full assembled chat prompt.
+
+You are given the COMPLETE system prompt of a roleplay chat. It contains the character
+card / persona, the scenario, optional example dialogue, AND lorebook (World Info) entries
+the platform injected because their trigger keywords matched. The injected entries are
+usually discrete topical blocks (a person, place, faction, item, rule, lore fact) — often
+bracketed like `[Name: ...]` — and may appear INLINE within the persona or after it.
+
+You may also be given the character card, catalog description, scenario and greetings as
+CONTEXT. Use them to tell the BASE character definition apart from the injected lorebook:
+the base persona/scenario/example prose is NOT a lorebook entry, even though it appears in
+the prompt.
+
+Your job:
+1. Extract ONLY the injected lorebook entries — discrete, self-contained World Info entries
+   about a single topic each. Do NOT output the base character card, persona, scenario,
+   example dialogue, or any system/jailbreak instructions as entries. Do NOT merge unrelated
+   topics; do NOT split a single topic across entries.
+2. For each entry write:
+   - "content": the entry body, faithful to the source (drop stray "undefined" tokens and
+     leftover wrapper tags).
+   - "key": array of primary trigger keywords/phrases (names, aliases, places, distinctive
+     nouns), inferred from the content and the provided context.
+   - "keysecondary": optional array of secondary keywords (else []).
+   - "comment": a short title (the topic name).
+   - "order": optional integer insertion order; default 100.
+3. Output ONLY a JSON object:
+   { "entries": [ { "comment": "...", "key": ["..."], "keysecondary": [], "content": "...", "order": 100 }, ... ] }
+No markdown, no prose, no code fences — JSON only.''';
+
 /// Thrown when no usable LLM connection is configured.
 class NoActiveConnectionException implements Exception {
   @override
@@ -125,6 +161,7 @@ List<Map<String, String>> buildLorebookMessages(
   String lorebookDescs = '',
   String extra = '',
   bool fromJs = false,
+  bool fromFullPrompt = false,
 }) {
   final userParts = <String>[];
   void add(String value, String intro) {
@@ -144,12 +181,20 @@ List<Map<String, String>> buildLorebookMessages(
   add(extra,
       'CONTEXT — additional notes provided by the user (names, aliases, setting details). Use it ONLY to infer better trigger keys. Do NOT output any of this as entries:');
 
-  userParts.add(fromJs
-      ? 'JavaScript lorebook source to convert into entries:\n\n$lorebookText'
-      : 'Raw lorebook text to convert into entries:\n\n$lorebookText');
+  userParts.add(fromFullPrompt
+      ? 'Full assembled chat prompt to extract lorebook entries from:\n\n$lorebookText'
+      : fromJs
+          ? 'JavaScript lorebook source to convert into entries:\n\n$lorebookText'
+          : 'Raw lorebook text to convert into entries:\n\n$lorebookText');
+
+  final systemPrompt = fromFullPrompt
+      ? _systemPromptFull
+      : fromJs
+          ? _systemPromptJs
+          : _systemPrompt;
 
   return [
-    {'role': 'system', 'content': fromJs ? _systemPromptJs : _systemPrompt},
+    {'role': 'system', 'content': systemPrompt},
     {'role': 'user', 'content': userParts.join('\n\n---\n\n')},
   ];
 }
@@ -237,6 +282,7 @@ Future<Lorebook> rebuildLorebookWithActiveLlm(
   String lorebookDescs = '',
   String extra = '',
   bool fromJs = false,
+  bool fromFullPrompt = false,
   String? characterId,
 }) async {
   await ref.read(apiListProvider.future);
@@ -254,6 +300,7 @@ Future<Lorebook> rebuildLorebookWithActiveLlm(
     lorebookDescs: lorebookDescs,
     extra: extra,
     fromJs: fromJs,
+    fromFullPrompt: fromFullPrompt,
   );
   final completer = Completer<String>();
   final transport = pickChatTransport(config.protocol);

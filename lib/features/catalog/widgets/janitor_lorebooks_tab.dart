@@ -271,9 +271,10 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _elapsed++);
     });
+    final fromFull = ex.hasAdvancedLorebook;
     try {
       final book = await ref.read(janitorExtractorProvider).buildLorebook(
-            lorebookText: ex.lorebookText,
+            lorebookText: fromFull ? ex.fullPromptText : ex.lorebookText,
             name: _nameController.text.trim().isEmpty
                 ? '${ex.character.charData.name} — Closed Lorebook'
                 : _nameController.text.trim(),
@@ -283,6 +284,7 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
             greetings: _sources.greetings ? ex.greetingsContext : '',
             lorebookDescs: _sources.lorebookDescs ? ex.lorebookDescsContext : '',
             extra: _sources.extra ? _extraController.text.trim() : '',
+            fromFullPrompt: fromFull,
           );
       if (mounted) setState(() => _built = book);
     } catch (e) {
@@ -301,15 +303,17 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
   void _preview() {
     final ex = _extraction;
     if (ex == null) return;
+    final fromFull = ex.hasAdvancedLorebook;
     setState(() {
       _previewMessages = buildLorebookMessages(
-        ex.lorebookText,
+        fromFull ? ex.fullPromptText : ex.lorebookText,
         card: _sources.card ? ex.cardContext : '',
         catalog: _sources.catalog ? ex.catalogContext : '',
         scenario: _sources.scenario ? ex.scenarioContext : '',
         greetings: _sources.greetings ? ex.greetingsContext : '',
         lorebookDescs: _sources.lorebookDescs ? ex.lorebookDescsContext : '',
         extra: _sources.extra ? _extraController.text.trim() : '',
+        fromFullPrompt: fromFull,
       );
     });
   }
@@ -459,20 +463,28 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
             ex.hasLorebook
                 ? 'Captured ${ex.entryBlockCount} block(s), '
                     '${estimateTokens(ex.lorebookText)} tokens'
-                : 'No closed lorebook text was found.',
+                : ex.hasAdvancedLorebook
+                    ? 'Advanced lorebook detected — its entries are injected '
+                        'inline, so the full prompt '
+                        '(${estimateTokens(ex.fullPromptText)} tokens) is mined '
+                        'with the LLM.'
+                    : 'No closed lorebook text was found.',
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: cs.onSurface),
           ),
-          if (ex.hasLorebook) ...[
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _downloadRaw,
-              icon: const Icon(Icons.notes_rounded, size: 16),
-              label: const Text('Download raw (no keys)'),
-            ),
-            const _OrDivider(),
+          if (ex.hasExtractable) ...[
+            if (ex.hasLorebook) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _downloadRaw,
+                icon: const Icon(Icons.notes_rounded, size: 16),
+                label: const Text('Download raw (no keys)'),
+              ),
+              const _OrDivider(),
+            ] else
+              const SizedBox(height: 12),
             _SectionTitle('Build with LLM', cs: cs),
             const SizedBox(height: 8),
             TextField(

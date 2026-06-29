@@ -104,6 +104,21 @@ List<JanitorScriptRef> lorebookScriptRefs(Map<String, dynamic>? meta) {
       .toList();
 }
 
+/// True when the character lists at least one JanitorAI **"advanced"** (Nine
+/// API / JS) lorebook script in its metadata. Such scripts inject their entries
+/// INLINE inside the persona block (not as discrete trailing blocks), so the
+/// mechanical [separate] can't isolate them — the whole captured prompt must be
+/// handed to the build LLM (`fromFullPrompt`) instead. Public or private alike:
+/// a private advanced script can't be downloaded, and a public one still
+/// pollutes the captured persona, so either way the full-prompt path is used.
+bool hasAdvancedLorebook(Map<String, dynamic>? meta) {
+  final scripts = meta?['scripts'];
+  if (scripts is! List) return false;
+  return scripts
+      .whereType<Map<String, dynamic>>()
+      .any((s) => s['type'] == 'advanced');
+}
+
 /// Parse the entries array out of a `/hampter/script/<id>` record (the `script`
 /// field is a JSON **string** holding an array).
 List<dynamic> parseScriptEntries(dynamic rec) {

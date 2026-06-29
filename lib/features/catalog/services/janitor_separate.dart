@@ -131,6 +131,12 @@ String _tidy(String text) => text
     .replaceAll(RegExp(r'\n{3,}'), '\n\n')
     .trim();
 
+/// Strips the leading bracketed jailbreak/system-prefix block(s) from [text].
+/// Used by the full-prompt path so the model isn't fed the jailbreak prologue as
+/// if it were a lorebook entry; the persona/scenario/entries are left intact.
+String stripLeadingJailbreak(String text) =>
+    text.replaceFirst(_leadingJailbreak, '').trim();
+
 /// Splits the isolated lorebook text into discrete entry blocks on blank lines.
 List<String> splitEntries(String text) => text
     .split(RegExp(r'\n\s*\n'))

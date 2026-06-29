@@ -26,6 +26,16 @@ class ExtractionResult {
   final String cardContext;
   final String catalogContext;
 
+  /// True when the character has at least one "advanced" (Nine API / JS)
+  /// lorebook. Those inject their entries inline inside the persona, so the
+  /// mechanical [lorebookText] misses them — [fullPromptText] is rebuilt with the
+  /// LLM in full-prompt mode instead. See [JanitorExtractor.buildLorebook].
+  final bool hasAdvancedLorebook;
+
+  /// The full captured system prompt (leading jailbreak stripped), used as the
+  /// extraction material when [hasAdvancedLorebook] is true.
+  final String fullPromptText;
+
   /// Extra context the lorebook-build LLM may use to infer better trigger keys
   /// (never emitted as entries). See `buildLorebookMessages`.
   final String scenarioContext;
@@ -43,9 +53,17 @@ class ExtractionResult {
     this.scenarioContext = '',
     this.greetingsContext = '',
     this.lorebookDescsContext = '',
+    this.hasAdvancedLorebook = false,
+    this.fullPromptText = '',
   });
 
   bool get hasLorebook => lorebookText.trim().isNotEmpty;
+
+  /// Whether there is anything to rebuild: either mechanically-separated closed
+  /// lorebook text, or a full prompt to mine for inline advanced-lorebook entries.
+  bool get hasExtractable =>
+      hasLorebook ||
+      (hasAdvancedLorebook && fullPromptText.trim().isNotEmpty);
 }
 
 /// Summary returned after persisting an [ExtractionResult] to the DB.
@@ -100,6 +118,9 @@ class JanitorExtractor {
       onPhase?.call('separating');
       final card = extractCard(payload);
       final sep = separate(payload, card);
+      final advanced = hasAdvancedLorebook(meta);
+      final fullPrompt =
+          advanced ? stripLeadingJailbreak(getSystemContent(payload)) : '';
 
       final name = extractCharName(payload).isNotEmpty
           ? extractCharName(payload)
@@ -147,6 +168,8 @@ class JanitorExtractor {
         scenarioContext: scenario,
         greetingsContext: greetings,
         lorebookDescsContext: await _lorebookDescs(meta),
+        hasAdvancedLorebook: advanced,
+        fullPromptText: fullPrompt,
       );
     } finally {
       proxy.setActive(false);
@@ -166,7 +189,7 @@ class JanitorExtractor {
         .read(catalogProvider.notifier)
         .importCharacter(result.character, sourceUrl: result.sourceUrl);
 
-    if (!result.hasLorebook) {
+    if (!result.hasExtractable) {
       return CommitResult(
         glazeCharacterId: glazeId,
         characterName: result.character.charData.name,
@@ -174,17 +197,22 @@ class JanitorExtractor {
       );
     }
 
+    // An advanced (Nine API) lorebook injects entries inline in the persona, so
+    // the mechanical separation misses them — feed the full prompt to the LLM and
+    // let it pull the entries out using the context blocks as the base card.
+    final fromFull = result.hasAdvancedLorebook;
     try {
       onPhase?.call('rebuilding lorebook (LLM)');
       final lorebook = await rebuildLorebookWithActiveLlm(
         _ref,
-        lorebookText: result.lorebookText,
+        lorebookText: fromFull ? result.fullPromptText : result.lorebookText,
         name: '${result.character.charData.name} — Closed Lorebook',
         card: result.cardContext,
         catalog: result.catalogContext,
         scenario: result.scenarioContext,
         greetings: result.greetingsContext,
         lorebookDescs: result.lorebookDescsContext,
+        fromFullPrompt: fromFull,
         characterId: glazeId,
       );
       onPhase?.call('saving lorebook');
@@ -218,6 +246,7 @@ class JanitorExtractor {
     String greetings = '',
     String lorebookDescs = '',
     String extra = '',
+    bool fromFullPrompt = false,
     String? characterId,
   }) =>
       rebuildLorebookWithActiveLlm(
@@ -230,6 +259,7 @@ class JanitorExtractor {
         greetings: greetings,
         lorebookDescs: lorebookDescs,
         extra: extra,
+        fromFullPrompt: fromFullPrompt,
         characterId: characterId,
       );
 
