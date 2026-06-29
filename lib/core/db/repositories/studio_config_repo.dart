@@ -243,7 +243,7 @@ class StudioConfigRepo implements SyncStudioConfigStore {
   /// Silent migration of loaded Studio configs:
   ///
   /// 1. Meta-Weaver (plan §Part 6): upgrade from the old `'static'` refresh
-  ///    policy + default `contextSize` to the new Lumia architecture —
+  ///    policy + default `contextSize` to the meta-weaver architecture —
   ///    `refreshPolicy: 'turn'` (runs every turn so it can count assistant
   ///    messages and apply the period rule) and `contextSize: 15` (enough
   ///    history to count periods up to ~10).
@@ -284,9 +284,9 @@ class StudioConfigRepo implements SyncStudioConfigStore {
     return changed ? config.copyWith(agents: migrated) : config;
   }
 
-  /// True if [agent] is the Meta-Weaver / Lumia Policy controller. Matches by
+  /// True if [agent] is the Meta-Weaver / OOC Policy controller. Matches by
   /// id/name (the controller spec id is `meta`, name is
-  /// `Meta-Weaver / Lumia Policy`). Falls back to substring contains so older
+  /// `Meta-Weaver / OOC Policy`). Falls back to substring contains so older
   /// configs with slightly different names still migrate.
   bool _isMetaWeaver(StudioAgent agent) {
     final id = agent.id.toLowerCase();
@@ -295,6 +295,7 @@ class StudioConfigRepo implements SyncStudioConfigStore {
         id == 'meta' ||
         name.contains('meta-weaver') ||
         name.contains('meta weaver') ||
+        name.contains('ooc policy') ||
         name.contains('lumia policy');
   }
 }

@@ -35,7 +35,7 @@ const studioRequestPresets = <StudioRequestPreset>[
         kind: 'agent_instruction',
         role: 'system',
         content:
-            'You are an intermediate Studio agent. Analyze the current roleplay context and produce only a compact operational brief for later agents. Focus on continuity, character truth, scene pressure, risks, and concrete next-beat guidance. Do not write narrative prose, dialogue, or the final RP response.',
+            'You are an intermediate Studio agent. Analyze the current roleplay context and produce only a compact operational brief for later agents. Focus on continuity, character truth, scene pressure, and risks. Do not write narrative prose, dialogue, or the final RP response.',
         order: 0,
       ),
       StudioPresetBlock(
@@ -148,7 +148,7 @@ const studioRequestPresets = <StudioRequestPreset>[
         kind: 'agent_instruction',
         role: 'system',
         content:
-            'Write the assistant next reply in immersive fictional roleplay with the user. Generate the continuation directly without meta-commentary. Never write the user dialogue, actions, thoughts, feelings, intentions, or decisions. Each paragraph must advance action, exchange, perception, or consequence.',
+            'Write the assistant next reply in immersive fictional roleplay with the user. Generate the continuation directly without meta-commentary.',
         order: 0,
       ),
       StudioPresetBlock(

@@ -110,9 +110,9 @@ class StudioDecompositionService {
 
     final now = currentTimestampSeconds();
     final assignments = _assignBlocks(enabledBlocks, routingMapResult);
-    // Lumia detection (plan §Part A/B): if any block routed to the `meta`
-    // bucket is a Lumia/meta-weaver block, the Meta-Weaver gets a counting
-    // duty suffix and the Main Responder gets a compact Lumia output contract.
+    // Meta-weaver detection (plan §Part A/B): if any block routed to the
+    // `meta` bucket is a meta-weaver/OOC block, the Meta-Weaver gets a counting
+    // duty suffix and the Main Responder gets a compact meta output contract.
     final lumiaActive = _bucketHasLumia(assignments['meta'] ?? const []);
     final agents = <StudioAgent>[];
     for (final spec in StudioControllerOntology.specs) {
@@ -254,11 +254,11 @@ class StudioDecompositionService {
       role: 'system',
       promptShard: promptShard,
       order: index,
-      // Meta-Weaver: auto-disable when the preset has no Lumia/meta-weaver
-      // block. Without lumia blocks the agent would run every turn (refresh
+      // Meta-Weaver: auto-disable when the preset has no meta-weaver/OOC
+      // block. Without a meta block the agent would run every turn (refresh
       // policy 'turn') on a bare fallback prompt and burn an LLM call to
       // output "inert" — pointless latency. The user can still re-enable it
-      // manually in the Studio UI if they add a lumia block later. See
+      // manually in the Studio UI if they add a meta block later. See
       // docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
       enabled: !(spec.id == 'meta' && !lumiaActive),
       modelSource: 'current',
@@ -347,17 +347,21 @@ class StudioDecompositionService {
   String _bucketForBlock(PresetBlock block) =>
       StudioBlockClassifier.bucketForBlock(block);
 
-  /// True if any block in [blocks] is a Lumia/meta-weaver/OOC block (by name,
-  /// id, or content keyword). Used to decide whether to append the Meta-Weaver
-  /// counting duty suffix and the Main Responder compact Lumia contract.
+  /// True if any block in [blocks] is a meta-weaver/OOC block (by name, id, or
+  /// content keyword). Used to decide whether to append the Meta-Weaver
+  /// counting duty suffix and the Main Responder compact meta contract.
   /// Mirrors the `meta` bucket keyword in `StudioBlockClassifier.bucketForBlock`.
+  /// Detection is generalized: any block mentioning meta-weaver / OOC / weaver
+  /// / a specific meta-persona name (e.g. "lumia", "ghost in the machine") counts.
   bool _bucketHasLumia(List<PresetBlock> blocks) {
     for (final block in blocks) {
       final text = '${block.name}\n${block.id}\n${block.content}'.toLowerCase();
       if (text.contains('lumia') ||
           text.contains('ghost in the machine') ||
           text.contains('meta-weaver') ||
+          text.contains('meta weaver') ||
           text.contains('ooc interface') ||
+          text.contains('ooc policy') ||
           text.contains('weaver')) {
         return true;
       }

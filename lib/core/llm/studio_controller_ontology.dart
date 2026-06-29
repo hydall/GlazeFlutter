@@ -41,7 +41,7 @@ class StudioControllerSpec {
     this.phase = 'pre_generation',
     // Default tracker context size (trailing chat messages forwarded to this
     // agent). 0 = inherit the StudioAgent freezed default of 5. The
-    // Meta-Weaver overrides this to 15 so it can count Lumia periods up to
+    // Meta-Weaver overrides this to 15 so it can count meta-persona periods up to
     // ~10. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
     this.contextSize = 0,
   });
@@ -164,16 +164,16 @@ class StudioControllerOntology {
     ),
     StudioControllerSpec(
       id: 'meta',
-      name: 'Meta-Weaver / Lumia Policy',
+      name: 'Meta-Weaver / OOC Policy',
       purpose:
-          'Lumia/meta-weaver/OOC interface. Runs EVERY turn. Counts assistant messages in the history it sees, applies the period rule from the assigned `<lumia_ghost>` block (e.g. "Every 4 assistant responses"), and decides whether Lumia should emit an OOC note this turn, respond to an explicit OOC address, or stay silent.',
+          'Meta-weaver / OOC interface controller. Runs EVERY turn when the preset has a meta/OOC block assigned. Counts assistant messages in the history it sees, applies the period rule from the assigned meta block (e.g. "Every 4 assistant responses"), and decides whether the meta-persona should emit an OOC note this turn, respond to an explicit OOC address, or stay silent. The meta-persona\'s name, voice, length, and format are all defined by the user\'s preset block — the controller does NOT hardcode any persona.',
       outputContract:
-          'At chat time, output a compact Lumia brief ONLY. Decide one of: '
-          '`lumia_ooc: due | topic: <X>` (user addressed Lumia OOC), '
-          '`lumia_periodic_note: due | last_note: <N turns ago> | keep: 1-3 sentences, warm, maternal, useful, not scene-stealing` (the Nth assistant turn fired the period rule), '
-          'or `lumia: silent` (neither condition met). Never write in-scene prose, never write the actual `<lumiaooc>` reply — that is the Main Responder\'s job, guided by your brief.',
+          'At chat time, output a compact meta brief ONLY. Decide one of: '
+          '`meta_ooc: due | topic: <X>` (user addressed the meta-persona OOC), '
+          '`meta_periodic_note: due | last_note: <N turns ago> | voice: <from block> | length: <from block> | format: <from block>` (the Nth assistant turn fired the period rule — relay the voice/length/format/wrapper from the assigned meta block so the Main Responder writes in the user\'s chosen style), '
+          'or `meta: silent` (neither condition met). Never write in-scene prose, never write the actual OOC reply — that is the Main Responder\'s job, guided by your brief.',
       fallbackPrompt:
-          'You are the Lumia/meta-weaver. Count the assistant messages in the history you see. Read the period rule from your assigned `<lumia_ghost>` block (e.g. "Every 4 assistant responses"). If the count since the last Lumia note matches the period, output `lumia_periodic_note: due` with guidance to keep it 1-3 sentences, warm, maternal, useful, and not scene-stealing. If the user explicitly addressed Lumia in OOC brackets (e.g. `((Lumia: ...))`, `[OOC: ...]`), output `lumia_ooc: due` with the detected topic. Otherwise output `lumia: silent`. Do NOT write the actual Lumia OOC reply — only the brief telling the Main Responder whether to emit one.',
+          'You are the meta-weaver / OOC interface. Count the assistant messages in the history you see. Read the period rule, persona name, voice, length, format, and wrapper from your assigned meta block (e.g. period "Every 4 assistant responses", voice "warm, maternal", wrapper "<lumiaooc>...</lumiaooc>", length "1-3 sentences"). The persona name and voice come entirely from the block — do NOT assume any specific name or voice. If the count since the last meta note matches the period, output `meta_periodic_note: due` and relay the block\'s persona/voice/length/wrapper instructions so the Main Responder writes the note correctly. If the user explicitly addressed the meta-persona in OOC brackets (e.g. `((<persona>: ...))`, `[OOC: ...]`), output `meta_ooc: due` with the detected topic. Otherwise output `meta: silent`. Do NOT write the actual OOC reply — only the brief telling the Main Responder whether to emit one.',
       refreshPolicy: 'turn',
       invalidationSignals: ['last_user_message_changed', 'assistant_turn_count_changed'],
       temperature: 0.2,

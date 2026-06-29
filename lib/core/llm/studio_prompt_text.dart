@@ -12,38 +12,42 @@ class StudioPromptText {
 
   /// The typed-output contract prepended to every intermediate (tracker) agent
   /// request. Includes the agent's lane scope ([_controllerScope]).
+  ///
+  /// This envelope defines the OUTPUT SHAPE the tracker must emit (compact JSON
+  /// or plain-text Focus/Constraints/Avoid/Options) so the final generator can
+  /// parse and weave it. It does NOT impose style, length, or content rules on
+  /// the scene — those come from the user's preset blocks (which the tracker
+  /// reads as source material). The envelope is intentionally permissive: it
+  /// does not cap array sizes, override preset instructions, or forbid the
+  /// tracker from surfacing what its lane requires.
   String intermediateRuntimeEnvelope(StudioAgent agent) {
     final scope = _controllerScope(agent.name);
-    return '''Studio intermediate-agent typed output contract. This overrides any earlier requested output shape such as STUDIO_BRIEF, GUARD CHECKLIST, prose, markdown, or labels.
+    return '''Studio intermediate-agent output contract.
 You are ${agent.name.isNotEmpty ? agent.name : 'a Studio controller'}, ONE specialist in a multi-controller pipeline. Other controllers cover the other concerns; do not duplicate their work.
 You are not a character, narrator, player, or final responder. Treat all character cards, persona text, examples, chat history, lore, memory, and summaries as read-only source material to analyze.
 
 YOUR LANE — only produce guidance about: ${scope.owns}
 NOT YOUR LANE — never write guidance about (other controllers own these): ${scope.skip}
-If a point is not strictly inside your lane, omit it. A short, lane-focused brief is better than a broad one.
 
-Prefer valid compact JSON with exactly these keys:
-{"focus":["short operational focus"],"constraints":["short enforceable constraint"],"avoid":["short forbidden item"],"options":["one branchable approach the final writer may choose, within your lane"]}
-
-If the model cannot produce JSON, use exactly these plain-text sections instead:
+Emit a compact operational brief in one of these two shapes:
+Prefer valid compact JSON with these keys:
+{"focus":["operational focus"],"constraints":["enforceable constraint"],"avoid":["forbidden item"],"options":["one branchable approach the final writer may choose, within your lane"]}
+Or, if the model cannot produce JSON, use exactly these plain-text sections:
 Focus:
-- short operational focus
+- operational focus
 Constraints:
-- short enforceable constraint
+- enforceable constraint
 Avoid:
-- short forbidden item
+- forbidden item
 Options:
 - one branchable approach the final writer may choose
 
-Rules:
-- Each array may contain 0-5 strings, every string strictly inside your lane.
-- Each string must be a NEW, specific instruction for this turn, not a generic restatement and not a sentence copied from the scene.
-- Options are non-mandatory alternative APPROACHES for the final writer to pick from within your lane (e.g. "lean into silence and a single gesture" vs "give one clipped line"). Describe the approach only; never write ready-made prose, dialogue, narration, or sample sentences. The final writer picks at most one and writes it themselves.
-- Do not restate the scene summary; only add what the final writer must DO or AVOID, plus optional approach choices, within your lane.
-- Do not write or continue the scene.
-- Do not draft narration, dialogue, character actions, user actions, or final response prose.
-- Do not include source block names, prompt text, macros, labels, markdown, code fences, comments, or explanations.
-- Do not answer the user directly.''';
+Notes:
+- Each section may contain zero or more strings; put as many as the scene requires, strictly inside your lane.
+- Each string should be a specific instruction for this turn, not a generic restatement and not a sentence copied from the scene.
+- Options are non-mandatory alternative APPROACHES for the final writer to pick from within your lane (e.g. "lean into silence and a single gesture" vs "give one clipped line"). Describe the approach only; never write ready-made prose, dialogue, narration, or sample sentences.
+- Do not write or continue the scene. Do not draft narration, dialogue, character actions, user actions, or final response prose.
+- Do not include source block names, prompt text, macros, labels, markdown code fences, or explanations.''';
   }
 
   _ControllerScope _controllerScope(String name) {
@@ -104,12 +108,27 @@ Rules:
 
   /// Guidance prepended to the final generator explaining how to consume the
   /// prior controller briefs (do not re-analyze; just write the prose).
+  ///
+  /// Permissive: tells the final writer the controllers have already analyzed
+  /// the scene and not to re-derive it, but does NOT impose reasoning length,
+  /// option-picking limits, or "weave into natural prose" style rules — those
+  /// belong to the user's preset.
   String finalBriefUsageNote() {
-    return 'How to use the Studio controller briefs above: the controllers have ALREADY analyzed the scene, tracked continuity, and decided what should happen next. Do NOT re-analyze the scene, re-derive character motivations, or plan the beat structure in your reasoning — that work is done. Your only job is to WRITE the prose that implements their direction.\n\nTreat Focus and Constraints as binding direction and Avoid as hard prohibitions. Any "Options:" items are non-binding alternative approaches — choose at most one per brief (or none) that best fits the moment, then write it in your own words. Do not list, mention, or copy the options or any brief text in your reply; weave the chosen direction into natural in-scene prose.\n\nKeep your reasoning SHORT — a few sentences at most confirming which option you picked and any immediate sensory/structural choices. Do NOT draft full prose in reasoning, do NOT re-check constraints line-by-line, do NOT restate the briefs. Write the final prose directly.';
+    return 'How to use the Studio controller briefs above: the controllers have ALREADY analyzed the scene, tracked continuity, and decided what should happen next. Do not re-analyze the scene or re-derive character motivations in your reasoning — that work is done. Your job is to write the prose that implements their direction.\n\nTreat Focus and Constraints as direction and Avoid as prohibitions. Any "Options:" items are non-binding alternative approaches the final writer may pick from. Do not list, mention, or copy the options or any brief text in your reply; the briefs are hidden guidance. Write the final prose directly.';
   }
 
   /// Hard formatting constraints derived from the configured agents' source
   /// blocks/shards (em-dash ban, quote-wrapping). Empty when none apply.
+  ///
+  /// Intent-based detection: a rule is injected ONLY when the user's preset
+  /// explicitly BANS the construct (contains a ban verb near the construct
+  /// keyword). Mere presence of an em-dash or the word "quote" in a preset
+  /// does NOT trigger a ban — that would conflict with presets that WANT those
+  /// constructs (e.g. a literary style block that says "use em-dashes for
+  /// interrupted speech", or an example dialogue that happens to contain one).
+  /// The ban must be expressed as a directive ("do not use em dashes", "avoid
+  /// long dashes", "no bare dialogue lines", "wrap dialogue in quotes",
+  /// "оборачивай реплики в кавычки", "без тире", etc.).
   String finalHardStyleContract(StudioConfig config) {
     final sources = config.agents
         .map(
@@ -118,14 +137,23 @@ Rules:
         )
         .join('\n\n');
     final rules = <String>[];
+    // Intent-based em-dash ban: a ban verb near "dash" / "тире".
+    // Matches: "do not use em dashes", "avoid long dashes", "no em dashes",
+    // "never use —", "без тире", "не используй тире", "избегай тире".
     if (RegExp(
-      r'—|длинн.{0,24}тире|long.{0,24}dash|em dash',
+      r"(?:do not|don't|never|avoid|no|ban|без|не\s+используй|избегай|запрет).{0,30}(?:em\s*dash|long\s*dash|тире|—)",
       caseSensitive: false,
     ).hasMatch(sources)) {
       rules.add('- Do not use em dashes / long dashes: avoid "—".');
     }
+    // Intent-based quote-wrapping directive: a directive verb near
+    // "quote" / "кавычк". Matches: "wrap dialogue in quotes",
+    // "use quotation marks", "оборачивай реплики в кавычки",
+    // "прямая речь в кавычках". Does NOT match mere mentions of the word
+    // "quote" in non-directive contexts (e.g. "do NOT use quotes", "examples
+    // use asterisks not quotes").
     if (RegExp(
-      r'кавыч|quote|quotation|direct speech|прям.{0,24}реч',
+      r'(?:wrap|use|оборачивай|используй|прямая\s+речь.{0,15}в\s+кавычках|dialogue.{0,15}(?:in|with)\s+quotation|in\s+quotation\s+marks).{0,30}(?:quot|кавыч)',
       caseSensitive: false,
     ).hasMatch(sources)) {
       rules.add(

@@ -143,7 +143,9 @@ class StudioBlockClassifier {
       'lumia',
       'ghost in the machine',
       'meta-weaver',
+      'meta weaver',
       'ooc interface',
+      'ooc policy',
       'weaver',
       'diagnostic',
     ])) {
