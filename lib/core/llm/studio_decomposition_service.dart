@@ -488,8 +488,11 @@ class StudioDecompositionService {
   /// paragraph target, "N-M words", "minimum N words", "maximum N words",
   /// "Response length: N-M words", "Always write N-M words".
   static final _lengthInstructionRegex = RegExp(
-    r'(?imu)^(?:.*(?:word\s+(?:budget|count|length|target|limit)|response\s+length|always\s+write|length\s*:|paragraph\s+(?:budget|count|target|limit))\s*:?\s*.*)$|'
-    r'(?imu).{0,40}(?:\d+-\d+\s*words?|\d+\s*words?\s*(?:min|max|minimum|maximum|target|hard|soft)).{0,40}',
+    r'^(?:.*(?:word\s+(?:budget|count|length|target|limit)|response\s+length|always\s+write|length\s*:|paragraph\s+(?:budget|count|target|limit))\s*:?\s*.*)$|'
+    r'.{0,40}(?:\d+-\d+\s*words?|\d+\s*words?\s*(?:min|max|minimum|maximum|target|hard|soft)).{0,40}',
+    caseSensitive: false,
+    multiLine: true,
+    unicode: true,
   );
 
   /// Extract a length hint from dropped CoT/reasoning blocks when no enabled
