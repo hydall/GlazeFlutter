@@ -107,7 +107,12 @@ class AgentRunner {
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
-    final resolved = await resolveAgentConfig(agent, apiConfig, sessionId);
+    final resolved = await resolveAgentConfig(
+      agent,
+      apiConfig,
+      sessionId,
+      isFinalResponse: isFinalResponse,
+    );
     if (resolved.endpoint.isEmpty || resolved.model.isEmpty) {
       throw Exception('Studio agent "${agent.name}" API is not configured');
     }
@@ -124,7 +129,13 @@ class AgentRunner {
             requestReasoning: false,
             omitReasoning: true,
           )
-        : resolved;
+        : (!isFinalResponse &&
+                _ref.read(pipelineSettingsProvider).studioTrackerDisableReasoning)
+            ? resolved.copyWithReasoning(
+                requestReasoning: false,
+                omitReasoning: true,
+              )
+            : resolved;
     return _streamRunner.run(
       agent: agent,
       messages: messages,
@@ -148,11 +159,16 @@ class AgentRunner {
   ///   model fields with the *current* chat API's key.
   /// - otherwise → use the chat session's configured run API (or the active
   ///   API), with [StudioAgent.modelOverride] on top.
+  ///
+  /// For non-final agents, when [PipelineSettings.studioTrackerModelOverride]
+  /// is non-empty it wins over the per-agent `modelOverride` so the user can
+  /// re-target all 7 trackers at once from the Studio menu.
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,
     ApiConfig current,
-    String sessionId,
-  ) async {
+    String sessionId, {
+    bool isFinalResponse = false,
+  }) async {
     await _ref.read(apiListProvider.future);
     final apiConfigs =
         _ref.read(apiListProvider).value ?? const <ApiConfig>[];
@@ -161,6 +177,17 @@ class AgentRunner {
       apiConfigs: apiConfigs,
       activeConfig: _ref.read(activeApiConfigProvider),
     );
+    if (!isFinalResponse) {
+      final trackerModel =
+          _ref.read(pipelineSettingsProvider).studioTrackerModelOverride;
+      if (trackerModel.isNotEmpty) {
+        return resolver.resolveAgentConfig(
+          agent.copyWith(modelOverride: trackerModel, modelSource: 'current'),
+          current,
+          runApiConfigId,
+        );
+      }
+    }
     return resolver.resolveAgentConfig(agent, current, runApiConfigId);
   }
 
@@ -195,34 +222,44 @@ class AgentRunner {
     return fallback;
   }
 
-  /// Max tokens for the final generator. Resolution order:
-  /// 1. [PipelineSettings.studioFinalMaxTokens] (>0) — global user setting
-  ///    from the Studio menu. Useful for reasoning models (e.g. Gemini) that
-  ///    burn the budget on thinking and leave too little for the reply.
-  /// 2. [StudioAgent.maxTokens] — per-agent value set at Studio build time
-  ///    (default 8000 for the final generator).
-  /// Returns null when the global override is 0 and the caller should use
-  /// the agent's own value.
+  /// Max tokens override. Two tiers:
+  /// - Final generator: [PipelineSettings.studioFinalMaxTokens] (>0)
+  ///   overrides the per-agent default (8000).
+  /// - Trackers: [PipelineSettings.studioTrackerMaxTokens] (>0) overrides the
+  ///   per-agent default (1600). Lets the user tighten/loosen the compact JSON
+  ///   brief budget for all 7 pre-gen agents at once from the Studio menu.
+  /// Returns null when the relevant global override is 0 and the caller should
+  /// use the agent's own value.
   int? effectiveMaxTokens(StudioAgent agent, bool isFinalResponse) {
-    if (!isFinalResponse) return null;
-    final global = _ref.read(pipelineSettingsProvider).studioFinalMaxTokens;
-    if (global > 0) return global;
+    if (isFinalResponse) {
+      final global = _ref.read(pipelineSettingsProvider).studioFinalMaxTokens;
+      if (global > 0) return global;
+      return null;
+    }
+    final trackerGlobal =
+        _ref.read(pipelineSettingsProvider).studioTrackerMaxTokens;
+    if (trackerGlobal > 0) return trackerGlobal;
     return null;
   }
 
-  /// Temperature for the final generator. Resolution order:
-  /// 1. [PipelineSettings.studioFinalTemperature] (>= 0) — global user
-  ///    setting from the Studio menu. Lets the user raise/lower the final
-  ///    responder's creativity without rebuilding the Studio agents.
-  /// 2. [StudioAgent.temperature] — per-agent value set at Studio build
-  ///    time (default 0.8 for the final generator).
-  /// Returns null when the global override is negative and the caller
-  /// should use the agent's own value.
+  /// Temperature override. Two tiers:
+  /// - Final generator: [PipelineSettings.studioFinalTemperature] (>= 0)
+  ///   overrides the per-agent default (0.8).
+  /// - Trackers: [PipelineSettings.studioTrackerTemperature] (>= 0) overrides
+  ///   the per-agent default (0.3). Lets the user tune the creativity of all
+  ///   7 pre-gen agents at once from the Studio menu.
+  /// Returns null when the relevant global override is negative and the
+  /// caller should use the agent's own value.
   double? effectiveTemperature(StudioAgent agent, bool isFinalResponse) {
-    if (!isFinalResponse) return null;
-    final global =
-        _ref.read(pipelineSettingsProvider).studioFinalTemperature;
-    if (global >= 0) return global;
+    if (isFinalResponse) {
+      final global =
+          _ref.read(pipelineSettingsProvider).studioFinalTemperature;
+      if (global >= 0) return global;
+      return null;
+    }
+    final trackerGlobal =
+        _ref.read(pipelineSettingsProvider).studioTrackerTemperature;
+    if (trackerGlobal >= 0) return trackerGlobal;
     return null;
   }
 
