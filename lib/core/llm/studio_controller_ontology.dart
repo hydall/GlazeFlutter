@@ -1,4 +1,5 @@
 import '../models/studio_config.dart';
+import 'beauty_shard_instruction.dart';
 
 /// One hard-coded Studio controller slot. The decomposition engine assigns
 /// preset blocks to these stable slots and synthesizes one agent per slot.
@@ -80,7 +81,10 @@ class StudioControllerOntology {
       fallbackPrompt:
           'Enforce user autonomy and character authenticity. Never write the user\'s dialogue, actions, thoughts, feelings, intentions, or decisions. Characters act only from established knowledge, psychology, history, physical limits, and current pressure. Produce constraints only, not prose.',
       refreshPolicy: 'turn',
-      invalidationSignals: ['active_cast_changed', 'relationship_state_changed'],
+      invalidationSignals: [
+        'active_cast_changed',
+        'relationship_state_changed',
+      ],
       temperature: 0.3,
       maxTokens: 1400,
       timeoutMs: 60000,
@@ -175,11 +179,28 @@ class StudioControllerOntology {
       fallbackPrompt:
           'You are the meta-weaver / OOC interface. Count the assistant messages in the history you see. Read the period rule, persona name, voice, length, format, and wrapper from your assigned meta block (e.g. period "Every 4 assistant responses", voice "warm, maternal", wrapper "<lumiaooc>...</lumiaooc>", length "1-3 sentences"). The persona name and voice come entirely from the block — do NOT assume any specific name or voice. If the count since the last meta note matches the period, output `meta_periodic_note: due` and relay the block\'s persona/voice/length/wrapper instructions so the Main Responder writes the note correctly. If the user explicitly addressed the meta-persona in OOC brackets (e.g. `((<persona>: ...))`, `[OOC: ...]`), output `meta_ooc: due` with the detected topic. Otherwise output `meta: silent`. Do NOT write the actual OOC reply — only the brief telling the Main Responder whether to emit one.',
       refreshPolicy: 'turn',
-      invalidationSignals: ['last_user_message_changed', 'assistant_turn_count_changed'],
+      invalidationSignals: [
+        'last_user_message_changed',
+        'assistant_turn_count_changed',
+      ],
       temperature: 0.2,
       maxTokens: 1200,
       timeoutMs: 60000,
       contextSize: 15,
+    ),
+    StudioControllerSpec(
+      id: 'beauty',
+      name: 'Beauty Shard',
+      purpose:
+          'Track reusable visual styling state only: HTML/CSS palette, background, text/font colors, speaker colors, typography, gradients, and art-style labels. Skip concrete HTML widgets, trackers, infoblocks, and image-generation instructions.',
+      outputContract:
+          'At chat time, output a compact beauty-state brief only: current reusable style variables, constraints for preserving/updating them, and items to avoid. Do NOT write scene prose. Do NOT handle concrete UI artifacts (phone screens, taxi menus, terminals), trackers, infoblocks, topbars, or image-gen blocks.',
+      fallbackPrompt: beautyShardTrackerFallbackPrompt,
+      refreshPolicy: 'turn',
+      invalidationSignals: ['last_user_message_changed', 'style_state_changed'],
+      temperature: 0.2,
+      maxTokens: 1200,
+      timeoutMs: 60000,
     ),
     StudioControllerSpec(
       id: 'final',

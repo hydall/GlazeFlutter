@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -11,6 +11,7 @@ import '../models/studio_config.dart';
 import '../utils/time_helpers.dart';
 import 'studio_block_classifier.dart';
 import 'studio_block_expander.dart';
+import 'studio_beauty_extractor.dart';
 import 'studio_block_router.dart';
 import 'studio_build_llm_client.dart';
 import 'studio_controller_ontology.dart';
@@ -32,16 +33,22 @@ import 'studio_shard_synthesizer.dart';
 class StudioDecompositionService {
   final StudioBuildLlmClient _buildLlm;
   final StudioShardSynthesizer _synthesizer;
+  final StudioBeautyExtractor _beautyExtractor;
 
   factory StudioDecompositionService(Ref ref) {
     final buildLlm = StudioBuildLlmClient(ref);
     return StudioDecompositionService._(
       buildLlm,
       StudioShardSynthesizer(buildLlm, _logStatic),
+      StudioBeautyExtractor(buildLlm.call),
     );
   }
 
-  StudioDecompositionService._(this._buildLlm, this._synthesizer);
+  StudioDecompositionService._(
+    this._buildLlm,
+    this._synthesizer,
+    this._beautyExtractor,
+  );
 
   static void _logStatic(String message) {
     debugPrint('[StudioBuild] $message');
@@ -133,21 +140,55 @@ class StudioDecompositionService {
       'model=${apiConfig?.model ?? '<active>'}',
     );
 
+    final beautyExtraction = await _beautyExtractor.extract(
+      blocks: enabledBlocksWithLength,
+      apiConfig: apiConfig,
+      cancelToken: cancelToken,
+    );
+    final beautyBlockIds = beautyExtraction.beautyBlockIds;
+    final beautyBlocks = enabledBlocksWithLength
+        .where((b) => beautyBlockIds.contains(b.id))
+        .toList();
+    final routableBlocks = enabledBlocksWithLength
+        .where((b) => !beautyBlockIds.contains(b.id))
+        .toList();
+    if (beautyBlocks.isNotEmpty ||
+        beautyExtraction.syntheticContract.isNotEmpty) {
+      _log(
+        'beauty pre-pass: selected ${beautyBlocks.length} reusable style block(s); '
+        'routing remaining ${routableBlocks.length}',
+      );
+    }
+
     // §11: LLM router classifies block -> agent ONCE at build-time. Falls back
     // to deterministic keyword bucketing if the LLM is unavailable/refuses, so
     // Studio always builds. Skipped only when there is no build model.
     final routingMapResult = await _routeBlocks(
-      blocks: enabledBlocksWithLength,
+      blocks: routableBlocks,
       apiConfig: apiConfig,
       cancelToken: cancelToken,
     );
     _log(
       'routing: ${routingMapResult.fromLlm ? 'LLM' : 'keyword-fallback'} '
-      '(${routingMapResult.blockToBucket.length}/${enabledBlocksWithLength.length} mapped)',
+      '(${routingMapResult.blockToBucket.length}/${routableBlocks.length} mapped)',
     );
 
     final now = currentTimestampSeconds();
-    final assignments = _assignBlocks(enabledBlocksWithLength, routingMapResult);
+    final assignments = _assignBlocks(routableBlocks, routingMapResult);
+    if (beautyBlocks.isNotEmpty ||
+        beautyExtraction.syntheticContract.isNotEmpty) {
+      assignments['beauty'] = [
+        if (beautyExtraction.syntheticContract.isNotEmpty)
+          PresetBlock(
+            id: '_beauty_extractor_contract',
+            name: 'Beauty extractor normalized contract',
+            role: 'system',
+            content: beautyExtraction.syntheticContract,
+          ),
+        ...beautyBlocks,
+        ...?assignments['beauty'],
+      ];
+    }
     // Meta-weaver detection (plan §Part A/B): if any block routed to the
     // `meta` bucket is a meta-weaver/OOC block, the Meta-Weaver gets a counting
     // duty suffix and the Main Responder gets a compact meta output contract.
@@ -237,12 +278,10 @@ class StudioDecompositionService {
     String routingMode = 'verbatim',
     CancelToken? cancelToken,
   }) async {
-    final allEnabled = preset.blocks
-        .where((b) => b.enabled)
-        .toList();
-    final expandedBlocks = expandBlocksForRouting(allEnabled)
-        .where((b) => !isReasoningBlock(b))
-        .toList();
+    final allEnabled = preset.blocks.where((b) => b.enabled).toList();
+    final expandedBlocks = expandBlocksForRouting(
+      allEnabled,
+    ).where((b) => !isReasoningBlock(b)).toList();
     final spec = StudioControllerOntology.specForAgent(agent);
     // Single-agent regen reuses deterministic bucketing (no LLM router call);
     // the build-time LLM map only matters for a full decompose().
@@ -264,7 +303,9 @@ class StudioDecompositionService {
         sourceBlockNames: _synthesizer.sourceBlockNames(blocks),
         refreshPolicy: spec.refreshPolicy,
         invalidationSignals: spec.invalidationSignals,
-        contextSize: spec.contextSize > 0 ? spec.contextSize : agent.contextSize,
+        contextSize: spec.contextSize > 0
+            ? spec.contextSize
+            : agent.contextSize,
       ),
       isFinal: spec.isFinal,
     );
@@ -335,7 +376,10 @@ class StudioDecompositionService {
     BlockRoutingMap routing,
   ) {
     final validIds = StudioControllerOntology.specs.map((s) => s.id).toSet();
-    final map = {for (final spec in StudioControllerOntology.specs) spec.id: <PresetBlock>[]};
+    final map = {
+      for (final spec in StudioControllerOntology.specs)
+        spec.id: <PresetBlock>[],
+    };
     for (final block in blocks) {
       // Honor an explicit LLM drop decision (reasoning/CoT template).
       if (routing.isDropped(block.id)) continue;
@@ -434,8 +478,7 @@ class StudioDecompositionService {
     String prompt, {
     ApiConfig? apiConfig,
     CancelToken? cancelToken,
-  }) =>
-      _buildLlm.call(prompt, apiConfig: apiConfig, cancelToken: cancelToken);
+  }) => _buildLlm.call(prompt, apiConfig: apiConfig, cancelToken: cancelToken);
 
   void _log(String message) {
     debugPrint('[StudioBuild] $message');
@@ -446,7 +489,7 @@ class StudioDecompositionService {
   /// "Response length: N-M words", "Always write N-M words".
   static final _lengthInstructionRegex = RegExp(
     r'(?imu)^(?:.*(?:word\s+(?:budget|count|length|target|limit)|response\s+length|always\s+write|length\s*:|paragraph\s+(?:budget|count|target|limit))\s*:?\s*.*)$|'
-        r'(?imu).{0,40}(?:\d+-\d+\s*words?|\d+\s*words?\s*(?:min|max|minimum|maximum|target|hard|soft)).{0,40}',
+    r'(?imu).{0,40}(?:\d+-\d+\s*words?|\d+\s*words?\s*(?:min|max|minimum|maximum|target|hard|soft)).{0,40}',
   );
 
   /// Extract a length hint from dropped CoT/reasoning blocks when no enabled
@@ -483,4 +526,3 @@ class StudioDecompositionService {
     return null;
   }
 }
-

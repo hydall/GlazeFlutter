@@ -1790,12 +1790,6 @@
     "post_building_consolidation_timeout": "Таймаут консолидации (мс)",
     "post_building_consolidation_timeout_desc": "Сколько ждать LLM консолидации.",
     "post_building_consolidation_not_functional": "Пока не работает — сервис консолидации реализован, но не подключён к post-turn пайплайну. Настройки сохраняются для будущего включения.",
-    "post_building_beauty_shard_title": "Beauty Shard",
-    "post_building_beauty_shard_subtitle": "Запоминание стилей между ходами (цвета, шрифты, арт-стили)",
-    "post_building_beauty_shard_enable": "Включить инструкцию beauty-shard",
-    "post_building_beauty_shard_enable_desc": "Добавляет системную инструкцию, которая говорит LLM читать текущее состояние стилей и дописывать маркер <glaze_beauty_state> в конце каждого ответа. Маркер автоматически вырезается из чата; пользователь его не видит. Состояние сохраняется в переменных сессии и переиспользуется на следующем ходу.",
-    "post_building_beauty_shard_help_title": "Beauty Shard — как это работает",
-    "post_building_beauty_shard_help_body": "Когда включено, в каждый промпт добавляется системная инструкция. Она говорит LLM:\n\n1. Читать текущее состояние стилей из {{getvar::glaze_beauty_state}}.\n2. Поддерживать цвета персонажей, палитру, шрифт, фон, арт-стиль между ходами.\n3. В КОНЦЕ каждого ответа дописывать маркер <glaze_beauty_state>{...}</glaze_beauty_state> с обновлённым JSON-состоянием.\n\nМаркер вырезается из чат-баббла и парсится в переменную сессии 'glaze_beauty_state'. На следующем ходу {{getvar::glaze_beauty_state}} разрешается в обновлённое состояние.\n\nПример JSON-состояния, которое пишет LLM:\n{\"speakers\":{\"Alice\":\"#abc123\"},\"palette\":\"dark\",\"font\":\"sans-serif\",\"bg\":\"#1a1a1a\",\"art_style\":\"street_art_anime\",\"reserved\":{\"lumia_ooc\":\"#9370DB\"}}\n\nСостояние липкое — битый JSON не сбрасывает предыдущее. Пользователь никогда не видит маркер в чат-баббле. Работает и для Studio, и для обычной генерации.\n\nДля инфоблоков, иллюстраций, генерации картинок и topbar — используйте панель Extensions. Beauty shard запоминает только состояние стилей.",
     "count_chats": {
         "one": "чат",
         "few": "чата",

@@ -1,13 +1,32 @@
-/// Hardcoded beauty-shard instruction injected into the system role when
-/// `PipelineSettings.beautyShardEnabled` is true. Tells the LLM to read the
-/// current styling state from `{{getvar::glaze_beauty_state}}` (resolved at
-/// prompt-build time) and append a `<glaze_beauty_state>{...}</glaze_beauty_state>`
-/// marker at the END of every response.
+/// Build/runtime prompt for the Studio Beauty Shard tracker.
 ///
-/// The post-gen parser (`beauty_state_parser.dart`) strips the marker and
-/// persists the JSON to `sessionVars['glaze_beauty_state']`, so the next
-/// turn's `{{getvar::glaze_beauty_state}}` resolves to the updated state.
-const String beautyShardInstruction = '''
+/// The tracker owns reusable presentation settings only. It should extract
+/// durable palette/font/color rules from user presets, but skip concrete
+/// diegetic HTML widgets (phone screens, taxi menus, terminals), trackers,
+/// infoblocks, topbars, and image-generation blocks.
+const String beautyShardTrackerFallbackPrompt = '''
+You are the Beauty Shard, a Studio tracker for reusable visual styling state.
+
+Current persistent styling state:
+
+{{getvar::glaze_beauty_state}}
+
+Your lane:
+- Reusable HTML/CSS presentation rules: palette, background color, text color, font family, border/radius/shadow language, dialogue colors, thought colors, gradients, typography, glow/mark/highlight styles, and art-style labels that should remain consistent across turns.
+- Speaker/thinker color assignment rules, including "reuse colors", reserved colors, accessibility/contrast constraints, and preset palette variables.
+- State update guidance: what keys should be preserved or changed in the final `<glaze_beauty_state>` JSON.
+
+Not your lane — do NOT route or summarize these as Beauty settings:
+- Concrete diegetic HTML artifacts: phone screens, taxi-call menus, terminals, HUDs, scrolls, cards, maps, buttons, carousels, page flips, scene objects, or one-off widgets.
+- Trackers, stats panels, infoblocks, general_stats, secondary_infoblock, topbar/infoboard instructions, hidden ledgers, pregnancy/cycle stats, relationship metrics.
+- Image generation instructions, [IMG:GEN], data-iig-instruction, illustration/comics/image-prompt blocks.
+
+At chat time, output only a compact Studio brief in the standard Focus / Constraints / Avoid / Options shape. Do not write scene prose. Do not append the `<glaze_beauty_state>` marker yourself — the Main Responder handles persistence.''';
+
+/// Final-generator contract used when an enabled Studio Beauty Shard is present.
+/// The final responder emits the machine-readable marker; the post-gen parser
+/// strips it from the visible reply and persists the JSON to session vars.
+const String beautyShardFinalMarkerContract = '''
 ## Persistent Styling State
 
 You maintain a styling state across turns so colors, fonts, and visual choices stay consistent. The current state is:

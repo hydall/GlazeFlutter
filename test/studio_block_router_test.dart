@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glaze_flutter/core/llm/studio_block_classifier.dart';
 import 'package:glaze_flutter/core/llm/studio_block_router.dart';
 import 'package:glaze_flutter/core/llm/studio_decomposition_service.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
@@ -20,7 +21,9 @@ const _buckets = [
 
 void main() {
   group('StudioBlockRouter.parse', () {
-    final router = StudioBlockRouter((p, {apiConfig, cancelToken}) async => null);
+    final router = StudioBlockRouter(
+      (p, {apiConfig, cancelToken}) async => null,
+    );
     final validBuckets = {'continuity', 'agency', 'final', kRouterDropBucketId};
     final validBlocks = {'b1', 'b2', 'b3'};
 
@@ -57,7 +60,11 @@ void main() {
     });
 
     test('returns empty on malformed JSON', () {
-      final map = router.parseForTest('not json at all', validBuckets, validBlocks);
+      final map = router.parseForTest(
+        'not json at all',
+        validBuckets,
+        validBlocks,
+      );
       expect(map, isEmpty);
     });
 
@@ -80,6 +87,52 @@ void main() {
           '{"block":"b2","bucket":"final"}]}';
       final map = router.parseForTest(json, validBuckets, validBlocks);
       expect(map, {'b1': kRouterDropBucketId, 'b2': 'final'});
+    });
+  });
+
+  group('StudioBlockClassifier beauty routing', () {
+    test('routes reusable color/font settings to Beauty Shard', () {
+      final block = _block(
+        id: 'colored_dialogue',
+        name: 'Colored Character Dialogue',
+        content:
+            'Wrap dialogue in <font color=#abc123> tags. Reuse colors for the same speaker. Palette: dark. Font-family: sans-serif.',
+      );
+
+      expect(StudioBlockClassifier.bucketForBlock(block), 'beauty');
+    });
+
+    test('does not route concrete HTML widgets to Beauty Shard', () {
+      final block = _block(
+        id: 'phone_ui',
+        name: 'HTML Phone Screen',
+        content:
+            'Create a concrete phone screen taxi-call menu with checkbox hack, buttons, and carousel UI.',
+      );
+
+      expect(StudioBlockClassifier.bucketForBlock(block), isNot('beauty'));
+    });
+
+    test('does not route image generation blocks to Beauty Shard', () {
+      final block = _block(
+        id: 'img_gen',
+        name: 'IMG:GEN Output',
+        content:
+            'Append visual HTML card with <img data-iig-instruction={} src="[IMG:GEN]">.',
+      );
+
+      expect(StudioBlockClassifier.bucketForBlock(block), isNot('beauty'));
+    });
+
+    test('does not steal Lumia/OOC block just because it has a color', () {
+      final block = _block(
+        id: 'lumia_ooc',
+        name: 'Lumia OOCs',
+        content:
+            'Every 4 weaves append <lumiaooc><font color="#9370DB">commentary</font></lumiaooc>.',
+      );
+
+      expect(StudioBlockClassifier.bucketForBlock(block), 'meta');
     });
   });
 
@@ -128,7 +181,9 @@ void main() {
     });
 
     test('falls back (empty) when classifier returns empty string', () async {
-      final router = StudioBlockRouter((p, {apiConfig, cancelToken}) async => '');
+      final router = StudioBlockRouter(
+        (p, {apiConfig, cancelToken}) async => '',
+      );
       final result = await router.route(
         blocks: [_block(id: 'b1')],
         buckets: _buckets,
@@ -161,7 +216,9 @@ void main() {
     });
 
     test('prompt lists every bucket and block', () async {
-      final router = StudioBlockRouter((p, {apiConfig, cancelToken}) async => null);
+      final router = StudioBlockRouter(
+        (p, {apiConfig, cancelToken}) async => null,
+      );
       final prompt = router.buildPromptForTest(
         blocks: [
           _block(id: 'b1', name: 'CoT Gemini', content: 'think step by step'),
@@ -383,7 +440,8 @@ void main() {
         id: 'length_medium',
         name: '📏 LENGTH: Medium ~ Средний ответ',
         role: 'system',
-        content: '{{setvar::length_words_min::800}}{{trim}}\n'
+        content:
+            '{{setvar::length_words_min::800}}{{trim}}\n'
             '{{setvar::length_words_max::900}}{{trim}}\n'
             '{{setvar::length_mode::medium}}{{trim}}\n'
             '{{setvar::length_target::800-900 Russian words, 6-8 paragraphs}}{{trim}}\n'
@@ -407,7 +465,8 @@ void main() {
         id: 'ban_rus',
         name: '❌Ban Rus',
         role: 'system',
-        content: '{{setvar::ban_rules::\n'
+        content:
+            '{{setvar::ban_rules::\n'
             'Forbidden words:\n- озон\n- мускус\n}}{{trim}}\n\n'
             '<ban_rules>\n{{getvar::ban_rules}}\n</ban_rules>',
       );
@@ -428,7 +487,8 @@ void main() {
         id: 'core_vars',
         name: '✨ Core Variables',
         role: 'system',
-        content: '{{setvar::agency_rules::\n'
+        content:
+            '{{setvar::agency_rules::\n'
             '- Never write for {{user}}.\n'
             '- Characters act from established knowledge.}}{{trim}}',
       );
@@ -452,30 +512,32 @@ void main() {
       expect(result[1].content, isNot(contains('{{getvar')));
     });
 
-    test('drops blocks that are empty after expansion (no setvar, no text)', () {
-      final empty = PresetBlock(
-        id: 'empty_block',
-        name: 'Empty',
-        role: 'system',
-        content: '{{trim}}',
-      );
-      final result = StudioDecompositionService.expandBlocksForRouting([
-        empty,
-      ]);
-      expect(result, isEmpty);
-    });
+    test(
+      'drops blocks that are empty after expansion (no setvar, no text)',
+      () {
+        final empty = PresetBlock(
+          id: 'empty_block',
+          name: 'Empty',
+          role: 'system',
+          content: '{{trim}}',
+        );
+        final result = StudioDecompositionService.expandBlocksForRouting([
+          empty,
+        ]);
+        expect(result, isEmpty);
+      },
+    );
 
     test('leaves non-variable macros untouched for chat-time expansion', () {
       final block = PresetBlock(
         id: 'narrative',
         name: 'Narrative',
         role: 'system',
-        content: '{{char}} looks at {{user}} and says: hello.\n'
+        content:
+            '{{char}} looks at {{user}} and says: hello.\n'
             '{{setvar::pov_mode::third}}{{trim}}',
       );
-      final result = StudioDecompositionService.expandBlocksForRouting([
-        block,
-      ]);
+      final result = StudioDecompositionService.expandBlocksForRouting([block]);
       // {{char}} and {{user}} should remain as literals.
       expect(result.first.content, contains('{{char}}'));
       expect(result.first.content, contains('{{user}}'));
@@ -488,7 +550,8 @@ void main() {
         id: 'core_vars',
         name: '✨ Core Variables',
         role: 'system',
-        content: '{{setvar::ground_truth_mode::strict}}{{trim}}\n'
+        content:
+            '{{setvar::ground_truth_mode::strict}}{{trim}}\n'
             '{{setvar::ground_truth_rules::\n'
             '- Explicit user facts override drama.}}{{trim}}\n'
             '{{setvar::agency_mode::enforce}}{{trim}}\n'

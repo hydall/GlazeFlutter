@@ -1773,12 +1773,6 @@
     "post_building_consolidation_timeout": "Consolidation timeout (ms)",
     "post_building_consolidation_timeout_desc": "How long to wait for the consolidation LLM.",
     "post_building_consolidation_not_functional": "Not yet functional — consolidation service is implemented but not wired into the post-turn pipeline. Settings are preserved for when it ships.",
-    "post_building_beauty_shard_title": "Beauty Shard",
-    "post_building_beauty_shard_subtitle": "Persistent styling state across turns (colors, fonts, art styles)",
-    "post_building_beauty_shard_enable": "Inject beauty-shard instruction",
-    "post_building_beauty_shard_enable_desc": "Adds a system instruction telling the LLM to read the current styling state and append a <glaze_beauty_state> marker at the end of every response. The marker is parsed and stripped automatically; the user never sees it. State persists in session variables and is reused on the next turn.",
-    "post_building_beauty_shard_help_title": "Beauty Shard — how it works",
-    "post_building_beauty_shard_help_body": "When enabled, a hardcoded system instruction is injected into every prompt. It tells the LLM:\n\n1. Read the current styling state from {{getvar::glaze_beauty_state}}.\n2. Maintain per-speaker colors, palette, font, background, art style across turns.\n3. At the END of every response, emit a <glaze_beauty_state>{...}</glaze_beauty_state> marker with the updated JSON state.\n\nThe marker is stripped from the chat bubble and parsed into the session's 'glaze_beauty_state' variable. On the next turn, {{getvar::glaze_beauty_state}} resolves to the updated state.\n\nSample state JSON the LLM emits:\n{\"speakers\":{\"Alice\":\"#abc123\"},\"palette\":\"dark\",\"font\":\"sans-serif\",\"bg\":\"#1a1a1a\",\"art_style\":\"street_art_anime\",\"reserved\":{\"lumia_ooc\":\"#9370DB\"}}\n\nState is sticky — malformed JSON leaves the previous state intact. The user never sees the marker in the chat bubble. Works for both Studio and non-Studio generation paths.\n\nFor infoblocks, illustration panels, image generation, and topbar — use the Extensions panel. The beauty shard only remembers styling state.",
     "count_chats": {
         "one": "chat",
         "other": "chats"

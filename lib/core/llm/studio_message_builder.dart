@@ -102,7 +102,7 @@ class StudioMessageBuilder {
                 ..writeln()
                 ..writeln(styleContract);
             }
-            if (promptPayload.beautyShardEnabled) {
+            if (_hasEnabledBeautyShard(config)) {
               final macroCtx = MacroContext(
                 charName: promptPayload.character.name,
                 userName: promptPayload.persona?.name ?? 'User',
@@ -113,7 +113,7 @@ class StudioMessageBuilder {
                 sessionId: promptPayload.sessionId ?? '',
               );
               final expanded = replaceMacros(
-                beautyShardInstruction,
+                beautyShardFinalMarkerContract,
                 macroCtx,
               ).text;
               control
@@ -247,10 +247,11 @@ class StudioMessageBuilder {
       finalPreset: false,
       overrides: config.studioPresetOverrides,
     );
-    final blocks = studioPreset.blocks
-        .where((b) => b.enabled && b.kind == 'agent_instruction')
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final blocks =
+        studioPreset.blocks
+            .where((b) => b.enabled && b.kind == 'agent_instruction')
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
     final buf = StringBuffer();
     final shardParts = <String>[];
     for (final shard in agent.promptShard) {
@@ -298,13 +299,14 @@ class StudioMessageBuilder {
       finalPreset: false,
       overrides: config.studioPresetOverrides,
     );
-    final blocks = studioPreset.blocks
-        .where((b) => b.enabled && b.kind != 'agent_instruction')
-        .where((b) => b.kind != 'static_context')
-        .where((b) => b.kind != 'chat_history')
-        .where((b) => b.kind != 'dynamic_context')
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final blocks =
+        studioPreset.blocks
+            .where((b) => b.enabled && b.kind != 'agent_instruction')
+            .where((b) => b.kind != 'static_context')
+            .where((b) => b.kind != 'chat_history')
+            .where((b) => b.kind != 'dynamic_context')
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
     final buf = StringBuffer();
     for (final block in blocks) {
       final promptMessages = context.messagesForKind(block.kind);
@@ -365,18 +367,22 @@ class StudioMessageBuilder {
     final normalized = contextSize.clamp(1, maxTrackerContextSize);
     if (history.length <= normalized) {
       return history
-          .map((m) => PromptMessage(
-                role: m.role,
-                content: truncateAgentText(stripHtmlTags(m.content), 2000),
-              ))
+          .map(
+            (m) => PromptMessage(
+              role: m.role,
+              content: truncateAgentText(stripHtmlTags(m.content), 2000),
+            ),
+          )
           .toList();
     }
     final trimmed = history.sublist(history.length - normalized);
     return trimmed
-        .map((m) => PromptMessage(
-              role: m.role,
-              content: truncateAgentText(stripHtmlTags(m.content), 2000),
-            ))
+        .map(
+          (m) => PromptMessage(
+            role: m.role,
+            content: truncateAgentText(stripHtmlTags(m.content), 2000),
+          ),
+        )
         .toList();
   }
 
@@ -384,7 +390,8 @@ class StudioMessageBuilder {
   /// [maxChars], keeps the head (40%) + a trim marker + the tail (60%),
   /// preserving both the beginning and the end of the message. Character
   /// counting uses `String.runes` for Unicode/emoji safety.
-  static const _trimMarker = '\n\n[Trimmed to keep this agent request compact]\n\n';
+  static const _trimMarker =
+      '\n\n[Trimmed to keep this agent request compact]\n\n';
 
   String truncateAgentText(String text, int maxChars) {
     if (text.length <= maxChars) return text;
@@ -476,6 +483,19 @@ class StudioMessageBuilder {
   /// roles — those ARE conversation turns, not instructions.
   String _normalizeInstructionRole(String role) {
     return 'system';
+  }
+
+  bool _hasEnabledBeautyShard(StudioConfig config) {
+    return config.agents.any((agent) {
+      if (!agent.enabled) return false;
+      final id = agent.id.toLowerCase();
+      final name = agent.name.toLowerCase();
+      final text = '$id\n$name';
+      return id == 'beauty' ||
+          text.contains('_beauty_') ||
+          text.contains('beauty shard') ||
+          name == 'beauty';
+    });
   }
 }
 

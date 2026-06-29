@@ -21,7 +21,6 @@ import 'memory_diagnostics.dart';
 import 'memory_excerpt_selector.dart';
 import 'memory_formatting.dart';
 import 'memory_selector.dart';
-import 'beauty_shard_instruction.dart';
 
 const _deferredMemoryPlaceholder = '[[GLAZE_DEFERRED_MEMORY_CONTEXT]]';
 
@@ -108,14 +107,6 @@ class PromptPayload {
   final String? arcContent;
   final String? entitiesContent;
 
-  /// True when the user enabled the Beauty Shard toggle in the Post-Building
-  /// menu. When set, the prompt builder injects a system-role instruction
-  /// that tells the LLM to read `{{getvar::glaze_beauty_state}}` and append a
-  /// `<glaze_beauty_state>{...}</glaze_beauty_state>` marker at the end of
-  /// its response. The post-gen parser (`beauty_state_parser.dart`) strips
-  /// the marker and persists the JSON to `sessionVars`.
-  final bool beautyShardEnabled;
-
   /// Lossless backstop for the lossy MemoryBook compression — top-K raw
   /// chat-message chunks semantically closest to the current user message,
   /// returned by [MessageRecallService]. Injected into the prompt as a
@@ -172,7 +163,6 @@ class PromptPayload {
     this.chunkFirstTopChunks = 1,
     this.arcContent,
     this.entitiesContent,
-    this.beautyShardEnabled = false,
     this.recalledMessagesContent,
     this.memoryInjectionFingerprint = '',
   });
@@ -960,10 +950,6 @@ PromptResult _assembleMessages({
     );
   }
 
-  if (payload.beautyShardEnabled) {
-    _injectBeautyShardBlock(messages, attributionBlocks, payload);
-  }
-
   final lorebookReserve = _calculateLorebookReserve(payload);
 
   // Count vector-only tokens so the tokenizer can show "Vector Lorebook" as
@@ -1265,41 +1251,6 @@ void _injectRecalledMessagesBlock(
     messages.insert(historyIdx, recallMsg);
   } else {
     messages.add(recallMsg);
-  }
-}
-
-/// Injects the hardcoded beauty-shard instruction as a `system` message
-/// before the first history message. The instruction contains
-/// `{{getvar::glaze_beauty_state}}`, which is expanded against the payload's
-/// session vars here so the LLM sees the current styling state. Only called
-/// when `payload.beautyShardEnabled` is true.
-void _injectBeautyShardBlock(
-  List<PromptMessage> messages,
-  List<StaticBlock> attributionBlocks,
-  PromptPayload payload,
-) {
-  final macroCtx = MacroContext(
-    charName: payload.character.name,
-    userName: payload.persona?.name ?? 'User',
-    personaPrompt: payload.persona?.prompt,
-    sessionVars: payload.sessionVars,
-    globalVars: payload.globalVars,
-    charId: payload.character.id,
-    sessionId: payload.sessionId ?? '',
-  );
-  final expanded = replaceMacros(beautyShardInstruction, macroCtx).text;
-  attributionBlocks.add(StaticBlock(id: 'beauty_shard', content: expanded));
-  final msg = PromptMessage(
-    role: 'system',
-    content: expanded,
-    blockId: 'beauty_shard',
-    blockName: 'Beauty Shard',
-  );
-  final historyIdx = messages.indexWhere((m) => m.isHistory);
-  if (historyIdx >= 0) {
-    messages.insert(historyIdx, msg);
-  } else {
-    messages.add(msg);
   }
 }
 

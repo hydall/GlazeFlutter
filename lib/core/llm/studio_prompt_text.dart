@@ -100,6 +100,14 @@ Notes:
             'the two leads\' psychology, factual continuity, prose style/length, dialogue formatting, and repetition bans.',
       );
     }
+    if (lower.contains('beauty')) {
+      return const _ControllerScope(
+        owns:
+            'reusable presentation/style state only: HTML/CSS palette, background and text colors, font family, speaker/thought colors, gradients, typography, glow/mark/highlight styles, and art-style labels that should remain consistent across turns.',
+        skip:
+            'concrete HTML widgets/windows (phone screens, taxi menus, terminals, HUDs, cards, maps, buttons), trackers, stats panels, infoblocks, topbar/infoboard instructions, image-generation prompts, plot facts, character psychology, and scene prose.',
+      );
+    }
     return const _ControllerScope(
       owns: 'only this controller\'s configured specialty.',
       skip: 'concerns that belong to the other Studio controllers.',
