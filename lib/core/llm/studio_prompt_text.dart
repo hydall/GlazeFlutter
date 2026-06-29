@@ -67,7 +67,7 @@ Rules:
     if (lower.contains('narrative') || lower.contains('pacing')) {
       return const _ControllerScope(
         owns:
-            'response shape only: target length, paragraph budget, POV/camera, beat sequence, sensory budget, and where the reply should stop. Classify the user\'s last turn as ACTION (physical movement, travel, object handling, executed decision — budget 4-6 even with dialogue), CONVERSATIONAL (mostly speech, no physical progression — 2-4), ATMOSPHERIC (slow/reflective — 4-6), or DYNAMIC/MIXED (action + dialogue comparable — 3-5). When in doubt between action and conversational, prefer action.',
+            'response shape only: beat type (ACTION / CONVERSATIONAL / ATMOSPHERIC / DYNAMIC-MIXED), qualitative tempo (short / medium / long), POV/camera, sensory budget, and where the reply should stop. Classify the user\'s last turn: physical movement, travel, object handling, or executed decision = ACTION even with dialogue; mostly speech = CONVERSATIONAL; slow/reflective = ATMOSPHERIC; action + dialogue comparable = DYNAMIC. Do NOT invent paragraph counts — the user\'s preset owns the numbers. When in doubt between action and conversational, prefer action.',
         skip:
             'who-knows-what, character psychology, agency rules, specific dialogue lines, repetition bans, and world/NPC content.',
       );
