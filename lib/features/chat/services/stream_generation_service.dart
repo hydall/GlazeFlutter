@@ -10,6 +10,7 @@ import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/memory_studio_service.dart';
 import '../../../core/llm/studio_stage_brief.dart';
 import '../../../core/llm/stream_accumulator.dart';
+import '../../../core/llm/beauty_state_parser.dart';
 import '../../../core/llm/transport/chat_transport_request.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/utils/error_format.dart';
@@ -336,15 +337,19 @@ class StreamGenerationService {
           studioResult,
           StudioCyclePhase.done,
         );
+        final beautyApplied = _applyBeautyState(
+          studioResult.response,
+          pendingSessionVars,
+        );
         final finalState = _writer
             .writeAssistant(
-              text: studioResult.response,
+              text: beautyApplied.text,
               reasoning: studioResult.reasoning.isNotEmpty
                   ? studioResult.reasoning
                   : null,
               currentSession: saveSession ?? session,
               isAborted: _isAborted,
-              pendingSessionVars: pendingSessionVars,
+              pendingSessionVars: beautyApplied.vars,
               genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
               tokens: estimateTokens(studioResult.response),
               rawResponse:
@@ -482,6 +487,10 @@ class StreamGenerationService {
               reasoningTagEnd,
             );
           }
+
+          final beautyApplied = _applyBeautyState(finalText, pendingSessionVars);
+          finalText = beautyApplied.text;
+          pendingSessionVars = beautyApplied.vars;
 
           final isAllReasoning =
               finalText.isEmpty &&
@@ -867,4 +876,32 @@ class StreamGenerationService {
       _ => AgentOperationStatus.error,
     };
   }
+
+  /// Strips any `<glaze_beauty_state>...</glaze_beauty_state>` marker from
+  /// the assistant response and merges the parsed JSON state into the pending
+  /// session vars (success-only persistence — INV-C5 still holds because this
+  /// is only called from the two success-path `writeAssistant` call sites).
+  /// When no marker is found, returns [text] and [vars] unchanged.
+  _BeautyStateResult _applyBeautyState(
+    String text,
+    Map<String, String>? pendingVars,
+  ) {
+    final parsed = parseBeautyState(text);
+    if (!parsed.markerFound) {
+      return _BeautyStateResult(text: text, vars: pendingVars);
+    }
+    final vars = parsed.stateJson == null
+        ? pendingVars
+        : <String, String>{
+            ...?pendingVars,
+            beautyStateVarKey: parsed.stateJson!,
+          };
+    return _BeautyStateResult(text: parsed.cleanedText, vars: vars);
+  }
+}
+
+class _BeautyStateResult {
+  final String text;
+  final Map<String, String>? vars;
+  const _BeautyStateResult({required this.text, required this.vars});
 }
