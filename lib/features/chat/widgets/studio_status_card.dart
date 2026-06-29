@@ -41,11 +41,13 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
     // Studio "was active" = phase is writingFinal or done (i.e. the cycle
     // has not yet auto-dismissed to idle). When the cleaner starts in that
     // window, we transition to the cleaning sub-phase.
-    final cleanerRunning = cleanerState.phase == PostCleanerPhase.running;
+    final cleanerRunning =
+        cleanerState.phase == PostCleanerPhase.factChecking ||
+        cleanerState.phase == PostCleanerPhase.running;
     final studioInFinalWindow =
         state.phase == StudioCyclePhase.writingFinal ||
-            state.phase == StudioCyclePhase.done ||
-            state.phase == StudioCyclePhase.agentErrors;
+        state.phase == StudioCyclePhase.done ||
+        state.phase == StudioCyclePhase.agentErrors;
     final showCleaning = cleanerRunning && studioInFinalWindow;
 
     // Track phase transitions to trigger auto-dismiss.
@@ -85,7 +87,7 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
       showSpinner = true;
     } else if (state.phase == StudioCyclePhase.writingFinal) {
       if (showCleaning) {
-        label = '3/3 - Cleaning';
+        label = cleanerLabel(cleanerState);
         icon = Icons.cleaning_services_outlined;
         accent = cs.primary;
         showSpinner = true;
@@ -96,13 +98,13 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
         showSpinner = true;
       }
     } else if (state.phase == StudioCyclePhase.cleaning) {
-      label = '3/3 - Cleaning';
+      label = cleanerLabel(cleanerState);
       icon = Icons.cleaning_services_outlined;
       accent = cs.primary;
       showSpinner = true;
     } else if (state.phase == StudioCyclePhase.done) {
       if (showCleaning) {
-        label = '3/3 - Cleaning';
+        label = cleanerLabel(cleanerState);
         icon = Icons.cleaning_services_outlined;
         accent = cs.primary;
         showSpinner = true;
@@ -117,7 +119,7 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
       }
     } else if (state.phase == StudioCyclePhase.agentErrors) {
       if (showCleaning) {
-        label = '3/3 - Cleaning';
+        label = cleanerLabel(cleanerState);
         icon = Icons.cleaning_services_outlined;
         accent = cs.primary;
         showSpinner = true;
@@ -180,6 +182,16 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
     );
   }
 
+  String cleanerLabel(PostCleanerState cleanerState) {
+    if (cleanerState.phase == PostCleanerPhase.factChecking) {
+      return '3/4 - Fact checking';
+    }
+    if (cleanerState.factCheckEnabled) {
+      return '4/4 - Cleaning';
+    }
+    return '3/3 - Cleaning';
+  }
+
   void _scheduleAutoDismiss() {
     Future<void>.delayed(const Duration(milliseconds: 2500), () {
       if (!mounted) return;
@@ -192,6 +204,7 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
           current.phase != StudioCyclePhase.writingFinal &&
           current.phase != StudioCyclePhase.cleaning &&
           current.phase != StudioCyclePhase.idle &&
+          cleaner.phase != PostCleanerPhase.factChecking &&
           cleaner.phase != PostCleanerPhase.running) {
         ref.read(studioCycleStateProvider.notifier).state =
             const StudioCycleState.idle();

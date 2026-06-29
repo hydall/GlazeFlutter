@@ -246,10 +246,11 @@ class StudioConfigRepo implements SyncStudioConfigStore {
   /// Silent migration of loaded Studio configs:
   ///
   /// 1. Meta-Weaver (plan §Part 6): upgrade from the old `'static'` refresh
-  ///    policy + default `contextSize` to the meta-weaver architecture —
-  ///    `refreshPolicy: 'turn'` (runs every turn so it can count assistant
-  ///    messages and apply the period rule) and `contextSize: 15` (enough
-  ///    history to count periods up to ~10).
+  ///    policy to the meta-weaver architecture — `refreshPolicy: 'turn'`
+  ///    (runs every turn so it can apply the period rule). Keep the user's
+  ///    existing `contextSize`: in batched Studio runs the largest tracker
+  ///    context becomes the shared history window for the whole group, so a
+  ///    high Meta-Weaver default would inflate every tracker request.
   ///
   /// 2. All trackers run every turn (Marinara parity, see
   ///    `studio_controller_ontology.dart`): any agent still carrying
@@ -270,12 +271,8 @@ class StudioConfigRepo implements SyncStudioConfigStore {
     var changed = false;
     for (final agent in config.agents) {
       var current = agent;
-      if (_isMetaWeaver(current) &&
-          (current.refreshPolicy != 'turn' || current.contextSize < 15)) {
-        current = current.copyWith(
-          refreshPolicy: 'turn',
-          contextSize: current.contextSize < 15 ? 15 : current.contextSize,
-        );
+      if (_isMetaWeaver(current) && current.refreshPolicy != 'turn') {
+        current = current.copyWith(refreshPolicy: 'turn');
         changed = true;
       }
       if (current.refreshPolicy != 'turn') {

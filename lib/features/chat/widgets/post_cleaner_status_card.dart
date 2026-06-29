@@ -21,8 +21,7 @@ class PostCleanerStatusCard extends ConsumerStatefulWidget {
       _PostCleanerStatusCardState();
 }
 
-class _PostCleanerStatusCardState
-    extends ConsumerState<PostCleanerStatusCard> {
+class _PostCleanerStatusCardState extends ConsumerState<PostCleanerStatusCard> {
   PostCleanerPhase? _lastSeenPhase;
 
   @override
@@ -50,6 +49,7 @@ class _PostCleanerStatusCardState
       return const SizedBox.shrink();
     }
 
+    final isFactChecking = state.phase == PostCleanerPhase.factChecking;
     final isRunning = state.phase == PostCleanerPhase.running;
     final isError = state.phase == PostCleanerPhase.error;
 
@@ -57,7 +57,11 @@ class _PostCleanerStatusCardState
     final IconData icon;
     final Color accent;
 
-    if (isRunning) {
+    if (isFactChecking) {
+      label = 'Fact checking…';
+      icon = Icons.fact_check_outlined;
+      accent = cs.primary;
+    } else if (isRunning) {
       label = 'Cleaning…';
       icon = Icons.cleaning_services_outlined;
       accent = cs.primary;
@@ -96,14 +100,11 @@ class _PostCleanerStatusCardState
         ),
         child: Row(
           children: [
-            if (isRunning)
+            if (isFactChecking || isRunning)
               SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: accent,
-                ),
+                child: CircularProgressIndicator(strokeWidth: 2, color: accent),
               )
             else
               Icon(icon, size: 18, color: accent),
@@ -119,7 +120,7 @@ class _PostCleanerStatusCardState
                 ),
               ),
             ),
-            if (isRunning)
+            if (isFactChecking || isRunning)
               IconButton(
                 onPressed: () {
                   final token = ref.read(cleanerCancelTokenProvider);
@@ -130,9 +131,7 @@ class _PostCleanerStatusCardState
                 icon: const Icon(Icons.stop_circle_outlined, size: 18),
                 tooltip: 'Stop cleaner',
                 visualDensity: VisualDensity.compact,
-                style: IconButton.styleFrom(
-                  foregroundColor: cs.error,
-                ),
+                style: IconButton.styleFrom(foregroundColor: cs.error),
               ),
           ],
         ),
@@ -146,7 +145,8 @@ class _PostCleanerStatusCardState
       final current = ref.read(postCleanerStateProvider);
       // Only auto-clear if we're still in the same done/error/skipped phase
       // (i.e. a new cleaner run hasn't started in the meantime).
-      if (current.phase != PostCleanerPhase.running &&
+      if (current.phase != PostCleanerPhase.factChecking &&
+          current.phase != PostCleanerPhase.running &&
           current.phase != PostCleanerPhase.idle) {
         ref.read(postCleanerStateProvider.notifier).state =
             const PostCleanerState.idle();

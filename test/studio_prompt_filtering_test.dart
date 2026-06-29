@@ -214,11 +214,11 @@ void main() {
       expect(meta.refreshPolicy, 'turn');
     });
 
-    test('Meta-Weaver contextSize is 15', () {
+    test('Meta-Weaver contextSize inherits tracker default', () {
       final meta = StudioControllerOntology.specs.firstWhere(
         (s) => s.id == 'meta',
       );
-      expect(meta.contextSize, 15);
+      expect(meta.contextSize, 0);
     });
 
     test('Main Responder spec contextSize defaults to 0 (inherits agent default)', () {
@@ -287,20 +287,20 @@ void main() {
       // every load. This test documents the expected behavior.
       final migrated = _migrateForTest(oldAgent);
       expect(migrated.refreshPolicy, 'turn');
-      expect(migrated.contextSize, 15);
+      expect(migrated.contextSize, 5);
     });
 
-    test('new Meta-Weaver with turn policy + contextSize 15 is unchanged', () {
+    test('new Meta-Weaver with turn policy + custom contextSize is unchanged', () {
       final newAgent = StudioAgent.fromJson(const {
         'id': 'agent_s1_meta_123',
         'name': 'Meta-Weaver / Lumia Policy',
         'refreshPolicy': 'turn',
-        'contextSize': 15,
+        'contextSize': 8,
         'order': 6,
       });
       final migrated = _migrateForTest(newAgent);
       expect(migrated.refreshPolicy, 'turn');
-      expect(migrated.contextSize, 15);
+      expect(migrated.contextSize, 8);
     });
 
     test('non-Meta-Weaver agent is unchanged by migration', () {
@@ -316,7 +316,7 @@ void main() {
       expect(migrated.contextSize, 5);
     });
 
-    test('Meta-Weaver with contextSize > 15 keeps its larger value', () {
+    test('Meta-Weaver with large contextSize keeps its larger value', () {
       final agent = StudioAgent.fromJson(const {
         'id': 'agent_s1_meta_123',
         'name': 'Meta-Weaver / Lumia Policy',
@@ -359,9 +359,6 @@ StudioAgent _migrateForTest(StudioAgent agent) {
       name.contains('meta weaver') ||
       name.contains('lumia policy');
   if (!isMeta) return agent;
-  if (agent.refreshPolicy == 'turn' && agent.contextSize >= 15) return agent;
-  return agent.copyWith(
-    refreshPolicy: 'turn',
-    contextSize: agent.contextSize < 15 ? 15 : agent.contextSize,
-  );
+  if (agent.refreshPolicy == 'turn') return agent;
+  return agent.copyWith(refreshPolicy: 'turn');
 }

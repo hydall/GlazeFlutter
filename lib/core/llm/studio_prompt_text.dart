@@ -46,6 +46,7 @@ Notes:
 - Each section may contain zero or more strings; put as many as the scene requires, strictly inside your lane.
 - Each string should be a specific instruction for this turn, not a generic restatement and not a sentence copied from the scene.
 - Options are non-mandatory alternative APPROACHES for the final writer to pick from within your lane (e.g. "lean into silence and a single gesture" vs "give one clipped line"). Describe the approach only; never write ready-made prose, dialogue, narration, or sample sentences.
+- Never require the final writer to advance the scene by writing {{user}}'s next action, movement, decision, silence, reaction, or vehicle/control input. If progress depends on {{user}}, tell the final writer to stop on a hook and leave that action to the player.
 - Do not write or continue the scene. Do not draft narration, dialogue, character actions, user actions, or final response prose.
 - Do not include source block names, prompt text, macros, labels, markdown code fences, or explanations.''';
   }
@@ -71,7 +72,7 @@ Notes:
     if (lower.contains('narrative') || lower.contains('pacing')) {
       return const _ControllerScope(
         owns:
-            'response shape only: beat type (ACTION / CONVERSATIONAL / ATMOSPHERIC / DYNAMIC-MIXED), qualitative tempo (short / medium / long), POV/camera, sensory budget, and where the reply should stop. Classify the user\'s last turn: physical movement, travel, object handling, or executed decision = ACTION even with dialogue; mostly speech = CONVERSATIONAL; slow/reflective = ATMOSPHERIC; action + dialogue comparable = DYNAMIC. Do NOT invent paragraph counts — the user\'s preset owns the numbers. When in doubt between action and conversational, prefer action.',
+            'response shape only: beat type (ACTION / CONVERSATIONAL / ATMOSPHERIC / DYNAMIC-MIXED), qualitative tempo (short / medium / long), POV/camera, sensory budget, and where the reply should stop. Classify the user\'s last turn: physical movement, travel, object handling, or executed decision = ACTION even with dialogue; mostly speech = CONVERSATIONAL; slow/reflective = ATMOSPHERIC; action + dialogue comparable = DYNAMIC. Do NOT invent paragraph counts — the user\'s preset owns the numbers. When in doubt between action and conversational, prefer action. Never require the response to end on motion, departure, or physical displacement if that motion depends on {{user}} taking the next action; instead stop at the character\'s response/hook.',
         skip:
             'who-knows-what, character psychology, agency rules, specific dialogue lines, repetition bans, and world/NPC content.',
       );
@@ -87,7 +88,7 @@ Notes:
     if (lower.contains('guard') || lower.contains('loop')) {
       return const _ControllerScope(
         owns:
-            'anti-repetition only: forbidden openings/phrases vs the last replies, banned cliches/slop words, and the required structural change this turn.',
+            'anti-repetition only: forbidden openings/phrases vs the last replies, banned cliches/slop words, and safe structural variation this turn. Structural variation must never force {{user}} movement, decisions, reactions, silence, or other user-controlled progression.',
         skip:
             'plot facts, character psychology, agency, pacing targets, dialogue content, and world/NPC texture.',
       );
@@ -122,7 +123,7 @@ Notes:
   /// option-picking limits, or "weave into natural prose" style rules — those
   /// belong to the user's preset.
   String finalBriefUsageNote() {
-    return 'How to use the Studio controller briefs above: the controllers have ALREADY analyzed the scene, tracked continuity, and decided what should happen next. Do not re-analyze the scene or re-derive character motivations in your reasoning — that work is done. Your job is to write the prose that implements their direction.\n\nTreat Focus and Constraints as direction and Avoid as prohibitions. Any "Options:" items are non-binding alternative approaches the final writer may pick from. Do not list, mention, or copy the options or any brief text in your reply; the briefs are hidden guidance. Write the final prose directly.';
+    return 'How to use the Studio controller briefs above: the controllers have ALREADY analyzed the scene, tracked continuity, and decided what should happen next. Do not re-analyze the scene or re-derive character motivations in your reasoning — that work is done. Your job is to write the prose that implements their direction.\n\nTreat Focus and Constraints as direction and Avoid as prohibitions. Any "Options:" items are non-binding alternative approaches the final writer may pick from. Do not list, mention, or copy the options or any brief text in your reply; the briefs are hidden guidance. Write the final prose directly.\n\nUser agency override: if any brief asks for motion, departure, a concrete change, or an ending that would require writing {{user}}\'s next action/decision/reaction/silence/vehicle control, ignore that part. Stop on a hook and leave {{user}}\'s next move to the player.';
   }
 
   /// Hard formatting constraints derived from the configured agents' source

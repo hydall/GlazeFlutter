@@ -27,6 +27,21 @@ void main() {
       expect(state.charDelta, isNull);
     });
 
+    test('factChecking is active and marks fact check enabled', () {
+      const state = PostCleanerState.factChecking(
+        sessionId: 's1',
+        messageId: 'm1',
+        originalChars: 500,
+      );
+      expect(state.phase, PostCleanerPhase.factChecking);
+      expect(state.isActive, isTrue);
+      expect(state.factCheckEnabled, isTrue);
+      expect(state.sessionId, 's1');
+      expect(state.messageId, 'm1');
+      expect(state.originalChars, 500);
+      expect(state.cleanedChars, isNull);
+    });
+
     test('done computes charDelta', () {
       const state = PostCleanerState.done(
         sessionId: 's1',
@@ -50,20 +65,14 @@ void main() {
     });
 
     test('error sets phase', () {
-      const state = PostCleanerState.error(
-        sessionId: 's1',
-        messageId: 'm1',
-      );
+      const state = PostCleanerState.error(sessionId: 's1', messageId: 'm1');
       expect(state.phase, PostCleanerPhase.error);
       expect(state.isError, isTrue);
       expect(state.isDone, isFalse);
     });
 
     test('skipped is done but not error', () {
-      const state = PostCleanerState.skipped(
-        sessionId: 's1',
-        messageId: 'm1',
-      );
+      const state = PostCleanerState.skipped(sessionId: 's1', messageId: 'm1');
       expect(state.phase, PostCleanerPhase.skipped);
       expect(state.isDone, isTrue);
       expect(state.isError, isFalse);
