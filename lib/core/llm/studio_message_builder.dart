@@ -69,7 +69,7 @@ class StudioMessageBuilder {
             ).trim();
             if (expanded.isEmpty) continue;
             messages.add({
-              'role': _normalizeRole(
+              'role': _normalizeInstructionRole(
                 shard.role.isNotEmpty ? shard.role : agent.role,
               ),
               'content': expanded,
@@ -105,7 +105,7 @@ class StudioMessageBuilder {
           final controlText = control.toString().trim();
           if (controlText.isNotEmpty) {
             messages.add({
-              'role': _normalizeRole(
+              'role': _normalizeInstructionRole(
                 block.role.isNotEmpty ? block.role : agent.role,
               ),
               'content': controlText,
@@ -124,7 +124,7 @@ class StudioMessageBuilder {
                 .where((b) => b.brief.trim().isNotEmpty)
                 .map(
                   (b) => {
-                    'role': _normalizeRole(block.role),
+                    'role': _normalizeInstructionRole(block.role),
                     'content': 'Studio agent brief: ${b.agentName}\n${b.brief}',
                   },
                 ),
@@ -156,7 +156,7 @@ class StudioMessageBuilder {
           ).trim();
           if (content.isNotEmpty) {
             messages.add({
-              'role': _normalizeRole(block.role),
+              'role': _normalizeInstructionRole(block.role),
               'content': content,
             });
           }
@@ -435,9 +435,18 @@ class StudioMessageBuilder {
     return replaceMacros(content, macroCtx).text;
   }
 
-  String _normalizeRole(String role) {
-    const allowed = {'system', 'user', 'assistant'};
-    return allowed.contains(role) ? role : 'system';
+  /// Normalize the role of a preset/shard INSTRUCTION block (not a chat
+  /// history message). Preset blocks sometimes carry `role: "user"` (e.g. the
+  /// Shino preset marks all instruction blocks as user), but in the Studio
+  /// pipeline these are INSTRUCTIONS to the model, not user dialogue turns.
+  /// Treating them as user messages can confuse models (especially Claude,
+  /// which treats user messages as human turns to respond to, not instructions
+  /// to follow). Force instruction blocks to `system` so the model treats them
+  /// as authoritative directives. Chat history (`chat_history` /
+  /// `dynamic_context` kinds) goes through `toApiMap()` and preserves its
+  /// original user/assistant roles — those ARE conversation turns.
+  String _normalizeInstructionRole(String role) {
+    return role == 'assistant' ? 'assistant' : 'system';
   }
 }
 
