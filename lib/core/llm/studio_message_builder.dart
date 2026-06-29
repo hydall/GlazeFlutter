@@ -442,11 +442,21 @@ class StudioMessageBuilder {
   /// Treating them as user messages can confuse models (especially Claude,
   /// which treats user messages as human turns to respond to, not instructions
   /// to follow). Force instruction blocks to `system` so the model treats them
-  /// as authoritative directives. Chat history (`chat_history` /
-  /// `dynamic_context` kinds) goes through `toApiMap()` and preserves its
-  /// original user/assistant roles — those ARE conversation turns.
+  /// as authoritative directives.
+  ///
+  /// Assistant-role blocks (prefill) are always forced to `system` here too.
+  /// They are already dropped from routing at build time
+  /// (`studio_decomposition_service.dart`), but if any slip through (e.g. via
+  /// a preset override or request-preset block), they must NOT become
+  /// assistant messages mid-conversation — that would break the conversation
+  /// flow. Assistant prefill is a transport-layer concern (API config prefix
+  /// field), not a preset-block concern.
+  ///
+  /// Chat history (`chat_history` kind) and dynamic context (`dynamic_context`
+  /// kind) go through `toApiMap()` and preserve their original user/assistant
+  /// roles — those ARE conversation turns, not instructions.
   String _normalizeInstructionRole(String role) {
-    return role == 'assistant' ? 'assistant' : 'system';
+    return 'system';
   }
 }
 
