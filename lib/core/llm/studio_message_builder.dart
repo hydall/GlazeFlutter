@@ -1,4 +1,5 @@
 import '../models/studio_config.dart';
+import 'beauty_shard_instruction.dart';
 import 'history_assembler.dart';
 import 'macro_engine.dart';
 import 'prompt_builder.dart';
@@ -100,6 +101,24 @@ class StudioMessageBuilder {
               control
                 ..writeln()
                 ..writeln(styleContract);
+            }
+            if (promptPayload.beautyShardEnabled) {
+              final macroCtx = MacroContext(
+                charName: promptPayload.character.name,
+                userName: promptPayload.persona?.name ?? 'User',
+                personaPrompt: promptPayload.persona?.prompt,
+                sessionVars: promptPayload.sessionVars,
+                globalVars: promptPayload.globalVars,
+                charId: promptPayload.character.id,
+                sessionId: promptPayload.sessionId ?? '',
+              );
+              final expanded = replaceMacros(
+                beautyShardInstruction,
+                macroCtx,
+              ).text;
+              control
+                ..writeln()
+                ..writeln(expanded);
             }
           }
           final controlText = control.toString().trim();

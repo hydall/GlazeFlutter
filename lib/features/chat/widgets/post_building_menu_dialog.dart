@@ -176,6 +176,11 @@ class _PostBuildingMenuDialogState
                 onFetchModels: _fetchProviderModels,
               ),
               const SizedBox(height: 8),
+              _BeautyShardSection(
+                pipeline: _pipeline,
+                onSaved: _savePipeline,
+              ),
+              const SizedBox(height: 8),
               _RecoverySection(
                 sessionId: widget.sessionId,
                 charId: widget.charId,
@@ -2076,6 +2081,76 @@ class _StatChip extends StatelessWidget {
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: accent ?? cs.onSurfaceVariant,
         ),
+      ),
+    );
+  }
+}
+
+/// Beauty Shard section — toggles the persistent styling-state injection.
+/// When enabled, a hardcoded system instruction is injected into every
+/// generation prompt telling the LLM to read {{getvar::glaze_beauty_state}}
+/// and append a <glaze_beauty_state>{...}</glaze_beauty_state> marker at
+/// the end of its response. The post-gen parser strips the marker and
+/// persists the JSON to sessionVars. See docs/beauty-shard.md.
+class _BeautyShardSection extends StatelessWidget {
+  final PipelineSettings pipeline;
+  final PipelineSaver onSaved;
+
+  const _BeautyShardSection({required this.pipeline, required this.onSaved});
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      icon: Icons.palette_outlined,
+      titleKey: 'post_building_beauty_shard_title',
+      subtitleKey: 'post_building_beauty_shard_subtitle',
+      children: [
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Row(
+            children: [
+              Flexible(
+                child: Text('post_building_beauty_shard_enable'.tr()),
+              ),
+              Tooltip(
+                message: 'memory_selector_help_tooltip'.tr(),
+                child: IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(4),
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  icon: Icon(
+                    Icons.help_outline_rounded,
+                    size: 16,
+                    color: context.cs.onSurfaceVariant,
+                  ),
+                  onPressed: () => _showBeautyShardHelpDialog(context),
+                ),
+              ),
+            ],
+          ),
+          subtitle: Text('post_building_beauty_shard_enable_desc'.tr()),
+          value: pipeline.beautyShardEnabled,
+          onChanged: (v) => onSaved((p) => p.copyWith(beautyShardEnabled: v)),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showBeautyShardHelpDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('post_building_beauty_shard_help_title'.tr()),
+        content: SingleChildScrollView(
+          child: Text('post_building_beauty_shard_help_body'.tr()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('btn_ok'.tr()),
+          ),
+        ],
       ),
     );
   }

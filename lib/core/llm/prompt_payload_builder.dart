@@ -17,6 +17,7 @@ import '../state/db_provider.dart';
 import '../state/global_regex_provider.dart';
 import '../state/lorebook_provider.dart';
 import '../state/memory_settings_provider.dart';
+import '../state/pipeline_settings_provider.dart';
 import 'embedding_types.dart';
 import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';
@@ -344,6 +345,7 @@ class PromptPayloadBuilder {
       chunkFirstTopChunks: memorySettings.chunkFirstTopChunks,
       arcContent: arcContent,
       entitiesContent: entitiesContent,
+      beautyShardEnabled: _ref.read(pipelineSettingsProvider).beautyShardEnabled,
       recalledMessagesContent: recalledMessagesContent,
     );
   }
@@ -453,6 +455,7 @@ class PromptPayloadBuilder {
       chunkFirstTopChunks: memSettings.chunkFirstTopChunks,
       arcContent: arcContent,
       entitiesContent: entitiesContent,
+      beautyShardEnabled: _ref.read(pipelineSettingsProvider).beautyShardEnabled,
       recalledMessagesContent: recalledMessagesContent,
     );
   }

@@ -167,6 +167,14 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default('') String consolidationEndpoint,
     @Default('') String consolidationApiKey,
     @Default(4000) int consolidationTimeoutMs,
+
+    // ── Beauty Shard (persistent styling state across LLM turns) ────────
+    // When true, the prompt builder injects a system instruction that tells
+    // the LLM to read {{getvar::glaze_beauty_state}} and append a
+    // <glaze_beauty_state>{...}</glaze_beauty_state> marker at the end of
+    // every response. The post-gen parser (beauty_state_parser.dart) strips
+    // the marker and persists the JSON to sessionVars. Off by default.
+    @Default(false) bool beautyShardEnabled,
   }) = _PipelineSettings;
 
   factory PipelineSettings.fromJson(Map<String, dynamic> json) =>
