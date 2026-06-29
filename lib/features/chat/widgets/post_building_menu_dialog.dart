@@ -152,23 +152,13 @@ class _PostBuildingMenuDialogState
                     _savePipeline((p) => p.copyWith(generationEndpoint: v)),
                 onApiKeyChanged: (v) =>
                     _savePipeline((p) => p.copyWith(generationApiKey: v)),
-                onTemperatureChanged: (v) => _savePipeline(
-                  (p) => p.copyWith(generationTemperature: v),
-                ),
-                onMaxTokensChanged: (v) => _savePipeline(
-                  (p) => p.copyWith(generationMaxTokens: v),
-                ),
+                onTemperatureChanged: (v) =>
+                    _savePipeline((p) => p.copyWith(generationTemperature: v)),
+                onMaxTokensChanged: (v) =>
+                    _savePipeline((p) => p.copyWith(generationMaxTokens: v)),
               ),
               const SizedBox(height: 8),
               _ClassifierSection(
-                pipeline: _pipeline,
-                onSaved: _savePipeline,
-                modelsByApiConfigId: _modelsByApiConfigId,
-                fetchingModelConfigIds: _fetchingModelConfigIds,
-                onFetchModels: _fetchProviderModels,
-              ),
-              const SizedBox(height: 8),
-              _ConsolidationSection(
                 pipeline: _pipeline,
                 onSaved: _savePipeline,
                 modelsByApiConfigId: _modelsByApiConfigId,
@@ -201,13 +191,14 @@ class _PostBuildingMenuDialogState
         endpoint: config.endpoint,
         apiKey: config.apiKey,
       );
-      final ids = models
-          .map((m) => m['id'])
-          .whereType<String>()
-          .where((id) => id.trim().isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
+      final ids =
+          models
+              .map((m) => m['id'])
+              .whereType<String>()
+              .where((id) => id.trim().isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
       if (config.model.isNotEmpty && !ids.contains(config.model)) {
         ids.insert(0, config.model);
       }
@@ -215,7 +206,10 @@ class _PostBuildingMenuDialogState
       setState(() => _modelsByApiConfigId[config.id] = ids);
     } catch (e) {
       if (mounted) {
-        GlazeToast.show(context, 'post_building_fetch_models_failed'.tr(namedArgs: {'arg0': '$e'}));
+        GlazeToast.show(
+          context,
+          'post_building_fetch_models_failed'.tr(namedArgs: {'arg0': '$e'}),
+        );
       }
     } finally {
       if (mounted) setState(() => _fetchingModelConfigIds.remove(config.id));
@@ -224,9 +218,8 @@ class _PostBuildingMenuDialogState
 }
 
 /// Common pattern shared by sidecar/classifier/cleaner sources.
-typedef PipelineSaver = Future<void> Function(
-  PipelineSettings Function(PipelineSettings) mutator,
-);
+typedef PipelineSaver =
+    Future<void> Function(PipelineSettings Function(PipelineSettings) mutator);
 
 /// Shared state passed to all sections.
 typedef FetchModels = Future<void> Function(ApiConfig config);
@@ -275,9 +268,8 @@ class _CleanerSection extends StatelessWidget {
           title: Text('post_building_cleaner_continuity'.tr()),
           subtitle: Text('post_building_cleaner_continuity_desc'.tr()),
           value: pipeline.postCleanerContinuityEnabled,
-          onChanged: (v) => onSaved(
-            (p) => p.copyWith(postCleanerContinuityEnabled: v),
-          ),
+          onChanged: (v) =>
+              onSaved((p) => p.copyWith(postCleanerContinuityEnabled: v)),
         ),
         SwitchListTile(
           dense: true,
@@ -285,9 +277,8 @@ class _CleanerSection extends StatelessWidget {
           title: Text('post_building_cleaner_audit'.tr()),
           subtitle: Text('post_building_cleaner_audit_desc'.tr()),
           value: pipeline.postCleanerCharacterCheckEnabled,
-          onChanged: (v) => onSaved(
-            (p) => p.copyWith(postCleanerCharacterCheckEnabled: v),
-          ),
+          onChanged: (v) =>
+              onSaved((p) => p.copyWith(postCleanerCharacterCheckEnabled: v)),
         ),
         if (pipeline.postCleanerCharacterCheckEnabled)
           Padding(
@@ -370,8 +361,9 @@ class _CleanerSection extends StatelessWidget {
           label: 'post_building_cleaner_max_tokens'.tr(),
           valueText: pipeline.postCleanerMaxTokens == 0
               ? 'post_building_auto_half_length'.tr()
-              : 'post_building_tokens_count'
-                  .tr(namedArgs: {'arg0': '${pipeline.postCleanerMaxTokens}'}),
+              : 'post_building_tokens_count'.tr(
+                  namedArgs: {'arg0': '${pipeline.postCleanerMaxTokens}'},
+                ),
           subtitleKey: 'post_building_cleaner_max_tokens_desc',
           onTap: (ctx) async {
             final v = await _editInt(
@@ -387,13 +379,17 @@ class _CleanerSection extends StatelessWidget {
         _NumberTile(
           label: 'post_building_cleaner_timeout'.tr(),
           valueText: pipeline.postCleanerTimeoutMs == 0
-              ? 'post_building_inherit_seconds'.tr(namedArgs: {
-                  'arg0': (inheritedTimeoutMs / 1000).toStringAsFixed(0),
-                })
-              : 'post_building_seconds_count'.tr(namedArgs: {
-                  'arg0': (pipeline.postCleanerTimeoutMs / 1000)
-                      .toStringAsFixed(0),
-                }),
+              ? 'post_building_inherit_seconds'.tr(
+                  namedArgs: {
+                    'arg0': (inheritedTimeoutMs / 1000).toStringAsFixed(0),
+                  },
+                )
+              : 'post_building_seconds_count'.tr(
+                  namedArgs: {
+                    'arg0': (pipeline.postCleanerTimeoutMs / 1000)
+                        .toStringAsFixed(0),
+                  },
+                ),
           subtitleKey: 'post_building_cleaner_timeout_desc',
           onTap: (ctx) async {
             final v = await _editIntSeconds(
@@ -419,9 +415,7 @@ class _CleanerSection extends StatelessWidget {
               max: 100,
             );
             if (v != null) {
-              await onSaved(
-                (p) => p.copyWith(postCleanerHistoryMessages: v),
-              );
+              await onSaved((p) => p.copyWith(postCleanerHistoryMessages: v));
             }
           },
         ),
@@ -448,8 +442,7 @@ class _CleanerSection extends StatelessWidget {
           label: 'post_building_cleaner_banned_words'.tr(),
           subtitleKey: 'post_building_cleaner_banned_words_desc',
           value: pipeline.postCleanerBannedWords,
-          onSaved: (v) =>
-              onSaved((p) => p.copyWith(postCleanerBannedWords: v)),
+          onSaved: (v) => onSaved((p) => p.copyWith(postCleanerBannedWords: v)),
         ),
         _StyleOverrideTile(
           label: 'post_building_cleaner_avoid_instructions'.tr(),
@@ -472,9 +465,9 @@ class _CleanerSection extends StatelessWidget {
           subtitle: Text(
             'post_building_cleaner_disable_reasoning_desc'.tr(),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontSize: 11,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           value: pipeline.postCleanerDisableReasoning,
           onChanged: (v) =>
@@ -519,9 +512,8 @@ class _WriteLoopSection extends StatelessWidget {
               title: Text('post_building_write_loop'.tr()),
               subtitle: Text('post_building_write_loop_desc'.tr()),
               value: pipeline.agenticWriteEnabled,
-              onChanged: (v) => onSaved(
-                (p) => p.copyWith(agenticWriteEnabled: v),
-              ),
+              onChanged: (v) =>
+                  onSaved((p) => p.copyWith(agenticWriteEnabled: v)),
             ),
             SwitchListTile(
               dense: true,
@@ -541,9 +533,9 @@ class _WriteLoopSection extends StatelessWidget {
               ),
               subtitle: Text(
                 sidecarLocked
-                    ? 'post_building_sidecar_locked'.tr(namedArgs: {
-                        'arg0': 'memory_mode_$memoryMode'.tr(),
-                      })
+                    ? 'post_building_sidecar_locked'.tr(
+                        namedArgs: {'arg0': 'memory_mode_$memoryMode'.tr()},
+                      )
                     : 'post_building_sidecar_enabled_desc'.tr(),
               ),
               value: pipeline.sidecarEnabled,
@@ -595,10 +587,11 @@ class _WriteLoopSection extends StatelessWidget {
               ),
             _NumberTile(
               label: 'post_building_agent_timeout'.tr(),
-              valueText: 'post_building_seconds_count'.tr(namedArgs: {
-                'arg0': (pipeline.sidecarTimeoutMs / 1000)
-                    .toStringAsFixed(0),
-              }),
+              valueText: 'post_building_seconds_count'.tr(
+                namedArgs: {
+                  'arg0': (pipeline.sidecarTimeoutMs / 1000).toStringAsFixed(0),
+                },
+              ),
               subtitleKey: 'post_building_agent_timeout_desc',
               onTap: (ctx) async {
                 final v = await _editIntSeconds(
@@ -676,10 +669,7 @@ class _PipelineLlmSection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _SourceSegment(
-              source: source,
-              onSourceChanged: onSourceChanged,
-            ),
+            _SourceSegment(source: source, onSourceChanged: onSourceChanged),
             if (source == 'custom') ...[
               _PipelineModelSelector(
                 labelKey: 'post_building_model',
@@ -729,8 +719,9 @@ class _PipelineLlmSection extends StatelessWidget {
               label: 'post_building_max_tokens'.tr(),
               valueText: maxTokens == null
                   ? 'post_building_auto'.tr()
-                  : 'post_building_tokens_count'
-                      .tr(namedArgs: {'arg0': '$maxTokens'}),
+                  : 'post_building_tokens_count'.tr(
+                      namedArgs: {'arg0': '$maxTokens'},
+                    ),
               subtitleKey: 'post_building_max_tokens_desc',
               onTap: (ctx) async {
                 final v = await _editNullableInt(
@@ -786,7 +777,8 @@ class _ClassifierSection extends StatelessWidget {
               title: Text('post_building_classifier_enable'.tr()),
               subtitle: Text('post_building_classifier_enable_desc'.tr()),
               value: pipeline.classifierEnabled,
-              onChanged: (v) => onSaved((p) => p.copyWith(classifierEnabled: v)),
+              onChanged: (v) =>
+                  onSaved((p) => p.copyWith(classifierEnabled: v)),
             ),
             _SourceSegment(
               source: pipeline.classifierSource,
@@ -825,9 +817,9 @@ class _ClassifierSection extends StatelessWidget {
             ],
             _NumberTile(
               label: 'post_building_classifier_timeout'.tr(),
-              valueText: 'post_building_ms_count'.tr(namedArgs: {
-                'arg0': '${pipeline.classifierTimeoutMs}',
-              }),
+              valueText: 'post_building_ms_count'.tr(
+                namedArgs: {'arg0': '${pipeline.classifierTimeoutMs}'},
+              ),
               subtitleKey: 'post_building_classifier_timeout_desc',
               onTap: (ctx) async {
                 final v = await _editInt(
@@ -851,153 +843,6 @@ class _ClassifierSection extends StatelessWidget {
       icon: Icons.category_outlined,
       titleKey: 'post_building_classifier_llm',
       modelHintKey: 'post_building_model_hint_classifier',
-      children: [c],
-    );
-  }
-}
-
-/// Consolidation LLM section.
-class _ConsolidationSection extends StatelessWidget {
-  final PipelineSettings pipeline;
-  final PipelineSaver onSaved;
-  final Map<String, List<String>> modelsByApiConfigId;
-  final Set<String> fetchingModelConfigIds;
-  final FetchModels onFetchModels;
-
-  const _ConsolidationSection({
-    required this.pipeline,
-    required this.onSaved,
-    required this.modelsByApiConfigId,
-    required this.fetchingModelConfigIds,
-    required this.onFetchModels,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = Consumer(
-      builder: (ctx, ref, _) {
-        final activeApi = ref.read(activeApiConfigProvider);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: context.cs.errorContainer.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 14,
-                    color: context.cs.onErrorContainer,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'post_building_consolidation_not_functional'.tr(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: context.cs.onErrorContainer,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 4),
-            SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Text('post_building_consolidation_enable'.tr()),
-              subtitle: Text('post_building_consolidation_enable_desc'.tr()),
-              value: pipeline.consolidationEnabled,
-              onChanged: (v) =>
-                  onSaved((p) => p.copyWith(consolidationEnabled: v)),
-            ),
-            _NumberTile(
-              label: 'post_building_consolidation_threshold'.tr(),
-              valueText: 'post_building_entries_count'.tr(namedArgs: {
-                'arg0': '${pipeline.consolidationThreshold}',
-              }),
-              subtitleKey: 'post_building_consolidation_threshold_desc',
-              onTap: (ctx) async {
-                final v = await _editInt(
-                  ctx: ctx,
-                  title: 'post_building_consolidation_threshold'.tr(),
-                  value: pipeline.consolidationThreshold,
-                  min: 1,
-                  max: 100,
-                );
-                if (v != null) {
-                  await onSaved((p) => p.copyWith(consolidationThreshold: v));
-                }
-              },
-            ),
-            _SourceSegment(
-              source: pipeline.consolidationSource,
-              onSourceChanged: (v) =>
-                  onSaved((p) => p.copyWith(consolidationSource: v)),
-            ),
-            if (pipeline.consolidationSource == 'custom') ...[
-              _PipelineModelSelector(
-                labelKey: 'post_building_consolidation_model',
-                model: pipeline.consolidationModel,
-                onModelChanged: (v) =>
-                    onSaved((p) => p.copyWith(consolidationModel: v)),
-              ),
-              _PipelineEndpointField(
-                endpoint: pipeline.consolidationEndpoint,
-                onEndpointChanged: (v) =>
-                    onSaved((p) => p.copyWith(consolidationEndpoint: v)),
-              ),
-              _PipelineApiKeyField(
-                apiKey: pipeline.consolidationApiKey,
-                onApiKeyChanged: (v) =>
-                    onSaved((p) => p.copyWith(consolidationApiKey: v)),
-              ),
-            ] else if (activeApi != null) ...[
-              _CurrentApiModelRow(
-                labelKey: 'post_building_consolidation_model',
-                apiConfig: activeApi,
-                modelsByApiConfigId: modelsByApiConfigId,
-                fetchingModelConfigIds: fetchingModelConfigIds,
-                onFetchModels: onFetchModels,
-                selectedModel: pipeline.consolidationModel,
-                fallbackModelLabel: activeApi.model,
-                onModelChanged: (v) =>
-                    onSaved((p) => p.copyWith(consolidationModel: v)),
-              ),
-            ],
-            _NumberTile(
-              label: 'post_building_consolidation_timeout'.tr(),
-              valueText: 'post_building_ms_count'.tr(namedArgs: {
-                'arg0': '${pipeline.consolidationTimeoutMs}',
-              }),
-              subtitleKey: 'post_building_consolidation_timeout_desc',
-              onTap: (ctx) async {
-                final v = await _editInt(
-                  ctx: ctx,
-                  title: 'post_building_consolidation_timeout'.tr(),
-                  value: pipeline.consolidationTimeoutMs,
-                  min: 1000,
-                  max: 60000,
-                  step: 1000,
-                );
-                if (v != null) {
-                  await onSaved((p) => p.copyWith(consolidationTimeoutMs: v));
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
-    return _SectionCard(
-      icon: Icons.merge_outlined,
-      titleKey: 'post_building_consolidation_llm',
-      modelHintKey: 'post_building_model_hint_consolidation',
       children: [c],
     );
   }
@@ -1264,8 +1109,7 @@ class _CurrentApiModelRow extends StatelessWidget {
       ...fetched,
       if (selectedModel.isNotEmpty && !fetched.contains(selectedModel))
         selectedModel,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     final selected = selectedModel.isEmpty ? '' : selectedModel;
     final isFetching = fetchingModelConfigIds.contains(config.id);
     return Padding(
@@ -1282,9 +1126,9 @@ class _CurrentApiModelRow extends StatelessWidget {
               decoration: InputDecoration(
                 labelText: labelKey.tr(),
                 helperText: fallbackModelLabel.isNotEmpty
-                    ? 'post_building_empty_chat_model'.tr(namedArgs: {
-                        'arg0': fallbackModelLabel,
-                      })
+                    ? 'post_building_empty_chat_model'.tr(
+                        namedArgs: {'arg0': fallbackModelLabel},
+                      )
                     : 'post_building_empty_chat_model_plain'.tr(),
                 helperMaxLines: 2,
                 border: const OutlineInputBorder(),
@@ -1413,8 +1257,7 @@ class _AuditModelRow extends ConsumerWidget {
       if (pipeline.postCleanerAuditModel.isNotEmpty &&
           !fetched.contains(pipeline.postCleanerAuditModel))
         pipeline.postCleanerAuditModel,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     final selected = pipeline.postCleanerAuditModel.isEmpty
         ? ''
         : pipeline.postCleanerAuditModel;
@@ -1434,9 +1277,9 @@ class _AuditModelRow extends ConsumerWidget {
               decoration: InputDecoration(
                 labelText: 'post_building_cleaner_audit_model'.tr(),
                 helperText: selected.isEmpty
-                    ? 'post_building_cleaner_audit_model_helper'.tr(namedArgs: {
-                        'arg0': config.model,
-                      })
+                    ? 'post_building_cleaner_audit_model_helper'.tr(
+                        namedArgs: {'arg0': config.model},
+                      )
                     : null,
                 helperMaxLines: 2,
                 border: const OutlineInputBorder(),
@@ -1525,18 +1368,16 @@ Future<double> _editDouble({
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'post_building_range'.tr(namedArgs: {
-              'arg0': '$min',
-              'arg1': '$max',
-            }),
+            'post_building_range'.tr(
+              namedArgs: {'arg0': '$min', 'arg1': '$max'},
+            ),
             style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: controller,
             autofocus: true,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
         ],
@@ -1624,8 +1465,7 @@ Future<int?> _editIntSeconds({
   required int valueSeconds,
   int minSeconds = 0,
 }) async {
-  final controller =
-      TextEditingController(text: '$valueSeconds');
+  final controller = TextEditingController(text: '$valueSeconds');
   final result = await showDialog<int>(
     context: ctx,
     builder: (c) => AlertDialog(
@@ -1691,18 +1531,16 @@ Future<double?> _editNullableDouble({
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'post_building_blank_default_range'.tr(namedArgs: {
-              'arg0': '$min',
-              'arg1': '$max',
-            }),
+            'post_building_blank_default_range'.tr(
+              namedArgs: {'arg0': '$min', 'arg1': '$max'},
+            ),
             style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: controller,
             autofocus: true,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
         ],
@@ -1910,10 +1748,12 @@ class _RecoverySection extends ConsumerWidget {
               Expanded(
                 child: Text(
                   state.totalMessages > 0
-                      ? 'post_building_recovery_progress'.tr(namedArgs: {
-                          'arg0': '${state.processedMessages}',
-                          'arg1': '${state.totalMessages}',
-                        })
+                      ? 'post_building_recovery_progress'.tr(
+                          namedArgs: {
+                            'arg0': '${state.processedMessages}',
+                            'arg1': '${state.totalMessages}',
+                          },
+                        )
                       : 'post_building_recovery_starting'.tr(),
                   style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
@@ -1966,9 +1806,8 @@ class _RecoverySection extends ConsumerWidget {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
-              onPressed: () => ref
-                  .read(trackerMemoryRecoveryServiceProvider)
-                  .cancel(),
+              onPressed: () =>
+                  ref.read(trackerMemoryRecoveryServiceProvider).cancel(),
               icon: const Icon(Icons.stop_circle_outlined, size: 16),
               label: Text('common_cancel'.tr()),
               style: TextButton.styleFrom(foregroundColor: cs.error),
@@ -1981,11 +1820,13 @@ class _RecoverySection extends ConsumerWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'post_building_recovery_done'.tr(namedArgs: {
-                    'arg0': '${state.trackersWritten}',
-                    'arg1': '${state.memoriesWritten}',
-                    'arg2': '${state.failedMessages}',
-                  }),
+                  'post_building_recovery_done'.tr(
+                    namedArgs: {
+                      'arg0': '${state.trackersWritten}',
+                      'arg1': '${state.memoriesWritten}',
+                      'arg2': '${state.failedMessages}',
+                    },
+                  ),
                   style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ),
@@ -2048,10 +1889,9 @@ class _RecoverySection extends ConsumerWidget {
     if (confirmed != true) return;
 
     unawaited(
-      ref.read(trackerMemoryRecoveryServiceProvider).recover(
-            sessionId: sessionId,
-            charId: charId,
-          ),
+      ref
+          .read(trackerMemoryRecoveryServiceProvider)
+          .recover(sessionId: sessionId, charId: charId),
     );
   }
 }
@@ -2073,9 +1913,9 @@ class _StatChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: accent ?? cs.onSurfaceVariant,
-        ),
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(color: accent ?? cs.onSurfaceVariant),
       ),
     );
   }
