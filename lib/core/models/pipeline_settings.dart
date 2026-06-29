@@ -95,6 +95,14 @@ abstract class PipelineSettings with _$PipelineSettings {
     // >= 0, overrides the per-agent default (0.8 for the final agent, 0.3
     // for trackers). Negative = use the agent's own temperature.
     @Default(-1.0) double studioFinalTemperature,
+    // When true, the final generator's request forces requestReasoning=false
+    // and omitReasoning=true regardless of the ApiConfig. Targeted at Gemini
+    // Flash thinking models that spend most of the token budget on a
+    // think-block and leave too little for the actual reply, truncating the
+    // visible prose mid-sentence. Intermediate agents are unaffected (they
+    // still reason when the ApiConfig asks them to). Only effective for
+    // Gemini-protocol endpoints; other transports ignore the override.
+    @Default(false) bool studioFinalDisableReasoning,
 
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,
@@ -125,6 +133,10 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default('') String postCleanerBannedWords,
     @Default('') String postCleanerAvoidInstructions,
     @Default('') String postCleanerStyleInstructions,
+    // When true, the POST-cleaner request forces omitReasoning=true so
+    // Gemini Flash thinking models cannot spend the rewrite budget on a
+    // think-block. Only affects the cleaner LLM call, not the audit.
+    @Default(false) bool postCleanerDisableReasoning,
 
     // ── Consolidation LLM ────────────────────────────────────────────────
     @Default(false) bool consolidationEnabled,

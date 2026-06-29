@@ -365,6 +365,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       const _StudioMaxTokensTile(),
                       const SizedBox(height: 4),
                       const _StudioTemperatureTile(),
+                      const SizedBox(height: 4),
+                      const _StudioDisableReasoningTile(),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -885,6 +887,41 @@ class _StudioTemperatureTile extends ConsumerWidget {
           final updated = pipeline.copyWith(studioFinalTemperature: v);
           await ref.read(pipelineSettingsProvider.notifier).save(updated);
         }
+      },
+    );
+  }
+}
+
+/// Disable-reasoning toggle for the Studio final generator (Main Responder).
+/// Reads/writes `PipelineSettings.studioFinalDisableReasoning`. When on, the
+/// final generator's request forces requestReasoning=false and
+/// omitReasoning=true regardless of the ApiConfig. Targeted at Gemini Flash
+/// thinking models that burn the token budget on a think-block and truncate
+/// the visible prose mid-sentence.
+class _StudioDisableReasoningTile extends ConsumerWidget {
+  const _StudioDisableReasoningTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioFinalDisableReasoning;
+    return SwitchListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        'post_building_studio_disable_reasoning'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        'post_building_studio_disable_reasoning_desc'.tr(),
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      value: value,
+      onChanged: (v) async {
+        final updated = pipeline.copyWith(studioFinalDisableReasoning: v);
+        await ref.read(pipelineSettingsProvider.notifier).save(updated);
       },
     );
   }

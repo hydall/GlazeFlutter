@@ -114,10 +114,21 @@ class AgentRunner {
     final timeoutMs = effectiveTimeoutMs(agent, isFinalResponse);
     final maxTokensOverride = effectiveMaxTokens(agent, isFinalResponse);
     final temperatureOverride = effectiveTemperature(agent, isFinalResponse);
+    // Studio override: disable reasoning for the final generator when the
+    // user toggled it in the Studio UI. Forces requestReasoning=false and
+    // omitReasoning=true so the model spends the full token budget on the
+    // reply instead of a think-block. Targeted at Gemini Flash thinking.
+    final effectiveResolved = (isFinalResponse &&
+            _ref.read(pipelineSettingsProvider).studioFinalDisableReasoning)
+        ? resolved.copyWithReasoning(
+            requestReasoning: false,
+            omitReasoning: true,
+          )
+        : resolved;
     return _streamRunner.run(
       agent: agent,
       messages: messages,
-      resolved: resolved,
+      resolved: effectiveResolved,
       sessionId: sessionId,
       isFinalResponse: isFinalResponse,
       cancelToken: cancelToken,
@@ -331,6 +342,37 @@ class ResolvedAgentConfig {
       cacheBreakpointMode: config.cacheBreakpointMode,
       sessionIdMode: config.sessionIdMode,
       contextSize: config.contextSize,
+    );
+  }
+
+  /// Per-call override of the reasoning-related flags. Used by
+  /// [AgentRunner._runAgentInner] when `studioFinalDisableReasoning` is on.
+  ResolvedAgentConfig copyWithReasoning({
+    bool? requestReasoning,
+    bool? omitReasoning,
+    bool? omitReasoningEffort,
+    String? reasoningEffort,
+  }) {
+    return ResolvedAgentConfig(
+      endpoint: endpoint,
+      apiKey: apiKey,
+      model: model,
+      protocol: protocol,
+      topP: topP,
+      topK: topK,
+      frequencyPenalty: frequencyPenalty,
+      presencePenalty: presencePenalty,
+      omitTemperature: omitTemperature,
+      omitTopP: omitTopP,
+      requestReasoning: requestReasoning ?? this.requestReasoning,
+      reasoningEffort: reasoningEffort ?? this.reasoningEffort,
+      omitReasoning: omitReasoning ?? this.omitReasoning,
+      omitReasoningEffort: omitReasoningEffort ?? this.omitReasoningEffort,
+      stream: stream,
+      cacheControlTtl: cacheControlTtl,
+      cacheBreakpointMode: cacheBreakpointMode,
+      sessionIdMode: sessionIdMode,
+      contextSize: contextSize,
     );
   }
 }

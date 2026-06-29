@@ -52,6 +52,7 @@ class LlmRequestDump {
       'frequencyPenalty': r.frequencyPenalty,
       'presencePenalty': r.presencePenalty,
       'requestReasoning': r.requestReasoning,
+      'omitReasoning': r.omitReasoning,
       'reasoningEffort': r.omitReasoningEffort ? null : r.reasoningEffort,
       'sessionId': r.sessionId,
       'cacheControlTtl': r.cacheControlTtl,
