@@ -104,6 +104,27 @@ abstract class PipelineSettings with _$PipelineSettings {
     // Gemini-protocol endpoints; other transports ignore the override.
     @Default(false) bool studioFinalDisableReasoning,
 
+    // ── Studio trackers (intermediate agents) ───────────────────────────
+    // The 7 pre-gen controllers (continuity / agency / narrative / dialogue /
+    // guard / world / meta) share one logical batch — they all produce compact
+    // JSON briefs, not prose, so a cheap fast model is usually enough. These
+    // four fields let the user configure them as a group from the Studio menu
+    // instead of editing each of the 7 agents individually.
+    // Model id override applied to ALL non-final Studio agents when non-empty.
+    // Empty = use each agent's own `modelOverride` or the chat's run model.
+    @Default('') String studioTrackerModelOverride,
+    // Max tokens for ALL non-final Studio agents. When > 0, overrides the
+    // per-agent default (1600). 0 = use the agent's own maxTokens.
+    @Default(0) int studioTrackerMaxTokens,
+    // Temperature for ALL non-final Studio agents. When >= 0, overrides the
+    // per-agent default (0.3). Negative = use the agent's own temperature.
+    @Default(-1.0) double studioTrackerTemperature,
+    // When true, all non-final Studio agent requests force
+    // requestReasoning=false and omitReasoning=true. Trackers emit compact
+    // JSON briefs, so a hidden think-block wastes tokens without improving the
+    // brief. Only effective for Gemini-protocol endpoints.
+    @Default(false) bool studioTrackerDisableReasoning,
+
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,
     @Default(0.3) double postCleanerTemperature,

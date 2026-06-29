@@ -24,8 +24,9 @@ class _FakeAgentRunner extends AgentRunner {
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,
     ApiConfig current,
-    String sessionId,
-  ) async {
+    String sessionId, {
+    bool isFinalResponse = false,
+  }) async {
     return ResolvedAgentConfig(
       endpoint: 'https://test',
       apiKey: 'k',
