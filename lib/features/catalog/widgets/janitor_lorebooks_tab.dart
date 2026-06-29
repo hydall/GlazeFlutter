@@ -98,6 +98,13 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
       _scriptRefs.any((r) => !r.isPublic) ||
       _public.any((b) => !b.accessible && !b.isJs);
 
+  /// The character lists at least one "advanced" (Nine API / JS) lorebook. Those
+  /// inject their entries inline, so the content can't be separated mechanically
+  /// — it must be mined from the full captured prompt with the LLM. When true the
+  /// heuristic "extracted content" + "download txt" path is dropped (it would be
+  /// misleading) and the build goes straight through the LLM.
+  bool get _hasAdvanced => hasAdvancedLorebook(widget.args.meta);
+
   /// Id of the JS lorebook currently being rebuilt by the LLM (per-row spinner).
   String? _jsBuildingId;
 
@@ -318,41 +325,32 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
     });
   }
 
-  /// Raw (keyless) lorebook: one entry per blank-line block, no trigger keys or
-  /// rules. Offers the same two destinations as a public lorebook.
-  void _downloadRaw() {
+  /// Export the isolated lorebook text verbatim as a plain .txt file. Without an
+  /// LLM the real entry boundaries and trigger keys can't be recovered, so we hand
+  /// back the extracted content as-is for manual use rather than a keyless,
+  /// over-segmented lorebook.
+  Future<void> _downloadExtracted() async {
     final ex = _extraction;
     if (ex == null) return;
-    final name = _nameController.text.trim().isEmpty
-        ? '${ex.character.charData.name} — Closed Lorebook (raw)'
-        : _nameController.text.trim();
-    final entries = rawLorebookEntries(ex.lorebookText);
-    if (entries.isEmpty) {
+    final text = ex.lorebookText.trim();
+    if (text.isEmpty) {
       GlazeToast.show(context, 'No lorebook text to download.');
       return;
     }
-    GlazeBottomSheet.show<void>(
-      context,
-      items: [
-        BottomSheetItem(
-          icon: Icons.bookmark_add_outlined,
-          label: 'Save to Glaze',
-          onTap: () async {
-            Navigator.of(context, rootNavigator: true).pop();
-            await _saveLorebook(convertJanitorScript(entries, name: name));
-          },
-        ),
-        BottomSheetItem(
-          icon: Icons.download_outlined,
-          label: 'Export .json (SillyTavern)',
-          onTap: () async {
-            Navigator.of(context, rootNavigator: true).pop();
-            await _exportJson(
-                janitorScriptToTavernJson(entries, name: name), name);
-          },
-        ),
-      ],
-    );
+    final name = _nameController.text.trim().isEmpty
+        ? '${ex.character.charData.name} — Closed Lorebook (extracted)'
+        : _nameController.text.trim();
+    try {
+      final safe = name.replaceAll(RegExp(r'[^\w\- ]+'), '').trim();
+      await FileExportService.export(
+        data: text,
+        filename: '${safe.isEmpty ? 'lorebook' : safe}.txt',
+        subfolder: 'Lorebooks',
+      );
+      if (mounted) GlazeToast.show(context, 'Exported $name.txt');
+    } catch (e) {
+      if (mounted) GlazeToast.show(context, 'Export failed: $e');
+    }
   }
 
   // ─── Build ──────────────────────────────────────────────────────────────────
@@ -382,6 +380,10 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
               'entries with your active LLM.',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
+            if (_hasAdvanced) ...[
+              const SizedBox(height: 8),
+              _AdvancedNotice(cs: cs),
+            ],
             const SizedBox(height: 12),
             _buildExtractControls(cs),
             if (_extraction != null) ...[
@@ -460,14 +462,12 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            ex.hasLorebook
-                ? 'Captured ${ex.entryBlockCount} block(s), '
-                    '${estimateTokens(ex.lorebookText)} tokens'
-                : ex.hasAdvancedLorebook
-                    ? 'Advanced lorebook detected — its entries are injected '
-                        'inline, so the full prompt '
-                        '(${estimateTokens(ex.fullPromptText)} tokens) is mined '
-                        'with the LLM.'
+            ex.hasAdvancedLorebook
+                ? 'Advanced (JS) lorebook — its entries are injected inline, so '
+                    'the full prompt (${estimateTokens(ex.fullPromptText)} '
+                    'tokens) is mined with the LLM.'
+                : ex.hasLorebook
+                    ? 'Extracted content · ${estimateTokens(ex.lorebookText)} tokens'
                     : 'No closed lorebook text was found.',
             style: TextStyle(
                 fontSize: 12,
@@ -475,12 +475,15 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
                 color: cs.onSurface),
           ),
           if (ex.hasExtractable) ...[
-            if (ex.hasLorebook) ...[
+            // For an advanced lorebook the heuristic "extracted content" is
+            // meaningless (the entries are inline), so skip the txt-download path
+            // and go straight to the LLM build.
+            if (ex.hasLorebook && !ex.hasAdvancedLorebook) ...[
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: _downloadRaw,
+                onPressed: _downloadExtracted,
                 icon: const Icon(Icons.notes_rounded, size: 16),
-                label: const Text('Download raw (no keys)'),
+                label: const Text('Download extracted content as txt'),
               ),
               const _OrDivider(),
             ] else
@@ -590,6 +593,12 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
                 label: const Text('Export .json'),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          _JsonView(
+            json: const JsonEncoder.withIndent('  ')
+                .convert(glazeLorebookToTavernJson(book)),
+            cs: cs,
           ),
         ],
       ),
@@ -1181,6 +1190,97 @@ class _Hint extends StatelessWidget {
         ),
         child: Text(text,
             style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+      );
+}
+
+/// Prominent banner shown when the character has an "advanced" (JS) lorebook:
+/// the content can't be separated mechanically, so it must be collected via the
+/// LLM. Port of JAR's `advancedNotice` (`.hint.warn`).
+class _AdvancedNotice extends StatelessWidget {
+  final ColorScheme cs;
+  const _AdvancedNotice({required this.cs});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: cs.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border(
+            left: BorderSide(color: cs.primary, width: 2),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.code_rounded, size: 16, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'This character uses JS (advanced) lorebooks. The lorebook '
+                'content must be collected with an LLM.',
+                style: TextStyle(
+                    fontSize: 12, height: 1.35, color: cs.onSurface),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+/// Collapsible pretty-printed JSON of a built lorebook (SillyTavern World Info
+/// shape). Port of JAR's `worldInfoPre` result block.
+class _JsonView extends StatelessWidget {
+  final String json;
+  final ColorScheme cs;
+  const _JsonView({required this.json, required this.cs});
+
+  @override
+  Widget build(BuildContext context) => Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: Text('Lorebook JSON',
+              style: TextStyle(fontSize: 12, color: cs.onSurface)),
+          childrenPadding: const EdgeInsets.only(bottom: 8),
+          children: [
+            Row(
+              children: [
+                const Spacer(),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Copy',
+                  icon: const Icon(Icons.copy_rounded, size: 14),
+                  color: cs.onSurfaceVariant,
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: json));
+                    if (context.mounted) GlazeToast.show(context, 'Copied JSON');
+                  },
+                ),
+              ],
+            ),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 240),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  json,
+                  style: TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color: cs.onSurfaceVariant,
+                      fontFamily: 'monospace'),
+                ),
+              ),
+            ),
+          ],
+        ),
       );
 }
 
