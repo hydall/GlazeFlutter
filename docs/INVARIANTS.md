@@ -261,17 +261,19 @@ swipe at cleaner start and finalizes it based on the outcome:
 reset in the `_runPostCleaner` finally block so state never leaks across
 runs.
 
-### INV-ST5: Single tracker failure does not abort the rest ✅ ENFORCED (Phase 5.7.5)
+### INV-ST5: Tracker failure aborts Studio after two retries ✅ ENFORCED
 
 `AgentRunner.runAgent` wraps any tracker exception (timeout, transport, idle,
-invalid output) in `AgentRunFailedException`. `MemoryStudioService._runTracker`
-catches it and emits a failed `StudioStageBrief` (`status: 'error'`,
-`error: reason`); the remaining trackers and the final generator continue.
+invalid output) in `AgentRunFailedException`. Chat-time Studio tracker calls get
+the initial attempt plus two retries. If the tracker still fails, or if a batch
+response is returned but one or more `<result>` blocks cannot be parsed,
+`MemoryStudioService.runTrackerCycle` returns `StudioPipelineResult(status:
+'error')` before the final generator runs.
 
-Fallback chain (Phase 5.1): in-batch invalid-JSON retry (re-request the whole
-batch once) → individual fallback (re-run each still-failed agent as its own
-request, concurrency limit 2) → error-result. The final generator rethrows —
-its failure aborts the turn.
+Batch failures retry the same batch twice. There is no individual fallback from
+a failed batch, and the final generator does not run with partial tracker
+output. The final generator rethrows normally — its failure also aborts the
+turn.
 
 ### INV-ST6: Batch budget and concurrency caps ✅ ENFORCED (Phase 5.7.2)
 
@@ -282,9 +284,9 @@ trackers). Batch `contextSize` = MAX across the group (the tracker that needs
 20 messages gets 20; the tracker that needs 5 sees more, which is safe).
 
 Concurrent in-flight tracker requests: `_maxConcurrentGroups = 4` for the
-phase, `_maxConcurrentFallback = 2` for the individual-fallback layer.
-Conservative defaults for desktop (Marinara runs 8/4 on a server; one user
-hitting one provider with 8 concurrent SSE streams is a real rate-limit risk).
+phase. Conservative default for desktop (Marinara runs 8/4 on a server; one
+user hitting one provider with 8 concurrent SSE streams is a real rate-limit
+risk).
 
 ### INV-ST7: Studio cache-friendly prompt ordering ✅ ENFORCED (Phase 6.1)
 

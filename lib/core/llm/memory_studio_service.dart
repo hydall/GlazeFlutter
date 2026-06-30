@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -25,7 +25,6 @@ import 'tracker_batcher.dart';
 // studio_activation_gate.dart.
 export 'studio_activation_gate.dart' show AgentPhaseSplit;
 
-
 /// Session-bound Studio pipeline.
 ///
 /// The Studio menu stores a user-editable [StudioConfig]. At generation time
@@ -36,7 +35,9 @@ class MemoryStudioService {
   final StudioPromptText _promptText = const StudioPromptText();
   final StudioContextBucketizer _bucketizer = const StudioContextBucketizer();
   late final StudioBriefParser _briefParser = StudioBriefParser(_log);
-  late final StudioBriefDeduper _briefDeduper = StudioBriefDeduper(_briefParser);
+  late final StudioBriefDeduper _briefDeduper = StudioBriefDeduper(
+    _briefParser,
+  );
   late final StudioBriefCache _briefCache = StudioBriefCache(_briefParser);
   late final StudioMessageBuilder _messageBuilder = StudioMessageBuilder(
     _bucketizer,
@@ -180,8 +181,9 @@ class MemoryStudioService {
         apiConfig: apiConfig,
         sessionId: sessionId,
       );
-      final trackerContextOverride =
-          _ref.read(pipelineSettingsProvider).studioTrackerContextSize;
+      final trackerContextOverride = _ref
+          .read(pipelineSettingsProvider)
+          .studioTrackerContextSize;
       final fetchedResults = await batcher.runPhase(
         batchGroups: grouping.batchGroups,
         individualAgents: grouping.individualAgents,
@@ -209,6 +211,25 @@ class MemoryStudioService {
           cancelToken: token,
         ),
       );
+      if (token.isCancelled) {
+        return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+      final trackerFailure = _firstFailedTrackerResult(fetchedResults);
+      if (trackerFailure != null) {
+        final failedBriefs = _trackerResultsToBriefs(
+          fetchedResults,
+          dueTrackers,
+          cacheProbeByAgent,
+        );
+        final error = _trackerFailureMessage(trackerFailure);
+        _log('tracker cycle failed session=$sessionId error=$error');
+        return StudioPipelineResult(
+          status: 'error',
+          response: '',
+          stageBriefs: failedBriefs,
+          error: error,
+        );
+      }
 
       // Convert batch results + individual results into StudioStageBriefs,
       // persist cache for the ones that succeeded.
@@ -247,12 +268,16 @@ class MemoryStudioService {
       // omitted entirely — the final generator sees only the due briefs.
       final briefs = <StudioStageBrief>[];
       for (final agent in dueTrackers) {
-        final cached = cachedBriefs.where((b) => b.agentId == agent.id).firstOrNull;
+        final cached = cachedBriefs
+            .where((b) => b.agentId == agent.id)
+            .firstOrNull;
         if (cached != null) {
           briefs.add(cached);
           continue;
         }
-        final fetched = fetchedBriefs.where((b) => b.agentId == agent.id).firstOrNull;
+        final fetched = fetchedBriefs
+            .where((b) => b.agentId == agent.id)
+            .firstOrNull;
         if (fetched != null) briefs.add(fetched);
       }
 
@@ -320,6 +345,22 @@ class MemoryStudioService {
           cancelToken: token,
         );
         postBriefs.add(result);
+        if (token.isCancelled) {
+          return const StudioPipelineResult(status: 'aborted', response: '');
+        }
+        if (result.status == 'error') {
+          final error =
+              'Studio tracker "${result.agentName}" failed after '
+              '2 retries: ${result.error ?? 'tracker failed'}. Please '
+              'restart generation.';
+          _log('post tracker cycle failed session=$sessionId error=$error');
+          return StudioPipelineResult(
+            status: 'error',
+            response: '',
+            stageBriefs: [...briefs, ...postBriefs],
+            error: error,
+          );
+        }
         if (result.status == 'ok' && result.brief.trim().isNotEmpty) {
           // This post-gen tracker produced a rewrite — it becomes the new
           // `mainResponse` for the next post-gen tracker (chained rewrites)
@@ -440,8 +481,9 @@ class MemoryStudioService {
         sessionId: sessionId,
       );
 
-      final trackerContextOverride =
-          _ref.read(pipelineSettingsProvider).studioTrackerContextSize;
+      final trackerContextOverride = _ref
+          .read(pipelineSettingsProvider)
+          .studioTrackerContextSize;
       final fetchedResults = await batcher.runPhase(
         batchGroups: grouping.batchGroups,
         individualAgents: grouping.individualAgents,
@@ -469,6 +511,25 @@ class MemoryStudioService {
           cancelToken: token,
         ),
       );
+      if (token.isCancelled) {
+        return const StudioPipelineResult(status: 'aborted', response: '');
+      }
+      final trackerFailure = _firstFailedTrackerResult(fetchedResults);
+      if (trackerFailure != null) {
+        final failedBriefs = _trackerResultsToBriefs(
+          fetchedResults,
+          dueTrackers,
+          cacheProbeByAgent,
+        );
+        final error = _trackerFailureMessage(trackerFailure);
+        _log('tracker-only cycle failed session=$sessionId error=$error');
+        return StudioPipelineResult(
+          status: 'error',
+          response: '',
+          stageBriefs: failedBriefs,
+          error: error,
+        );
+      }
 
       final fetchedBriefs = <StudioStageBrief>[];
       for (final result in fetchedResults) {
@@ -502,12 +563,16 @@ class MemoryStudioService {
 
       final briefs = <StudioStageBrief>[];
       for (final agent in dueTrackers) {
-        final cached = cachedBriefs.where((b) => b.agentId == agent.id).firstOrNull;
+        final cached = cachedBriefs
+            .where((b) => b.agentId == agent.id)
+            .firstOrNull;
         if (cached != null) {
           briefs.add(cached);
           continue;
         }
-        final fetched = fetchedBriefs.where((b) => b.agentId == agent.id).firstOrNull;
+        final fetched = fetchedBriefs
+            .where((b) => b.agentId == agent.id)
+            .firstOrNull;
         if (fetched != null) briefs.add(fetched);
       }
 
@@ -557,12 +622,11 @@ class MemoryStudioService {
     List<String> keywords,
     List<String> historyContents,
     int scanDepth,
-  ) =>
-      StudioActivationGate.matchesActivationKeywords(
-        keywords,
-        historyContents,
-        scanDepth,
-      );
+  ) => StudioActivationGate.matchesActivationKeywords(
+    keywords,
+    historyContents,
+    scanDepth,
+  );
 
   /// Feature 6 — split a sorted (by `order`) list of enabled agents into the
   /// three pipeline phases. Exposed `@visibleForTesting` so the splitting
@@ -591,6 +655,53 @@ class MemoryStudioService {
   @visibleForTesting
   static AgentPhaseSplit splitAgentsByPhase(List<StudioAgent> agents) =>
       StudioActivationGate.splitAgentsByPhase(agents);
+
+  TrackerBatchResult? _firstFailedTrackerResult(
+    List<TrackerBatchResult> results,
+  ) {
+    for (final result in results) {
+      if (result.status != 'ok' || result.text.trim().isEmpty) {
+        return result;
+      }
+    }
+    return null;
+  }
+
+  List<StudioStageBrief> _trackerResultsToBriefs(
+    List<TrackerBatchResult> results,
+    List<StudioAgent> dueTrackers,
+    Map<String, CacheProbe> cacheProbeByAgent,
+  ) {
+    final briefs = <StudioStageBrief>[];
+    for (final result in results) {
+      final probe = cacheProbeByAgent[result.agentId];
+      final agent = dueTrackers.firstWhere((a) => a.id == result.agentId);
+      final sanitized = result.status == 'ok'
+          ? _briefParser.sanitizeIntermediateAgentOutput(agent, result.text)
+          : result.text;
+      briefs.add(
+        StudioStageBrief(
+          agentId: result.agentId,
+          agentName: result.agentName,
+          brief: sanitized,
+          status: result.status,
+          error: result.error,
+          refreshPolicy: probe?.policy ?? 'turn',
+          cacheKey: _briefCache.isCacheablePolicy(probe?.policy ?? 'turn')
+              ? probe?.cacheKey
+              : null,
+          cacheHit: false,
+        ),
+      );
+    }
+    return briefs;
+  }
+
+  String _trackerFailureMessage(TrackerBatchResult result) {
+    final reason = result.error ?? 'missing or unparseable tracker result';
+    return 'Studio tracker "${result.agentName}" failed after 2 retries: '
+        '$reason. Please restart generation.';
+  }
 
   void _log(String message) {
     debugPrint('[Studio] $message');

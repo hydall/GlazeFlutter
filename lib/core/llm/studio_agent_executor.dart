@@ -20,29 +20,24 @@ import 'tracker_batcher.dart';
 /// Each adapter assembles the agent's message list via the injected
 /// [StudioMessageBuilder], invokes [AgentRunner.runAgent], and adapts the
 /// result type to the pipeline-internal [StudioStageBrief] / [TrackerBatchResult]
-/// / [StudioFinalRunResult] shapes. Per-agent failure isolation (Phase
-/// 5.7.5): pre-gen / post-gen tracker failures are caught and returned as
-/// failed briefs so the pipeline keeps going; the final generator rethrows.
-/// Behavior preserved verbatim.
+/// / [StudioFinalRunResult] shapes. Tracker failures are retried by the
+/// relevant adapter and returned as failed results when retries are exhausted;
+/// the final generator rethrows.
 class StudioAgentExecutor {
   final Ref _ref;
   final StudioMessageBuilder _messageBuilder;
   final StudioBriefParser _briefParser;
 
-  StudioAgentExecutor(
-    this._ref,
-    this._messageBuilder,
-    this._briefParser,
-  );
+  StudioAgentExecutor(this._ref, this._messageBuilder, this._briefParser);
 
   /// Delegate the actual LLM call to [AgentRunner]. This method still
   /// builds the `messages` list (prompt assembly via [StudioMessageBuilder])
   /// and adapts the result type to the internal [StudioStageBrief] pipeline.
   ///
-  /// Per-agent failure isolation (Phase 5.7.5): when [isFinalResponse] is
-  /// false, [AgentRunner.runAgent] wraps any failure into an
-  /// [AgentRunFailedException]; here we unwrap it into a failed brief so the
-  /// rest of the pipeline keeps going. The final generator rethrows.
+  /// When [isFinalResponse] is false, [AgentRunner.runAgent] wraps any failure
+  /// into an [AgentRunFailedException]; here we unwrap it into a failed brief
+  /// so callers can retry and then surface a hard Studio error. The final
+  /// generator rethrows.
   Future<StudioStageBrief> runTracker({
     required StudioAgent agent,
     required PromptResult promptResult,
@@ -79,7 +74,10 @@ class StudioAgentExecutor {
         cancelToken: cancelToken,
         onIntermediateUpdate: onIntermediateUpdate,
       );
-      final sanitized = _briefParser.sanitizeIntermediateAgentOutput(agent, result.text);
+      final sanitized = _briefParser.sanitizeIntermediateAgentOutput(
+        agent,
+        result.text,
+      );
       return StudioStageBrief(
         agentId: agent.id,
         agentName: agent.name,
@@ -105,11 +103,10 @@ class StudioAgentExecutor {
   /// allowed to produce prose, since its job is to rewrite the response).
   /// The caller decides whether the rewrite replaces `mainResponse`.
   ///
-  /// Failure isolation: a post-gen tracker failure (timeout, transport) is
-  /// caught and returned as a failed brief so the pipeline keeps going with
-  /// the previous `mainResponse` intact. This mirrors the pre-gen tracker
-  /// failure isolation (Phase 5.7.5), since a single post-gen tracker
-  /// crashing should not lose the generator's already-good response.
+  /// Failure policy: a post-gen tracker gets the same initial attempt + two
+  /// retries as pre-gen trackers. Exhausting retries returns a failed brief;
+  /// the caller surfaces it as a hard Studio error instead of silently keeping
+  /// the previous `mainResponse`.
   Future<StudioStageBrief> runPostProcessingTracker({
     required StudioAgent agent,
     required String mainResponse,
@@ -120,47 +117,60 @@ class StudioAgentExecutor {
     required String sessionId,
     required CancelToken cancelToken,
   }) async {
-    try {
-      final messages = _messageBuilder.buildAgentMessages(
-        agent: agent,
-        promptResult: promptResult,
-        promptPayload: promptPayload,
-        config: config,
-        priorBriefs: const [],
-        isFinalResponse: false,
-        mainResponse: mainResponse,
-      );
-      final runner = _ref.read(agentRunnerProvider);
-      final result = await runner.runAgent(
-        agent: agent,
-        messages: messages,
-        apiConfig: apiConfig,
-        sessionId: sessionId,
-        isFinalResponse: false,
-        cancelToken: cancelToken,
-        onIntermediateUpdate: null,
-      );
-      // Post-gen trackers produce prose (a rewrite), NOT a brief — skip the
-      // brief-shape sanitization that pre-gen trackers go through. Empty
-      // output means "no edit needed" → caller keeps `mainResponse`. This is
-      // the intentional happy-path no-op, so it is reported as 'skipped'
-      // (NOT 'error') to avoid surfacing a false failure in the stage briefs.
-      final text = result.text.trim();
-      return StudioStageBrief(
-        agentId: agent.id,
-        agentName: agent.name,
-        brief: text,
-        status: text.isNotEmpty ? 'ok' : 'skipped',
-      );
-    } on AgentRunFailedException catch (e) {
-      return StudioStageBrief(
-        agentId: e.agentId,
-        agentName: e.agentName,
-        brief: '',
-        status: 'error',
-        error: e.reason,
-      );
+    String? lastError;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      if (cancelToken.isCancelled) {
+        return StudioStageBrief(
+          agentId: agent.id,
+          agentName: agent.name,
+          brief: '',
+          status: 'error',
+          error: 'cancelled',
+        );
+      }
+      try {
+        final messages = _messageBuilder.buildAgentMessages(
+          agent: agent,
+          promptResult: promptResult,
+          promptPayload: promptPayload,
+          config: config,
+          priorBriefs: const [],
+          isFinalResponse: false,
+          mainResponse: mainResponse,
+        );
+        final runner = _ref.read(agentRunnerProvider);
+        final result = await runner.runAgent(
+          agent: agent,
+          messages: messages,
+          apiConfig: apiConfig,
+          sessionId: sessionId,
+          isFinalResponse: false,
+          cancelToken: cancelToken,
+          onIntermediateUpdate: null,
+        );
+        // Post-gen trackers produce prose (a rewrite), NOT a brief — skip the
+        // brief-shape sanitization that pre-gen trackers go through. Empty
+        // output means "no edit needed" → caller keeps `mainResponse`. This is
+        // the intentional happy-path no-op, so it is reported as 'skipped'
+        // (NOT 'error') to avoid surfacing a false failure in the stage briefs.
+        final text = result.text.trim();
+        return StudioStageBrief(
+          agentId: agent.id,
+          agentName: agent.name,
+          brief: text,
+          status: text.isNotEmpty ? 'ok' : 'skipped',
+        );
+      } on AgentRunFailedException catch (e) {
+        lastError = e.reason;
+      }
     }
+    return StudioStageBrief(
+      agentId: agent.id,
+      agentName: agent.name,
+      brief: '',
+      status: 'error',
+      error: lastError ?? 'tracker failed after 2 retries',
+    );
   }
 
   /// Run one individual tracker (not part of any batch group). Reuses the
@@ -174,31 +184,45 @@ class StudioAgentExecutor {
     required String sessionId,
     required CancelToken cancelToken,
   }) async {
-    try {
-      final brief = await runTracker(
-        agent: agent,
-        promptResult: promptResult,
-        promptPayload: promptPayload,
-        apiConfig: apiConfig,
-        config: config,
-        sessionId: sessionId,
-        cancelToken: cancelToken,
-        onIntermediateUpdate: null,
-      );
-      return TrackerBatchResult(
-        agentId: agent.id,
-        agentName: agent.name,
-        text: brief.brief,
-        status: brief.status,
-        error: brief.error,
-      );
-    } catch (e) {
-      return TrackerBatchResult.failed(
-        agentId: agent.id,
-        agentName: agent.name,
-        reason: formatError(e),
-      );
+    String? lastError;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      if (cancelToken.isCancelled) {
+        return TrackerBatchResult.failed(
+          agentId: agent.id,
+          agentName: agent.name,
+          reason: 'cancelled',
+        );
+      }
+      try {
+        final brief = await runTracker(
+          agent: agent,
+          promptResult: promptResult,
+          promptPayload: promptPayload,
+          apiConfig: apiConfig,
+          config: config,
+          sessionId: sessionId,
+          cancelToken: cancelToken,
+          onIntermediateUpdate: null,
+        );
+        if (brief.status == 'ok' && brief.brief.trim().isNotEmpty) {
+          return TrackerBatchResult(
+            agentId: agent.id,
+            agentName: agent.name,
+            text: brief.brief,
+            status: brief.status,
+            error: brief.error,
+          );
+        }
+        lastError = brief.error ?? 'tracker returned an empty response';
+      } catch (e) {
+        lastError = formatError(e);
+      }
     }
+    return TrackerBatchResult.failed(
+      agentId: agent.id,
+      agentName: agent.name,
+      reason: lastError ?? 'tracker failed after 2 retries',
+    );
   }
 
   Future<StudioFinalRunResult> runFinalGenerator({
@@ -219,8 +243,9 @@ class StudioAgentExecutor {
       config: config,
       priorBriefs: priorBriefs,
       isFinalResponse: true,
-      finalContextOverride:
-          _ref.read(pipelineSettingsProvider).studioFinalContextSize,
+      finalContextOverride: _ref
+          .read(pipelineSettingsProvider)
+          .studioFinalContextSize,
     );
     final runner = _ref.read(agentRunnerProvider);
     final result = await runner.runAgent(
