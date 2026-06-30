@@ -45,10 +45,12 @@ class MemoryGraphBuilder {
 
     // Stamp sourceHash on all entities
     final stamped = entities
-        .map((e) => e.copyWith(
-              sourceHash: sourceHash,
-              updatedAt: currentTimestampSeconds(),
-            ))
+        .map(
+          (e) => e.copyWith(
+            sourceHash: sourceHash,
+            updatedAt: currentTimestampSeconds(),
+          ),
+        )
         .toList();
 
     // Transactional replace
@@ -68,6 +70,7 @@ class MemoryGraphBuilder {
     List<String> knownCharacterNames = const [],
   }) async {
     await _entityRepo.deleteBySessionId(sessionId);
+    await _salienceRepo.deleteBySessionId(sessionId);
 
     for (final entry in entries) {
       if (entry.status != 'active' || entry.content.trim().isEmpty) continue;
