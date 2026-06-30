@@ -47,6 +47,12 @@ class AgentRunner {
   /// as [AgentRunFailedException]** so a single tracker cannot crash the whole
   /// pipeline — `runTrackerCycle` converts it to a failed `StudioStageBrief`.
   /// The final generator rethrows normally (its failure aborts the turn).
+  /// When [preResolvedConfig] is provided, [resolveAgentConfig] is skipped
+  /// and the caller-supplied config is used directly. This avoids double
+  /// resolution when the caller (e.g. `StudioBatchCoordinator`) has already
+  /// resolved the config at grouping time. When provided, global tracker
+  /// maxTokens/temperature overrides are also skipped — the agent's own
+  /// values (which for batch carry the batch budget) are used instead.
   Future<AgentRunResult> runAgent({
     required StudioAgent agent,
     required List<Map<String, dynamic>> messages,
@@ -54,6 +60,7 @@ class AgentRunner {
     required String sessionId,
     required bool isFinalResponse,
     CancelToken? cancelToken,
+    ResolvedAgentConfig? preResolvedConfig,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
@@ -74,6 +81,7 @@ class AgentRunner {
         sessionId: sessionId,
         isFinalResponse: isFinalResponse,
         cancelToken: token,
+        preResolvedConfig: preResolvedConfig,
         onFinalResponseUpdate: onFinalResponseUpdate,
         onIntermediateUpdate: onIntermediateUpdate,
       );
@@ -104,10 +112,11 @@ class AgentRunner {
     required String sessionId,
     required bool isFinalResponse,
     required CancelToken cancelToken,
+    ResolvedAgentConfig? preResolvedConfig,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
-    final resolved = await resolveAgentConfig(
+    final resolved = preResolvedConfig ?? await resolveAgentConfig(
       agent,
       apiConfig,
       sessionId,
@@ -117,12 +126,17 @@ class AgentRunner {
       throw Exception('Studio agent "${agent.name}" API is not configured');
     }
     final timeoutMs = effectiveTimeoutMs(agent, isFinalResponse);
-    final maxTokensOverride = effectiveMaxTokens(agent, isFinalResponse);
-    final temperatureOverride = effectiveTemperature(agent, isFinalResponse);
-    // Studio override: disable reasoning for the final generator when the
-    // user toggled it in the Studio UI. Forces requestReasoning=false and
-    // omitReasoning=true so the model spends the full token budget on the
-    // reply instead of a think-block. Targeted at Gemini Flash thinking.
+    // When preResolvedConfig is provided, skip global tracker maxTokens/
+    // temperature overrides — the agent carries the batch budget (sum of
+    // all group agents' maxTokens, min temperature). Global overrides are
+    // for individual tracker requests; applying them to a batch would
+    // overwrite the computed batch budget with a per-agent cap.
+    final maxTokensOverride = preResolvedConfig != null && !isFinalResponse
+        ? null
+        : effectiveMaxTokens(agent, isFinalResponse);
+    final temperatureOverride = preResolvedConfig != null && !isFinalResponse
+        ? null
+        : effectiveTemperature(agent, isFinalResponse);
     final effectiveResolved = (isFinalResponse &&
             _ref.read(pipelineSettingsProvider).studioFinalDisableReasoning)
         ? resolved.copyWithReasoning(

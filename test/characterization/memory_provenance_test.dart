@@ -27,7 +27,7 @@ MemoryDerivedArtifact<String> _artifact({
 }) {
   return MemoryDerivedArtifact<String>(
     id: id,
-    kind: MemoryDerivedArtifactKind.sidecar,
+    kind: MemoryDerivedArtifactKind.tracker,
     provenance: provenance ?? _key(),
     value: 'derived output',
     createdAtMillis: 10,

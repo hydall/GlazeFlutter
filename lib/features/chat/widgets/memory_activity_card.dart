@@ -138,23 +138,12 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                           runSpacing: 6,
                           children: [
                             _MemoryActivityChip(label: 'skipped $skippedCount'),
-                            _MemoryActivityChip(label: 'latency ${latencyMs}ms'),
+                            _MemoryActivityChip(
+                              label: 'latency ${latencyMs}ms',
+                            ),
                             _MemoryActivityChip(
                               label: _budgetLabel(diagnostics['budget']),
                             ),
-                            if (diagnostics['classifierStatus'] != null &&
-                                diagnostics['classifierStatus'] != 'disabled')
-                              _MemoryActivityChip(
-                                label:
-                                    'classifier ${diagnostics['classifierStatus']}',
-                              ),
-                            if (diagnostics['sidecarStatus'] != null &&
-                                diagnostics['sidecarStatus'] != 'disabled')
-                              _MemoryActivityChip(
-                                label: 'sidecar ${diagnostics['sidecarStatus']}',
-                              ),
-                            if (diagnostics['prewarmHit'] == true)
-                              const _MemoryActivityChip(label: 'prewarm hit'),
                           ],
                         ),
                       ),
@@ -165,20 +154,20 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                             context,
                             sessionId: widget.sessionId,
                           ),
-                          icon: const Icon(Icons.smart_toy_outlined,
-                              size: 18),
+                          icon: const Icon(Icons.smart_toy_outlined, size: 18),
                           tooltip: 'Agentic operations log',
                           visualDensity: VisualDensity.compact,
                         ),
                         IconButton(
                           onPressed: () => showDialog<void>(
                             context: context,
-                            builder: (_) => MemoryGraphPanel(
-                              sessionId: widget.sessionId!,
-                            ),
+                            builder: (_) =>
+                                MemoryGraphPanel(sessionId: widget.sessionId!),
                           ),
-                          icon: const Icon(Icons.account_tree_outlined,
-                              size: 18),
+                          icon: const Icon(
+                            Icons.account_tree_outlined,
+                            size: 18,
+                          ),
                           tooltip: 'Memory Graph',
                           visualDensity: VisualDensity.compact,
                         ),
@@ -186,12 +175,6 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  if (diagnostics['classifierStatus'] != null &&
-                      diagnostics['classifierStatus'] != 'disabled')
-                    _classifierSection(context, diagnostics),
-                  if (diagnostics['sidecarStatus'] != null &&
-                      diagnostics['sidecarStatus'] != 'disabled')
-                    _sidecarSection(context, diagnostics),
                   _candidateList(context, diagnostics),
                 ],
               ],
@@ -207,60 +190,6 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
     final source = raw['source'] ?? 'none';
     final tokens = raw['effectiveTokens'];
     return tokens is int ? 'budget $tokens ($source)' : 'budget $source';
-  }
-
-  Widget _classifierSection(
-    BuildContext context,
-    Map<String, dynamic> diagnostics,
-  ) {
-    final status = diagnostics['classifierStatus'] as String? ?? '';
-    final needsMemory = diagnostics['classifierNeedsMemory'] as bool? ?? false;
-    final confidence = diagnostics['classifierConfidence'];
-    final confidenceText = confidence is num
-        ? '${(confidence * 100).round()}%'
-        : '';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Classifier: $status'
-            '${confidenceText.isNotEmpty ? " · confidence $confidenceText" : ""}'
-            '${needsMemory ? " · needs memory" : ""}',
-            style: TextStyle(
-              fontSize: 11,
-              color: context.cs.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sidecarSection(
-    BuildContext context,
-    Map<String, dynamic> diagnostics,
-  ) {
-    final status = diagnostics['sidecarStatus'] as String? ?? '';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Sidecar: $status'
-            '${diagnostics['prewarmHit'] == true ? " · prewarm hit" : ""}',
-            style: TextStyle(
-              fontSize: 11,
-              color: context.cs.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _candidateList(
@@ -391,7 +320,9 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                       selected
                           ? Icons.check_circle_outline
                           : Icons.cancel_outlined,
-                      color: selected ? Colors.greenAccent : Colors.orangeAccent,
+                      color: selected
+                          ? Colors.greenAccent
+                          : Colors.orangeAccent,
                       size: 16,
                     ),
                     const SizedBox(width: 7),
@@ -515,9 +446,7 @@ class _MemoryActivityWarning extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.orangeAccent.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: Colors.orangeAccent.withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.5)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

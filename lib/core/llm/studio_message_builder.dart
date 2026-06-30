@@ -40,6 +40,7 @@ class StudioMessageBuilder {
     required List<StudioStageBrief> priorBriefs,
     required bool isFinalResponse,
     String mainResponse = '',
+    int finalContextOverride = 0,
   }) {
     final studioPreset = studioRequestPresetById(
       isFinalResponse ? config.finalStudioPresetId : config.agentStudioPresetId,
@@ -154,7 +155,8 @@ class StudioMessageBuilder {
           break;
         case 'chat_history':
           final history = isFinalResponse
-              ? limitFinalHistory(context.history, config)
+              ? limitFinalHistory(context.history, config,
+                  pipelineOverride: finalContextOverride)
               : limitTrackerHistory(context.history, agent.contextSize);
           messages.addAll(history.map((m) => m.toApiMap()));
           break;
@@ -338,9 +340,12 @@ class StudioMessageBuilder {
   /// the current user turn (it is last). 0 (or negative) means no limit.
   List<PromptMessage> limitFinalHistory(
     List<PromptMessage> history,
-    StudioConfig config,
-  ) {
-    final limit = config.maxFinalHistoryMessages;
+    StudioConfig config, {
+    int pipelineOverride = 0,
+  }) {
+    final limit = pipelineOverride > 0
+        ? pipelineOverride
+        : config.maxFinalHistoryMessages;
     if (limit <= 0 || history.length <= limit) return history;
     final trimmed = history.sublist(history.length - limit);
     return trimmed;

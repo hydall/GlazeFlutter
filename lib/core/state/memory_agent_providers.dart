@@ -1,11 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'db_provider.dart';
-import '../llm/memory_classifier_http_client.dart';
-import '../llm/memory_needs_classifier_service.dart';
-import '../llm/memory_sidecar_http_client.dart';
-import '../llm/memory_sidecar_prewarm_cache.dart';
-import '../llm/memory_sidecar_reranker_service.dart';
 import '../llm/memory_graph_builder.dart';
 import '../llm/memory_provenance.dart';
 import '../llm/memory_cadence_service.dart';
@@ -20,37 +15,6 @@ import '../llm/post_cleaner_service.dart';
 import '../llm/studio_ledger_service.dart';
 import 'memory_settings_provider.dart';
 
-/// Provider for the memory needs classifier service.
-/// Returns a no-op service when classifier is not configured.
-final memoryClassifierServiceProvider = Provider<MemoryNeedsClassifierService>((
-  ref,
-) {
-  return MemoryNeedsClassifierService(buildClassifierClient(ref));
-});
-
-/// Provider for the sidecar reranker service.
-final memorySidecarRerankerServiceProvider =
-    Provider<MemorySidecarRerankerService>((ref) {
-      return MemorySidecarRerankerService(
-        buildSidecarClient(ref),
-        callWithLog: (request, cancelToken) => callSidecarWithLog(
-          ref: ref,
-          request: request,
-          cancelToken: cancelToken,
-        ),
-      );
-    });
-
-/// Singleton in-memory prewarm cache for sidecar results.
-/// Keyed per-session with full provenance key matching.
-final memorySidecarPrewarmCacheProvider = Provider<MemorySidecarPrewarmCache>((
-  ref,
-) {
-  final cache = MemorySidecarPrewarmCache();
-  ref.onDispose(cache.clear);
-  return cache;
-});
-
 /// Provider for the entity graph builder.
 final memoryGraphBuilderProvider = Provider<MemoryGraphBuilder>((ref) {
   return MemoryGraphBuilder(
@@ -59,7 +23,8 @@ final memoryGraphBuilderProvider = Provider<MemoryGraphBuilder>((ref) {
   );
 });
 
-/// Provenance index for derived state artifacts (catalog, sidecar, tracker).
+/// Provenance index for derived state artifacts (tracker, proposed memory,
+/// scene, and legacy catalog artifacts).
 final memoryProvenanceIndexProvider =
     Provider<MemoryProvenanceIndex<MemoryDerivedArtifact<dynamic>>>((ref) {
       final index = MemoryProvenanceIndex<MemoryDerivedArtifact<dynamic>>();

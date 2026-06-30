@@ -21,9 +21,9 @@ import 'transport/transport_factory.dart';
 ///
 /// Config resolution order (verbatim from the original `_callLlm`):
 /// 1. explicit [apiConfig] argument (the resolved build config), else
-/// 2. the sidecar config when `pipelineSettings.sidecarSource == 'custom'`,
+/// 2. the aux config when `pipelineSettings.auxSource == 'custom'`,
 ///    else
-/// 3. the active chat API config, with the sidecar model id overriding the
+/// 3. the active chat API config, with the aux model id overriding the
 ///    chat model when set.
 class StudioBuildLlmClient {
   final Ref _ref;
@@ -36,7 +36,7 @@ class StudioBuildLlmClient {
     CancelToken? cancelToken,
   }) async {
     final settings = _ref.read(pipelineSettingsProvider);
-    final isCustom = settings.sidecarSource == 'custom';
+    final isCustom = settings.auxSource == 'custom';
     String endpoint;
     String apiKey;
     String model;
@@ -48,9 +48,9 @@ class StudioBuildLlmClient {
       model = apiConfig.model;
       protocol = apiConfig.protocol;
     } else if (isCustom) {
-      endpoint = settings.sidecarEndpoint;
-      apiKey = settings.sidecarApiKey;
-      model = settings.sidecarModel;
+      endpoint = settings.auxEndpoint;
+      apiKey = settings.auxApiKey;
+      model = settings.auxModel;
       protocol = LlmProtocol.openai;
     } else {
       await _ref.read(apiListProvider.future);
@@ -62,8 +62,8 @@ class StudioBuildLlmClient {
       }
       endpoint = chatConfig.endpoint;
       apiKey = chatConfig.apiKey;
-      model = settings.sidecarModel.isNotEmpty
-          ? settings.sidecarModel
+      model = settings.auxModel.isNotEmpty
+          ? settings.auxModel
           : chatConfig.model;
       protocol = chatConfig.protocol;
     }

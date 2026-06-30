@@ -14,10 +14,10 @@ import 'shared_prefs_provider.dart';
 /// [PipelineGlobalSettings] subset; that table was dropped in schema v52 and
 /// the two freezed classes were merged into this single [PipelineSettings]
 /// shape.
-final pipelineSettingsProvider = StateNotifierProvider<
-    PipelineSettingsNotifier, PipelineSettings>(
-  (ref) => PipelineSettingsNotifier(ref),
-);
+final pipelineSettingsProvider =
+    StateNotifierProvider<PipelineSettingsNotifier, PipelineSettings>(
+      (ref) => PipelineSettingsNotifier(ref),
+    );
 
 class PipelineSettingsNotifier extends StateNotifier<PipelineSettings> {
   final Ref _ref;
@@ -29,7 +29,7 @@ class PipelineSettingsNotifier extends StateNotifier<PipelineSettings> {
     if (raw != null) {
       try {
         final json = jsonDecode(raw) as Map<String, dynamic>;
-        state = PipelineSettings.fromJson(json);
+        state = PipelineSettings.fromJson(_migrateLegacySidecarJson(json));
       } catch (_) {}
     }
   }
@@ -38,5 +38,15 @@ class PipelineSettingsNotifier extends StateNotifier<PipelineSettings> {
     state = settings;
     final prefs = await _ref.read(sharedPreferencesProvider.future);
     await prefs.setString('pipelineSettings', jsonEncode(settings.toJson()));
+  }
+
+  Map<String, dynamic> _migrateLegacySidecarJson(Map<String, dynamic> json) {
+    final migrated = Map<String, dynamic>.from(json);
+    migrated.putIfAbsent('auxSource', () => migrated['sidecarSource']);
+    migrated.putIfAbsent('auxModel', () => migrated['sidecarModel']);
+    migrated.putIfAbsent('auxEndpoint', () => migrated['sidecarEndpoint']);
+    migrated.putIfAbsent('auxApiKey', () => migrated['sidecarApiKey']);
+    migrated.putIfAbsent('auxTimeoutMs', () => migrated['sidecarTimeoutMs']);
+    return migrated;
   }
 }

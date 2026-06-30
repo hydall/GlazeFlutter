@@ -181,9 +181,9 @@ class _OperationsTabState extends ConsumerState<_OperationsTab> {
                     padding: const EdgeInsets.all(24),
                     child: Text(
                       'No agentic operations recorded yet.\n\n'
-                      'Operations appear here when the POST-cleaner, '
-                      'memory sidecar reranker, or agentic memory '
-                      'search/write tools are invoked during generation.',
+                      'Operations appear here when the POST-cleaner, Studio '
+                      'Ledger, tracker agents, or agentic memory search/write '
+                      'tools are invoked during generation.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: context.cs.onSurfaceVariant,

@@ -120,6 +120,14 @@ class PromptPayload {
   /// message. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3).
   final String? recalledMessagesContent;
 
+  /// When true, MemoryBook entries whose source messages fall inside the
+  /// visible window are NOT excluded. Studio tracker briefs are compact
+  /// JSON — they never carry the source messages themselves, so
+  /// deduplicating MemoryBook entries against visible messages wastes
+  /// durable facts that the tracker would otherwise leverage. Default
+  /// false = legacy source-window exclusion applies.
+  final bool disableSourceWindowExclusion;
+
   /// djb2-style hash of the compiled memory injection content for this
   /// turn. Used by the next generation to detect "memory changed since
   /// last turn" and invalidate prompt cache (Anthropic / DeepSeek prompt
@@ -171,6 +179,7 @@ class PromptPayload {
     this.entitiesContent,
     this.studioSessionStateContent,
     this.recalledMessagesContent,
+    this.disableSourceWindowExclusion = false,
     this.memoryInjectionFingerprint = '',
   });
 }
@@ -1121,6 +1130,7 @@ _DeferredMemoryResult _finalizeDeferredMemory({
     selection,
     visibleMessageIds: breakdown.visibleMessageIds,
     chunkBudgeting: payload.memoryPackingMode == 'chunk_first',
+    disableSourceWindowExclusion: payload.disableSourceWindowExclusion,
   );
   MemorySelection? finalMemorySelection = refiltered;
   MemoryExcerptSelection? finalExcerptSelection;
@@ -1353,6 +1363,7 @@ MemorySelection _refilterMemorySelection(
   MemorySelection previous, {
   required Set<String> visibleMessageIds,
   bool chunkBudgeting = false,
+  bool disableSourceWindowExclusion = false,
 }) {
   if (previous.selectionMode == 'legacy') return previous;
   if (visibleMessageIds.isEmpty) return previous;
@@ -1376,7 +1387,7 @@ MemorySelection _refilterMemorySelection(
       maxInjectedEntries: previous.entryCap > 0
           ? previous.entryCap
           : previous.entries.length,
-      sourceWindowExclusion: true,
+      sourceWindowExclusion: !disableSourceWindowExclusion,
       diversityAware: false,
       chunkBudgeting: chunkBudgeting,
     ),

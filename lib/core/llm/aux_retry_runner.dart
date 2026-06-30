@@ -5,10 +5,10 @@ import 'package:flutter/foundation.dart';
 
 import '../models/agent_operation_record.dart';
 
-/// Outcome of a retried sidecar call. Carries the final text result (when
+/// Outcome of a retried auxiliary LLM call. Carries the final text result (when
 /// successful) plus the per-attempt log so callers can record it in the
 /// agentic operations log.
-class SidecarCallOutcome {
+class AuxCallOutcome {
   /// Final status. `ok` only when [text] is non-null and the last attempt
   /// succeeded.
   final AgentOperationStatus status;
@@ -23,7 +23,7 @@ class SidecarCallOutcome {
   /// Total elapsed millis across all attempts.
   final int totalElapsedMs;
 
-  const SidecarCallOutcome({
+  const AuxCallOutcome({
     required this.status,
     this.text,
     this.attempts = const [],
@@ -33,14 +33,14 @@ class SidecarCallOutcome {
   bool get isOk => status == AgentOperationStatus.ok;
 }
 
-/// Retry policy for [SidecarRetryRunner]. Default: 3 attempts, 1s/2s/4s
+/// Retry policy for [AuxRetryRunner]. Default: 3 attempts, 1s/2s/4s
 /// backoff, retries only on 5xx and TimeoutException.
-class SidecarRetryPolicy {
+class AuxRetryPolicy {
   final int maxAttempts;
   final List<Duration> backoffDelays;
   final bool retryOnTimeout;
 
-  const SidecarRetryPolicy({
+  const AuxRetryPolicy({
     this.maxAttempts = 3,
     this.backoffDelays = const [
       Duration(seconds: 1),
@@ -69,26 +69,24 @@ class SidecarRetryPolicy {
     if (attempt <= 0) return Duration.zero;
     final idx = attempt - 1;
     if (idx < backoffDelays.length) return backoffDelays[idx];
-    return backoffDelays.isEmpty
-        ? Duration.zero
-        : backoffDelays.last;
+    return backoffDelays.isEmpty ? Duration.zero : backoffDelays.last;
   }
 }
 
 /// Runs a single-attempt LLM call under a retry policy and produces a
-/// [SidecarCallOutcome] with the per-attempt log. Used by the memory sidecar
-/// reranker HTTP client and the shared [SidecarLlmClient] (post-cleaner,
+/// [AuxCallOutcome] with the per-attempt log. Used by the shared
+/// [AuxLlmClient] (post-cleaner,
 /// agentic search/write) so retry behaviour is uniform and visible.
-class SidecarRetryRunner {
-  final SidecarRetryPolicy policy;
+class AuxRetryRunner {
+  final AuxRetryPolicy policy;
 
-  const SidecarRetryRunner({this.policy = const SidecarRetryPolicy()});
+  const AuxRetryRunner({this.policy = const AuxRetryPolicy()});
 
   /// Runs [attempt] under the retry policy. [attempt] must throw on failure
   /// (will be caught and logged as an attempt) and return the raw text on
   /// success. [cancelToken] is checked between attempts; if cancelled, the
   /// loop exits early with [AgentOperationStatus.aborted].
-  Future<SidecarCallOutcome> run({
+  Future<AuxCallOutcome> run({
     required Future<String> Function(int attempt) attempt,
     CancelToken? cancelToken,
   }) async {
@@ -106,7 +104,7 @@ class SidecarRetryRunner {
       final delay = policy.delayBefore(i);
       if (delay != Duration.zero) {
         debugPrint(
-          '[SidecarRetry] backing off ${delay.inMilliseconds}ms before attempt ${i + 1}',
+          '[AuxRetry] backing off ${delay.inMilliseconds}ms before attempt ${i + 1}',
         );
         try {
           await Future<void>.delayed(delay);
@@ -154,11 +152,7 @@ class SidecarRetryRunner {
           );
         }
         if (!policy.shouldRetry(e, i)) {
-          return _finish(
-            _statusFor(e),
-            attemptsLog,
-            sw.elapsedMilliseconds,
-          );
+          return _finish(_statusFor(e), attemptsLog, sw.elapsedMilliseconds);
         }
       }
     }
@@ -169,12 +163,12 @@ class SidecarRetryRunner {
     );
   }
 
-  static SidecarCallOutcome _finishOk(
+  static AuxCallOutcome _finishOk(
     String text,
     List<AgentOperationAttempt> attempts,
     int totalMs,
   ) {
-    return SidecarCallOutcome(
+    return AuxCallOutcome(
       status: AgentOperationStatus.ok,
       text: text,
       attempts: List.unmodifiable(attempts),
@@ -182,12 +176,12 @@ class SidecarRetryRunner {
     );
   }
 
-  static SidecarCallOutcome _finish(
+  static AuxCallOutcome _finish(
     AgentOperationStatus status,
     List<AgentOperationAttempt> attempts,
     int totalMs,
   ) {
-    return SidecarCallOutcome(
+    return AuxCallOutcome(
       status: status,
       attempts: List.unmodifiable(attempts),
       totalElapsedMs: totalMs,

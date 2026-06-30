@@ -16,9 +16,9 @@ import '../state/recovery_state_provider.dart';
 
 /// Post-Building menu dialog. Session-bound.
 ///
-/// Hosts all generation-pipeline LLM settings (separated from MemoryBooks):
-/// POST-cleaner, agentic write-loop + sidecar, memory generation LLM,
-/// classifier, and consolidation LLM. Reads/writes [PipelineSettings] via
+/// Hosts generation-pipeline LLM settings (separated from MemoryBooks):
+/// POST-cleaner, agentic write-loop + aux defaults, memory generation LLM,
+/// and consolidation LLM. Reads/writes [PipelineSettings] via
 /// [pipelineSettingsProvider].
 class PostBuildingMenuDialog extends ConsumerStatefulWidget {
   final String charId;
@@ -38,7 +38,6 @@ class PostBuildingMenuDialog extends ConsumerStatefulWidget {
 class _PostBuildingMenuDialogState
     extends ConsumerState<PostBuildingMenuDialog> {
   PipelineSettings _pipeline = const PipelineSettings();
-  String _memoryMode = 'fast';
   bool _loading = true;
 
   final Map<String, List<String>> _modelsByApiConfigId = {};
@@ -53,21 +52,9 @@ class _PostBuildingMenuDialogState
   Future<void> _loadSettings() async {
     try {
       final pipeline = ref.read(pipelineSettingsProvider);
-      final book = await ref
-          .read(memoryBookRepoProvider)
-          .getBySessionId(widget.sessionId);
-      final mode = book?.settings.memoryMode ?? 'fast';
       if (mounted) {
         setState(() {
           _pipeline = pipeline;
-          _memoryMode = mode;
-          // Deep memory mode requires the sidecar. If the user has
-          // selected deep mode in Memory Books, force the sidecar
-          // toggle ON here so the pipeline doesn't silently degrade to fast.
-          if (mode == 'deep' && !_pipeline.sidecarEnabled) {
-            _pipeline = _pipeline.copyWith(sidecarEnabled: true);
-            ref.read(pipelineSettingsProvider.notifier).save(_pipeline);
-          }
           _loading = false;
         });
       }
@@ -75,8 +62,6 @@ class _PostBuildingMenuDialogState
       if (mounted) setState(() => _loading = false);
     }
   }
-
-  bool get _sidecarLocked => _memoryMode == 'deep';
 
   Future<void> _savePipeline(
     PipelineSettings Function(PipelineSettings) mutator,
@@ -115,7 +100,7 @@ class _PostBuildingMenuDialogState
               _CleanerSection(
                 pipeline: _pipeline,
                 onSaved: _savePipeline,
-                inheritedTimeoutMs: _pipeline.sidecarTimeoutMs,
+                inheritedTimeoutMs: _pipeline.auxTimeoutMs,
                 modelsByApiConfigId: _modelsByApiConfigId,
                 fetchingModelConfigIds: _fetchingModelConfigIds,
                 onFetchModels: _fetchProviderModels,
@@ -134,8 +119,6 @@ class _PostBuildingMenuDialogState
               _WriteLoopSection(
                 pipeline: _pipeline,
                 onSaved: _savePipeline,
-                sidecarLocked: _sidecarLocked,
-                memoryMode: _memoryMode,
                 modelsByApiConfigId: _modelsByApiConfigId,
                 fetchingModelConfigIds: _fetchingModelConfigIds,
                 onFetchModels: _fetchProviderModels,
@@ -166,14 +149,6 @@ class _PostBuildingMenuDialogState
                     _savePipeline((p) => p.copyWith(generationTemperature: v)),
                 onMaxTokensChanged: (v) =>
                     _savePipeline((p) => p.copyWith(generationMaxTokens: v)),
-              ),
-              const SizedBox(height: 8),
-              _ClassifierSection(
-                pipeline: _pipeline,
-                onSaved: _savePipeline,
-                modelsByApiConfigId: _modelsByApiConfigId,
-                fetchingModelConfigIds: _fetchingModelConfigIds,
-                onFetchModels: _fetchProviderModels,
               ),
               const SizedBox(height: 8),
               _RecoverySection(
@@ -227,7 +202,7 @@ class _PostBuildingMenuDialogState
   }
 }
 
-/// Common pattern shared by sidecar/classifier/cleaner sources.
+/// Common pattern shared by aux/cleaner sources.
 typedef PipelineSaver =
     Future<void> Function(PipelineSettings Function(PipelineSettings) mutator);
 
@@ -256,7 +231,7 @@ class _CleanerSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveSource = pipeline.postCleanerSource == 'inherit'
-        ? pipeline.sidecarSource
+        ? pipeline.auxSource
         : pipeline.postCleanerSource;
     return _SectionCard(
       icon: Icons.cleaning_services_outlined,
@@ -548,7 +523,7 @@ class _LedgerSection extends StatelessWidget {
         _NumberTile(
           label: 'post_building_studio_ledger_timeout'.tr(),
           valueText: pipeline.studioLedgerTimeoutMs <= 0
-              ? 'post_building_inherit_sidecar'.tr()
+              ? 'post_building_inherit_aux'.tr()
               : 'post_building_seconds_count'.tr(
                   namedArgs: {
                     'arg0': (pipeline.studioLedgerTimeoutMs / 1000)
@@ -807,12 +782,10 @@ class _HelperText extends StatelessWidget {
   }
 }
 
-/// Agentic write-loop + sidecar model selector + agent timeout.
+/// Agentic write-loop + auxiliary model selector + agent timeout.
 class _WriteLoopSection extends StatelessWidget {
   final PipelineSettings pipeline;
   final PipelineSaver onSaved;
-  final bool sidecarLocked;
-  final String memoryMode;
   final Map<String, List<String>> modelsByApiConfigId;
   final Set<String> fetchingModelConfigIds;
   final FetchModels onFetchModels;
@@ -820,8 +793,6 @@ class _WriteLoopSection extends StatelessWidget {
   const _WriteLoopSection({
     required this.pipeline,
     required this.onSaved,
-    required this.sidecarLocked,
-    required this.memoryMode,
     required this.modelsByApiConfigId,
     required this.fetchingModelConfigIds,
     required this.onFetchModels,
@@ -844,55 +815,25 @@ class _WriteLoopSection extends StatelessWidget {
               onChanged: (v) =>
                   onSaved((p) => p.copyWith(agenticWriteEnabled: v)),
             ),
-            SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Row(
-                children: [
-                  Flexible(child: Text('post_building_sidecar_enabled'.tr())),
-                  if (sidecarLocked) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.lock_outline,
-                      size: 14,
-                      color: context.cs.primary,
-                    ),
-                  ],
-                ],
-              ),
-              subtitle: Text(
-                sidecarLocked
-                    ? 'post_building_sidecar_locked'.tr(
-                        namedArgs: {'arg0': 'memory_mode_$memoryMode'.tr()},
-                      )
-                    : 'post_building_sidecar_enabled_desc'.tr(),
-              ),
-              value: pipeline.sidecarEnabled,
-              onChanged: sidecarLocked
-                  ? null
-                  : (v) => onSaved((p) => p.copyWith(sidecarEnabled: v)),
-            ),
             _SourceSegment(
-              source: pipeline.sidecarSource,
-              onSourceChanged: (v) =>
-                  onSaved((p) => p.copyWith(sidecarSource: v)),
+              source: pipeline.auxSource,
+              onSourceChanged: (v) => onSaved((p) => p.copyWith(auxSource: v)),
             ),
-            if (pipeline.sidecarSource == 'custom') ...[
+            if (pipeline.auxSource == 'custom') ...[
               _PipelineModelSelector(
                 labelKey: 'post_building_agent_model',
-                model: pipeline.sidecarModel,
-                onModelChanged: (v) =>
-                    onSaved((p) => p.copyWith(sidecarModel: v)),
+                model: pipeline.auxModel,
+                onModelChanged: (v) => onSaved((p) => p.copyWith(auxModel: v)),
               ),
               _PipelineEndpointField(
-                endpoint: pipeline.sidecarEndpoint,
+                endpoint: pipeline.auxEndpoint,
                 onEndpointChanged: (v) =>
-                    onSaved((p) => p.copyWith(sidecarEndpoint: v)),
+                    onSaved((p) => p.copyWith(auxEndpoint: v)),
               ),
               _PipelineApiKeyField(
-                apiKey: pipeline.sidecarApiKey,
+                apiKey: pipeline.auxApiKey,
                 onApiKeyChanged: (v) =>
-                    onSaved((p) => p.copyWith(sidecarApiKey: v)),
+                    onSaved((p) => p.copyWith(auxApiKey: v)),
               ),
             ] else if (activeApi != null) ...[
               _CurrentApiModelRow(
@@ -901,10 +842,9 @@ class _WriteLoopSection extends StatelessWidget {
                 modelsByApiConfigId: modelsByApiConfigId,
                 fetchingModelConfigIds: fetchingModelConfigIds,
                 onFetchModels: onFetchModels,
-                selectedModel: pipeline.sidecarModel,
+                selectedModel: pipeline.auxModel,
                 fallbackModelLabel: activeApi.model,
-                onModelChanged: (v) =>
-                    onSaved((p) => p.copyWith(sidecarModel: v)),
+                onModelChanged: (v) => onSaved((p) => p.copyWith(auxModel: v)),
               ),
             ] else
               Padding(
@@ -918,7 +858,7 @@ class _WriteLoopSection extends StatelessWidget {
               label: 'post_building_agent_timeout'.tr(),
               valueText: 'post_building_seconds_count'.tr(
                 namedArgs: {
-                  'arg0': (pipeline.sidecarTimeoutMs / 1000).toStringAsFixed(0),
+                  'arg0': (pipeline.auxTimeoutMs / 1000).toStringAsFixed(0),
                 },
               ),
               subtitleKey: 'post_building_agent_timeout_desc',
@@ -926,11 +866,11 @@ class _WriteLoopSection extends StatelessWidget {
                 final v = await _editIntSeconds(
                   ctx: ctx,
                   title: 'post_building_agent_timeout'.tr(),
-                  valueSeconds: (pipeline.sidecarTimeoutMs / 1000).round(),
+                  valueSeconds: (pipeline.auxTimeoutMs / 1000).round(),
                   minSeconds: 1,
                 );
                 if (v != null) {
-                  await onSaved((p) => p.copyWith(sidecarTimeoutMs: v * 1000));
+                  await onSaved((p) => p.copyWith(auxTimeoutMs: v * 1000));
                 }
               },
             ),
@@ -942,7 +882,7 @@ class _WriteLoopSection extends StatelessWidget {
       icon: Icons.psychology_outlined,
       titleKey: 'post_building_agentic_advanced',
       subtitleKey: 'post_building_agentic_advanced_desc',
-      modelHintKey: 'post_building_model_hint_sidecar',
+      modelHintKey: 'post_building_model_hint_aux',
       children: [c],
     );
   }
@@ -1071,107 +1011,6 @@ class _PipelineLlmSection extends StatelessWidget {
       icon: icon,
       titleKey: titleKey,
       modelHintKey: modelHintKey,
-      children: [c],
-    );
-  }
-}
-
-/// Classifier LLM section.
-class _ClassifierSection extends StatelessWidget {
-  final PipelineSettings pipeline;
-  final PipelineSaver onSaved;
-  final Map<String, List<String>> modelsByApiConfigId;
-  final Set<String> fetchingModelConfigIds;
-  final FetchModels onFetchModels;
-
-  const _ClassifierSection({
-    required this.pipeline,
-    required this.onSaved,
-    required this.modelsByApiConfigId,
-    required this.fetchingModelConfigIds,
-    required this.onFetchModels,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = Consumer(
-      builder: (ctx, ref, _) {
-        final activeApi = ref.read(activeApiConfigProvider);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Text('post_building_classifier_enable'.tr()),
-              subtitle: Text('post_building_classifier_enable_desc'.tr()),
-              value: pipeline.classifierEnabled,
-              onChanged: (v) =>
-                  onSaved((p) => p.copyWith(classifierEnabled: v)),
-            ),
-            _SourceSegment(
-              source: pipeline.classifierSource,
-              onSourceChanged: (v) =>
-                  onSaved((p) => p.copyWith(classifierSource: v)),
-            ),
-            if (pipeline.classifierSource == 'custom') ...[
-              _PipelineModelSelector(
-                labelKey: 'post_building_classifier_model',
-                model: pipeline.classifierModel,
-                onModelChanged: (v) =>
-                    onSaved((p) => p.copyWith(classifierModel: v)),
-              ),
-              _PipelineEndpointField(
-                endpoint: pipeline.classifierEndpoint,
-                onEndpointChanged: (v) =>
-                    onSaved((p) => p.copyWith(classifierEndpoint: v)),
-              ),
-              _PipelineApiKeyField(
-                apiKey: pipeline.classifierApiKey,
-                onApiKeyChanged: (v) =>
-                    onSaved((p) => p.copyWith(classifierApiKey: v)),
-              ),
-            ] else if (activeApi != null) ...[
-              _CurrentApiModelRow(
-                labelKey: 'post_building_classifier_model',
-                apiConfig: activeApi,
-                modelsByApiConfigId: modelsByApiConfigId,
-                fetchingModelConfigIds: fetchingModelConfigIds,
-                onFetchModels: onFetchModels,
-                selectedModel: pipeline.classifierModel,
-                fallbackModelLabel: activeApi.model,
-                onModelChanged: (v) =>
-                    onSaved((p) => p.copyWith(classifierModel: v)),
-              ),
-            ],
-            _NumberTile(
-              label: 'post_building_classifier_timeout'.tr(),
-              valueText: 'post_building_ms_count'.tr(
-                namedArgs: {'arg0': '${pipeline.classifierTimeoutMs}'},
-              ),
-              subtitleKey: 'post_building_classifier_timeout_desc',
-              onTap: (ctx) async {
-                final v = await _editInt(
-                  ctx: ctx,
-                  title: 'post_building_classifier_timeout'.tr(),
-                  value: pipeline.classifierTimeoutMs,
-                  min: 500,
-                  max: 10000,
-                  step: 500,
-                );
-                if (v != null) {
-                  await onSaved((p) => p.copyWith(classifierTimeoutMs: v));
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
-    return _SectionCard(
-      icon: Icons.category_outlined,
-      titleKey: 'post_building_classifier_llm',
-      modelHintKey: 'post_building_model_hint_classifier',
       children: [c],
     );
   }
@@ -1397,8 +1236,8 @@ class _PipelineApiKeyField extends StatelessWidget {
 
 /// Shared "current API" model dropdown + refresh button.
 ///
-/// Used by every pipeline section (cleaner, sidecar, generation, classifier,
-/// consolidation) when source='current'. Shows models fetched from the
+/// Used by every pipeline section (cleaner, aux, generation, consolidation)
+/// when source='current'. Shows models fetched from the
 /// active API config endpoint, plus a refresh button to fetch the list.
 class _CurrentApiModelRow extends StatelessWidget {
   final String labelKey;
@@ -1499,7 +1338,7 @@ class _CurrentApiModelRow extends StatelessWidget {
   }
 }
 
-/// Studio Ledger model dropdown. Ledger inherits sidecar endpoint/key/model when
+/// Studio Ledger model dropdown. Ledger inherits aux endpoint/key/model when
 /// its override fields are empty, then falls back to the active chat API.
 class _LedgerModelRow extends ConsumerWidget {
   final PipelineSettings pipeline;
@@ -1519,12 +1358,12 @@ class _LedgerModelRow extends ConsumerWidget {
   ApiConfig? _resolveLedgerConfig(ApiConfig? activeApi) {
     final endpoint = pipeline.studioLedgerEndpoint.isNotEmpty
         ? pipeline.studioLedgerEndpoint
-        : pipeline.sidecarEndpoint;
+        : pipeline.auxEndpoint;
     final apiKey = pipeline.studioLedgerApiKey.isNotEmpty
         ? pipeline.studioLedgerApiKey
-        : pipeline.sidecarApiKey;
-    final inheritedModel = pipeline.sidecarModel.isNotEmpty
-        ? pipeline.sidecarModel
+        : pipeline.auxApiKey;
+    final inheritedModel = pipeline.auxModel.isNotEmpty
+        ? pipeline.auxModel
         : activeApi?.model ?? '';
 
     if (endpoint.isNotEmpty) {
@@ -1660,23 +1499,23 @@ class _AuditModelRow extends ConsumerWidget {
   });
 
   /// Builds the synthetic [ApiConfig] the audit resolves to (mirrors
-  /// [SidecarLlmClient.resolveConfigForAudit] → [resolveConfigForCleaner]).
+  /// [AuxLlmClient.resolveConfigForAudit] → [resolveConfigForCleaner]).
   /// Returns null when the resolved endpoint is empty (cleaner custom config
   /// incomplete) so the row can show an inline hint instead of an empty
   /// dropdown.
   ApiConfig? _resolveAuditConfig(ApiConfig? activeApi) {
     final source = pipeline.postCleanerSource == 'inherit'
-        ? pipeline.sidecarSource
+        ? pipeline.auxSource
         : pipeline.postCleanerSource;
     final endpoint = pipeline.postCleanerEndpoint.isNotEmpty
         ? pipeline.postCleanerEndpoint
-        : pipeline.sidecarEndpoint;
+        : pipeline.auxEndpoint;
     final apiKey = pipeline.postCleanerApiKey.isNotEmpty
         ? pipeline.postCleanerApiKey
-        : pipeline.sidecarApiKey;
+        : pipeline.auxApiKey;
     final fallbackModel = pipeline.postCleanerModel.isNotEmpty
         ? pipeline.postCleanerModel
-        : pipeline.sidecarModel;
+        : pipeline.auxModel;
 
     if (source == 'custom') {
       if (endpoint.isEmpty) return null;

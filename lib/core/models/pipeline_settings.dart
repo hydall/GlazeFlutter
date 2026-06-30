@@ -5,11 +5,10 @@ part 'pipeline_settings.g.dart';
 
 /// Global generation-pipeline LLM settings, separated from [MemoryBookSettings].
 ///
-/// These fields configure LLM sidecars and post-generation passes that have
+/// These fields configure auxiliary LLM calls and post-generation passes that have
 /// nothing to do with memory retrieval:
 /// - Memory generation LLM (writes memory entries)
-/// - Classifier LLM (classifies memory importance)
-/// - Sidecar LLM (write-loop + reranker)
+/// - Auxiliary LLM defaults (write-loop + cleaner + ledger fallback)
 /// - Agentic write-loop
 /// - POST-cleaner (anti-cliche rewrite + continuity audit)
 /// - Consolidation LLM (merges memory entries)
@@ -31,21 +30,15 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default(null) double? generationTemperature,
     @Default(null) int? generationMaxTokens,
 
-    // ── Classifier LLM ────────────────────────────────────────────────────
-    @Default(false) bool classifierEnabled,
-    @Default('current') String classifierSource,
-    @Default('') String classifierModel,
-    @Default('') String classifierEndpoint,
-    @Default('') String classifierApiKey,
-    @Default(2500) int classifierTimeoutMs,
-
-    // ── Sidecar LLM (write-loop + reranker) ────────────────────────────────
-    @Default(false) bool sidecarEnabled,
-    @Default('current') String sidecarSource,
-    @Default('') String sidecarModel,
-    @Default('') String sidecarEndpoint,
-    @Default('') String sidecarApiKey,
-    @Default(60000) int sidecarTimeoutMs,
+    // ── Auxiliary LLM defaults ─────────────────────────────────────────────
+    // Shared fallback config for non-streaming helper LLM calls such as the
+    // write-loop, POST-cleaner, Studio Ledger, and consolidation. MemoryBook
+    // retrieval does not use this; it is local/vector-only.
+    @Default('current') String auxSource,
+    @Default('') String auxModel,
+    @Default('') String auxEndpoint,
+    @Default('') String auxApiKey,
+    @Default(60000) int auxTimeoutMs,
 
     // ── Agentic write-loop ────────────────────────────────────────────────
     @Default(false) bool agenticWriteEnabled,
@@ -103,6 +96,10 @@ abstract class PipelineSettings with _$PipelineSettings {
     // (e.g. Gemini) that spend most of the budget on thinking and leave too
     // little for the actual reply. 0 = use the agent's own maxTokens.
     @Default(0) int studioFinalMaxTokens,
+    // Chat history messages override for the Studio final generator (Main
+    // Responder). When > 0, overrides StudioConfig.maxFinalHistoryMessages.
+    // 0 = use per-session StudioConfig default (15).
+    @Default(0) int studioFinalContextSize,
     // Temperature for the Studio final generator (Main Responder). When
     // >= 0, overrides the per-agent default (0.8 for the final agent, 0.3
     // for trackers). Negative = use the agent's own temperature.
@@ -136,6 +133,12 @@ abstract class PipelineSettings with _$PipelineSettings {
     // JSON briefs, so a hidden think-block wastes tokens without improving the
     // brief. Only effective for Gemini-protocol endpoints.
     @Default(false) bool studioTrackerDisableReasoning,
+
+    // Context size override for ALL non-final Studio agents (batch and
+    // individual). When > 0, overrides the per-agent contextSize and the
+    // batch MAX-of-all-agents logic. 0 = use per-agent contextSize (default
+    // 5 per agent, batch = max across group).
+    @Default(0) int studioTrackerContextSize,
 
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,
@@ -177,13 +180,13 @@ abstract class PipelineSettings with _$PipelineSettings {
     // relationship/arc/world state and durable MemoryBook facts.
     // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md.
     @Default(false) bool studioLedgerEnabled,
-    // Model for the ledger LLM call. When empty, inherits the sidecar model.
+    // Model for the ledger LLM call. When empty, inherits the aux model.
     @Default('') String studioLedgerModel,
-    // Endpoint override for the ledger LLM. When empty, inherits sidecar.
+    // Endpoint override for the ledger LLM. When empty, inherits aux.
     @Default('') String studioLedgerEndpoint,
-    // API key override for the ledger LLM. When empty, inherits sidecar.
+    // API key override for the ledger LLM. When empty, inherits aux.
     @Default('') String studioLedgerApiKey,
-    // Ledger LLM call timeout in milliseconds. 0 = use sidecarTimeoutMs.
+    // Ledger LLM call timeout in milliseconds. 0 = use auxTimeoutMs.
     @Default(0) int studioLedgerTimeoutMs,
     // Max tokens for the ledger LLM call. 0 = use default (2000).
     @Default(0) int studioLedgerMaxTokens,

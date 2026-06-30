@@ -609,18 +609,11 @@ class AppDatabase extends _$AppDatabase {
           'generationApiKey',
           'generationTemperature',
           'generationMaxTokens',
-          'classifierEnabled',
-          'classifierSource',
-          'classifierModel',
-          'classifierEndpoint',
-          'classifierApiKey',
-          'classifierTimeoutMs',
-          'sidecarEnabled',
-          'sidecarSource',
-          'sidecarModel',
-          'sidecarEndpoint',
-          'sidecarApiKey',
-          'sidecarTimeoutMs',
+          'auxSource',
+          'auxModel',
+          'auxEndpoint',
+          'auxApiKey',
+          'auxTimeoutMs',
           'agenticWriteEnabled',
           'postCleanerEnabled',
           'postCleanerTemperature',
@@ -657,6 +650,28 @@ class AppDatabase extends _$AppDatabase {
             if (bookJson.containsKey(key)) {
               pipelineJson[key] = bookJson[key];
             }
+          }
+          // Historical builds stored the shared helper LLM config as
+          // `sidecar*`. Preserve that config under the neutral `aux*` names.
+          if (!pipelineJson.containsKey('auxSource') &&
+              bookJson.containsKey('sidecarSource')) {
+            pipelineJson['auxSource'] = bookJson['sidecarSource'];
+          }
+          if (!pipelineJson.containsKey('auxModel') &&
+              bookJson.containsKey('sidecarModel')) {
+            pipelineJson['auxModel'] = bookJson['sidecarModel'];
+          }
+          if (!pipelineJson.containsKey('auxEndpoint') &&
+              bookJson.containsKey('sidecarEndpoint')) {
+            pipelineJson['auxEndpoint'] = bookJson['sidecarEndpoint'];
+          }
+          if (!pipelineJson.containsKey('auxApiKey') &&
+              bookJson.containsKey('sidecarApiKey')) {
+            pipelineJson['auxApiKey'] = bookJson['sidecarApiKey'];
+          }
+          if (!pipelineJson.containsKey('auxTimeoutMs') &&
+              bookJson.containsKey('sidecarTimeoutMs')) {
+            pipelineJson['auxTimeoutMs'] = bookJson['sidecarTimeoutMs'];
           }
           if (pipelineJson.isEmpty) continue;
           await customStatement(
@@ -715,8 +730,7 @@ class AppDatabase extends _$AppDatabase {
         final snapTables = await customSelect(
           "SELECT name FROM sqlite_master WHERE type = 'table'",
         ).get();
-        final snapNames =
-            snapTables.map((r) => r.read<String>('name')).toSet();
+        final snapNames = snapTables.map((r) => r.read<String>('name')).toSet();
         if (snapNames.contains('tracker_snapshots') &&
             snapNames.contains('tracker_rows')) {
           // Aggregate each session's trackers into a JSON array and insert

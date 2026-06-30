@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
+import '../../../core/llm/prompt_builder.dart' show PromptPayload;
 import '../../../core/llm/memory_studio_service.dart';
 import '../../../core/llm/studio_stage_brief.dart';
 import '../../../core/llm/stream_accumulator.dart';
@@ -17,8 +18,10 @@ import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/agent_operation_record.dart';
+import '../../../core/models/api_config.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
+import '../../../core/state/pipeline_settings_provider.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../state/agent_operations_log_provider.dart';
@@ -70,6 +73,16 @@ class StreamGenerationService {
       );
     }
     try {
+      final studioService = _ref.read(memoryStudioServiceProvider);
+      final studioConfig = await studioService.getEnabledConfig(session.id);
+      if (_isAborted()) {
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
+      }
+
       final builder = _ref.read(promptPayloadBuilderProvider);
       final payload = await builder.buildFromSession(
         charId: _charId,
@@ -87,7 +100,52 @@ class StreamGenerationService {
       }
       final apiConfig = payload.apiConfig;
 
-      final promptResult = await buildPromptInIsolate(payload);
+      final effectivePayload = studioConfig != null
+          ? PromptPayload(
+              character: payload.character,
+              persona: payload.persona,
+              preset: payload.preset,
+              history: payload.history,
+              sessionId: payload.sessionId,
+              apiConfig: payload.apiConfig,
+              sessionVars: payload.sessionVars,
+              globalVars: payload.globalVars,
+              summaryContent: payload.summaryContent,
+              summaryPrefix: payload.summaryPrefix,
+              memoryContent: payload.memoryContent,
+              memoryMacroContent: payload.memoryMacroContent,
+              memoryInjectionTarget: payload.memoryInjectionTarget,
+              guidanceText: payload.guidanceText,
+              lorebooks: payload.lorebooks,
+              lorebookSettings: payload.lorebookSettings,
+              lorebookActivations: payload.lorebookActivations,
+              vectorEntries: payload.vectorEntries,
+              authorsNote: payload.authorsNote,
+              characterDepthPrompt: payload.characterDepthPrompt,
+              characterDepthPromptDepth: payload.characterDepthPromptDepth,
+              characterDepthPromptRole: payload.characterDepthPromptRole,
+              memoryCoverage: payload.memoryCoverage,
+              globalRegexes: payload.globalRegexes,
+              preScannedEntries: payload.preScannedEntries,
+              triggeredMemories: payload.triggeredMemories,
+              runtimePromptBlocks: payload.runtimePromptBlocks,
+              memorySelection: payload.memorySelection,
+              memoryExcerptingEnabled: payload.memoryExcerptingEnabled,
+              memoryPackingMode: payload.memoryPackingMode,
+              memoryExcerptTokensPerChunk: payload.memoryExcerptTokensPerChunk,
+              memoryExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
+              chunkFirstTopEntries: payload.chunkFirstTopEntries,
+              chunkFirstTopChunks: payload.chunkFirstTopChunks,
+              arcContent: payload.arcContent,
+              entitiesContent: payload.entitiesContent,
+              studioSessionStateContent: payload.studioSessionStateContent,
+              recalledMessagesContent: payload.recalledMessagesContent,
+              disableSourceWindowExclusion: true,
+              memoryInjectionFingerprint: payload.memoryInjectionFingerprint,
+            )
+          : payload;
+
+      final promptResult = await buildPromptInIsolate(effectivePayload);
       if (_isAborted()) {
         return ChatState(
           session: saveSession ?? session,
@@ -153,16 +211,6 @@ class StreamGenerationService {
       final triggeredLorebooks = promptResult.triggeredLorebooks;
       final triggeredMemories = promptResult.triggeredMemories;
 
-      final studioConfig = await _ref
-          .read(memoryStudioServiceProvider)
-          .getEnabledConfig(session.id);
-      if (_isAborted()) {
-        return ChatState(
-          session: saveSession ?? session,
-          isGenerating: false,
-          visibleStartIndex: vsi,
-        );
-      }
       if (studioConfig != null) {
         _log(
           'studio intercept char=$_charId session=${session.id} '
@@ -174,14 +222,6 @@ class StreamGenerationService {
           sessionId: session.id,
           totalAgents: studioConfig.agents.length,
         );
-        final promptResult = await buildPromptInIsolate(payload);
-        if (_isAborted()) {
-          return ChatState(
-            session: saveSession ?? session,
-            isGenerating: false,
-            visibleStartIndex: vsi,
-          );
-        }
         final startGenTime = DateTime.now();
         DateTime? finalStartTime;
         bool studioFrameScheduled = false;
@@ -202,7 +242,6 @@ class StreamGenerationService {
           });
         }
 
-        final studioService = _ref.read(memoryStudioServiceProvider);
         final studioResult = await studioService.runTrackerCycle(
           config: studioConfig,
           promptResult: promptResult,
@@ -294,7 +333,8 @@ class StreamGenerationService {
             startGenTime: startGenTime,
             finalStartTime: finalStartTime,
             result: studioResult,
-            model: apiConfig.model,
+            trackerModel: _resolvedTrackerModel(apiConfig),
+            finalModel: apiConfig.model,
           );
           return finalState;
         }
@@ -309,7 +349,8 @@ class StreamGenerationService {
             sessionId: session.id,
             startGenTime: startGenTime,
             result: studioResult,
-            model: apiConfig.model,
+            trackerModel: _resolvedTrackerModel(apiConfig),
+            finalModel: apiConfig.model,
           );
           _ref.read(studioCycleStateProvider.notifier).state =
               const StudioCycleState.error(sessionId: '');
@@ -379,7 +420,8 @@ class StreamGenerationService {
           startGenTime: startGenTime,
           finalStartTime: finalStartTime,
           result: studioResult,
-          model: apiConfig.model,
+          trackerModel: _resolvedTrackerModel(apiConfig),
+          finalModel: apiConfig.model,
         );
         if (memoryDiagnostics is Map<String, dynamic> &&
             finalState.session != null) {
@@ -395,7 +437,7 @@ class StreamGenerationService {
             diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
             updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
           );
-          _recordSidecarOperation(
+          _recordMemoryAgentOperation(
             finalState.session!.id,
             memoryMessageId,
             memoryDiagnostics,
@@ -554,7 +596,7 @@ class StreamGenerationService {
               diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
               updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
             );
-            _recordSidecarOperation(
+            _recordMemoryAgentOperation(
               finalState!.session!.id,
               messageId,
               memoryDiagnostics,
@@ -670,48 +712,12 @@ class StreamGenerationService {
         .toList(growable: false);
   }
 
-  /// Records a memory sidecar reranker operation in the agentic operations log
-  /// when the diagnostics carry a `sidecarAttempts` array (deep mode only).
-  void _recordSidecarOperation(
+  /// Records memory agent operations in the agentic operations log.
+  void _recordMemoryAgentOperation(
     String sessionId,
     String? messageId,
     Map<String, dynamic> diagnostics,
   ) {
-    // Memory sidecar (reranker) operation.
-    final sidecarStatus = diagnostics['sidecarStatus'] as String?;
-    if (sidecarStatus != null && sidecarStatus != 'disabled') {
-      final rawAttempts = diagnostics['sidecarAttempts'];
-      if (rawAttempts is List) {
-        final attempts = rawAttempts
-            .whereType<Map<dynamic, dynamic>>()
-            .map(
-              (e) =>
-                  AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)),
-            )
-            .toList();
-        if (attempts.isNotEmpty) {
-          final status = _sidecarStatusToOp(sidecarStatus);
-          _appendOperation(
-            AgentOperationRecord(
-              id: 'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
-              kind: AgentOperationKind.memorySidecar,
-              status: status,
-              sessionId: sessionId,
-              messageId: messageId,
-              attempts: attempts,
-              totalElapsedMs: attempts.fold(0, (sum, a) => sum + a.elapsedMs),
-              summary: status == AgentOperationStatus.ok
-                  ? 'reranked ${diagnostics['selectedCount'] ?? 0} entries'
-                  : sidecarStatus,
-              startedAtMs: attempts.first.startedAtMs,
-              finishedAtMs: attempts.last.startedAtMs + attempts.last.elapsedMs,
-              canRegenerate: status.isFailure,
-            ),
-          );
-        }
-      }
-    }
-
     // Agentic search (searchMemory tool) operation.
     final agenticStatus = diagnostics['agenticStatus'] as String?;
     if (agenticStatus != null &&
@@ -727,7 +733,7 @@ class StreamGenerationService {
             )
             .toList();
         if (attempts.isNotEmpty) {
-          final status = _sidecarStatusToOp(agenticStatus);
+          final status = _memoryAgentStatusToOp(agenticStatus);
           _appendOperation(
             AgentOperationRecord(
               id: 'agentic-search-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
@@ -779,7 +785,8 @@ class StreamGenerationService {
     required DateTime startGenTime,
     DateTime? finalStartTime,
     required StudioPipelineResult result,
-    String? model,
+    required String trackerModel,
+    required String finalModel,
   }) {
     final status = _studioStatusToOp(result.status);
     if (status == AgentOperationStatus.aborted ||
@@ -811,7 +818,7 @@ class StreamGenerationService {
             ),
           ],
           totalElapsedMs: elapsedMs,
-          model: model,
+          model: trackerModel,
           summary: result.error ?? result.status,
           startedAtMs: startedAtMs,
           finishedAtMs: now.millisecondsSinceEpoch,
@@ -851,7 +858,7 @@ class StreamGenerationService {
             ),
           ],
           totalElapsedMs: elapsedMs,
-          model: model,
+          model: trackerModel,
           summary: summary,
           startedAtMs: opStartedAt,
           finishedAtMs: opStartedAt,
@@ -881,7 +888,7 @@ class StreamGenerationService {
           ),
         ],
         totalElapsedMs: finalElapsedMs < 0 ? elapsedMs : finalElapsedMs,
-        model: model,
+        model: finalModel,
         summary: status.isOk
             ? 'final reply · ${result.response.length} chars'
             : result.error ?? result.status,
@@ -902,6 +909,13 @@ class StreamGenerationService {
       'agent_errors' => AgentOperationStatus.error,
       _ => AgentOperationStatus.error,
     };
+  }
+
+  String _resolvedTrackerModel(ApiConfig apiConfig) {
+    final override = _ref
+        .read(pipelineSettingsProvider)
+        .studioTrackerModelOverride;
+    return override.isNotEmpty ? override : apiConfig.model;
   }
 
   /// Builds the terminal `StudioCycleState` from a `StudioPipelineResult`,
@@ -940,7 +954,7 @@ class StreamGenerationService {
     }
   }
 
-  static AgentOperationStatus _sidecarStatusToOp(String status) {
+  static AgentOperationStatus _memoryAgentStatusToOp(String status) {
     return switch (status) {
       'ok' => AgentOperationStatus.ok,
       'disabled' => AgentOperationStatus.disabled,

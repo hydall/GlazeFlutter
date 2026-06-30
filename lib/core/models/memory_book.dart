@@ -52,6 +52,7 @@ abstract class MemoryEntry with _$MemoryEntry {
     @Default('') String arc,
     @Default('curated') String kind,
     @Default('') String sourceHash,
+
     /// Provenance marker for UI filtering (Phase 7). Empty for entries
     /// created before the source field existed or for manual/curated
     /// entries. Set to `'scan_chat'` when promoted from a scan draft, or
@@ -59,6 +60,7 @@ abstract class MemoryEntry with _$MemoryEntry {
     /// MemoryBook UI tab agent-sourced entries separately from curated
     /// ones (see `memory_books_sheet.dart` "Agent memories" tab).
     @Default('') String source,
+
     /// When true, the agentic write-loop MUST NOT modify this entry —
     /// `MemoryBookRepo.appendFactsToEntry` skips it and the parser marks
     /// it as `[locked]` in the `<existing_memory_entries>` prompt block
@@ -67,6 +69,7 @@ abstract class MemoryEntry with _$MemoryEntry {
     /// UI to protect manually-curated facts from being rewritten by the
     /// agent. See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.4.
     @Default(false) bool locked,
+
     /// When true, this entry is excluded from the embedding pipeline —
     /// `MemoryEmbeddingService` skips it, and `MessageRecallService` /
     /// memory vector search do not surface it. Useful for spoiler entries
@@ -93,9 +96,11 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default('hybrid') String memoryPackingMode,
     @Default(500) int memoryExcerptTokensPerChunk,
     @Default(2) int memoryExcerptChunksPerEntry,
+
     /// Top-N entries (by entry score) that each receive at least one chunk in
     /// chunk_first mode. 0 disables the entry floor pass.
     @Default(3) int chunkFirstTopEntries,
+
     /// Best chunks reserved per guaranteed entry in chunk_first floor pass.
     @Default(1) int chunkFirstTopChunks,
     @Default(0.35) double maxInjectionBudgetPercent,
@@ -121,6 +126,7 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(6) int queryRecentTurns,
     @Default(1500) int queryMaxChars,
     @Default(3) int cadenceInterval,
+
     /// Enables the memory consolidation pass. The consolidation LLM config
     /// (model/endpoint/key/timeout) lives in [PipelineSettings]; this flag is
     /// the retrieval-side toggle that gates whether the post-turn pipeline
@@ -138,12 +144,9 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
 /// values were misleadingly named because the "summary" prefix was
 /// about *where* memory goes, not about the summary feature itself.
 ///
-/// Also migrates the removed `agentic` retrieval mode to `deep`. The
-/// `agentic` mode mixed retrieval depth with an LLM sidecar layer; the
-/// sidecar is now a separate tracker concern (see
-/// docs/PLAN_AGENTIC_STUDIO.md Phase 4). Old MemoryBook JSON with
-/// `memoryMode: "agentic"` reads as `deep` so users keep deep rerank
-/// without silent LLM calls.
+/// Also migrates the removed `agentic` retrieval mode to `deep`. Old
+/// MemoryBook JSON with `memoryMode: "agentic"` keeps the strongest local
+/// retrieval mode without restoring removed hidden LLM retrieval calls.
 Map<String, dynamic> _migrateInjectionTargetInPlace(Map<String, dynamic> json) {
   var result = json;
   final injectionTarget = result['injectionTarget'];

@@ -1,6 +1,6 @@
-/// A single attempt inside an agentic LLM call (sidecar / post-cleaner /
-/// agentic search-write). Captured for the operations log UI so the user can
-/// see retry behaviour (502 → retry → 200).
+/// A single attempt inside an auxiliary LLM call (post-cleaner, ledger,
+/// tracker, or agentic search/write). Captured for the operations log UI so the
+/// user can see retry behaviour (502 -> retry -> 200).
 class AgentOperationAttempt {
   /// 1-based attempt number.
   final int attempt;
@@ -152,9 +152,8 @@ class AgentOperationRecord {
   final int finishedAtMs;
 
   /// Whether the operation can be retried/regenerated from the UI.
-  /// True for post-cleaner (regen cleaner on the message) and memory sidecar
-  /// (re-run selection on next turn). False for fire-and-forget ops without a
-  /// natural user-triggered retry.
+  /// True for operations with a natural user-triggered retry, such as
+  /// post-cleaner regeneration. False for fire-and-forget ops.
   final bool canRegenerate;
 
   const AgentOperationRecord({

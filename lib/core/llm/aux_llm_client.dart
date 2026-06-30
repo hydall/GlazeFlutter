@@ -6,19 +6,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
 import '../models/pipeline_settings.dart';
-import 'sidecar_retry_runner.dart';
+import 'aux_retry_runner.dart';
 import 'transport/chat_transport_request.dart';
 import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
 
-/// Resolved sidecar API configuration for a non-streaming LLM call.
-class SidecarApiConfig {
+/// Resolved auxiliary API configuration for a non-streaming LLM call.
+class AuxApiConfig {
   final String endpoint;
   final String apiKey;
   final String model;
   final String protocol;
 
-  const SidecarApiConfig({
+  const AuxApiConfig({
     required this.endpoint,
     required this.apiKey,
     required this.model,
@@ -26,7 +26,7 @@ class SidecarApiConfig {
   });
 }
 
-/// Shared helper for sidecar (non-streaming) LLM calls.
+/// Shared helper for auxiliary (non-streaming) LLM calls.
 ///
 /// Extracted from the duplicated pattern in `MemoryAgenticService`
 /// (`_askLlmForSearchQuery`, `_askLlmForWrites`) and `PostCleanerService`
@@ -35,45 +35,45 @@ class SidecarApiConfig {
 ///
 /// Usage:
 /// ```dart
-/// final client = SidecarLlmClient(ref);
+/// final client = AuxLlmClient(ref);
 /// final config = await client.resolveConfig(settings, errorLabel: 'write-loop');
 /// final raw = await client.callOnce(
 ///   config: config,
 ///   prompt: '...',
 ///   maxTokens: 1000,
 ///   temperature: 0.2,
-///   timeoutMs: settings.sidecarTimeoutMs,
+///   timeoutMs: settings.auxTimeoutMs,
 ///   cancelToken: cancelToken,
 /// );
 /// ```
-class SidecarLlmClient {
+class AuxLlmClient {
   final Ref _ref;
 
-  SidecarLlmClient(this._ref);
+  AuxLlmClient(this._ref);
 
-  /// Resolves the API config from [settings]: either the custom sidecar
+  /// Resolves the API config from [settings]: either the custom auxiliary
   /// endpoint or the active chat config. Throws if not configured.
-  Future<SidecarApiConfig> resolveConfig(
+  Future<AuxApiConfig> resolveConfig(
     PipelineSettings settings, {
-    String errorLabel = 'sidecar',
+    String errorLabel = 'aux',
   }) async {
-    final isCustom = settings.sidecarSource == 'custom';
+    final isCustom = settings.auxSource == 'custom';
     if (isCustom) {
-      if (settings.sidecarEndpoint.isEmpty || settings.sidecarModel.isEmpty) {
+      if (settings.auxEndpoint.isEmpty || settings.auxModel.isEmpty) {
         debugPrint(
-          '[Sidecar] custom config incomplete — endpoint='
-          "'${settings.sidecarEndpoint}' model='${settings.sidecarModel}'",
+          '[Aux] custom config incomplete — endpoint='
+          "'${settings.auxEndpoint}' model='${settings.auxModel}'",
         );
-        throw Exception('Sidecar custom config incomplete for $errorLabel');
+        throw Exception('Aux custom config incomplete for $errorLabel');
       }
       debugPrint(
-        '[Sidecar] resolved custom for $errorLabel '
-        'model=${settings.sidecarModel}',
+        '[Aux] resolved custom for $errorLabel '
+        'model=${settings.auxModel}',
       );
-      return SidecarApiConfig(
-        endpoint: settings.sidecarEndpoint,
-        apiKey: settings.sidecarApiKey,
-        model: settings.sidecarModel,
+      return AuxApiConfig(
+        endpoint: settings.auxEndpoint,
+        apiKey: settings.auxApiKey,
+        model: settings.auxModel,
         protocol: LlmProtocol.openai,
       );
     }
@@ -81,17 +81,17 @@ class SidecarLlmClient {
     await _ref.read(apiListProvider.future);
     final chatConfig = _ref.read(activeApiConfigProvider);
     if (chatConfig == null) {
-      debugPrint('[Sidecar] no active chat API config for $errorLabel');
+      debugPrint('[Aux] no active chat API config for $errorLabel');
       throw Exception('No chat API config available for $errorLabel');
     }
-    final model = settings.sidecarModel.isNotEmpty
-        ? settings.sidecarModel
+    final model = settings.auxModel.isNotEmpty
+        ? settings.auxModel
         : chatConfig.model;
     debugPrint(
-      '[Sidecar] resolved chat-fallback for $errorLabel '
+      '[Aux] resolved chat-fallback for $errorLabel '
       'model=$model endpoint=${chatConfig.endpoint}',
     );
-    return SidecarApiConfig(
+    return AuxApiConfig(
       endpoint: chatConfig.endpoint,
       apiKey: chatConfig.apiKey,
       model: model,
@@ -100,35 +100,35 @@ class SidecarLlmClient {
   }
 
   /// Resolves the API config for the POST-cleaner, preferring
-  /// `postCleaner*` fields and falling back to `sidecar*` when the
+  /// `postCleaner*` fields and falling back to `aux*` when the
   /// cleaner-specific fields are empty/zero.
-  Future<SidecarApiConfig> resolveConfigForCleaner(
+  Future<AuxApiConfig> resolveConfigForCleaner(
     PipelineSettings settings, {
     String errorLabel = 'post-cleaner',
   }) async {
     final source = settings.postCleanerSource == 'inherit'
-        ? settings.sidecarSource
+        ? settings.auxSource
         : settings.postCleanerSource;
     final model = settings.postCleanerModel.isNotEmpty
         ? settings.postCleanerModel
-        : settings.sidecarModel;
+        : settings.auxModel;
     final endpoint = settings.postCleanerEndpoint.isNotEmpty
         ? settings.postCleanerEndpoint
-        : settings.sidecarEndpoint;
+        : settings.auxEndpoint;
     final apiKey = settings.postCleanerApiKey.isNotEmpty
         ? settings.postCleanerApiKey
-        : settings.sidecarApiKey;
+        : settings.auxApiKey;
 
     if (source == 'custom') {
       if (endpoint.isEmpty || model.isEmpty) {
         debugPrint(
-          '[Sidecar] cleaner custom config incomplete — endpoint='
+          '[Aux] cleaner custom config incomplete — endpoint='
           "'$endpoint' model='$model'",
         );
-        throw Exception('Sidecar custom config incomplete for $errorLabel');
+        throw Exception('Aux custom config incomplete for $errorLabel');
       }
-      debugPrint('[Sidecar] resolved custom for $errorLabel model=$model');
-      return SidecarApiConfig(
+      debugPrint('[Aux] resolved custom for $errorLabel model=$model');
+      return AuxApiConfig(
         endpoint: endpoint,
         apiKey: apiKey,
         model: model,
@@ -139,15 +139,15 @@ class SidecarLlmClient {
     await _ref.read(apiListProvider.future);
     final chatConfig = _ref.read(activeApiConfigProvider);
     if (chatConfig == null) {
-      debugPrint('[Sidecar] no active chat API config for $errorLabel');
+      debugPrint('[Aux] no active chat API config for $errorLabel');
       throw Exception('No chat API config available for $errorLabel');
     }
     final effectiveModel = model.isNotEmpty ? model : chatConfig.model;
     debugPrint(
-      '[Sidecar] resolved chat-fallback for $errorLabel '
+      '[Aux] resolved chat-fallback for $errorLabel '
       'model=$effectiveModel endpoint=${chatConfig.endpoint}',
     );
-    return SidecarApiConfig(
+    return AuxApiConfig(
       endpoint: chatConfig.endpoint,
       apiKey: chatConfig.apiKey,
       model: effectiveModel,
@@ -163,8 +163,8 @@ class SidecarLlmClient {
   ///
   /// Reuses [resolveConfigForCleaner] for the endpoint/key/source/protocol
   /// resolution, then swaps in the audit model. This keeps the two resolvers
-  /// in lockstep for every source branch (inherit → sidecar, custom, current).
-  Future<SidecarApiConfig> resolveConfigForAudit(
+  /// in lockstep for every source branch (inherit → aux, custom, current).
+  Future<AuxApiConfig> resolveConfigForAudit(
     PipelineSettings settings, {
     String errorLabel = 'post-cleaner-audit',
   }) async {
@@ -177,11 +177,11 @@ class SidecarLlmClient {
         : cleaner.model;
     if (auditModel != cleaner.model) {
       debugPrint(
-        '[Sidecar] audit model override for $errorLabel '
+        '[Aux] audit model override for $errorLabel '
         'model=$auditModel (cleaner=${cleaner.model})',
       );
     }
-    return SidecarApiConfig(
+    return AuxApiConfig(
       endpoint: cleaner.endpoint,
       apiKey: cleaner.apiKey,
       model: auditModel,
@@ -195,7 +195,7 @@ class SidecarLlmClient {
   /// `source='current'` → read the active chat API config and use its
   /// endpoint/key/protocol. `consolidationModel` overrides the model when
   /// non-empty (same pattern as [resolveConfigForCleaner]).
-  Future<SidecarApiConfig> resolveConfigForConsolidation(
+  Future<AuxApiConfig> resolveConfigForConsolidation(
     PipelineSettings settings, {
     String errorLabel = 'consolidation',
   }) async {
@@ -203,17 +203,17 @@ class SidecarLlmClient {
       if (settings.consolidationEndpoint.isEmpty ||
           settings.consolidationModel.isEmpty) {
         debugPrint(
-          '[Sidecar] consolidation custom config incomplete — '
+          '[Aux] consolidation custom config incomplete — '
           "endpoint='${settings.consolidationEndpoint}' "
           "model='${settings.consolidationModel}'",
         );
-        throw Exception('Sidecar custom config incomplete for $errorLabel');
+        throw Exception('Aux custom config incomplete for $errorLabel');
       }
       debugPrint(
-        '[Sidecar] resolved custom for $errorLabel '
+        '[Aux] resolved custom for $errorLabel '
         'model=${settings.consolidationModel}',
       );
-      return SidecarApiConfig(
+      return AuxApiConfig(
         endpoint: settings.consolidationEndpoint,
         apiKey: settings.consolidationApiKey,
         model: settings.consolidationModel,
@@ -224,17 +224,17 @@ class SidecarLlmClient {
     await _ref.read(apiListProvider.future);
     final chatConfig = _ref.read(activeApiConfigProvider);
     if (chatConfig == null) {
-      debugPrint('[Sidecar] no active chat API config for $errorLabel');
+      debugPrint('[Aux] no active chat API config for $errorLabel');
       throw Exception('No chat API config available for $errorLabel');
     }
     final model = settings.consolidationModel.isNotEmpty
         ? settings.consolidationModel
         : chatConfig.model;
     debugPrint(
-      '[Sidecar] resolved chat-fallback for $errorLabel '
+      '[Aux] resolved chat-fallback for $errorLabel '
       'model=$model endpoint=${chatConfig.endpoint}',
     );
-    return SidecarApiConfig(
+    return AuxApiConfig(
       endpoint: chatConfig.endpoint,
       apiKey: chatConfig.apiKey,
       model: model,
@@ -245,31 +245,31 @@ class SidecarLlmClient {
   int resolveCleanerTimeout(PipelineSettings settings) {
     return settings.postCleanerTimeoutMs > 0
         ? settings.postCleanerTimeoutMs
-        : settings.sidecarTimeoutMs;
+        : settings.auxTimeoutMs;
   }
 
   /// Resolves the API config for the Studio Ledger LLM call.
   ///
-  /// Falls back to the sidecar config when ledger-specific overrides are not
+  /// Falls back to the aux config when ledger-specific overrides are not
   /// set. Follows the same pattern as [resolveConfigForCleaner].
-  Future<SidecarApiConfig> resolveConfigForLedger(
+  Future<AuxApiConfig> resolveConfigForLedger(
     PipelineSettings settings, {
     String errorLabel = 'studio-ledger',
   }) async {
     final endpoint = settings.studioLedgerEndpoint.isNotEmpty
         ? settings.studioLedgerEndpoint
-        : settings.sidecarEndpoint;
+        : settings.auxEndpoint;
     final apiKey = settings.studioLedgerApiKey.isNotEmpty
         ? settings.studioLedgerApiKey
-        : settings.sidecarApiKey;
+        : settings.auxApiKey;
     final model = settings.studioLedgerModel.isNotEmpty
         ? settings.studioLedgerModel
-        : settings.sidecarModel;
+        : settings.auxModel;
 
     // Custom path: both endpoint and model must be non-empty.
     if (endpoint.isNotEmpty && model.isNotEmpty) {
-      debugPrint('[Sidecar] resolved custom for $errorLabel model=$model');
-      return SidecarApiConfig(
+      debugPrint('[Aux] resolved custom for $errorLabel model=$model');
+      return AuxApiConfig(
         endpoint: endpoint,
         apiKey: apiKey,
         model: model,
@@ -281,15 +281,15 @@ class SidecarLlmClient {
     await _ref.read(apiListProvider.future);
     final chatConfig = _ref.read(activeApiConfigProvider);
     if (chatConfig == null) {
-      debugPrint('[Sidecar] no active chat API config for $errorLabel');
+      debugPrint('[Aux] no active chat API config for $errorLabel');
       throw Exception('No chat API config available for $errorLabel');
     }
     final effectiveModel = model.isNotEmpty ? model : chatConfig.model;
     debugPrint(
-      '[Sidecar] resolved chat-fallback for $errorLabel '
+      '[Aux] resolved chat-fallback for $errorLabel '
       'model=$effectiveModel endpoint=${chatConfig.endpoint}',
     );
-    return SidecarApiConfig(
+    return AuxApiConfig(
       endpoint: chatConfig.endpoint,
       apiKey: chatConfig.apiKey,
       model: effectiveModel,
@@ -300,7 +300,7 @@ class SidecarLlmClient {
   /// Resolves the ledger LLM timeout from settings.
   int resolveLedgerTimeout(PipelineSettings settings) {
     final configured = settings.studioLedgerTimeoutMs;
-    if (configured <= 0) return settings.sidecarTimeoutMs;
+    if (configured <= 0) return settings.auxTimeoutMs;
     // Early UI builds edited this value as seconds while the field name stores
     // milliseconds. Treat small persisted values as seconds to avoid accidental
     // sub-second Ledger timeouts (for example, 180 should mean 180s).
@@ -310,14 +310,14 @@ class SidecarLlmClient {
   /// Makes a single non-streaming LLM call and returns the raw text response.
   ///
   /// Retries on 5xx server errors (502/503/500) and timeouts using a 3-attempt
-  /// backoff (1s/2s/4s) via [SidecarRetryRunner]. Throws [TimeoutException] if
+  /// backoff (1s/2s/4s) via [AuxRetryRunner]. Throws [TimeoutException] if
   /// all attempts time out. Throws [DioException] (cancel) if [cancelToken] is
   /// cancelled.
   ///
   /// Prefer [callOnceWithLog] when the caller wants the per-attempt log for
   /// the agentic operations UI.
   Future<String> callOnce({
-    required SidecarApiConfig config,
+    required AuxApiConfig config,
     required String prompt,
     required int maxTokens,
     required double temperature,
@@ -336,10 +336,10 @@ class SidecarLlmClient {
     throw _descriptiveError(outcome);
   }
 
-  /// Same as [callOnce] but returns a [SidecarCallOutcome] with the per-attempt
+  /// Same as [callOnce] but returns a [AuxCallOutcome] with the per-attempt
   /// log so callers can record it in the agentic operations log.
-  Future<SidecarCallOutcome> callOnceWithLog({
-    required SidecarApiConfig config,
+  Future<AuxCallOutcome> callOnceWithLog({
+    required AuxApiConfig config,
     required String prompt,
     required int maxTokens,
     required double temperature,
@@ -348,9 +348,9 @@ class SidecarLlmClient {
     bool omitReasoning = false,
   }) async {
     if (config.endpoint.isEmpty || config.model.isEmpty) {
-      throw Exception('Sidecar API not configured');
+      throw Exception('Aux API not configured');
     }
-    final runner = const SidecarRetryRunner();
+    final runner = const AuxRetryRunner();
     return runner.run(
       cancelToken: cancelToken,
       attempt: (i) => _callOnce(
@@ -367,7 +367,7 @@ class SidecarLlmClient {
 
   /// Streaming variant of [callOnceWithLog]. Makes a streaming LLM call
   /// (`stream: true`) and invokes [onChunk] with the accumulated text on
-  /// every delta. Returns the same [SidecarCallOutcome] (final text = last
+  /// every delta. Returns the same [AuxCallOutcome] (final text = last
   /// accumulation).
   ///
   /// On retry, the accumulator resets and [onChunk] is called with the new
@@ -380,8 +380,8 @@ class SidecarLlmClient {
   /// instead of replacing the text in one shot. Reranker / agentic-write /
   /// auditor keep using [callOnceWithLog] (non-streaming) because they need
   /// the full structured response before acting.
-  Future<SidecarCallOutcome> callStreamWithLog({
-    required SidecarApiConfig config,
+  Future<AuxCallOutcome> callStreamWithLog({
+    required AuxApiConfig config,
     required String prompt,
     required int maxTokens,
     required double temperature,
@@ -391,9 +391,9 @@ class SidecarLlmClient {
     bool omitReasoning = false,
   }) async {
     if (config.endpoint.isEmpty || config.model.isEmpty) {
-      throw Exception('Sidecar API not configured');
+      throw Exception('Aux API not configured');
     }
-    final runner = const SidecarRetryRunner();
+    final runner = const AuxRetryRunner();
     return runner.run(
       cancelToken: cancelToken,
       attempt: (i) => _callStream(
@@ -409,14 +409,14 @@ class SidecarLlmClient {
     );
   }
 
-  /// Builds a descriptive exception from a non-ok [SidecarCallOutcome] so the
+  /// Builds a descriptive exception from a non-ok [AuxCallOutcome] so the
   /// caller's `catch` block can fall back to the original text with a useful
   /// error message.
-  Object _descriptiveError(SidecarCallOutcome outcome) {
-    if (outcome.attempts.isEmpty) return Exception('Sidecar call failed');
+  Object _descriptiveError(AuxCallOutcome outcome) {
+    if (outcome.attempts.isEmpty) return Exception('Aux call failed');
     final last = outcome.attempts.last;
     if (last.status == 'timeout') {
-      return TimeoutException('Sidecar timed out after retries');
+      return TimeoutException('Aux timed out after retries');
     }
     if (last.statusCode != 0) {
       return DioException(
@@ -429,11 +429,11 @@ class SidecarLlmClient {
         message: last.error ?? 'HTTP ${last.statusCode}',
       );
     }
-    return Exception(last.error ?? 'Sidecar call failed');
+    return Exception(last.error ?? 'Aux call failed');
   }
 
   Future<String> _callOnce({
-    required SidecarApiConfig config,
+    required AuxApiConfig config,
     required String prompt,
     required int maxTokens,
     required double temperature,
@@ -476,7 +476,7 @@ class SidecarLlmClient {
   /// `stream: true` and forwards accumulated text to [onChunk] on every
   /// delta. Completes with the final accumulated text.
   Future<String> _callStream({
-    required SidecarApiConfig config,
+    required AuxApiConfig config,
     required String prompt,
     required int maxTokens,
     required double temperature,

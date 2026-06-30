@@ -8,28 +8,28 @@ import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
 import '../models/tracker.dart';
 import 'memory_agentic_tools.dart';
-import 'sidecar_llm_client.dart';
+import 'aux_llm_client.dart';
 
 /// Builds the agentic write-loop prompt + parses the LLM's JSON response
 /// into tracker/memory write requests. Extracted from
 /// `MemoryAgenticWriteService._askLlmForWrites` (plan §7.2).
 ///
-/// Pure prompt/parse pair aside from the injected [SidecarLlmClient] (used
+/// Pure prompt/parse pair aside from the injected [AuxLlmClient] (used
 /// for the actual LLM call with retry/timeout). Behavior preserved verbatim.
 /// The write-execution (`_executeTrackerWrites` / `_executeMemoryWrites`)
 /// stays in `MemoryAgenticWriteService` — this specialist is only the
 /// request-shaping layer.
 class AgenticWriteRequestParser {
-  final SidecarLlmClient _llm;
+  final AuxLlmClient _llm;
 
   AgenticWriteRequestParser(this._llm);
 
-  /// Build the write-loop prompt, fire one sidecar LLM call, and parse the
+  /// Build the write-loop prompt, fire one auxiliary LLM call, and parse the
   /// JSON response into an [AgenticWriteLlmOutcome]. Null `response` means
   /// the LLM returned null/unparseable text; `attempts`/`totalElapsedMs`
   /// are still surfaced for diagnostics.
   Future<AgenticWriteLlmOutcome> askLlmForWrites({
-    required SidecarApiConfig config,
+    required AuxApiConfig config,
     required PipelineSettings settings,
     required String recentHistoryText,
     required List<Tracker> currentTrackers,
@@ -50,14 +50,15 @@ class AgenticWriteRequestParser {
     final existingBlock = existingMemories.isEmpty
         ? '(no existing memory entries)'
         : existingMemories
-            .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
-            .map((e) {
-              final keysStr =
-                  e.keys.isEmpty ? '' : ' [keys: ${e.keys.join(', ')}]';
-              final lockedStr = e.locked ? ' [locked: do not modify]' : '';
-              return '- ${e.title.isNotEmpty ? e.title : e.id}$keysStr$lockedStr';
-            })
-            .join('\n');
+              .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
+              .map((e) {
+                final keysStr = e.keys.isEmpty
+                    ? ''
+                    : ' [keys: ${e.keys.join(', ')}]';
+                final lockedStr = e.locked ? ' [locked: do not modify]' : '';
+                return '- ${e.title.isNotEmpty ? e.title : e.id}$keysStr$lockedStr';
+              })
+              .join('\n');
 
     final prompt =
         '''You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.
@@ -102,7 +103,7 @@ Rules:
       prompt: prompt,
       maxTokens: 1000,
       temperature: 0.2,
-      timeoutMs: settings.sidecarTimeoutMs,
+      timeoutMs: settings.auxTimeoutMs,
       cancelToken: cancelToken,
     );
     if (!outcome.isOk || outcome.text == null) {
@@ -119,7 +120,8 @@ Rules:
     // Transient LLM formatting errors caused silent memory loss before this
     // retry — the catch block returned null with no second attempt.
     if (response == null) {
-      final retryPrompt = '$prompt\n\n'
+      final retryPrompt =
+          '$prompt\n\n'
           'IMPORTANT: Your previous response was not valid JSON. '
           'Return ONLY a JSON object now — no markdown fences, no prose, '
           'no explanation. Start with `{` and end with `}`.';
@@ -128,7 +130,7 @@ Rules:
         prompt: retryPrompt,
         maxTokens: 1000,
         temperature: 0.2,
-        timeoutMs: settings.sidecarTimeoutMs,
+        timeoutMs: settings.auxTimeoutMs,
         cancelToken: cancelToken,
       );
       if (retryOutcome.isOk && retryOutcome.text != null) {

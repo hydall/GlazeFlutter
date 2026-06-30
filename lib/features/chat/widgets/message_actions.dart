@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/state/memory_agent_providers.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../chat_provider.dart';
 import '../editing_message_provider.dart';
@@ -55,7 +54,8 @@ void showMessageContextMenu({
           label: 'Edit',
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            ref.read(editingMessageIdProvider(charId).notifier).state = messageId;
+            ref.read(editingMessageIdProvider(charId).notifier).state =
+                messageId;
           },
         ),
       if ((!isUser && isLast && !isGenerating) || isError)
@@ -83,14 +83,6 @@ void showMessageContextMenu({
           label: 'Branch',
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            final sessionId = ref
-                .read(chatProvider(charId))
-                .value?.session?.id;
-            if (sessionId != null) {
-              ref
-                  .read(memorySidecarPrewarmCacheProvider)
-                  .invalidateSession(sessionId);
-            }
             ref.read(chatProvider(charId).notifier).branchSession(messageIndex);
           },
         ),
@@ -99,7 +91,9 @@ void showMessageContextMenu({
         label: isHidden ? 'Unhide' : 'Hide',
         onTap: () {
           Navigator.of(context, rootNavigator: true).pop();
-          ref.read(chatProvider(charId).notifier).toggleMessageHidden(messageIndex);
+          ref
+              .read(chatProvider(charId).notifier)
+              .toggleMessageHidden(messageIndex);
         },
       ),
       if (isLast && !isGenerating)
@@ -117,4 +111,3 @@ void showMessageContextMenu({
 
   GlazeBottomSheet.show<void>(context, items: items);
 }
-
