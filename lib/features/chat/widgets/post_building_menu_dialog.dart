@@ -635,20 +635,6 @@ class _CadenceSection extends StatelessWidget {
       subtitleKey: 'post_building_cadence_desc',
       children: [
         _CadenceBlock(
-          label: 'post_building_studio_ledger'.tr(),
-          helperText: 'post_building_cadence_studio_ledger_hint'.tr(),
-          runMode: pipeline.studioLedgerRunMode,
-          interval: pipeline.studioLedgerIntervalN,
-          blockNextGen: pipeline.studioLedgerBlockNextGen,
-          onRunModeChanged: (v) =>
-              onSaved((p) => p.copyWith(studioLedgerRunMode: v)),
-          onIntervalChanged: (v) =>
-              onSaved((p) => p.copyWith(studioLedgerIntervalN: v)),
-          onBlockNextGenChanged: (v) =>
-              onSaved((p) => p.copyWith(studioLedgerBlockNextGen: v)),
-        ),
-        const Divider(height: 24),
-        _CadenceBlock(
           label: 'post_building_cadence_write_loop'.tr(),
           helperText: 'post_building_cadence_write_loop_hint'.tr(),
           runMode: pipeline.agenticWriteRunMode,
