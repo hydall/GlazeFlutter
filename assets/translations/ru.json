@@ -1791,7 +1791,7 @@
     "post_building_inherit_sidecar": "Наследовать сайдкар",
     "post_building_cadence": "Каденция",
     "post_building_cadence_desc": "Частота запуска компонентов (каждый ход / условно / каждые N / вручную / отключено).",
-    "post_building_cadence_studio_ledger_hint": "По умолчанию каждый ход. Интервал/ручной режим ослабляет континуитет и подавление крючков карточки. Studio принудительно включает Ledger, но пользователь может выбрать экономную каденцию.",
+    "post_building_cadence_studio_ledger_hint": "В Studio-чатах Ledger запускается каждый ход для сохранения канона. Эта каденция применяется только к standalone Ledger вне Studio.",
     "post_building_cadence_write_loop": "Агентский write-loop",
     "post_building_cadence_write_loop_hint": "По умолчанию каждый ход. Интервал/ручной режим замедляет запись памяти. Используйте каждые N ходов ассистента для экономии.",
     "post_building_cadence_every_turn": "Каждый ход",

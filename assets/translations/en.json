@@ -1774,7 +1774,7 @@
     "post_building_inherit_sidecar": "Inherit sidecar",
     "post_building_cadence": "Cadence",
     "post_building_cadence_desc": "Per-component run cadence (every turn / conditional / every N / manual / disabled).",
-    "post_building_cadence_studio_ledger_hint": "Default every turn. Interval/manual weakens continuity and card-hook suppression. Studio forces it on regardless of this setting, but the user can opt into a lower-power cadence.",
+    "post_building_cadence_studio_ledger_hint": "Studio chats run Ledger every turn to preserve canon. This cadence only applies to standalone Ledger outside Studio.",
     "post_building_cadence_write_loop": "Agentic write-loop",
     "post_building_cadence_write_loop_hint": "Default every turn. Interval/manual slows memory propagation. Use every N assistant turns for cost savings.",
     "post_building_cadence_every_turn": "Every turn",

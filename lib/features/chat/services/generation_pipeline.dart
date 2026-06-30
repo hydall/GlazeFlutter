@@ -1648,13 +1648,22 @@ class GenerationPipeline {
       // "Studio Ledger is mandatory while Studio is enabled").
       // studioLedgerEnabled can still be used as an explicit on-switch when
       // Studio is disabled (standalone mode, future use).
+      var studioConfigEnabled = false;
       bool studioLedgerActive = pipeline.studioLedgerEnabled;
       if (!studioLedgerActive) {
         try {
           final studioConfig = await ref
               .read(studioConfigRepoProvider)
               .getBySessionId(sessionId);
-          studioLedgerActive = studioConfig?.enabled == true;
+          studioConfigEnabled = studioConfig?.enabled == true;
+          studioLedgerActive = studioConfigEnabled;
+        } catch (_) {}
+      } else {
+        try {
+          final studioConfig = await ref
+              .read(studioConfigRepoProvider)
+              .getBySessionId(sessionId);
+          studioConfigEnabled = studioConfig?.enabled == true;
         } catch (_) {}
       }
       if (!studioLedgerActive) {
@@ -1666,18 +1675,18 @@ class GenerationPipeline {
         return;
       }
 
-      // Cadence (plan §Model Cadence). The Studio forces the ledger on, but
-      // the user can still opt into a lower-power cadence (interval/manual/
-      // conditional) inside Studio. 'disabled' is treated as a hard skip
-      // (the user explicitly disabled the cadence even while Studio is on).
+      // Cadence (plan §Model Cadence). Studio Ledger is mandatory while Studio
+      // is enabled, so cadence only gates standalone Ledger outside Studio.
       final assistantTurnCount = messages
           .where((m) => m.role == 'assistant' && !m.isTyping)
           .length;
-      final cadenceReason = _resolveLedgerCadence(
-        pipeline,
-        assistantTurnCount,
-        finalAssistantText,
-      );
+      final cadenceReason = studioConfigEnabled
+          ? null
+          : _resolveLedgerCadence(
+              pipeline,
+              assistantTurnCount,
+              finalAssistantText,
+            );
       if (cadenceReason != null) {
         await _recordLedgerDiag(
           sessionId: sessionId,
