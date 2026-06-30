@@ -278,66 +278,6 @@ class StreamGenerationService {
             visibleStartIndex: vsi,
           );
         }
-        if (studioResult.status == 'agent_errors') {
-          // Intermediate agents failed — save their outputs (with error
-          // status) so the user can regenerate failed agents, then
-          // explicitly send to the final model. Do NOT write an error
-          // message; the studio outputs panel shows the failures.
-          _log(
-            'studio agent_errors char=$_charId session=${session.id} '
-            'error=${studioResult.error}',
-          );
-          _ref
-              .read(studioCycleStateProvider.notifier)
-              .state = _studioFinalState(
-            session.id,
-            studioResult,
-            StudioCyclePhase.agentErrors,
-          );
-          final elapsed = DateTime.now()
-              .difference(startGenTime)
-              .inMilliseconds;
-          final finalState = _writer
-              .writeAssistant(
-                text: '',
-                reasoning: null,
-                currentSession: saveSession ?? session,
-                isAborted: _isAborted,
-                pendingSessionVars: pendingSessionVars,
-                genTime: '${(elapsed / 1000).toStringAsFixed(1)}s',
-                tokens: 0,
-                rawResponse: '',
-                previousSwipes: previousSwipes,
-                previousSwipeId: previousSwipeId,
-                previousReasoning: previousReasoning,
-                previousGenTime: previousGenTime,
-                previousTokens: previousTokens,
-                previousSwipesMeta: previousSwipesMeta,
-                guidanceText: guidanceText,
-                memoryCoverage: coverage,
-                isAllReasoning: false,
-                triggeredLorebooks: triggeredLorebooks,
-                triggeredMemories: triggeredMemories,
-                regenTargetId: regenTargetId,
-                visibleStartIndex: vsi,
-                studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
-              )
-              .copyWith(promptPayload: payload);
-          final messageId = _lastAssistantId(
-            finalState.session ?? saveSession ?? session,
-            regenTargetId,
-          );
-          _recordStudioTrackerOperation(
-            sessionId: session.id,
-            messageId: messageId,
-            startGenTime: startGenTime,
-            finalStartTime: finalStartTime,
-            result: studioResult,
-            trackerModel: _resolvedTrackerModel(apiConfig),
-            finalModel: apiConfig.model,
-          );
-          return finalState;
-        }
         if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
           final message =
               studioResult.error ?? 'Studio failed: ${studioResult.status}';
@@ -773,9 +713,8 @@ class StreamGenerationService {
   ///
   /// Call sites:
   ///   - success path (`status == 'ok'`)
-  ///   - partial agent errors (`status == 'agent_errors'`)
-  ///   - hard failure (`status != 'ok' && status != 'agent_errors' &&
-  ///     status != 'aborted' && status != 'disabled'`)
+  ///   - hard failure (`status != 'ok' && status != 'aborted' &&
+  ///     status != 'disabled'`)
   ///
   /// Aborted / disabled runs are not logged — they are user-initiated
   /// cancellations or no-op configurations, not real operations.

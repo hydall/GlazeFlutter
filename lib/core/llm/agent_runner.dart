@@ -23,9 +23,8 @@ import 'transport/transport_factory.dart';
 ///
 /// Used by:
 /// - `MemoryStudioService.runTrackerCycle` for the final generator and
-///   individual tracker fallbacks.
-/// - `MemoryStudioService.executeTrackerBatch` for the per-agent fallback path
-///   inside a batch (this class is unaware of batching).
+///   individual trackers.
+/// - `StudioBatchCoordinator` for batch tracker requests.
 class AgentRunner {
   final Ref _ref;
   late final AgentStreamRunner _streamRunner = AgentStreamRunner(
@@ -42,10 +41,10 @@ class AgentRunner {
   /// forwarded to the UI. [isFinalResponse] = false → a tracker; reasoning
   /// is discarded (trackers are JSON/plain-text producers).
   ///
-  /// Per-agent failure isolation (Phase 5.7.5): when [isFinalResponse] is
-  /// false, any exception (timeout, transport, idle) is **caught and rethrown
-  /// as [AgentRunFailedException]** so a single tracker cannot crash the whole
-  /// pipeline — `runTrackerCycle` converts it to a failed `StudioStageBrief`.
+  /// Tracker failure handling: when [isFinalResponse] is false, any exception
+  /// (timeout, transport, idle) is **caught and rethrown as
+  /// [AgentRunFailedException]** so callers can retry consistently. Exhausted
+  /// tracker retries abort the Studio turn before the final generator runs.
   /// The final generator rethrows normally (its failure aborts the turn).
   /// When [preResolvedConfig] is provided, [resolveAgentConfig] is skipped
   /// and the caller-supplied config is used directly. This avoids double
@@ -94,8 +93,8 @@ class AgentRunner {
         );
       }
       if (isFinalResponse) rethrow;
-      // Per-agent failure isolation: wrap so the caller can map to a failed
-      // brief without losing the other agents' results.
+      // Wrap so Studio tracker callers can retry and then hard-fail with a
+      // tracker-specific error.
       throw AgentRunFailedException(
         agentId: agent.id,
         agentName: agent.name,
@@ -116,12 +115,14 @@ class AgentRunner {
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
-    final resolved = preResolvedConfig ?? await resolveAgentConfig(
-      agent,
-      apiConfig,
-      sessionId,
-      isFinalResponse: isFinalResponse,
-    );
+    final resolved =
+        preResolvedConfig ??
+        await resolveAgentConfig(
+          agent,
+          apiConfig,
+          sessionId,
+          isFinalResponse: isFinalResponse,
+        );
     if (resolved.endpoint.isEmpty || resolved.model.isEmpty) {
       throw Exception('Studio agent "${agent.name}" API is not configured');
     }
@@ -137,19 +138,20 @@ class AgentRunner {
     final temperatureOverride = preResolvedConfig != null && !isFinalResponse
         ? null
         : effectiveTemperature(agent, isFinalResponse);
-    final effectiveResolved = (isFinalResponse &&
+    final effectiveResolved =
+        (isFinalResponse &&
             _ref.read(pipelineSettingsProvider).studioFinalDisableReasoning)
         ? resolved.copyWithReasoning(
             requestReasoning: false,
             omitReasoning: true,
           )
         : (!isFinalResponse &&
-                _ref.read(pipelineSettingsProvider).studioTrackerDisableReasoning)
-            ? resolved.copyWithReasoning(
-                requestReasoning: false,
-                omitReasoning: true,
-              )
-            : resolved;
+              _ref.read(pipelineSettingsProvider).studioTrackerDisableReasoning)
+        ? resolved.copyWithReasoning(
+            requestReasoning: false,
+            omitReasoning: true,
+          )
+        : resolved;
     return _streamRunner.run(
       agent: agent,
       messages: messages,
@@ -184,16 +186,16 @@ class AgentRunner {
     bool isFinalResponse = false,
   }) async {
     await _ref.read(apiListProvider.future);
-    final apiConfigs =
-        _ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
     final runApiConfigId = await _readRunApiConfigId(sessionId);
     final resolver = StudioApiConfigResolver(
       apiConfigs: apiConfigs,
       activeConfig: _ref.read(activeApiConfigProvider),
     );
     if (!isFinalResponse) {
-      final trackerModel =
-          _ref.read(pipelineSettingsProvider).studioTrackerModelOverride;
+      final trackerModel = _ref
+          .read(pipelineSettingsProvider)
+          .studioTrackerModelOverride;
       if (trackerModel.isNotEmpty) {
         return resolver.resolveAgentConfig(
           agent.copyWith(modelOverride: trackerModel, modelSource: 'current'),
@@ -250,8 +252,9 @@ class AgentRunner {
       if (global > 0) return global;
       return null;
     }
-    final trackerGlobal =
-        _ref.read(pipelineSettingsProvider).studioTrackerMaxTokens;
+    final trackerGlobal = _ref
+        .read(pipelineSettingsProvider)
+        .studioTrackerMaxTokens;
     if (trackerGlobal > 0) return trackerGlobal;
     return null;
   }
@@ -266,13 +269,13 @@ class AgentRunner {
   /// caller should use the agent's own value.
   double? effectiveTemperature(StudioAgent agent, bool isFinalResponse) {
     if (isFinalResponse) {
-      final global =
-          _ref.read(pipelineSettingsProvider).studioFinalTemperature;
+      final global = _ref.read(pipelineSettingsProvider).studioFinalTemperature;
       if (global >= 0) return global;
       return null;
     }
-    final trackerGlobal =
-        _ref.read(pipelineSettingsProvider).studioTrackerTemperature;
+    final trackerGlobal = _ref
+        .read(pipelineSettingsProvider)
+        .studioTrackerTemperature;
     if (trackerGlobal >= 0) return trackerGlobal;
     return null;
   }
@@ -299,11 +302,11 @@ class AgentRunResult {
   });
 }
 
-/// Per-agent failure wrapper (Phase 5.7.5). Thrown by [AgentRunner.runAgent]
-/// for trackers (non-final agents) when the underlying LLM call fails for any
-/// reason (timeout, transport, parse). The caller converts it to a failed
-/// `StudioStageBrief` so the rest of the pipeline keeps going. The final
-/// generator's failures propagate as the original exception (no wrap).
+/// Per-agent failure wrapper. Thrown by [AgentRunner.runAgent] for trackers
+/// (non-final agents) when the underlying LLM call fails for any reason
+/// (timeout, transport, parse). The caller retries and then returns a hard
+/// Studio error. The final generator's failures propagate as the original
+/// exception (no wrap).
 class AgentRunFailedException implements Exception {
   final String agentId;
   final String agentName;

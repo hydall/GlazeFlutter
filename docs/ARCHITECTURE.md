@@ -452,25 +452,23 @@ At generation time `MemoryStudioService.runTrackerCycle` runs:
    + individual agents fire in parallel, subject to the concurrency cap. Each
    batch is one LLM call → `parseBatchResponse` (`<result agent="id">` with
    missing-close-tag tolerance + `<result_ID>` legacy fallback).
-4. **In-batch retry (layer 1)**: if any agent in the batch comes back failed,
-   re-request the whole batch ONCE.
-5. **Individual fallback (layer 2, concurrency limit 2)**: any agent still
-   failed from both attempts is re-run as its own LLM request.
-6. **Final generator** (`_runFinalGenerator`): runs every turn after all
+4. **Batch retry**: if any agent in the batch comes back failed or missing,
+   re-request the whole batch twice. If it still cannot be parsed, Studio
+   returns a hard error asking the user to restart generation.
+5. **Final generator** (`_runFinalGenerator`): runs only after all
    trackers settle, using `maxFinalHistoryMessages` (default 15) for the
    trimmed history; trackers receive their own `contextSize` (default 5,
    hard-cap 200) via `_limitTrackerHistory` + `truncateAgentText`
    (head 40% + tail 60%) + `stripHtmlTags`.
 
-`AgentRunFailedException` (Phase 5.7.5) wraps tracker failures so the
-generator still runs with the successful briefs plus an error marker. The
-generator's own failure aborts the turn.
+`AgentRunFailedException` wraps tracker failures for retry accounting. After
+two failed retries, Studio aborts before the final generator instead of running
+with partial tracker output. The generator's own failure aborts the turn.
 
 Per-tracker model override (`StudioAgent.modelSource = 'custom'` picks an
 `ApiConfig` by `agent.model`; `modelOverride` applied on top) and
-`runInterval` (every-N-th-turn scheduling) are respected. Concurrency caps:
-`_maxConcurrentGroups = 4`, `_maxConcurrentFallback = 2` (Phase 5.7.2,
-conservative defaults for desktop).
+`runInterval` (every-N-th-turn scheduling) are respected. Concurrency cap:
+`_maxConcurrentGroups = 4` (Phase 5.7.2, conservative default for desktop).
 
 POST-processing (Phase 1.3) stays separate from the tracker pipeline: the
 POST-cleaner runs after the full reply and writes a blue `'cleaned'` agent
@@ -555,7 +553,7 @@ at the top of the chat (below the POST-cleaner status card — they never
 overlap in time: Studio runs during generation, POST-cleaner after). It is
 driven by `studioCycleStateProvider` through phases:
 
-  idle → running → writingFinal → done | agentErrors | error
+  idle → running → writingFinal → done | error
 
 `StreamGenerationService` sets `running` when Studio intercepts, transitions
 to `writingFinal` on the first `onFinalResponseUpdate` callback (trackers

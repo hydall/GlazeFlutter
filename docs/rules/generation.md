@@ -129,20 +129,19 @@ Studio Mode (tracker-around-generator, Phase 5+):
   only affects prompt text, not provider-internal thinking.
 - One main LLM (the generator) writes the visible reply; trackers run as
   sidecars and contribute notes that shape the next prompt. Trackers do NOT
-  duplicate the generator's output. Failed trackers return a failed
-  `StudioStageBrief` (`status: 'error'`); the generator still runs with the
-  successful briefs plus an error marker. Only generator failure aborts the
-  turn. See INV-ST5 in `docs/INVARIANTS.md`.
+  duplicate the generator's output. Failed trackers abort the Studio turn after
+  the initial attempt plus two retries; the final generator does not run with
+  partial tracker output. See INV-ST5 in `docs/INVARIANTS.md`.
 - Trackers with the same `(provider, model)` and `!runIndividually` are
   batched into one LLM request via `<agents><agent_task>` XML. The batch
   system prompt is cache-friendly: shared `<role>` + `<lore>` first, per-agent
   `<agents>` tail (INV-ST3, INV-ST7). Heavy trackers
   (`expression`/`illustrator`/`lorebook` name match, or explicit
   `StudioAgent.runIndividually`) run as individual requests.
-- Fallback chain on batch failure: in-batch retry (re-request the whole batch
-  once) → individual fallback (re-run each still-failed agent, concurrency
-  limit 2) → error-result. Per-agent failure isolation via
-  `AgentRunFailedException` (Phase 5.7.5).
+- Retry chain on tracker failure: re-request the same tracker/batch twice, then
+  return a hard Studio error. Missing or unparseable `<result>` blocks count as
+  tracker failure and ask the user to restart generation. There is no
+  individual fallback from a failed batch.
 - Trackers receive `StudioAgent.contextSize` (default 5, hard-cap 200) last
   messages via `_limitTrackerHistory` + `truncateAgentText` (head 40% + tail
   60%) + `stripHtmlTags`. The generator uses `maxFinalHistoryMessages`
@@ -174,13 +173,12 @@ Studio Mode (tracker-around-generator, Phase 5+):
   `AgentOperationAttempt` covering the whole cycle elapsed time; per-agent
   breakdown (success / failure, agent names) goes into the `summary` text
   since `StudioPipelineResult` does not expose per-agent LLM attempts as a
-  structured array. Records are emitted on the success path, on
-  `agent_errors` (partial failure), and on hard failure. Aborted / disabled
-  runs are not logged.
+  structured array. Records are emitted on the success path and on hard
+  failure. Aborted / disabled runs are not logged.
 - Live cycle status is surfaced to the chat UI via `studioCycleStateProvider`
   (Phase 11) and rendered by `StudioStatusCard` (floating card at the top
   of the chat). The cycle phases are:
-  `idle → running → writingFinal → done | agentErrors | error`. Aborted
+  `idle → running → writingFinal → done | error`. Aborted
   runs reset to `idle`.
 
 ---

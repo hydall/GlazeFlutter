@@ -13,15 +13,14 @@ import 'tracker_batcher.dart';
 
 /// Runs a batch group of Studio chat-time trackers: builds the batched
 /// system prompt + per-agent task text, fires a single LLM request, parses
-/// the `<result>` blocks, and runs the 2-layer retry/fallback (in-batch
-/// retry → individual fallback). Extracted from `MemoryStudioService`
+/// the `<result>` blocks, and retries the whole batch twice before surfacing
+/// tracker failures to the Studio pipeline. Extracted from `MemoryStudioService`
 /// (plan §2.9).
 ///
 /// Deps: the shared [Ref] (for `trackerBatcherProvider` +
 /// `agentRunnerProvider`), the injected [StudioContextBucketizer],
-/// [StudioMessageBuilder], and [StudioAgentExecutor] (for the individual
-/// fallback). `_log` is injected as a callback so this specialist does not
-/// own the host's debug-print sink. Behavior preserved verbatim.
+/// [StudioMessageBuilder], and [StudioAgentExecutor]. `_log` is injected as a
+/// callback so this specialist does not own the host's debug-print sink.
 class StudioBatchCoordinator {
   final Ref _ref;
   final StudioContextBucketizer _bucketizer;
@@ -39,9 +38,9 @@ class StudioBatchCoordinator {
 
   /// [batchContextSize] = max contextSize across the group), per-agent task
   /// text, the batched system prompt, fire a single LLM request, parse the
-  /// `<result>` blocks, and run the in-batch invalid-JSON retry (Phase 5.1
-  /// layer 1) + individual fallback (layer 2) for any agents whose blocks
-  /// came back empty/failed.
+  /// `<result>` blocks, and retry the batch twice for any transport failure or
+  /// missing/unparseable tracker result. Exhausted retries return failed
+  /// tracker results; the caller turns that into a hard Studio error.
   Future<List<TrackerBatchResult>> runBatchGroup({
     required TrackerBatchGroup group,
     required StudioConfig config,
@@ -114,93 +113,69 @@ class StudioBatchCoordinator {
       contextSize: batchContextSize,
     );
     final runner = _ref.read(agentRunnerProvider);
-    try {
-      final result = await runner.runAgent(
-        agent: batchAgent,
-        messages: batchMessages,
-        apiConfig: apiConfig,
-        sessionId: sessionId,
-        isFinalResponse: false,
-        cancelToken: cancelToken,
-        preResolvedConfig: group.resolved,
-      );
-      final parsed = batcher.parseBatchResponse(result.text, group);
-      // Layer 1 — in-batch invalid-JSON retry: if ANY agent's block came back
-      // empty/failed, re-request the WHOLE batch ONCE (the model may have
-      // truncated mid-batch on the first try). If the retry succeeds, use
-      // it; otherwise fall through to layer 2 (individual fallback).
-      if (_allOk(parsed)) {
-        return parsed;
+    List<TrackerBatchResult>? lastParsed;
+    String? lastError;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      if (cancelToken.isCancelled) {
+        throw const AgentRunFailedException(
+          agentId: 'batch',
+          agentName: 'Studio tracker batch',
+          reason: 'cancelled',
+        );
       }
-      final failedCount = parsed.where((r) => r.status != 'ok').length;
-      _log(
-        'batch group ${group.key} had $failedCount failed agents on first '
-        'attempt — retrying batch',
-      );
-      final retryResult = await runner.runAgent(
-        agent: batchAgent,
-        messages: batchMessages,
-        apiConfig: apiConfig,
-        sessionId: sessionId,
-        isFinalResponse: false,
-        cancelToken: cancelToken,
-        preResolvedConfig: group.resolved,
-      );
-      final retryParsed = batcher.parseBatchResponse(retryResult.text, group);
-      if (_allOk(retryParsed)) {
-        return retryParsed;
+      try {
+        final result = await runner.runAgent(
+          agent: batchAgent,
+          messages: batchMessages,
+          apiConfig: apiConfig,
+          sessionId: sessionId,
+          isFinalResponse: false,
+          cancelToken: cancelToken,
+          preResolvedConfig: group.resolved,
+        );
+        final parsed = batcher.parseBatchResponse(result.text, group);
+        if (_allOk(parsed)) {
+          return parsed;
+        }
+        lastParsed = parsed;
+        final failedCount = parsed.where((r) => r.status != 'ok').length;
+        lastError =
+            '$failedCount tracker result(s) were missing or unparseable';
+        if (attempt < 3) {
+          _log(
+            'batch group ${group.key} had $failedCount failed agents on '
+            'attempt $attempt — retrying batch',
+          );
+        }
+      } on AgentRunFailedException catch (e) {
+        if (cancelToken.isCancelled) rethrow;
+        lastError = e.reason;
+        if (attempt < 3) {
+          _log(
+            'batch group ${group.key} request failed on attempt $attempt '
+            '(${e.reason}) — retrying batch',
+          );
+        }
       }
-      // Layer 2 — individual fallback: take the union of failed agents from
-      // BOTH attempts and re-run each one as its own LLM request, concurrency
-      // limited to 2 (Phase 5.7.2).
-      final failedIds = <String>{};
-      for (final r in parsed.where((r) => r.status != 'ok')) {
-        failedIds.add(r.agentId);
-      }
-      for (final r in retryParsed.where((r) => r.status != 'ok')) {
-        failedIds.add(r.agentId);
-      }
-      // Keep the ok results from either attempt (an agent ok in attempt 1
-      // but failed in attempt 2 should NOT be re-run — keep the ok version).
-      final okResults = <TrackerBatchResult>[
-        ...parsed.where((r) => r.status == 'ok' && !failedIds.contains(r.agentId)),
-        ...retryParsed.where((r) => r.status == 'ok' && !failedIds.contains(r.agentId)),
-      ];
-      final failedAgents = group.agents
-          .where((a) => failedIds.contains(a.id))
-          .toList();
-      final retried = await retryFailedIndividually(
-        agents: failedAgents,
-        config: config,
-        promptResult: promptResult,
-        promptPayload: promptPayload,
-        apiConfig: apiConfig,
-        sessionId: sessionId,
-        cancelToken: cancelToken,
-      );
-      return [...okResults, ...retried];
-    } on AgentRunFailedException catch (e) {
-      // Whole batch request failed — fall back to individual for ALL agents
-      // in this group (Phase 5.7.5 per-agent failure isolation at the batch
-      // level: a single transport failure should not lose every agent).
-      _log(
-        'batch group ${group.key} request failed (${e.reason}) — falling '
-        'back to individual for ${group.agents.length} agents',
-      );
-      return retryFailedIndividually(
-        agents: group.agents,
-        config: config,
-        promptResult: promptResult,
-        promptPayload: promptPayload,
-        apiConfig: apiConfig,
-        sessionId: sessionId,
-        cancelToken: cancelToken,
-      );
     }
+    _log(
+      'batch group ${group.key} failed after 2 retries: '
+      '${lastError ?? 'unknown tracker error'}',
+    );
+    return lastParsed ??
+        group.agents
+            .map(
+              (agent) => TrackerBatchResult.failed(
+                agentId: agent.id,
+                agentName: agent.name,
+                reason: lastError ?? 'tracker batch failed after 2 retries',
+              ),
+            )
+            .toList(growable: false);
   }
 
-  /// Per-agent fallback (Phase 5.1 layer 2 + Phase 5.7.2). Run each failed
-  /// agent as its own LLM request, concurrency-limited to 2.
+  /// Legacy test seam for per-agent reruns. The chat-time Studio pipeline no
+  /// longer falls back from failed batches to individual tracker calls.
   Future<List<TrackerBatchResult>> retryFailedIndividually({
     required List<StudioAgent> agents,
     required StudioConfig config,
