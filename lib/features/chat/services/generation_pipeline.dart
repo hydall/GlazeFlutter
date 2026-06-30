@@ -14,6 +14,7 @@ import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_agentic_service.dart';
 import '../../../core/llm/memory_injection_service.dart'
     show chatMessageEmbeddingServiceProvider;
+import '../../../core/llm/studio_ledger_service.dart';
 import '../../../core/llm/lorebook_providers.dart' show embeddingConfigProvider;
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
@@ -244,6 +245,17 @@ class GenerationPipeline {
               character: character,
             ),
           );
+
+          // Stage 5: Studio Ledger — runs after POST-cleaner (fire-and-forget).
+          // Extracts entity/relationship/arc/world state and durable facts from
+          // the final assistant response on regen path.
+          unawaited(
+            _runStudioLedger(
+              sessionId: result.session!.id,
+              messages: result.session!.messages,
+              genId: genId,
+            ),
+          );
         }
         return regenOutcome;
       }
@@ -339,6 +351,21 @@ class GenerationPipeline {
             genId: genId,
             promptPayload: result.promptPayload,
             character: character,
+          ),
+        );
+
+        // Stage 5: Studio Ledger — extracts entity/relationship/arc/world
+        // state and durable MemoryBook facts from the final assistant response.
+        // Fire-and-forget; never blocks generation or user interaction.
+        // Runs after POST-cleaner is dispatched (both are fire-and-forget,
+        // so the ledger may race with the cleaner — that is intentional:
+        // the ledger uses the raw streamed text, the cleaner rewrites it).
+        // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Pipeline Placement.
+        unawaited(
+          _runStudioLedger(
+            sessionId: result.session!.id,
+            messages: result.session!.messages,
+            genId: genId,
           ),
         );
       }
@@ -1493,6 +1520,73 @@ class GenerationPipeline {
         }
         ref.invalidate(chatHistoryProvider);
       }
+    }
+  }
+
+  /// Stage 5: Studio Ledger trigger.
+  ///
+  /// Fire-and-forget — does not block generation or user interaction.
+  /// Extracts entity/relationship/arc/world state and durable MemoryBook facts
+  /// from the final assistant response and persists them via
+  /// [StudioLedgerService]. Only runs when [PipelineSettings.studioLedgerEnabled].
+  ///
+  /// Uses the raw final assistant text (not the POST-cleaner rewrite) because
+  /// both are dispatched concurrently. The ledger captures what the narrative
+  /// SAID, not what the cleaner polished — style rewrites do not change facts.
+  ///
+  /// Staleness guard: checks [abortHandler.isCurrentGen] before writing (after
+  /// the LLM returns). The service itself never throws — errors land in
+  /// [LedgerRunResult.status].
+  Future<void> _runStudioLedger({
+    required String sessionId,
+    required List<ChatMessage> messages,
+    required int genId,
+  }) async {
+    if (!ref.mounted) return;
+
+    try {
+      final pipeline = ref.read(pipelineSettingsProvider);
+      if (!pipeline.studioLedgerEnabled) return;
+
+      // Find the last non-error, non-typing assistant message.
+      final lastAssistant = messages.lastWhere(
+        (m) => m.role == 'assistant' && !m.isError && !m.isTyping,
+        orElse: () => messages.last,
+      );
+      if (lastAssistant.role != 'assistant' ||
+          lastAssistant.isError ||
+          lastAssistant.content.trim().isEmpty) {
+        return;
+      }
+
+      if (!abortHandler.isCurrentGen(genId)) return;
+
+      final recentHistory = extractRecentHistoryText(
+        messages,
+        maxMessages: 10,
+      );
+
+      final service = ref.read(studioLedgerServiceProvider);
+      final result = await service.run(
+        sessionId: sessionId,
+        settings: pipeline,
+        finalAssistantText: lastAssistant.content,
+        recentHistoryText: recentHistory,
+        messageId: lastAssistant.id,
+        swipeId: lastAssistant.swipeId,
+        agentSwipeId: lastAssistant.agentSwipeId,
+        isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
+      );
+
+      debugPrint(
+        '[StudioLedger] result session=$sessionId status=${result.status} '
+        'opsApplied=${result.opsApplied} '
+        'factsWritten=${result.durableFactsWritten} '
+        'elapsedMs=${result.elapsedMs} '
+        'error=${result.error ?? "none"}',
+      );
+    } catch (e) {
+      debugPrint('[StudioLedger] pipeline trigger failed session=$sessionId: $e');
     }
   }
 
