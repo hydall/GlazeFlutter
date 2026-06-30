@@ -183,6 +183,7 @@ class StreamGenerationService {
           );
         }
         final startGenTime = DateTime.now();
+        DateTime? finalStartTime;
         bool studioFrameScheduled = false;
         var latestStudioText = '';
         String? latestStudioReasoning;
@@ -215,6 +216,7 @@ class StreamGenerationService {
             latestStudioReasoning = reasoning;
             final cur = _ref.read(studioCycleStateProvider);
             if (cur.phase == StudioCyclePhase.running) {
+              finalStartTime ??= DateTime.now();
               _ref
                   .read(studioCycleStateProvider.notifier)
                   .state = StudioCycleState.writingFinal(
@@ -245,12 +247,6 @@ class StreamGenerationService {
           _log(
             'studio agent_errors char=$_charId session=${session.id} '
             'error=${studioResult.error}',
-          );
-          _recordStudioTrackerOperation(
-            sessionId: session.id,
-            startGenTime: startGenTime,
-            result: studioResult,
-            model: apiConfig.model,
           );
           _ref
               .read(studioCycleStateProvider.notifier)
@@ -288,6 +284,18 @@ class StreamGenerationService {
                 studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
               )
               .copyWith(promptPayload: payload);
+          final messageId = _lastAssistantId(
+            finalState.session ?? saveSession ?? session,
+            regenTargetId,
+          );
+          _recordStudioTrackerOperation(
+            sessionId: session.id,
+            messageId: messageId,
+            startGenTime: startGenTime,
+            finalStartTime: finalStartTime,
+            result: studioResult,
+            model: apiConfig.model,
+          );
           return finalState;
         }
         if (studioResult.status != 'ok' || studioResult.response.isEmpty) {
@@ -325,12 +333,6 @@ class StreamGenerationService {
           'studio write assistant char=$_charId session=${session.id} '
           'elapsedMs=$elapsed chars=${studioResult.response.length} '
           'briefs=${studioResult.stageBriefs.length}',
-        );
-        _recordStudioTrackerOperation(
-          sessionId: session.id,
-          startGenTime: startGenTime,
-          result: studioResult,
-          model: apiConfig.model,
         );
         _ref.read(studioCycleStateProvider.notifier).state = _studioFinalState(
           session.id,
@@ -370,9 +372,18 @@ class StreamGenerationService {
               studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
             )
             .copyWith(promptPayload: payload);
+        final messageId = _lastAssistantId(finalState.session!, regenTargetId);
+        _recordStudioTrackerOperation(
+          sessionId: session.id,
+          messageId: messageId,
+          startGenTime: startGenTime,
+          finalStartTime: finalStartTime,
+          result: studioResult,
+          model: apiConfig.model,
+        );
         if (memoryDiagnostics is Map<String, dynamic> &&
             finalState.session != null) {
-          final messageId = _lastAssistantId(
+          final memoryMessageId = _lastAssistantId(
             finalState.session!,
             regenTargetId,
           );
@@ -380,13 +391,13 @@ class StreamGenerationService {
               .read(lastMemoryActivityProvider(_charId).notifier)
               .state = MemoryActivityState(
             sessionId: finalState.session!.id,
-            messageId: messageId,
+            messageId: memoryMessageId,
             diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
             updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
           );
           _recordSidecarOperation(
             finalState.session!.id,
-            messageId,
+            memoryMessageId,
             memoryDiagnostics,
           );
         } else {
@@ -488,7 +499,10 @@ class StreamGenerationService {
             );
           }
 
-          final beautyApplied = _applyBeautyState(finalText, pendingSessionVars);
+          final beautyApplied = _applyBeautyState(
+            finalText,
+            pendingSessionVars,
+          );
           finalText = beautyApplied.text;
           pendingSessionVars = beautyApplied.vars;
 
@@ -761,7 +775,9 @@ class StreamGenerationService {
   /// cancellations or no-op configurations, not real operations.
   void _recordStudioTrackerOperation({
     required String sessionId,
+    String? messageId,
     required DateTime startGenTime,
+    DateTime? finalStartTime,
     required StudioPipelineResult result,
     String? model,
   }) {
@@ -775,41 +791,101 @@ class StreamGenerationService {
     final startedAtMs = startGenTime.millisecondsSinceEpoch;
 
     final briefs = result.stageBriefs;
-    final okCount = briefs.where((b) => b.status == 'ok').length;
-    final errCount = briefs.length - okCount;
 
-    final summary = switch (result.status) {
-      'ok' =>
-        briefs.isEmpty
-            ? 'studio ok (no trackers)'
-            : 'ran ${briefs.length} tracker${briefs.length > 1 ? 's' : ''}'
-                  '${okCount > 0 ? '' : ''}',
-      'agent_errors' =>
-        'agent errors: $errCount/${briefs.length} failed (${briefs.where((b) => b.status != 'ok').map((b) => b.agentName).join(', ')})',
-      _ => result.error ?? result.status,
-    };
+    if (briefs.isEmpty) {
+      _appendOperation(
+        AgentOperationRecord(
+          id: 'studio-tracker-$sessionId-${now.microsecondsSinceEpoch}',
+          kind: AgentOperationKind.studioTracker,
+          status: status,
+          sessionId: sessionId,
+          messageId: messageId,
+          attempts: [
+            AgentOperationAttempt(
+              attempt: 1,
+              statusCode: 0,
+              status: status.label,
+              error: status.isFailure ? (result.error ?? result.status) : null,
+              startedAtMs: startedAtMs,
+              elapsedMs: elapsedMs,
+            ),
+          ],
+          totalElapsedMs: elapsedMs,
+          model: model,
+          summary: result.error ?? result.status,
+          startedAtMs: startedAtMs,
+          finishedAtMs: now.millisecondsSinceEpoch,
+          canRegenerate: status.isFailure,
+        ),
+      );
+      return;
+    }
 
+    for (var i = 0; i < briefs.length; i++) {
+      final brief = briefs[i];
+      final briefStatus = brief.status == 'ok'
+          ? AgentOperationStatus.ok
+          : AgentOperationStatus.error;
+      final summary = brief.status == 'ok'
+          ? '${brief.agentName} · ${brief.brief.length} chars'
+          : '${brief.agentName} · ${brief.error ?? brief.status}';
+      final idStamp = now.microsecondsSinceEpoch + i;
+      final opStartedAt = startedAtMs + i;
+      _appendOperation(
+        AgentOperationRecord(
+          id: 'studio-tracker-${brief.agentId}-$sessionId-$idStamp',
+          kind: AgentOperationKind.studioTracker,
+          status: briefStatus,
+          sessionId: sessionId,
+          messageId: messageId,
+          attempts: [
+            AgentOperationAttempt(
+              attempt: 1,
+              statusCode: 0,
+              status: briefStatus.label,
+              error: briefStatus.isFailure
+                  ? (brief.error ?? brief.status)
+                  : null,
+              startedAtMs: opStartedAt,
+              elapsedMs: elapsedMs,
+            ),
+          ],
+          totalElapsedMs: elapsedMs,
+          model: model,
+          summary: summary,
+          startedAtMs: opStartedAt,
+          finishedAtMs: opStartedAt,
+          canRegenerate: briefStatus.isFailure,
+        ),
+      );
+    }
+
+    final finalStartedAt =
+        finalStartTime?.millisecondsSinceEpoch ?? startedAtMs + briefs.length;
+    final finalElapsedMs = now.millisecondsSinceEpoch - finalStartedAt;
     _appendOperation(
       AgentOperationRecord(
-        id: 'studio-tracker-$sessionId-${now.microsecondsSinceEpoch}',
-        kind: AgentOperationKind.studioTracker,
+        id: 'studio-final-$sessionId-${now.microsecondsSinceEpoch}',
+        kind: AgentOperationKind.studioFinal,
         status: status,
         sessionId: sessionId,
-        messageId: null,
+        messageId: messageId,
         attempts: [
           AgentOperationAttempt(
             attempt: 1,
             statusCode: 0,
             status: status.label,
             error: status.isFailure ? (result.error ?? result.status) : null,
-            startedAtMs: startedAtMs,
-            elapsedMs: elapsedMs,
+            startedAtMs: finalStartedAt,
+            elapsedMs: finalElapsedMs < 0 ? elapsedMs : finalElapsedMs,
           ),
         ],
-        totalElapsedMs: elapsedMs,
+        totalElapsedMs: finalElapsedMs < 0 ? elapsedMs : finalElapsedMs,
         model: model,
-        summary: summary,
-        startedAtMs: startedAtMs,
+        summary: status.isOk
+            ? 'final reply · ${result.response.length} chars'
+            : result.error ?? result.status,
+        startedAtMs: finalStartedAt,
         finishedAtMs: now.millisecondsSinceEpoch,
         canRegenerate: status.isFailure,
       ),

@@ -22,6 +22,7 @@ import '../../../core/services/generation_notification_service.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/utils/time_helpers.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../../cloud_sync/sync_provider.dart' show notifySyncMessageGenerated;
 import '../../extensions/services/extension_post_gen_service.dart';
 import '../../chat_history/chat_history_provider.dart';
@@ -1188,6 +1189,7 @@ class GenerationPipeline {
     // still uses the cleaner timeout and cancel token, so Stop aborts it.
     List<String>? auditIssues;
     Future<List<String>?>? auditFuture;
+    int? auditStartedAt;
     if (factCheckEnabled) {
       final auditPayload = promptPayload;
       final loreContent = _assembleLorebooksContent(auditPayload);
@@ -1195,6 +1197,7 @@ class GenerationPipeline {
       // cleaner prompt is built.
       _auditCancelToken = CancelToken();
       ref.read(cleanerCancelTokenProvider.notifier).state = _auditCancelToken;
+      auditStartedAt = DateTime.now().millisecondsSinceEpoch;
       auditFuture = cleanerService
           .runCharacterAudit(
             assistantText: assistantText,
@@ -1276,6 +1279,13 @@ class GenerationPipeline {
     if (auditFuture != null) {
       try {
         auditIssues = await auditFuture;
+        _recordFactCheckerOperation(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          startedAtMs: auditStartedAt ?? DateTime.now().millisecondsSinceEpoch,
+          issues: auditIssues,
+          model: _factCheckerModelLabel(pipeline),
+        );
         if (!abortCheck()) {
           ref.read(postCleanerStateProvider.notifier).state =
               const PostCleanerState.idle();
@@ -1288,6 +1298,14 @@ class GenerationPipeline {
       } catch (e) {
         debugPrint('[PostCleaner] audit await error=$e');
         auditIssues = null;
+        _recordFactCheckerOperation(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          startedAtMs: auditStartedAt ?? DateTime.now().millisecondsSinceEpoch,
+          issues: null,
+          error: '$e',
+          model: _factCheckerModelLabel(pipeline),
+        );
       }
     }
 
@@ -1737,6 +1755,21 @@ class GenerationPipeline {
             '${result.error == null ? '' : ': ${result.error}'}',
       );
 
+      _recordStudioLedgerOperation(
+        sessionId: sessionId,
+        targetMessage: targetMessage,
+        result: result,
+      );
+
+      if (_ledgerStatusToOp(result.status).isFailure) {
+        GlazeToast.showWithoutContext(
+          'Studio Ledger failed. Open Agentic Ops -> Last turn to inspect or rerun.',
+          duration: 5000,
+          position: ToastPosition.top,
+          isError: true,
+        );
+      }
+
       debugPrint(
         '[StudioLedger] result session=$sessionId status=${result.status} '
         'opsApplied=${result.opsApplied} '
@@ -1753,7 +1786,105 @@ class GenerationPipeline {
         targetMessage: targetMessage,
         reason: 'skipped, trigger error: $e',
       );
+      _recordStudioLedgerOperation(
+        sessionId: sessionId,
+        targetMessage: targetMessage,
+        result: LedgerRunResult(status: 'error', error: 'trigger error: $e'),
+      );
+      GlazeToast.showWithoutContext(
+        'Studio Ledger failed. Open Agentic Ops -> Last turn to inspect or rerun.',
+        duration: 5000,
+        position: ToastPosition.top,
+        isError: true,
+      );
     }
+  }
+
+  void _recordFactCheckerOperation({
+    required String sessionId,
+    required String messageId,
+    required int startedAtMs,
+    required List<String>? issues,
+    String? error,
+    String? model,
+  }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final status = error == null && issues != null
+        ? AgentOperationStatus.ok
+        : AgentOperationStatus.error;
+    ref.read(agentOperationsLogProvider.notifier).state = ref
+        .read(agentOperationsLogProvider)
+        .append(
+          AgentOperationRecord(
+            id: 'fact-checker-$messageId-${DateTime.now().microsecondsSinceEpoch}',
+            kind: AgentOperationKind.factChecker,
+            status: status,
+            sessionId: sessionId,
+            messageId: messageId,
+            attempts: [
+              AgentOperationAttempt(
+                attempt: 1,
+                statusCode: 0,
+                status: status.label,
+                error: status.isFailure ? (error ?? 'audit failed') : null,
+                startedAtMs: startedAtMs,
+                elapsedMs: now - startedAtMs,
+              ),
+            ],
+            totalElapsedMs: now - startedAtMs,
+            model: model,
+            summary: status.isOk
+                ? 'issues=${issues?.length ?? 0}'
+                : error ?? 'audit failed',
+            startedAtMs: startedAtMs,
+            finishedAtMs: now,
+            canRegenerate: status.isFailure,
+          ),
+        );
+  }
+
+  String? _factCheckerModelLabel(PipelineSettings pipeline) {
+    if (pipeline.postCleanerAuditModel.isNotEmpty) {
+      return pipeline.postCleanerAuditModel;
+    }
+    if (pipeline.postCleanerModel.isNotEmpty) return pipeline.postCleanerModel;
+    if (pipeline.sidecarModel.isNotEmpty) return pipeline.sidecarModel;
+    return null;
+  }
+
+  void _recordStudioLedgerOperation({
+    required String sessionId,
+    required ChatMessage targetMessage,
+    required LedgerRunResult result,
+  }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final startedAt = result.attempts.isNotEmpty
+        ? result.attempts.first.startedAtMs
+        : now - result.elapsedMs;
+    final finishedAt = result.attempts.isNotEmpty
+        ? result.attempts.last.startedAtMs + result.attempts.last.elapsedMs
+        : now;
+    final status = _ledgerStatusToOp(result.status);
+    ref.read(agentOperationsLogProvider.notifier).state = ref
+        .read(agentOperationsLogProvider)
+        .append(
+          AgentOperationRecord(
+            id: 'studio-ledger-${targetMessage.id}-${DateTime.now().microsecondsSinceEpoch}',
+            kind: AgentOperationKind.studioLedger,
+            status: status,
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            attempts: result.attempts,
+            totalElapsedMs: result.elapsedMs,
+            model: result.model,
+            summary: status.isOk
+                ? 'ops=${result.opsApplied}, facts=${result.durableFactsWritten}'
+                : result.error ?? result.status,
+            startedAtMs: startedAt,
+            finishedAtMs: finishedAt,
+            canRegenerate: status.isFailure,
+          ),
+        );
   }
 
   /// Returns a non-null skip reason when the cadence should suppress the
@@ -2038,6 +2169,18 @@ AgentOperationStatus _agenticWriteStatusToOp(String status) {
     'timeout' => AgentOperationStatus.timeout,
     'error' => AgentOperationStatus.httpError,
     'invalid_output' => AgentOperationStatus.invalidOutput,
+    _ => AgentOperationStatus.error,
+  };
+}
+
+AgentOperationStatus _ledgerStatusToOp(String status) {
+  return switch (status) {
+    'ok' => AgentOperationStatus.ok,
+    'skipped' => AgentOperationStatus.disabled,
+    'disabled' => AgentOperationStatus.disabled,
+    'aborted' => AgentOperationStatus.aborted,
+    'timeout' => AgentOperationStatus.timeout,
+    'error' => AgentOperationStatus.error,
     _ => AgentOperationStatus.error,
   };
 }

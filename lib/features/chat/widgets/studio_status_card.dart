@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/state/db_provider.dart';
 import '../state/post_cleaner_state_provider.dart';
 import '../state/studio_cycle_state_provider.dart';
 
@@ -35,7 +36,12 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
   Widget build(BuildContext context) {
     final state = ref.watch(studioCycleStateProvider);
     final cleanerState = ref.watch(postCleanerStateProvider);
+    final pipeline = ref.watch(pipelineSettingsProvider);
     final cs = Theme.of(context).colorScheme;
+    final totalSteps =
+        pipeline.postCleanerEnabled && pipeline.postCleanerCharacterCheckEnabled
+        ? 4
+        : 3;
 
     // Detect cleaning phase: cleaner running while Studio was active.
     // Studio "was active" = phase is writingFinal or done (i.e. the cycle
@@ -78,10 +84,7 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
     final bool showSpinner;
 
     if (state.phase == StudioCyclePhase.running) {
-      // 1/3 — Trackers Gen. Show internal agent progress (done/total).
-      final done = state.completedAgents + state.failedAgents;
-      final inner = state.totalAgents > 0 ? ' $done/${state.totalAgents}' : '';
-      label = '1/3 - Trackers Gen$inner';
+      label = '1/$totalSteps - Trackers Gen';
       icon = Icons.auto_awesome_outlined;
       accent = cs.primary;
       showSpinner = true;
@@ -92,7 +95,7 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
         accent = cs.primary;
         showSpinner = true;
       } else {
-        label = '2/3 - Main agent';
+        label = '2/$totalSteps - Main agent';
         icon = Icons.edit_note;
         accent = cs.primary;
         showSpinner = true;

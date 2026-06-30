@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'json_repair.dart';
 import '../models/studio_ledger_export.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,7 +96,14 @@ class StudioLedgerExportParser {
 
     StudioLedgerExport export;
     try {
-      final decoded = jsonDecode(exportRaw);
+      final jsonRaw = extractJsonObject(exportRaw);
+      if (jsonRaw == null) {
+        return LedgerParseResult(
+          visibleLedger: visibleLedger,
+          rejectionReason: 'export block does not contain a JSON object',
+        );
+      }
+      final decoded = jsonDecode(repairJson(jsonRaw));
       if (decoded is! Map<String, dynamic>) {
         return LedgerParseResult(
           visibleLedger: visibleLedger,

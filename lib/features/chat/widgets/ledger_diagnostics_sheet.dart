@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/db/repositories/tracker_repo.dart';
+import '../../../core/models/chat_message.dart';
 import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/memory_agent_providers.dart';
 
 /// Diagnostics sheet for Studio Ledger committed canon state.
 ///
@@ -21,10 +23,10 @@ import '../../../core/state/db_provider.dart';
 ///
 /// Each row supports:
 ///   - edit value (inline)
-///   - lock (creates canon_lock:<key>=true)
-///   - unlock (removes canon_lock:<key>)
-///   - override (creates canon_override:<key>)
-///   - reset (removes canon_override:<key> only)
+///   - lock (creates `canon_lock:<key>=true`)
+///   - unlock (removes `canon_lock:<key>`)
+///   - override (creates `canon_override:<key>`)
+///   - reset (removes `canon_override:<key>` only)
 ///   - delete
 ///   - source-message navigation (when [onScrollToMessage] is provided)
 ///
@@ -64,6 +66,7 @@ class _LedgerDiagnosticsSheetState
     extends ConsumerState<LedgerDiagnosticsSheet> {
   List<Tracker>? _rows;
   bool _loading = true;
+  bool _rerunning = false;
 
   @override
   void initState() {
@@ -128,6 +131,21 @@ class _LedgerDiagnosticsSheetState
                   ),
                   const Spacer(),
                   IconButton(
+                    icon: _rerunning
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(
+                            Icons.replay_circle_filled_outlined,
+                            size: 20,
+                          ),
+                    onPressed: _rerunning ? null : _rerunLastLedger,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Regenerate Ledger for latest assistant turn',
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.refresh, size: 20),
                     onPressed: () {
                       setState(() => _loading = true);
@@ -180,6 +198,115 @@ class _LedgerDiagnosticsSheetState
       },
     );
   }
+
+  Future<void> _rerunLastLedger() async {
+    if (_rerunning) return;
+    setState(() => _rerunning = true);
+
+    ChatMessage? target;
+    try {
+      final session = await ref
+          .read(chatRepoProvider)
+          .getById(widget.sessionId);
+      if (session == null) {
+        throw StateError('Session not found');
+      }
+      final messages = session.messages;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        final m = messages[i];
+        if (m.role == 'assistant' &&
+            !m.isError &&
+            !m.isTyping &&
+            m.content.trim().isNotEmpty) {
+          target = m;
+          break;
+        }
+      }
+      if (target == null) {
+        throw StateError('No assistant message found');
+      }
+
+      final pipeline = ref.read(pipelineSettingsProvider);
+      final recentHistory = _recentHistoryText(
+        messages,
+        maxMessages: 10,
+        upToMessageId: target.id,
+      );
+      final result = await ref
+          .read(studioLedgerServiceProvider)
+          .run(
+            sessionId: widget.sessionId,
+            settings: pipeline,
+            finalAssistantText: target.content,
+            recentHistoryText: recentHistory,
+            messageId: target.id,
+            swipeId: target.swipeId,
+            agentSwipeId: target.agentSwipeId,
+            forceEnabled: true,
+            isStillCurrent: () => mounted,
+          );
+
+      await ref
+          .read(trackerRepoProvider)
+          .upsertValue(
+            widget.sessionId,
+            '_ledger_diag:studio_ledger',
+            'turn=${target.id} • manual rerun, ${result.status} '
+                '(ops=${result.opsApplied}, facts=${result.durableFactsWritten})'
+                '${result.error == null ? '' : ': ${result.error}'}',
+            scope: 'ledger_diagnostic',
+            provenance:
+                'message=${target.id}|swipe=${target.swipeId}|'
+                'agentSwipe=${target.agentSwipeId}|manual=1',
+          );
+    } catch (e) {
+      if (target != null) {
+        await ref
+            .read(trackerRepoProvider)
+            .upsertValue(
+              widget.sessionId,
+              '_ledger_diag:studio_ledger',
+              'turn=${target.id} • manual rerun, trigger error: $e',
+              scope: 'ledger_diagnostic',
+              provenance:
+                  'message=${target.id}|swipe=${target.swipeId}|'
+                  'agentSwipe=${target.agentSwipeId}|manual=1',
+            );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ledger rerun failed: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _rerunning = false);
+        await _load();
+      }
+    }
+  }
+}
+
+String _recentHistoryText(
+  List<ChatMessage> messages, {
+  int maxMessages = 10,
+  String? upToMessageId,
+}) {
+  var source = messages;
+  if (upToMessageId != null) {
+    final idx = messages.indexWhere((m) => m.id == upToMessageId);
+    if (idx >= 0) source = messages.sublist(0, idx + 1);
+  }
+  final start = source.length > maxMessages ? source.length - maxMessages : 0;
+  final lines = <String>[];
+  for (final msg in source.sublist(start)) {
+    if (msg.isError || msg.isTyping) continue;
+    final content = msg.content.trim();
+    if (content.isEmpty) continue;
+    final role = msg.role == 'assistant' ? 'Assistant' : 'User';
+    lines.add('$role: $content');
+  }
+  return lines.join('\n\n');
 }
 
 class _LedgerRowList extends ConsumerWidget {

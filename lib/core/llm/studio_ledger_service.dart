@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/tracker_repo.dart';
+import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
 import '../models/studio_ledger_export.dart';
@@ -49,6 +50,8 @@ class LedgerRunResult {
   final int durableFactsWritten;
   final String? error;
   final int elapsedMs;
+  final List<AgentOperationAttempt> attempts;
+  final String? model;
 
   const LedgerRunResult({
     required this.status,
@@ -57,6 +60,8 @@ class LedgerRunResult {
     this.durableFactsWritten = 0,
     this.error,
     this.elapsedMs = 0,
+    this.attempts = const [],
+    this.model,
   });
 
   static const LedgerRunResult disabled = LedgerRunResult(status: 'disabled');
@@ -173,6 +178,7 @@ class StudioLedgerService {
         temperature: temperature,
         timeoutMs: timeoutMs,
         cancelToken: token,
+        omitReasoning: true,
       );
 
       if (token.isCancelled || isStillCurrent?.call() == false) {
@@ -188,6 +194,8 @@ class StudioLedgerService {
           status: 'error',
           error: 'LLM call failed: ${outcome.attempts.lastOrNull?.status}',
           elapsedMs: sw.elapsedMilliseconds,
+          attempts: outcome.attempts,
+          model: config.model,
         );
       }
 
@@ -216,6 +224,8 @@ class StudioLedgerService {
           visibleLedger: parseResult.visibleLedger,
           error: parseResult.rejectionReason,
           elapsedMs: sw.elapsedMilliseconds,
+          attempts: outcome.attempts,
+          model: config.model,
         );
       }
 
@@ -310,6 +320,8 @@ class StudioLedgerService {
         opsApplied: opsApplied,
         durableFactsWritten: durableFactsWritten,
         elapsedMs: sw.elapsedMilliseconds,
+        attempts: outcome.attempts,
+        model: config.model,
       );
     } on TimeoutException {
       sw.stop();

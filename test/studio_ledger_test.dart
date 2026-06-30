@@ -138,6 +138,21 @@ void main() {
       expect(result.wasRejected, isFalse);
     });
 
+    test('extracts valid JSON wrapped in markdown fence', () {
+      const raw =
+          '''
+<glaze_memory_export>
+```json
+$_validJson
+```
+</glaze_memory_export>
+''';
+      final result = parser.parse(raw);
+      expect(result.export, isNotNull);
+      expect(result.export!.ops, hasLength(3));
+      expect(result.wasRejected, isFalse);
+    });
+
     // Test 2
     test('malformed JSON does not crash; returns null export', () {
       const bad = '<glaze_memory_export>{ not json </glaze_memory_export>';
