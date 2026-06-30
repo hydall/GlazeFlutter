@@ -4,7 +4,8 @@ import 'package:collection/collection.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../bridge/chat_bridge_controller.dart';
-import 'chat_message_sync.dart' show chatMessageListsIdentical, lastUserMessageId;
+import 'chat_message_sync.dart'
+    show chatMessageListsIdentical, lastUserMessageId;
 
 /// Mutable per-frame state owned by the [ChatWebViewSyncDispatcher].
 /// Lifted out of the widget so the dispatcher can be tested in
@@ -64,11 +65,7 @@ class ChatWebViewSyncDispatcher {
       );
     }
 
-    _maybeUpdateMemoryBook(
-      bridge: bridge,
-      old: old,
-      current: current,
-    );
+    _maybeUpdateMemoryBook(bridge: bridge, old: old, current: current);
 
     if (current.charId != old.charId || current.sessionId != old.sessionId) {
       // The actual session switch is performed by the caller; we just
@@ -103,11 +100,18 @@ class ChatWebViewSyncDispatcher {
     _maybeApplySearch(bridge: bridge, old: old, current: current);
     _maybeApplyInsets(bridge: bridge, old: old, current: current);
 
-    _maybeApplyGeneratingState(
-      bridge: bridge,
-      old: old,
-      current: current,
-    );
+    _maybeApplyGeneratingState(bridge: bridge, old: old, current: current);
+
+    // Level-reconcile the native-side streaming flags too. If the previous
+    // generation's falling edge was missed while the WebView was not ready or
+    // during a session switch, `streamingSent` can stay true. The next user
+    // send then looks like "messages + generating" and ChatMessageSync would
+    // incorrectly skip the just-appended persisted user message as if it were
+    // the virtual streaming placeholder.
+    if (!state.wasGenerating && current.isGenerating) {
+      state.streamingSent = false;
+      state.regenStreamingSent = false;
+    }
 
     if (state.wasGenerating && !current.isGenerating) {
       final finishedRegenId = old.regenTargetId;
@@ -138,13 +142,18 @@ class ChatWebViewSyncDispatcher {
       state.streamingSent = false;
       state.regenStreamingSent = false;
       unawaited(onSyncExtBlockPanels());
+    } else if (!current.isGenerating) {
+      state.streamingSent = false;
+      state.regenStreamingSent = false;
     }
 
-    final runMessageSync = !identical(oldMessages, newMessages) &&
+    final runMessageSync =
+        !identical(oldMessages, newMessages) &&
         !chatMessageListsIdentical(oldMessages, newMessages);
 
     // Fresh generation started (no regenTargetId) → inject typing placeholder.
-    final shouldInjectPlaceholder = !state.wasGenerating &&
+    final shouldInjectPlaceholder =
+        !state.wasGenerating &&
         current.isGenerating &&
         current.regenTargetId == null &&
         !state.streamingSent;
@@ -154,9 +163,7 @@ class ChatWebViewSyncDispatcher {
       runMessageSync: runMessageSync,
       appendPlaceholder: shouldInjectPlaceholder,
       sessionSwitched: false,
-      placeholder: shouldInjectPlaceholder
-          ? buildStreamingPlaceholder()
-          : null,
+      placeholder: shouldInjectPlaceholder ? buildStreamingPlaceholder() : null,
     );
   }
 
