@@ -1783,7 +1783,7 @@
     "post_building_studio_ledger_model_hint": "Извлекает компактное канон-состояние после каждого финального ответа ассистента. Рекомендуются средние модели. Дешёвые модели могут сработать, но плохой вывод будет отклонён валидацией схемы и может ухудшить континуитет.",
     "post_building_studio_ledger_defaults_hint": "Модель: пусто = наследовать модель сайдкара/чата. Таймаут: 0 = наследовать таймаут сайдкара. Макс. токенов: 0 = стандартный бюджет структурированного вывода (2000). Температура: отрицательная = по умолчанию 0.2.",
     "post_building_studio_ledger_timeout": "Таймаут Studio Ledger",
-    "post_building_studio_ledger_timeout_desc": "0 = наследовать таймаут сайдкара.",
+    "post_building_studio_ledger_timeout_desc": "Секунд ожидания. 0 = наследовать таймаут сайдкара.",
     "post_building_studio_ledger_max_tokens": "Макс. токенов Studio Ledger",
     "post_building_studio_ledger_max_tokens_desc": "0 = стандартный бюджет структурированного вывода (2000).",
     "post_building_studio_ledger_temperature": "Температура Studio Ledger",

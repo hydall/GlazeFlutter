@@ -549,19 +549,26 @@ class _LedgerSection extends StatelessWidget {
           label: 'post_building_studio_ledger_timeout'.tr(),
           valueText: pipeline.studioLedgerTimeoutMs <= 0
               ? 'post_building_inherit_sidecar'.tr()
-              : 'post_building_ms_count'.tr(
-                  namedArgs: {'arg0': '${pipeline.studioLedgerTimeoutMs}'},
+              : 'post_building_seconds_count'.tr(
+                  namedArgs: {
+                    'arg0': (pipeline.studioLedgerTimeoutMs / 1000)
+                        .round()
+                        .toString(),
+                  },
                 ),
           subtitleKey: 'post_building_studio_ledger_timeout_desc',
           onTap: (ctx) async {
-            final v = await _editNullableInt(
+            final valueSeconds = pipeline.studioLedgerTimeoutMs <= 0
+                ? 0
+                : (pipeline.studioLedgerTimeoutMs / 1000).round();
+            final v = await _editIntSeconds(
               ctx: ctx,
               title: 'post_building_studio_ledger_timeout'.tr(),
-              value: pipeline.studioLedgerTimeoutMs <= 0
-                  ? null
-                  : pipeline.studioLedgerTimeoutMs,
+              valueSeconds: valueSeconds,
             );
-            await onSaved((p) => p.copyWith(studioLedgerTimeoutMs: v ?? 0));
+            if (v != null) {
+              await onSaved((p) => p.copyWith(studioLedgerTimeoutMs: v * 1000));
+            }
           },
         ),
         _NumberTile(

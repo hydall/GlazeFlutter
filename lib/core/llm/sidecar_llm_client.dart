@@ -188,6 +188,7 @@ class SidecarLlmClient {
       protocol: cleaner.protocol,
     );
   }
+
   /// Resolves the API config for the memory consolidation LLM (Phase G5).
   ///
   /// `source='custom'` → use `consolidationEndpoint/ApiKey/Model`.
@@ -206,9 +207,7 @@ class SidecarLlmClient {
           "endpoint='${settings.consolidationEndpoint}' "
           "model='${settings.consolidationModel}'",
         );
-        throw Exception(
-          'Sidecar custom config incomplete for $errorLabel',
-        );
+        throw Exception('Sidecar custom config incomplete for $errorLabel');
       }
       debugPrint(
         '[Sidecar] resolved custom for $errorLabel '
@@ -269,9 +268,7 @@ class SidecarLlmClient {
 
     // Custom path: both endpoint and model must be non-empty.
     if (endpoint.isNotEmpty && model.isNotEmpty) {
-      debugPrint(
-        '[Sidecar] resolved custom for $errorLabel model=$model',
-      );
+      debugPrint('[Sidecar] resolved custom for $errorLabel model=$model');
       return SidecarApiConfig(
         endpoint: endpoint,
         apiKey: apiKey,
@@ -302,9 +299,12 @@ class SidecarLlmClient {
 
   /// Resolves the ledger LLM timeout from settings.
   int resolveLedgerTimeout(PipelineSettings settings) {
-    return settings.studioLedgerTimeoutMs > 0
-        ? settings.studioLedgerTimeoutMs
-        : settings.sidecarTimeoutMs;
+    final configured = settings.studioLedgerTimeoutMs;
+    if (configured <= 0) return settings.sidecarTimeoutMs;
+    // Early UI builds edited this value as seconds while the field name stores
+    // milliseconds. Treat small persisted values as seconds to avoid accidental
+    // sub-second Ledger timeouts (for example, 180 should mean 180s).
+    return configured < 1000 ? configured * 1000 : configured;
   }
 
   /// Makes a single non-streaming LLM call and returns the raw text response.

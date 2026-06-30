@@ -1766,7 +1766,7 @@
     "post_building_studio_ledger_model_hint": "Extracts compact canon state after each final assistant response. Medium models are recommended. Cheap models may work, but bad output is rejected by schema validation and may reduce continuity.",
     "post_building_studio_ledger_defaults_hint": "Model: empty = inherit sidecar/chat model. Timeout: 0 = inherit sidecar timeout. Max tokens: 0 = use default structured-output budget (2000). Temperature: negative = use default 0.2.",
     "post_building_studio_ledger_timeout": "Studio Ledger timeout",
-    "post_building_studio_ledger_timeout_desc": "0 = inherit sidecar timeout.",
+    "post_building_studio_ledger_timeout_desc": "Seconds to wait. 0 = inherit sidecar timeout.",
     "post_building_studio_ledger_max_tokens": "Studio Ledger max tokens",
     "post_building_studio_ledger_max_tokens_desc": "0 = use default structured-output budget (2000).",
     "post_building_studio_ledger_temperature": "Studio Ledger temperature",

@@ -1733,7 +1733,8 @@ class GenerationPipeline {
         targetMessage: targetMessage,
         reason:
             'ran, ${result.status} '
-            '(ops=${result.opsApplied}, facts=${result.durableFactsWritten})',
+            '(ops=${result.opsApplied}, facts=${result.durableFactsWritten})'
+            '${result.error == null ? '' : ': ${result.error}'}',
       );
 
       debugPrint(
