@@ -326,14 +326,9 @@ class _TrackerTile extends ConsumerWidget {
       subtitle: isLongValue
           ? GestureDetector(
               onTap: () => _showFullValue(context, t),
-              child: Text(
-                t.value.length > 200
-                    ? '${t.value.substring(0, 200)}…  (tap to expand)'
-                    : t.value,
-                style: const TextStyle(fontSize: 11),
-              ),
+              child: _TrackerValue(t: t, isLongValue: true),
             )
-          : Text(t.value, style: const TextStyle(fontSize: 12)),
+          : _TrackerValue(t: t),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -375,6 +370,39 @@ class _TrackerTile extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TrackerValue extends StatelessWidget {
+  final Tracker t;
+  final bool isLongValue;
+
+  const _TrackerValue({required this.t, this.isLongValue = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final value = isLongValue && t.value.length > 200
+        ? '${t.value.substring(0, 200)}…  (tap to expand)'
+        : t.value;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value, style: TextStyle(fontSize: isLongValue ? 11 : 12)),
+        if (t.provenance.isNotEmpty) ...[
+          const SizedBox(height: 3),
+          Text(
+            t.provenance,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

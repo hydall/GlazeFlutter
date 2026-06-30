@@ -7,6 +7,7 @@ import '../models/chat_message.dart';
 import '../state/db_provider.dart';
 import '../../features/settings/api_list_provider.dart';
 import 'chat_message_embedding_service.dart';
+import 'embedding_service.dart';
 import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';
 
@@ -81,6 +82,13 @@ final vectorRebuildControllerProvider =
     NotifierProvider<VectorRebuildController, VectorRebuildState>(
       VectorRebuildController.new,
     );
+
+final embeddingStaleStatsProvider = FutureProvider((ref) async {
+  await ref.watch(apiListProvider.future);
+  final config = ref.watch(embeddingConfigProvider);
+  final signature = embeddingModelSignature(config);
+  return ref.watch(embeddingRepoProvider).getStaleStats(signature);
+});
 
 class VectorRebuildController extends Notifier<VectorRebuildState> {
   bool _cancelRequested = false;
@@ -170,6 +178,7 @@ class VectorRebuildController extends Notifier<VectorRebuildState> {
         currentLabel: '',
         message: 'Vector rebuild complete.',
       );
+      ref.invalidate(embeddingStaleStatsProvider);
     } catch (e) {
       state = state.copyWith(
         status: VectorRebuildStatus.error,

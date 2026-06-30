@@ -1042,10 +1042,19 @@ String _dedupeAndCapStudioState(String raw) {
   var out = lines.join('\n');
   if (out.length <= maxChars) return out;
   final close = '</studio_session_state>';
-  final budget = maxChars - close.length - 48;
+  final trimNotice = '[trimmed lower-priority canon details]';
+  final budget = maxChars - close.length - trimNotice.length - 2;
   if (budget <= 0) return out.substring(0, maxChars);
-  out = out.substring(0, budget).trimRight();
-  return '$out\n[trimmed lower-priority canon details]\n$close';
+  final packed = <String>[];
+  var used = 0;
+  for (final line in lines) {
+    final cost = line.length + 1;
+    if (used + cost > budget) break;
+    packed.add(line);
+    used += cost;
+  }
+  out = packed.join('\n').trimRight();
+  return '$out\n$trimNotice\n$close';
 }
 
 class _GenerationAbortedException implements Exception {

@@ -70,7 +70,13 @@ class ChatMessageEmbeddingService {
     for (int i = 0; i + chunkSize <= eligible.length; i += chunkSize) {
       final slice = eligible.sublist(i, i + chunkSize);
       final text = _formatChunk(slice);
-      chunks.add(_MessageChunk(index: i ~/ chunkSize, text: text, messageIds: slice.map((m) => m.id).toList()));
+      chunks.add(
+        _MessageChunk(
+          index: i ~/ chunkSize,
+          text: text,
+          messageIds: slice.map((m) => m.id).toList(),
+        ),
+      );
     }
     if (chunks.isEmpty) return;
 
@@ -87,10 +93,9 @@ class ChatMessageEmbeddingService {
           continue;
         }
 
-        final embedded = await _embeddingService.getEmbeddingsWithChunks(
-          [chunk.text],
-          config,
-        );
+        final embedded = await _embeddingService.getEmbeddingsWithChunks([
+          chunk.text,
+        ], config);
         final vectors = embedded.map((c) => c.vector).toList();
         if (vectors.isEmpty) continue;
 
@@ -100,20 +105,24 @@ class ChatMessageEmbeddingService {
           sourceId: sessionId,
           vectors: vectors,
           textHash: textHash,
-          retrievalMetadata: {
+          retrievalMetadata: embeddingMetadataForConfig(
+            config,
+            vectors,
             // Same shape as MemoryEmbeddingService — list of {index, text}
             // so MessageRecallService can extract the matched chunk text
             // via the standard _decodeChunkTexts path.
-            'chunks': [
+            chunks: [
               for (int i = 0; i < embedded.length; i++)
                 {'index': i, 'text': embedded[i].text},
             ],
             // Provenance for debugging and orphan-cleanup tools.
-            'messageIds': chunk.messageIds,
-            'chunkIndex': chunk.index,
-            'chunkCount': chunks.length,
-            'chunkSize': chunkSize,
-          },
+            extra: {
+              'messageIds': chunk.messageIds,
+              'chunkIndex': chunk.index,
+              'chunkCount': chunks.length,
+              'chunkSize': chunkSize,
+            },
+          ),
         );
       } on RateLimitException {
         await _repo.putEmbeddingError(
@@ -126,7 +135,11 @@ class ChatMessageEmbeddingService {
             'message': 'Rate limited, deferred',
             'retryable': true,
           },
-          retrievalMetadata: {'messageIds': chunk.messageIds, 'chunkIndex': chunk.index},
+          retrievalMetadata: embeddingMetadataForConfig(
+            config,
+            const [],
+            extra: {'messageIds': chunk.messageIds, 'chunkIndex': chunk.index},
+          ),
         );
         // Stop the loop — rate limits apply to the whole endpoint.
         return;
@@ -136,8 +149,16 @@ class ChatMessageEmbeddingService {
           sourceType: 'chat_message',
           sourceId: sessionId,
           textHash: textHash,
-          error: {'type': 'api_error', 'message': e.toString(), 'retryable': true},
-          retrievalMetadata: {'messageIds': chunk.messageIds, 'chunkIndex': chunk.index},
+          error: {
+            'type': 'api_error',
+            'message': e.toString(),
+            'retryable': true,
+          },
+          retrievalMetadata: embeddingMetadataForConfig(
+            config,
+            const [],
+            extra: {'messageIds': chunk.messageIds, 'chunkIndex': chunk.index},
+          ),
         );
       }
     }

@@ -22,7 +22,7 @@ class _MemoryGraphPanelState extends ConsumerState<MemoryGraphPanel>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 1, vsync: this);
   }
 
   @override
@@ -72,20 +72,12 @@ class _MemoryGraphPanelState extends ConsumerState<MemoryGraphPanel>
             ),
             TabBar(
               controller: _tabController,
-              tabs: const [
-                Tab(text: 'Entities'),
-                Tab(text: 'Arcs'),
-                Tab(text: 'Errors'),
-              ],
+              tabs: const [Tab(text: 'Entities')],
             ),
             Expanded(
               child: TabBarView(
                 controller: _tabController,
-                children: [
-                  _entitiesTab(),
-                  _arcsTab(),
-                  _errorsTab(),
-                ],
+                children: [_entitiesTab()],
               ),
             ),
           ],
@@ -96,9 +88,9 @@ class _MemoryGraphPanelState extends ConsumerState<MemoryGraphPanel>
 
   Widget _entitiesTab() {
     return FutureBuilder(
-      future: ref.read(memoryEntityRepoProvider).getBySessionId(
-        widget.sessionId,
-      ),
+      future: ref
+          .read(memoryEntityRepoProvider)
+          .getBySessionId(widget.sessionId),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -145,93 +137,6 @@ class _MemoryGraphPanelState extends ConsumerState<MemoryGraphPanel>
     );
   }
 
-  Widget _arcsTab() {
-    return FutureBuilder(
-      future: ref.read(memoryConsolidationRepoProvider).getBySessionId(
-        widget.sessionId,
-        tier: 2,
-      ),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final arcs = snapshot.data!;
-        if (arcs.isEmpty) {
-          return const Center(
-            child: Text(
-              'No arc summaries. Enable consolidation in memory settings '
-              'and accumulate enough entries.',
-            ),
-          );
-        }
-        return ListView.builder(
-          itemCount: arcs.length,
-          itemBuilder: (context, index) {
-            final arc = arcs[index];
-            return ExpansionTile(
-              title: Text(arc.title),
-              subtitle: Text(
-                'range ${arc.messageRangeStart}-${arc.messageRangeEnd}',
-                style: const TextStyle(fontSize: 12),
-              ),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Text(arc.summary),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _errorsTab() {
-    return FutureBuilder(
-      future: ref.read(memoryConsolidationRepoProvider).getBySessionId(
-        widget.sessionId,
-      ),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final errors = snapshot.data!.where((c) => c.status == 'error').toList();
-        if (errors.isEmpty) {
-          return const Center(child: Text('No consolidation errors.'));
-        }
-        return ListView.builder(
-          itemCount: errors.length,
-          itemBuilder: (context, index) {
-            final e = errors[index];
-            return ListTile(
-              leading: const Icon(Icons.error_outline, color: Colors.red),
-              title: Text('Tier ${e.tier}: ${e.title}'),
-              subtitle: Text(
-                e.errorMessage,
-                style: const TextStyle(fontSize: 12),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: FilledButton.tonal(
-                onPressed: () async {
-                  await ref
-                      .read(memoryConsolidationRepoProvider)
-                      .updateStatus(e.id, 'pending', null);
-                  setState(() {});
-                },
-                child: const Text('Retry'),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   Future<void> _rebuildGraph() async {
     setState(() => _rebuilding = true);
     try {
@@ -239,10 +144,7 @@ class _MemoryGraphPanelState extends ConsumerState<MemoryGraphPanel>
       final book = await bookRepo.getBySessionId(widget.sessionId);
       if (book == null) return;
       final builder = ref.read(memoryGraphBuilderProvider);
-      await builder.rebuildSession(
-        widget.sessionId,
-        book.entries,
-      );
+      await builder.rebuildSession(widget.sessionId, book.entries);
     } finally {
       if (mounted) setState(() => _rebuilding = false);
     }

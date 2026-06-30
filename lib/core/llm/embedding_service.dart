@@ -17,6 +17,29 @@ class EmbeddingConfig {
   });
 }
 
+String embeddingModelSignature(EmbeddingConfig config) {
+  final endpoint = config.endpoint.trim();
+  final model = config.model.trim();
+  return '${endpoint.isEmpty ? '<endpoint>' : endpoint}|${model.isEmpty ? '<model>' : model}';
+}
+
+Map<String, dynamic> embeddingMetadataForConfig(
+  EmbeddingConfig config,
+  List<List<double>> vectors, {
+  List<String>? hints,
+  List<Map<String, dynamic>>? chunks,
+  Map<String, dynamic> extra = const {},
+}) {
+  final metadata = <String, dynamic>{...extra};
+  if (hints != null) metadata['hints'] = hints;
+  if (chunks != null) metadata['chunks'] = chunks;
+  metadata['embeddingModel'] = config.model.trim();
+  metadata['embeddingEndpoint'] = config.endpoint.trim();
+  metadata['embeddingSignature'] = embeddingModelSignature(config);
+  metadata['embeddingDimension'] = vectors.isEmpty ? 0 : vectors.first.length;
+  return metadata;
+}
+
 class RateLimitException implements Exception {
   final int retryAfter;
   RateLimitException(this.retryAfter);

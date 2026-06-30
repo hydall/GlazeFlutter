@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/db/repositories/embedding_repo.dart';
 import '../../../core/services/api_connection_tester.dart';
 import '../../../core/llm/lorebook_providers.dart';
 import '../../../core/llm/vector_rebuild_service.dart';
@@ -155,6 +156,7 @@ class _EmbeddingSettingsScreenState
   @override
   Widget build(BuildContext context) {
     final rebuildState = ref.watch(vectorRebuildControllerProvider);
+    final staleStats = ref.watch(embeddingStaleStatsProvider);
     return Scaffold(
       backgroundColor: context.cs.surface,
       body: Column(
@@ -277,7 +279,7 @@ class _EmbeddingSettingsScreenState
                   hint: '10',
                 ),
                 const SizedBox(height: 24),
-                _buildVectorRebuildSection(rebuildState),
+                _buildVectorRebuildSection(rebuildState, staleStats),
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
@@ -326,8 +328,22 @@ class _EmbeddingSettingsScreenState
     );
   }
 
-  Widget _buildVectorRebuildSection(VectorRebuildState rebuildState) {
+  Widget _buildVectorRebuildSection(
+    VectorRebuildState rebuildState,
+    AsyncValue<EmbeddingStaleStats> staleStats,
+  ) {
     final running = rebuildState.isRunning || rebuildState.isPaused;
+    final stats = switch (staleStats) {
+      AsyncData(:final value) => value,
+      _ => null,
+    };
+    final staleCount = stats?.stale ?? 0;
+    final totalCount = stats?.total ?? 0;
+    final staleSources =
+        stats?.bySource.entries
+            .map((MapEntry<String, int> e) => '${e.key}: ${e.value}')
+            .join(' • ') ??
+        '';
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -350,6 +366,61 @@ class _EmbeddingSettingsScreenState
           Text(
             'Rebuild MemoryBook, Lorebook, and raw chat vectors after embedding model or dimensionality changes.',
             style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: staleCount > 0
+                  ? context.cs.errorContainer.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: staleCount > 0
+                    ? context.cs.error.withValues(alpha: 0.35)
+                    : Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  staleStats.isLoading
+                      ? 'Checking vector metadata...'
+                      : staleCount > 0
+                      ? '$staleCount of $totalCount vectors may be stale'
+                      : '$totalCount vectors match the current embedding config',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: staleCount > 0
+                        ? context.cs.error
+                        : context.cs.onSurface,
+                  ),
+                ),
+                if (staleSources.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    staleSources,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                if ((stats?.missingMetadata ?? 0) > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${stats!.missingMetadata} older rows have no model metadata; force rebuild is recommended.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(

@@ -617,6 +617,17 @@ void main() {
       expect(compiled, contains('Neo-calendar 2077'));
     });
 
+    test('budget cap preserves XML close tag and trims by complete lines', () {
+      final trackers = _makeTrackers('s1', {
+        for (var i = 0; i < 220; i++)
+          'world:fact_$i': 'long canon fact ${'x' * 80} $i',
+      });
+      final compiled = kCompileStudioSessionStateForTest(trackers, 's1')!;
+      expect(compiled.length, lessThanOrEqualTo(6000));
+      expect(compiled, endsWith('</studio_session_state>'));
+      expect(compiled, contains('[trimmed lower-priority canon details]'));
+    });
+
     test('relationship pair appears in Relationships section', () {
       final trackers = _makeTrackers('s1', {
         'relationship:Danvi:Lucy.attitude': 'wary admiration',

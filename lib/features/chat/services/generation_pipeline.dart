@@ -1565,13 +1565,13 @@ class GenerationPipeline {
       // 2. skipped → assistantText (original preserved, cleaned rejected).
       // 3. partial → _lastStreamedText (persisted as partial swipe).
       // 4. error/nothing → assistantText (original unchanged in DB).
-      final ledgerText = result.wasCleaned
-          ? result.cleanedText
-          : result.status == 'skipped'
-          ? assistantText
-          : _lastStreamedText.trim().isNotEmpty
-          ? _lastStreamedText
-          : assistantText;
+      final ledgerText = selectStudioLedgerTextAfterCleaner(
+        cleanerStatus: result.status,
+        wasCleaned: result.wasCleaned,
+        cleanedText: result.cleanedText,
+        assistantText: assistantText,
+        streamedPartialText: _lastStreamedText,
+      );
       final ledgerTargetMessage = refreshedMessages
           ?.where((m) => m.id == targetMessage.id)
           .firstOrNull;
@@ -1806,6 +1806,21 @@ class GenerationPipeline {
       _preCreatedMessageId = null;
     }
   }
+}
+
+@visibleForTesting
+String selectStudioLedgerTextAfterCleaner({
+  required String cleanerStatus,
+  required bool wasCleaned,
+  required String cleanedText,
+  required String assistantText,
+  required String streamedPartialText,
+}) {
+  if (wasCleaned) return cleanedText;
+  if (cleanerStatus == 'skipped') return assistantText;
+  final partial = streamedPartialText.trim();
+  if (partial.isNotEmpty) return streamedPartialText;
+  return assistantText;
 }
 
 /// Extracts recent conversation as plain text for the agentic write-loop

@@ -206,6 +206,8 @@ class StudioLedgerService {
         await _storeVisibleLedger(
           sessionId: sessionId,
           messageId: messageId,
+          swipeId: swipeId,
+          agentSwipeId: agentSwipeId,
           visibleLedger: parseResult.visibleLedger,
           trackerRepo: trackerRepo,
         );
@@ -232,6 +234,8 @@ class StudioLedgerService {
             op: op,
             sessionId: sessionId,
             messageId: messageId,
+            swipeId: swipeId,
+            agentSwipeId: agentSwipeId,
             trackerRepo: trackerRepo,
           );
           opsApplied++;
@@ -266,6 +270,8 @@ class StudioLedgerService {
       await _storeVisibleLedger(
         sessionId: sessionId,
         messageId: messageId,
+        swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
         visibleLedger: parseResult.visibleLedger,
         trackerRepo: trackerRepo,
       );
@@ -332,6 +338,8 @@ class StudioLedgerService {
     required LedgerOp op,
     required String sessionId,
     required String messageId,
+    required int swipeId,
+    required int agentSwipeId,
     required TrackerRepo trackerRepo,
   }) async {
     // Plan §Manual Overrides and Locks: if canon_lock:<key> = 'true',
@@ -343,8 +351,12 @@ class StudioLedgerService {
       return;
     }
 
-    final provenance =
-        'studio_ledger:$messageId${op.evidence.isNotEmpty ? ':${op.evidence.substring(0, op.evidence.length.clamp(0, 80))}' : ''}';
+    final provenance = _buildLedgerProvenance(
+      messageId: messageId,
+      swipeId: swipeId,
+      agentSwipeId: agentSwipeId,
+      evidence: op.evidence,
+    );
 
     switch (op.op) {
       case 'set':
@@ -468,6 +480,8 @@ class StudioLedgerService {
   Future<void> _storeVisibleLedger({
     required String sessionId,
     required String messageId,
+    required int swipeId,
+    required int agentSwipeId,
     required String visibleLedger,
     required TrackerRepo trackerRepo,
   }) async {
@@ -480,10 +494,35 @@ class StudioLedgerService {
             ? '${visibleLedger.substring(0, 8000)}…[truncated]'
             : visibleLedger,
         scope: 'ledger_diagnostic',
-        provenance: 'studio_ledger',
+        provenance: _buildLedgerProvenance(
+          messageId: messageId,
+          swipeId: swipeId,
+          agentSwipeId: agentSwipeId,
+        ),
       );
     } catch (e) {
       debugPrint('[StudioLedger] failed to store visible ledger: $e');
     }
+  }
+
+  String _buildLedgerProvenance({
+    required String messageId,
+    required int swipeId,
+    required int agentSwipeId,
+    String evidence = '',
+  }) {
+    final parts = <String>[
+      'source=studio_ledger',
+      'message=$messageId',
+      'swipe=$swipeId',
+      'agentSwipe=$agentSwipeId',
+    ];
+    final trimmedEvidence = evidence.trim();
+    if (trimmedEvidence.isNotEmpty) {
+      parts.add(
+        'evidence=${trimmedEvidence.substring(0, trimmedEvidence.length.clamp(0, 80))}',
+      );
+    }
+    return parts.join('|');
   }
 }
