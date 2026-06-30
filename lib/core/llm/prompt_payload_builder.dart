@@ -291,11 +291,7 @@ class PromptPayloadBuilder {
     String? studioSessionStateContent;
     if (sessionId != null) {
       try {
-        final trackerRepo = _ref.read(trackerRepoProvider);
-        final ledgerTrackers = await trackerRepo.getBySessionAndScope(
-          sessionId,
-          'ledger',
-        );
+        final ledgerTrackers = await _loadEffectiveLedgerTrackers(sessionId);
         if (ledgerTrackers.isNotEmpty) {
           studioSessionStateContent = _compileStudioSessionState(
             ledgerTrackers,
@@ -317,9 +313,7 @@ class PromptPayloadBuilder {
     String? entitiesContent;
     if (memorySettings.memoryMode != 'fast' && sessionId != null) {
       try {
-        final allLedger = await _ref
-            .read(trackerRepoProvider)
-            .getBySessionAndScope(sessionId, 'ledger');
+        final allLedger = await _loadEffectiveLedgerTrackers(sessionId);
         arcContent = _buildArcContent(
           allLedger,
           latestUserText: _latestUserText(history),
@@ -421,13 +415,26 @@ class PromptPayloadBuilder {
     }
 
     final memSettings = _ref.read(memoryGlobalSettingsProvider);
+    String? studioSessionStateContent;
+    if (session != null) {
+      try {
+        final ledgerTrackers = await _loadEffectiveLedgerTrackers(session.id);
+        if (ledgerTrackers.isNotEmpty) {
+          studioSessionStateContent = _compileStudioSessionState(
+            ledgerTrackers,
+            session.id,
+            latestUserText: _latestUserText(history),
+          );
+        }
+      } catch (e) {
+        debugPrint('[PromptBuilder] studio_session_state load failed: $e');
+      }
+    }
     String? arcContent;
     String? entitiesContent;
     if (memSettings.memoryMode != 'fast' && session != null) {
       try {
-        final allLedger = await _ref
-            .read(trackerRepoProvider)
-            .getBySessionAndScope(session.id, 'ledger');
+        final allLedger = await _loadEffectiveLedgerTrackers(session.id);
         arcContent = _buildArcContent(
           allLedger,
           latestUserText: _latestUserText(history),
@@ -484,6 +491,7 @@ class PromptPayloadBuilder {
       chunkFirstTopChunks: memSettings.chunkFirstTopChunks,
       arcContent: arcContent,
       entitiesContent: entitiesContent,
+      studioSessionStateContent: studioSessionStateContent,
       recalledMessagesContent: recalledMessagesContent,
     );
   }
@@ -555,6 +563,36 @@ class PromptPayloadBuilder {
       );
       return [];
     }
+  }
+
+  Future<List<Tracker>> _loadEffectiveLedgerTrackers(String sessionId) async {
+    final trackerRepo = _ref.read(trackerRepoProvider);
+    final snapshot = await _ref
+        .read(trackerSnapshotRepoProvider)
+        .getLatestCommitted(sessionId);
+    final liveLedger = await trackerRepo.getBySessionAndScope(
+      sessionId,
+      'ledger',
+    );
+
+    if (snapshot == null) return liveLedger;
+
+    final byName = <String, Tracker>{
+      for (final tracker in snapshot.trackers)
+        if (tracker.scope == 'ledger') tracker.name: tracker,
+    };
+
+    // Manual overrides/locks are user-owned and can be newer than the latest
+    // committed model snapshot. Keep them authoritative without admitting
+    // uncommitted model-written rows from tracker_rows.
+    for (final tracker in liveLedger) {
+      if (tracker.name.startsWith('canon_override:') ||
+          tracker.name.startsWith('canon_lock:')) {
+        byName[tracker.name] = tracker;
+      }
+    }
+
+    return byName.values.toList()..sort((a, b) => a.name.compareTo(b.name));
   }
 }
 

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/db/repositories/memory_book_repo.dart';
 import 'package:glaze_flutter/core/db/repositories/tracker_repo.dart';
+import 'package:glaze_flutter/core/db/repositories/tracker_snapshot_repo.dart';
 import 'package:glaze_flutter/core/llm/studio_ledger_export_parser.dart';
 import 'package:glaze_flutter/core/llm/prompt_payload_builder.dart'
     show kCompileStudioSessionStateForTest;
@@ -413,6 +414,92 @@ void main() {
       final loaded2 = await repo.getBySessionId(sessionId);
       expect(loaded2!.entries, hasLength(1));
     });
+  });
+
+  // ── TrackerSnapshot rollback tests ───────────────────────────────────────
+  group('TrackerSnapshotRepo — Studio Canon rollback safety', () {
+    late AppDatabase db;
+    late TrackerSnapshotRepo snapshotRepo;
+    late TrackerRepo trackerRepo;
+
+    setUp(() {
+      db = _db();
+      snapshotRepo = TrackerSnapshotRepo(db);
+      trackerRepo = TrackerRepo(db);
+    });
+
+    tearDown(() async => db.close());
+
+    // Test 13
+    test(
+      'uncommitted regenerated swipe state is not effective canon',
+      () async {
+        const sessionId = 'sess_snap';
+
+        await snapshotRepo.upsertTrackers(
+          sessionId: sessionId,
+          messageId: 'msg_old',
+          swipeId: 0,
+          agentSwipeId: 0,
+          trackers: _makeTrackers(sessionId, {
+            'arc:david_fate.status': 'completed',
+          }),
+          committed: true,
+        );
+
+        await snapshotRepo.upsertTrackers(
+          sessionId: sessionId,
+          messageId: 'msg_regen',
+          swipeId: 1,
+          agentSwipeId: 0,
+          trackers: _makeTrackers(sessionId, {
+            'arc:david_fate.status': 'active',
+          }),
+        );
+
+        final effective = await snapshotRepo.getLatestCommitted(sessionId);
+        expect(effective, isNotNull);
+        expect(effective!.messageId, 'msg_old');
+        expect(effective.trackers.single.value, 'completed');
+      },
+    );
+
+    // Test 14
+    test(
+      'deleted source message falls back to previous committed canon',
+      () async {
+        const sessionId = 'sess_delete';
+
+        await snapshotRepo.upsertTrackers(
+          sessionId: sessionId,
+          messageId: 'msg_1',
+          swipeId: 0,
+          agentSwipeId: 0,
+          trackers: _makeTrackers(sessionId, {'npc:Lucy.attitude': 'wary'}),
+          committed: true,
+        );
+        await snapshotRepo.upsertTrackers(
+          sessionId: sessionId,
+          messageId: 'msg_2',
+          swipeId: 0,
+          agentSwipeId: 0,
+          trackers: _makeTrackers(sessionId, {'npc:Lucy.attitude': 'trusting'}),
+          committed: true,
+        );
+
+        await trackerRepo.replaceForSession(
+          sessionId,
+          _makeTrackers(sessionId, {'npc:Lucy.attitude': 'trusting'}),
+        );
+        await snapshotRepo.deleteForMessage(sessionId, 'msg_2');
+        final fallback = await snapshotRepo.getLatestCommitted(sessionId);
+        await trackerRepo.replaceForSession(sessionId, fallback!.trackers);
+
+        final live = await trackerRepo.get(sessionId, 'npc:Lucy.attitude');
+        expect(fallback.messageId, 'msg_1');
+        expect(live!.value, 'wary');
+      },
+    );
   });
 
   // ── _compileStudioSessionState tests ─────────────────────────────────────

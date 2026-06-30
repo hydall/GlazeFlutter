@@ -103,10 +103,11 @@ class StudioLedgerService {
     required String messageId,
     required int swipeId,
     required int agentSwipeId,
+    bool forceEnabled = false,
     bool Function()? isStillCurrent,
     CancelToken? cancelToken,
   }) async {
-    if (!settings.studioLedgerEnabled) {
+    if (!settings.studioLedgerEnabled && !forceEnabled) {
       return LedgerRunResult.disabled;
     }
 
@@ -268,6 +269,27 @@ class StudioLedgerService {
         visibleLedger: parseResult.visibleLedger,
         trackerRepo: trackerRepo,
       );
+
+      // ── 9. Snapshot post-ledger tracker state for rollback/swipe safety ──
+      // The mutable tracker_rows table is only the live working store. Prompt
+      // reads use committed tracker_snapshots, so every ledger write must also
+      // capture an immutable snapshot at the assistant output anchor.
+      if (token.isCancelled == false && isStillCurrent?.call() != false) {
+        try {
+          final updatedTrackers = await trackerRepo.getBySessionId(sessionId);
+          await _ref
+              .read(trackerSnapshotRepoProvider)
+              .upsertTrackers(
+                sessionId: sessionId,
+                messageId: messageId,
+                swipeId: swipeId,
+                agentSwipeId: agentSwipeId,
+                trackers: updatedTrackers,
+              );
+        } catch (e) {
+          debugPrint('[StudioLedger] snapshot write failed: $e');
+        }
+      }
 
       sw.stop();
       debugPrint(

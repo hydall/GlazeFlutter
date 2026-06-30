@@ -1572,6 +1572,9 @@ class GenerationPipeline {
           : _lastStreamedText.trim().isNotEmpty
           ? _lastStreamedText
           : assistantText;
+      final ledgerTargetMessage = refreshedMessages
+          ?.where((m) => m.id == targetMessage.id)
+          .firstOrNull;
 
       unawaited(
         _runStudioLedger(
@@ -1579,7 +1582,7 @@ class GenerationPipeline {
           messages: refreshedMessages ?? recentMessages,
           genId: genId,
           finalAssistantText: ledgerText,
-          targetMessage: targetMessage,
+          targetMessage: ledgerTargetMessage ?? targetMessage,
         ),
       );
     }
@@ -1646,6 +1649,7 @@ class GenerationPipeline {
         messageId: targetMessage.id,
         swipeId: targetMessage.swipeId,
         agentSwipeId: targetMessage.agentSwipeId,
+        forceEnabled: ledgerShouldRun,
         isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
       );
 

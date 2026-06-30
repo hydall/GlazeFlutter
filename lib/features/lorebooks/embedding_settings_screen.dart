@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/services/api_connection_tester.dart';
 import '../../../core/llm/lorebook_providers.dart';
+import '../../../core/llm/vector_rebuild_service.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../../../shared/shell/shell_header_provider.dart';
@@ -21,7 +22,8 @@ class EmbeddingSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _EmbeddingSettingsScreenState
-    extends ConsumerState<EmbeddingSettingsScreen> with ShellHeaderMixin {
+    extends ConsumerState<EmbeddingSettingsScreen>
+    with ShellHeaderMixin {
   @override
   int get headerBranchIndex => 2;
 
@@ -39,8 +41,14 @@ class _EmbeddingSettingsScreenState
   late TextEditingController _thresholdCtrl;
   late TextEditingController _topKCtrl;
   late TextEditingController _scanDepthCtrl;
+  late TextEditingController _vectorsPerMinuteCtrl;
+  late TextEditingController _batchSizeCtrl;
   String _searchType = 'keyword';
   bool _isTesting = false;
+  bool _rebuildMemoryBooks = true;
+  bool _rebuildLorebooks = true;
+  bool _rebuildRawChat = true;
+  bool _forceReindex = false;
 
   @override
   void initState() {
@@ -58,6 +66,8 @@ class _EmbeddingSettingsScreenState
     );
     _topKCtrl = TextEditingController(text: settings.vectorTopK.toString());
     _scanDepthCtrl = TextEditingController(text: settings.scanDepth.toString());
+    _vectorsPerMinuteCtrl = TextEditingController(text: '30');
+    _batchSizeCtrl = TextEditingController(text: '10');
     _searchType = settings.searchType;
   }
 
@@ -83,7 +93,30 @@ class _EmbeddingSettingsScreenState
     _thresholdCtrl.dispose();
     _topKCtrl.dispose();
     _scanDepthCtrl.dispose();
+    _vectorsPerMinuteCtrl.dispose();
+    _batchSizeCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _startVectorRebuild() async {
+    final sources = <VectorRebuildSource>{
+      if (_rebuildMemoryBooks) VectorRebuildSource.memoryBooks,
+      if (_rebuildLorebooks) VectorRebuildSource.lorebooks,
+      if (_rebuildRawChat) VectorRebuildSource.rawChat,
+    };
+    if (sources.isEmpty) {
+      GlazeToast.show(context, 'Select at least one vector source.');
+      return;
+    }
+    final controller = ref.read(vectorRebuildControllerProvider.notifier);
+    await controller.start(
+      VectorRebuildRequest(
+        sources: sources,
+        vectorsPerMinute: int.tryParse(_vectorsPerMinuteCtrl.text) ?? 30,
+        batchSize: int.tryParse(_batchSizeCtrl.text) ?? 10,
+        forceReindex: _forceReindex,
+      ),
+    );
   }
 
   void _save() async {
@@ -121,6 +154,7 @@ class _EmbeddingSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final rebuildState = ref.watch(vectorRebuildControllerProvider);
     return Scaffold(
       backgroundColor: context.cs.surface,
       body: Column(
@@ -182,11 +216,24 @@ class _EmbeddingSettingsScreenState
                   hint: 'http://127.0.0.1:11434/v1',
                 ),
                 const SizedBox(height: 8),
-                _field('label_embedding_key'.tr(), _apiKeyCtrl, hint: 'Optional', obscure: true),
+                _field(
+                  'label_embedding_key'.tr(),
+                  _apiKeyCtrl,
+                  hint: 'Optional',
+                  obscure: true,
+                ),
                 const SizedBox(height: 8),
-                _field('label_embedding_model'.tr(), _modelCtrl, hint: 'text-embedding-3-small'),
+                _field(
+                  'label_embedding_model'.tr(),
+                  _modelCtrl,
+                  hint: 'text-embedding-3-small',
+                ),
                 const SizedBox(height: 8),
-                _field('label_max_chunk_tokens'.tr(), _maxChunkTokensCtrl, hint: '8192'),
+                _field(
+                  'label_max_chunk_tokens'.tr(),
+                  _maxChunkTokensCtrl,
+                  hint: '8192',
+                ),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
@@ -199,7 +246,11 @@ class _EmbeddingSettingsScreenState
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.wifi_tethering, size: 18),
-                    label: Text(_isTesting ? 'btn_testing'.tr() : 'btn_test_connection'.tr()),
+                    label: Text(
+                      _isTesting
+                          ? 'btn_testing'.tr()
+                          : 'btn_test_connection'.tr(),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -212,11 +263,21 @@ class _EmbeddingSettingsScreenState
                   ),
                 ),
                 const SizedBox(height: 8),
-                _field('label_similarity_threshold'.tr(), _thresholdCtrl, hint: '0.45'),
+                _field(
+                  'label_similarity_threshold'.tr(),
+                  _thresholdCtrl,
+                  hint: '0.45',
+                ),
                 const SizedBox(height: 8),
                 _field('label_top_k'.tr(), _topKCtrl, hint: '10'),
                 const SizedBox(height: 8),
-                _field('label_vector_scan_depth'.tr(), _scanDepthCtrl, hint: '10'),
+                _field(
+                  'label_vector_scan_depth'.tr(),
+                  _scanDepthCtrl,
+                  hint: '10',
+                ),
+                const SizedBox(height: 24),
+                _buildVectorRebuildSection(rebuildState),
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
@@ -261,6 +322,156 @@ class _EmbeddingSettingsScreenState
         fillColor: Colors.white.withValues(alpha: 0.05),
         isDense: true,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  Widget _buildVectorRebuildSection(VectorRebuildState rebuildState) {
+    final running = rebuildState.isRunning || rebuildState.isPaused;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Vector rebuilds',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: context.cs.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Rebuild MemoryBook, Lorebook, and raw chat vectors after embedding model or dimensionality changes.',
+            style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              FilterChip(
+                label: const Text('MemoryBook'),
+                selected: _rebuildMemoryBooks,
+                onSelected: running
+                    ? null
+                    : (v) => setState(() => _rebuildMemoryBooks = v),
+              ),
+              FilterChip(
+                label: const Text('Lorebooks'),
+                selected: _rebuildLorebooks,
+                onSelected: running
+                    ? null
+                    : (v) => setState(() => _rebuildLorebooks = v),
+              ),
+              FilterChip(
+                label: const Text('Raw chat'),
+                selected: _rebuildRawChat,
+                onSelected: running
+                    ? null
+                    : (v) => setState(() => _rebuildRawChat = v),
+              ),
+              FilterChip(
+                label: const Text('Force'),
+                selected: _forceReindex,
+                onSelected: running
+                    ? null
+                    : (v) => setState(() => _forceReindex = v),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _field(
+                  'Vectors per minute',
+                  _vectorsPerMinuteCtrl,
+                  hint: '30',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _field('Batch size', _batchSizeCtrl, hint: '10')),
+            ],
+          ),
+          if (running ||
+              rebuildState.status == VectorRebuildStatus.completed ||
+              rebuildState.status == VectorRebuildStatus.error) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: rebuildState.progress.clamp(0, 1)),
+            const SizedBox(height: 8),
+            Text(
+              '${rebuildState.current}/${rebuildState.total} • indexed ${rebuildState.indexed} • skipped ${rebuildState.skipped} • failed ${rebuildState.failed}',
+              style: TextStyle(
+                fontSize: 12,
+                color: context.cs.onSurfaceVariant,
+              ),
+            ),
+            if (rebuildState.currentLabel.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                rebuildState.currentLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+            if (rebuildState.message.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                rebuildState.message,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: running ? null : _startVectorRebuild,
+                  icon: const Icon(Icons.sync, size: 18),
+                  label: const Text('Rebuild selected'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                tooltip: rebuildState.isPaused ? 'Resume' : 'Pause',
+                onPressed: running
+                    ? () {
+                        final ctrl = ref.read(
+                          vectorRebuildControllerProvider.notifier,
+                        );
+                        rebuildState.isPaused ? ctrl.resume() : ctrl.pause();
+                      }
+                    : null,
+                icon: Icon(
+                  rebuildState.isPaused ? Icons.play_arrow : Icons.pause,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                tooltip: 'Cancel',
+                onPressed: running
+                    ? ref.read(vectorRebuildControllerProvider.notifier).cancel
+                    : null,
+                icon: const Icon(Icons.stop),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
