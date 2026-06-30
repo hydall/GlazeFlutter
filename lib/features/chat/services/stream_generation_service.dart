@@ -90,7 +90,63 @@ class StreamGenerationService {
       }
       final apiConfig = payload.apiConfig;
 
-      final promptResult = await buildPromptInIsolate(payload);
+      final studioConfig = await _ref
+          .read(memoryStudioServiceProvider)
+          .getEnabledConfig(session.id);
+      if (_isAborted()) {
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
+      }
+
+      final effectivePayload = studioConfig != null
+          ? PromptPayload(
+              character: payload.character,
+              persona: payload.persona,
+              preset: payload.preset,
+              history: payload.history,
+              sessionId: payload.sessionId,
+              apiConfig: payload.apiConfig,
+              sessionVars: payload.sessionVars,
+              globalVars: payload.globalVars,
+              summaryContent: payload.summaryContent,
+              summaryPrefix: payload.summaryPrefix,
+              memoryContent: payload.memoryContent,
+              memoryMacroContent: payload.memoryMacroContent,
+              memoryInjectionTarget: payload.memoryInjectionTarget,
+              guidanceText: payload.guidanceText,
+              lorebooks: payload.lorebooks,
+              lorebookSettings: payload.lorebookSettings,
+              lorebookActivations: payload.lorebookActivations,
+              vectorEntries: payload.vectorEntries,
+              authorsNote: payload.authorsNote,
+              characterDepthPrompt: payload.characterDepthPrompt,
+              characterDepthPromptDepth: payload.characterDepthPromptDepth,
+              characterDepthPromptRole: payload.characterDepthPromptRole,
+              memoryCoverage: payload.memoryCoverage,
+              globalRegexes: payload.globalRegexes,
+              preScannedEntries: payload.preScannedEntries,
+              triggeredMemories: payload.triggeredMemories,
+              runtimePromptBlocks: payload.runtimePromptBlocks,
+              memorySelection: payload.memorySelection,
+              memoryExcerptingEnabled: payload.memoryExcerptingEnabled,
+              memoryPackingMode: payload.memoryPackingMode,
+              memoryExcerptTokensPerChunk: payload.memoryExcerptTokensPerChunk,
+              memoryExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
+              chunkFirstTopEntries: payload.chunkFirstTopEntries,
+              chunkFirstTopChunks: payload.chunkFirstTopChunks,
+              arcContent: payload.arcContent,
+              entitiesContent: payload.entitiesContent,
+              studioSessionStateContent: payload.studioSessionStateContent,
+              recalledMessagesContent: payload.recalledMessagesContent,
+              disableSourceWindowExclusion: true,
+              memoryInjectionFingerprint: payload.memoryInjectionFingerprint,
+            )
+          : payload;
+
+      final promptResult = await buildPromptInIsolate(effectivePayload);
       if (_isAborted()) {
         return ChatState(
           session: saveSession ?? session,
@@ -156,16 +212,6 @@ class StreamGenerationService {
       final triggeredLorebooks = promptResult.triggeredLorebooks;
       final triggeredMemories = promptResult.triggeredMemories;
 
-      final studioConfig = await _ref
-          .read(memoryStudioServiceProvider)
-          .getEnabledConfig(session.id);
-      if (_isAborted()) {
-        return ChatState(
-          session: saveSession ?? session,
-          isGenerating: false,
-          visibleStartIndex: vsi,
-        );
-      }
       if (studioConfig != null) {
         _log(
           'studio intercept char=$_charId session=${session.id} '
@@ -177,56 +223,6 @@ class StreamGenerationService {
           sessionId: session.id,
           totalAgents: studioConfig.agents.length,
         );
-        final studioPayload = PromptPayload(
-          character: payload.character,
-          persona: payload.persona,
-          preset: payload.preset,
-          history: payload.history,
-          sessionId: payload.sessionId,
-          apiConfig: payload.apiConfig,
-          sessionVars: payload.sessionVars,
-          globalVars: payload.globalVars,
-          summaryContent: payload.summaryContent,
-          summaryPrefix: payload.summaryPrefix,
-          memoryContent: payload.memoryContent,
-          memoryMacroContent: payload.memoryMacroContent,
-          memoryInjectionTarget: payload.memoryInjectionTarget,
-          guidanceText: payload.guidanceText,
-          lorebooks: payload.lorebooks,
-          lorebookSettings: payload.lorebookSettings,
-          lorebookActivations: payload.lorebookActivations,
-          vectorEntries: payload.vectorEntries,
-          authorsNote: payload.authorsNote,
-          characterDepthPrompt: payload.characterDepthPrompt,
-          characterDepthPromptDepth: payload.characterDepthPromptDepth,
-          characterDepthPromptRole: payload.characterDepthPromptRole,
-          memoryCoverage: payload.memoryCoverage,
-          globalRegexes: payload.globalRegexes,
-          preScannedEntries: payload.preScannedEntries,
-          triggeredMemories: payload.triggeredMemories,
-          runtimePromptBlocks: payload.runtimePromptBlocks,
-          memorySelection: payload.memorySelection,
-          memoryExcerptingEnabled: payload.memoryExcerptingEnabled,
-          memoryPackingMode: payload.memoryPackingMode,
-          memoryExcerptTokensPerChunk: payload.memoryExcerptTokensPerChunk,
-          memoryExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
-          chunkFirstTopEntries: payload.chunkFirstTopEntries,
-          chunkFirstTopChunks: payload.chunkFirstTopChunks,
-          arcContent: payload.arcContent,
-          entitiesContent: payload.entitiesContent,
-          studioSessionStateContent: payload.studioSessionStateContent,
-          recalledMessagesContent: payload.recalledMessagesContent,
-          disableSourceWindowExclusion: true,
-          memoryInjectionFingerprint: payload.memoryInjectionFingerprint,
-        );
-        final promptResult = await buildPromptInIsolate(studioPayload);
-        if (_isAborted()) {
-          return ChatState(
-            session: saveSession ?? session,
-            isGenerating: false,
-            visibleStartIndex: vsi,
-          );
-        }
         final startGenTime = DateTime.now();
         DateTime? finalStartTime;
         bool studioFrameScheduled = false;
