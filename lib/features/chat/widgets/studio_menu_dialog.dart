@@ -171,6 +171,71 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
+  Future<void> _editAgentModel(StudioAgent agent) async {
+    final apiConfig = _ctrl.resolveTrackerApiConfig();
+    if (apiConfig == null) {
+      GlazeToast.show(
+        context,
+        'No chat API configured. Set one up in API settings first.',
+      );
+      return;
+    }
+    final models = await _ctrl.fetchModelsForTrackerConfig();
+    if (!mounted) return;
+    setState(() {});
+    if (models.isEmpty) {
+      GlazeToast.show(
+        context,
+        'Could not fetch models from ${apiConfig.name.isEmpty ? "the provider" : apiConfig.name}. '
+        'Check the API endpoint and key in settings.',
+      );
+      return;
+    }
+    final current = agent.modelOverride;
+    if (current.isNotEmpty && !models.contains(current)) {
+      models.insert(0, current);
+    }
+    final selectedIndex = current.isNotEmpty ? models.indexOf(current) : -1;
+    if (!mounted) return;
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: agent.name.isEmpty ? agent.id : agent.name,
+      scrollToIndex: selectedIndex >= 0 ? selectedIndex : null,
+      items: [
+        BottomSheetItem(
+          label: 'Use chat/run model',
+          hint: apiConfig.model.isEmpty ? null : 'chat: ${apiConfig.model}',
+          icon: current.isEmpty ? Icons.check : Icons.chat_bubble_outline,
+          iconColor: Theme.of(context).colorScheme.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _setAgentModelOverride(agent, '');
+          },
+        ),
+        ...models.map(
+          (m) => BottomSheetItem(
+            label: m,
+            icon: m == current ? Icons.check : null,
+            iconColor: Theme.of(context).colorScheme.primary,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _setAgentModelOverride(agent, m);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _setAgentModelOverride(
+    StudioAgent agent,
+    String modelOverride,
+  ) async {
+    await _ctrl.setAgentModelOverride(agent, modelOverride);
+    if (!mounted) return;
+    setState(() {});
+  }
+
   Future<void> _setTrackerModelOverride(String modelOverride) async {
     final pipeline = ref.read(pipelineSettingsProvider);
     final updated = pipeline.copyWith(
@@ -335,6 +400,7 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                               .toList(),
                           trackerValueFor: _ctrl.trackerValueFor,
                           onToggle: _toggleAgent,
+                          onEditModel: _editAgentModel,
                           onEditShard: _editAgentShard,
                           onRegenerate: _regenerateAgentInstruction,
                           regeneratingAgentIds: _ctrl.regeneratingAgentIds,
@@ -404,6 +470,7 @@ class _TrackerRow extends StatelessWidget {
   final StudioAgent agent;
   final String? value;
   final ValueChanged<bool> onToggle;
+  final void Function(StudioAgent)? onEditModel;
   final VoidCallback onEditShard;
   final VoidCallback onRegenerate;
   final bool regenerating;
@@ -412,6 +479,7 @@ class _TrackerRow extends StatelessWidget {
     required this.agent,
     required this.value,
     required this.onToggle,
+    this.onEditModel,
     required this.onEditShard,
     required this.onRegenerate,
     required this.regenerating,
@@ -472,6 +540,7 @@ class _TrackerRow extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       ...chips.map((c) => _chip(context, c.label, c.emphasize)),
+                      if (onEditModel != null) _modelChip(context),
                       // Tappable prompt-shard chip — opens a multi-line
                       // editor for the tracker's promptShard (manual shard
                       // editing, Phase B).
@@ -540,6 +609,57 @@ class _TrackerRow extends StatelessWidget {
               style: Theme.of(
                 context,
               ).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modelChip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final model = agent.modelOverride.isNotEmpty
+        ? agent.modelOverride
+        : agent.model.isNotEmpty
+        ? agent.model
+        : 'model';
+    return InkWell(
+      onTap: () => onEditModel?.call(agent),
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: agent.modelOverride.isNotEmpty
+              ? cs.primaryContainer
+              : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: cs.primary.withValues(alpha: 0.4),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.smart_toy_outlined,
+              size: 12,
+              color: agent.modelOverride.isNotEmpty
+                  ? cs.onPrimaryContainer
+                  : cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 3),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Text(
+                model,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: agent.modelOverride.isNotEmpty
+                      ? cs.onPrimaryContainer
+                      : cs.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -1027,6 +1147,7 @@ class _FinalizerSection extends StatelessWidget {
   final List<StudioAgent> disabledFinalAgents;
   final String? Function(String) trackerValueFor;
   final Future<void> Function(StudioAgent, bool) onToggle;
+  final Future<void> Function(StudioAgent) onEditModel;
   final Future<void> Function(StudioAgent) onEditShard;
   final Future<void> Function(StudioAgent) onRegenerate;
   final Set<String> regeneratingAgentIds;
@@ -1036,6 +1157,7 @@ class _FinalizerSection extends StatelessWidget {
     required this.disabledFinalAgents,
     required this.trackerValueFor,
     required this.onToggle,
+    required this.onEditModel,
     required this.onEditShard,
     required this.onRegenerate,
     required this.regeneratingAgentIds,
@@ -1061,6 +1183,7 @@ class _FinalizerSection extends StatelessWidget {
             agent: a,
             value: trackerValueFor(a.name),
             onToggle: (v) => onToggle(a, v),
+            onEditModel: (_) => onEditModel(a),
             onEditShard: () => onEditShard(a),
             onRegenerate: () => onRegenerate(a),
             regenerating: regeneratingAgentIds.contains(a.id),
@@ -1071,6 +1194,7 @@ class _FinalizerSection extends StatelessWidget {
             agent: a,
             value: trackerValueFor(a.name),
             onToggle: (v) => onToggle(a, v),
+            onEditModel: (_) => onEditModel(a),
             onEditShard: () => onEditShard(a),
             onRegenerate: () => onRegenerate(a),
             regenerating: regeneratingAgentIds.contains(a.id),
