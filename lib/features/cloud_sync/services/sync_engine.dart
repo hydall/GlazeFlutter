@@ -48,6 +48,7 @@ class SyncEngine {
   final SyncExtensionsSettingsStore _extensionsSettingsStore;
   final SyncInfoBlockStore _infoBlockStore;
   final SyncTrackerSnapshotStore _trackerSnapshotStore;
+  final SyncTrackerValueStore _trackerValueStore;
   final SyncStudioConfigStore _studioConfigStore;
   final SyncQueue _queue = SyncQueue();
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
@@ -71,6 +72,7 @@ class SyncEngine {
     this._extensionsSettingsStore,
     this._infoBlockStore,
     this._trackerSnapshotStore,
+    this._trackerValueStore,
     this._studioConfigStore,
     this._saveLorebookActivations,
   ) {
@@ -96,6 +98,7 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/extension_presets');
     await _adapter.ensureFolder('$cloudBase/info_blocks');
     await _adapter.ensureFolder('$cloudBase/tracker_snapshots');
+    await _adapter.ensureFolder('$cloudBase/tracker_values');
     await _adapter.ensureFolder('$cloudBase/studio_configs');
 
     onProgress(const SyncProgress(message: 'Building sync manifest...'));
@@ -741,6 +744,10 @@ class SyncEngine {
           final snaps = await _trackerSnapshotStore.getBySessionId(id);
           if (snaps.isEmpty) return null;
           return {'__trackerSnapshots': true, 'items': snaps};
+        case 'tracker_value':
+          final trackers = await _trackerValueStore.getBySessionId(id);
+          if (trackers.isEmpty) return null;
+          return {'__trackerValues': true, 'items': trackers};
         case 'studio_config':
           final config = await _studioConfigStore.getById(id);
           return config?.toJson();
@@ -805,6 +812,9 @@ class SyncEngine {
         case 'tracker_snapshot':
           await _applyCloudTrackerSnapshots(id, data);
           break;
+        case 'tracker_value':
+          await _applyCloudTrackerValues(id, data);
+          break;
         case 'studio_config':
           await _studioConfigStore.put(StudioConfig.fromJson(data));
           break;
@@ -849,6 +859,25 @@ class SyncEngine {
     await _trackerSnapshotStore.deleteBySessionId(sessionId);
     for (final item in items) {
       await _trackerSnapshotStore.insertRaw(item);
+    }
+  }
+
+  Future<void> _applyCloudTrackerValues(
+    String sessionId,
+    Map<String, dynamic> data,
+  ) async {
+    final List<Map<String, dynamic>> items;
+    if (data['__trackerValues'] == true) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else if (data.containsKey('items')) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else {
+      return;
+    }
+
+    await _trackerValueStore.deleteBySessionId(sessionId);
+    for (final item in items) {
+      await _trackerValueStore.insertRaw(item);
     }
   }
 
@@ -1088,6 +1117,9 @@ class SyncEngine {
           break;
         case 'tracker_snapshot':
           await _trackerSnapshotStore.deleteBySessionId(id);
+          break;
+        case 'tracker_value':
+          await _trackerValueStore.deleteBySessionId(id);
           break;
         case 'studio_config':
           await _studioConfigStore.delete(id);

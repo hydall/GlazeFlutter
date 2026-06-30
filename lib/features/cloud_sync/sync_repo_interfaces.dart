@@ -108,6 +108,13 @@ abstract class SyncTrackerSnapshotStore {
   Future<void> insertRaw(Map<String, dynamic> snapshot);
 }
 
+abstract class SyncTrackerValueStore {
+  Future<List<String>> getAllSessionIds();
+  Future<List<Map<String, dynamic>>> getBySessionId(String sessionId);
+  Future<void> deleteBySessionId(String sessionId);
+  Future<void> insertRaw(Map<String, dynamic> tracker);
+}
+
 abstract class SyncStudioConfigStore {
   Future<List<StudioConfig>> getAll();
   Future<StudioConfig?> getById(String id);

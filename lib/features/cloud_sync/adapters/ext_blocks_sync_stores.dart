@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/db/repositories/extension_presets_repository.dart';
 import '../../../core/db/repositories/info_blocks_repository.dart';
 import '../../../core/db/repositories/tracker_snapshot_repo.dart';
+import '../../../core/db/repositories/tracker_repo.dart';
+import '../../../core/models/tracker.dart';
 import '../../../core/models/tracker_snapshot.dart';
 import '../../extensions/models/extension_preset.dart';
 import '../../extensions/models/extensions_settings.dart';
@@ -115,5 +117,33 @@ class TrackerSnapshotSyncStore implements SyncTrackerSnapshotStore {
   @override
   Future<void> insertRaw(Map<String, dynamic> snapshot) async {
     await _repo.upsert(TrackerSnapshot.fromJson(snapshot));
+  }
+}
+
+/// Adapter wrapping [TrackerRepo] for cloud sync of the live Tracker Values
+/// store. Snapshots are synced separately; this preserves current mutable rows
+/// such as canon overrides/locks that may not be represented by an accepted
+/// assistant-turn snapshot yet.
+class TrackerValueSyncStore implements SyncTrackerValueStore {
+  final TrackerRepo _repo;
+
+  TrackerValueSyncStore(this._repo);
+
+  @override
+  Future<List<String>> getAllSessionIds() => _repo.getAllSessionIds();
+
+  @override
+  Future<List<Map<String, dynamic>>> getBySessionId(String sessionId) async {
+    final trackers = await _repo.getBySessionId(sessionId);
+    return trackers.map((t) => t.toJson()).toList();
+  }
+
+  @override
+  Future<void> deleteBySessionId(String sessionId) =>
+      _repo.clearForSession(sessionId);
+
+  @override
+  Future<void> insertRaw(Map<String, dynamic> tracker) async {
+    await _repo.upsert(Tracker.fromJson(tracker));
   }
 }
