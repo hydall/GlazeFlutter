@@ -105,8 +105,7 @@ void main() {
     // sees the same context the original turn saw. Mirrors Marinara's
     // `buildHistoricalLorebookKeeperContext`. See
     // docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2.
-    test('upToMessageId truncates messages after the target (inclusive)',
-        () {
+    test('upToMessageId truncates messages after the target (inclusive)', () {
       final messages = List.generate(
         20,
         (i) => _msg(id: 'm$i', role: 'user', content: 'Msg $i'),
@@ -142,21 +141,23 @@ void main() {
       expect(result.contains('Msg 10'), isFalse);
     });
 
-    test('upToMessageId with unknown id returns the full slice (no truncation)',
-        () {
-      final messages = List.generate(
-        5,
-        (i) => _msg(id: 'm$i', role: 'user', content: 'Msg $i'),
-      );
-      final result = extractRecentHistoryText(
-        messages,
-        maxMessages: 10,
-        upToMessageId: 'm_nonexistent',
-      );
-      // Unknown id → no truncation, behaves like upToMessageId=null.
-      expect(result.contains('Msg 0'), isTrue);
-      expect(result.contains('Msg 4'), isTrue);
-    });
+    test(
+      'upToMessageId with unknown id returns the full slice (no truncation)',
+      () {
+        final messages = List.generate(
+          5,
+          (i) => _msg(id: 'm$i', role: 'user', content: 'Msg $i'),
+        );
+        final result = extractRecentHistoryText(
+          messages,
+          maxMessages: 10,
+          upToMessageId: 'm_nonexistent',
+        );
+        // Unknown id → no truncation, behaves like upToMessageId=null.
+        expect(result.contains('Msg 0'), isTrue);
+        expect(result.contains('Msg 4'), isTrue);
+      },
+    );
 
     test('upToMessageId null returns the full recent history (legacy)', () {
       final messages = List.generate(
@@ -192,5 +193,43 @@ void main() {
     test('regen (regenTargetId != null) → suppresses', () {
       expect(writeLoopTriggers('msg_123'), isFalse);
     });
+  });
+
+  group('selectStudioLedgerTextAfterCleaner', () {
+    test('uses cleaned text when cleaner changed the reply', () {
+      final text = selectStudioLedgerTextAfterCleaner(
+        cleanerStatus: 'ok',
+        wasCleaned: true,
+        cleanedText: 'POST-cleaner canon',
+        assistantText: 'PRE-cleaner raw',
+        streamedPartialText: '',
+      );
+      expect(text, 'POST-cleaner canon');
+    });
+
+    test('uses original text when cleaner skipped the rewrite', () {
+      final text = selectStudioLedgerTextAfterCleaner(
+        cleanerStatus: 'skipped',
+        wasCleaned: false,
+        cleanedText: 'Rejected rewrite',
+        assistantText: 'Original preserved',
+        streamedPartialText: '',
+      );
+      expect(text, 'Original preserved');
+    });
+
+    test(
+      'uses partial streamed cleaner text when cleaner failed after output',
+      () {
+        final text = selectStudioLedgerTextAfterCleaner(
+          cleanerStatus: 'error',
+          wasCleaned: false,
+          cleanedText: 'Original raw',
+          assistantText: 'Original raw',
+          streamedPartialText: 'Partial cleaned canon',
+        );
+        expect(text, 'Partial cleaned canon');
+      },
+    );
   });
 }

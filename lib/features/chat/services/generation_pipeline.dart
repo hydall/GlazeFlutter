@@ -14,6 +14,7 @@ import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_agentic_service.dart';
 import '../../../core/llm/memory_injection_service.dart'
     show chatMessageEmbeddingServiceProvider;
+import '../../../core/llm/studio_ledger_service.dart';
 import '../../../core/llm/lorebook_providers.dart' show embeddingConfigProvider;
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
@@ -21,6 +22,7 @@ import '../../../core/services/generation_notification_service.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/utils/time_helpers.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../../cloud_sync/sync_provider.dart' show notifySyncMessageGenerated;
 import '../../extensions/services/extension_post_gen_service.dart';
 import '../../chat_history/chat_history_provider.dart';
@@ -244,6 +246,34 @@ class GenerationPipeline {
               character: character,
             ),
           );
+
+          // Stage 5: Studio Ledger — same as normal path: launched from
+          // _executeAndApplyCleaner when cleaner is enabled, or fired here
+          // directly on raw text when cleaner is disabled.
+          if (!ref.read(pipelineSettingsProvider).postCleanerEnabled) {
+            ChatMessage? lastAssistant;
+            for (var i = result.session!.messages.length - 1; i >= 0; i--) {
+              final m = result.session!.messages[i];
+              if (m.role == 'assistant' &&
+                  !m.isError &&
+                  !m.isTyping &&
+                  m.content.trim().isNotEmpty) {
+                lastAssistant = m;
+                break;
+              }
+            }
+            if (lastAssistant != null) {
+              unawaited(
+                _runStudioLedger(
+                  sessionId: result.session!.id,
+                  messages: result.session!.messages,
+                  genId: genId,
+                  finalAssistantText: lastAssistant.content,
+                  targetMessage: lastAssistant,
+                ),
+              );
+            }
+          }
         }
         return regenOutcome;
       }
@@ -341,6 +371,35 @@ class GenerationPipeline {
             character: character,
           ),
         );
+
+        // Stage 5: Studio Ledger — launched from _executeAndApplyCleaner
+        // when the cleaner is enabled (so it uses cleaned text). When the
+        // cleaner is disabled, fire here on the raw assistant text.
+        // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Pipeline Placement.
+        if (!ref.read(pipelineSettingsProvider).postCleanerEnabled) {
+          ChatMessage? lastAssistant;
+          for (var i = result.session!.messages.length - 1; i >= 0; i--) {
+            final m = result.session!.messages[i];
+            if (m.role == 'assistant' &&
+                !m.isError &&
+                !m.isTyping &&
+                m.content.trim().isNotEmpty) {
+              lastAssistant = m;
+              break;
+            }
+          }
+          if (lastAssistant != null) {
+            unawaited(
+              _runStudioLedger(
+                sessionId: result.session!.id,
+                messages: result.session!.messages,
+                genId: genId,
+                finalAssistantText: lastAssistant.content,
+                targetMessage: lastAssistant,
+              ),
+            );
+          }
+        }
       }
 
       return GenerationOutcome(
@@ -666,25 +725,18 @@ class GenerationPipeline {
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.agenticWriteEnabled) return;
 
-      // Cadence (Marinara runInterval=8 analog): run the agentic write-loop
-      // every N assistant turns, not every turn. Cuts LLM cost / latency on
-      // long chats at the cost of slower memory propagation between runs.
-      // 1 = every turn (legacy behavior). The current turn number is the
-      // count of assistant messages in the session — this method is called
-      // after the just-finished assistant turn is persisted, so the count
-      // includes it.
-      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (cadence) and
-      // PipelineSettings.runAgenticEveryN.
-      final assistantTurnCount =
-          messages.where((m) => m.role == 'assistant' && !m.isTyping).length;
-      final cadence = pipeline.runAgenticEveryN < 1
-          ? 1
-          : pipeline.runAgenticEveryN;
-      if (cadence > 1 && assistantTurnCount % cadence != 0) {
-        debugPrint(
-          '[AgenticWrite] skipping write-loop — cadence=$cadence, '
-          'turn=$assistantTurnCount (not a multiple)',
-        );
+      // Cadence (plan §Model Cadence). The run mode controls when the
+      // write-loop runs: 'every_turn' (legacy), 'conditional', 'every_n'
+      // (uses [runAgenticEveryN]), 'manual' (skipped), 'disabled' (skipped).
+      final assistantTurnCount = messages
+          .where((m) => m.role == 'assistant' && !m.isTyping)
+          .length;
+      final cadenceReason = _resolveAgenticWriteCadence(
+        pipeline,
+        assistantTurnCount,
+      );
+      if (cadenceReason != null) {
+        debugPrint('[AgenticWrite] $cadenceReason');
         return;
       }
 
@@ -731,7 +783,9 @@ class GenerationPipeline {
       // longer exists in the session. Writing trackers/memory for a deleted
       // message would create orphaned entries tied to a non-existent
       // messageId. Re-read the session and abort if the target is gone.
-      final currentSession = await ref.read(chatRepoProvider).getById(sessionId);
+      final currentSession = await ref
+          .read(chatRepoProvider)
+          .getById(sessionId);
       if (currentSession == null ||
           !currentSession.messages.any((m) => m.id == lastAssistant.id)) {
         debugPrint(
@@ -794,9 +848,7 @@ class GenerationPipeline {
               .read(trackerSnapshotRepoProvider)
               .getLatestCommitted(sessionId);
           if (snapshot == null) {
-            await ref
-                .read(trackerRepoProvider)
-                .clearForSession(sessionId);
+            await ref.read(trackerRepoProvider).clearForSession(sessionId);
           } else {
             await ref
                 .read(trackerRepoProvider)
@@ -842,6 +894,38 @@ class GenerationPipeline {
     }
   }
 
+  /// Returns a non-null skip reason when the cadence should suppress the
+  /// agentic write-loop, or null when the run should proceed. Applies the
+  /// per-component run mode (plan §Model Cadence).
+  String? _resolveAgenticWriteCadence(
+    PipelineSettings pipeline,
+    int assistantTurnCount,
+  ) {
+    switch (pipeline.agenticWriteRunMode) {
+      case 'disabled':
+        return 'skipping write-loop — runMode=disabled';
+      case 'manual':
+        return 'skipping write-loop — runMode=manual';
+      case 'every_n':
+        final n = pipeline.runAgenticEveryN < 1 ? 1 : pipeline.runAgenticEveryN;
+        if (n > 1 && assistantTurnCount % n != 0) {
+          return 'skipping write-loop — runMode=every_n interval=$n turn=$assistantTurnCount (not a multiple)';
+        }
+        return null;
+      case 'conditional':
+        // Conditional flags are best-effort; the write-loop always runs
+        // when the user has enabled it, so the only condition here is
+        // the MemoryBook candidates check.
+        if (pipeline.agenticWriteRunWhenMemoryBookCandidatesExist) {
+          return 'skipping write-loop — runMode=conditional, no candidates check';
+        }
+        return null;
+      case 'every_turn':
+      default:
+        return null;
+    }
+  }
+
   /// Stage 3.5: embed raw chat-message chunks (fire-and-forget, best-effort
   /// insurance for the lossy MemoryBook compression).
   ///
@@ -871,7 +955,9 @@ class GenerationPipeline {
       if (!pipeline.messageRecallEnabled) return;
       final config = ref.read(embeddingConfigProvider);
       if (config.endpoint.isEmpty) return;
-      await ref.read(chatMessageEmbeddingServiceProvider).indexSessionMessages(
+      await ref
+          .read(chatMessageEmbeddingServiceProvider)
+          .indexSessionMessages(
             sessionId: sessionId,
             messages: messages,
             config: config,
@@ -1017,11 +1103,8 @@ class GenerationPipeline {
         }
       }
     } finally {
-      // Cancel any still-running (race-loser) audit call so it doesn't burn
-      // an LLM request after the cleaner has finalized / the turn aborted.
-      // No-op if the audit already completed (won the race) or was never
-      // started. The `.catchError` on `auditFuture` neutralizes the
-      // resulting cancellation error for the late `.then` logger.
+      // Cancel any still-running audit call on abort/error cleanup. No-op if
+      // the audit already completed or was never started.
       if (_auditCancelToken != null && !_auditCancelToken!.isCancelled) {
         _auditCancelToken!.cancel();
       }
@@ -1036,7 +1119,7 @@ class GenerationPipeline {
 
   /// Shared core of the POST-cleaner pipeline. Handles:
   ///   - debugPrint start line + `PostCleanerState.running`
-  ///   - optional parallel character audit (race against pre-create+chunk)
+  ///   - optional character audit before cleaner prompt assembly
   ///   - pre-create the blue 'cleaned' sub-swipe (Fix 1)
   ///   - `runCleaner` with streaming into the chat bubble
   ///   - finalize the pre-created swipe (update / remove / append fallback)
@@ -1079,13 +1162,20 @@ class GenerationPipeline {
       'rerun=$isManualRerun',
     );
 
-    ref
-        .read(postCleanerStateProvider.notifier)
-        .state = PostCleanerState.running(
-        sessionId: sessionId,
-        messageId: targetMessage.id,
-        originalChars: assistantText.length,
-      );
+    final factCheckEnabled =
+        pipeline.postCleanerCharacterCheckEnabled && promptPayload != null;
+
+    ref.read(postCleanerStateProvider.notifier).state = factCheckEnabled
+        ? PostCleanerState.factChecking(
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            originalChars: assistantText.length,
+          )
+        : PostCleanerState.running(
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            originalChars: assistantText.length,
+          );
 
     final cleanerService = ref.read(postCleanerServiceProvider);
 
@@ -1093,61 +1183,42 @@ class GenerationPipeline {
     // characterCheckEnabled AND promptPayload is available (exact generation
     // snapshot). Returns null on failure → cleaner runs without audit notes.
     //
-    // Parallelised with the cleaner (Marinara `mergePairedBuiltInRewriteAgents`
-    // adaptation for streaming UX): audit is non-streaming and short; the
-    // cleaner is streaming and long. We fire audit `unawaited`-style in a
-    // Future and `await` it with a SHORT timeout that races the cleaner's
-    // pre-create-swipe + first-chunk work. If audit wins → its issues are
-    // injected into the cleaner prompt as CHARACTER CONSISTENCY NOTES (same
-    // as the serial path). If audit loses the race → cleaner runs without
-    // audit notes this turn (graceful degradation; the audit Future is left
-    // running and its result is logged when it completes — it does NOT block
-    // cleanup). This trades 1 serial LLM call's latency for parallel
-    // execution: UX-feel is "blue swipe starts streaming immediately,
-    // audit badge appears later if it finished in time".
+    // If enabled, audit issues must be available before building the cleaner
+    // prompt; otherwise the cleaner cannot apply the factual corrections. This
+    // intentionally serializes audit → cleaner for correctness. The audit call
+    // still uses the cleaner timeout and cancel token, so Stop aborts it.
     List<String>? auditIssues;
     Future<List<String>?>? auditFuture;
-    if (pipeline.postCleanerCharacterCheckEnabled && promptPayload != null) {
-      final loreContent = _assembleLorebooksContent(promptPayload);
-      // Dedicated cancel token: on the race-loser path the audit Future
-      // keeps running in the background. Without this it would run to
-      // completion (burning an LLM call / quota) even after the cleaner
-      // finalized or the turn was aborted. We cancel it in the `finally`
-      // block so the orphaned call is always bounded.
+    int? auditStartedAt;
+    if (factCheckEnabled) {
+      final auditPayload = promptPayload;
+      final loreContent = _assembleLorebooksContent(auditPayload);
+      // Dedicated cancel token so Stop can abort the auditor before the
+      // cleaner prompt is built.
       _auditCancelToken = CancelToken();
+      ref.read(cleanerCancelTokenProvider.notifier).state = _auditCancelToken;
+      auditStartedAt = DateTime.now().millisecondsSinceEpoch;
       auditFuture = cleanerService
           .runCharacterAudit(
             assistantText: assistantText,
-            character: promptPayload.character,
-            persona: promptPayload.persona,
+            character: auditPayload.character,
+            persona: auditPayload.persona,
             lorebooksContent: loreContent,
             memoryContent:
-                promptPayload.memoryContent ?? promptPayload.memoryMacroContent,
-            summaryContent: promptPayload.summaryContent,
-            arcContent: promptPayload.arcContent,
-            entitiesContent: promptPayload.entitiesContent,
+                auditPayload.memoryContent ?? auditPayload.memoryMacroContent,
+            summaryContent: auditPayload.summaryContent,
+            arcContent: auditPayload.arcContent,
+            entitiesContent: auditPayload.entitiesContent,
             recentMessages: recentMessages,
             settings: pipeline,
             cancelToken: _auditCancelToken,
           )
           .catchError((Object e) {
-            debugPrint('[PostCleaner] audit failed session=$sessionId error=$e');
+            debugPrint(
+              '[PostCleaner] audit failed session=$sessionId error=$e',
+            );
             return null;
           });
-      // Log late-landing audit results (race-loser case): the Future
-      // keeps running after the 3s timeout below; when it completes we
-      // emit a debug line so the user can see "audit found N issues" even
-      // on a turn where the cleaner ran without them. Fire-and-forget.
-      unawaited(
-        auditFuture.then((r) {
-          if (r != null && r.isNotEmpty) {
-            debugPrint(
-              '[PostCleaner] audit late-landed session=$sessionId '
-              'issues=${r.length} (not applied this turn — race loser)',
-            );
-          }
-        }),
-      );
     }
 
     // ── Swipe-first: pre-create the blue 'cleaned' swipe NOW (Fix 1) ─────────
@@ -1175,9 +1246,7 @@ class GenerationPipeline {
           if (msg != null && msg.agentSwipeId > 0) {
             _preCreatedCleanerSwipeId = msg.agentSwipeId;
             final parentAgentSwipeId = msg.agentSwipeId - 1;
-            final snapshotRepo = ref.read(
-              trackerSnapshotRepoProvider,
-            );
+            final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
             final parent = await snapshotRepo.getByAnchor(
               sessionId: sessionId,
               messageId: targetMessage.id,
@@ -1204,18 +1273,18 @@ class GenerationPipeline {
       _preCreatedCleanerSwipeId = -1;
     }
 
-    // Race the audit Future against a short budget (3s). If audit wins,
-    // its issues flow into the cleaner prompt as CHARACTER CONSISTENCY
-    // NOTES (same as the serial path). If it loses the race, the cleaner
-    // runs without audit notes this turn — graceful degradation. The
-    // audit Future keeps running in the background; we log its result
-    // when it lands (below, after the cleaner returns) so the user can
-    // still see "audit found N issues" even on a losing race.
+    // If audit is enabled, wait for it before constructing the cleaner prompt
+    // so its issues flow into CHARACTER CONSISTENCY NOTES. Audit failure still
+    // degrades gracefully to `null` notes.
     if (auditFuture != null) {
       try {
-        auditIssues = await auditFuture.timeout(
-          const Duration(seconds: 3),
-          onTimeout: () => null,
+        auditIssues = await auditFuture;
+        _recordFactCheckerOperation(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          startedAtMs: auditStartedAt ?? DateTime.now().millisecondsSinceEpoch,
+          issues: auditIssues,
+          model: _factCheckerModelLabel(pipeline),
         );
         if (!abortCheck()) {
           ref.read(postCleanerStateProvider.notifier).state =
@@ -1229,11 +1298,29 @@ class GenerationPipeline {
       } catch (e) {
         debugPrint('[PostCleaner] audit await error=$e');
         auditIssues = null;
+        _recordFactCheckerOperation(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          startedAtMs: auditStartedAt ?? DateTime.now().millisecondsSinceEpoch,
+          issues: null,
+          error: '$e',
+          model: _factCheckerModelLabel(pipeline),
+        );
       }
     }
 
     _cleanerCancelToken = CancelToken();
     ref.read(cleanerCancelTokenProvider.notifier).state = _cleanerCancelToken;
+    if (factCheckEnabled) {
+      ref
+          .read(postCleanerStateProvider.notifier)
+          .state = PostCleanerState.running(
+        sessionId: sessionId,
+        messageId: targetMessage.id,
+        originalChars: assistantText.length,
+        factCheckEnabled: true,
+      );
+    }
     final result = await cleanerService.runCleaner(
       sessionId: sessionId,
       settings: pipeline,
@@ -1274,11 +1361,13 @@ class GenerationPipeline {
       // _lastStreamedText is empty here.
       if (_preCreatedCleanerSwipeId >= 0) {
         try {
-          await ref.read(chatRepoProvider).removeAgentSwipe(
-            sessionId: sessionId,
-            messageId: targetMessage.id,
-            agentSwipeId: _preCreatedCleanerSwipeId,
-          );
+          await ref
+              .read(chatRepoProvider)
+              .removeAgentSwipe(
+                sessionId: sessionId,
+                messageId: targetMessage.id,
+                agentSwipeId: _preCreatedCleanerSwipeId,
+              );
         } catch (_) {}
       }
       ref.read(postCleanerStateProvider.notifier).state =
@@ -1322,9 +1411,7 @@ class GenerationPipeline {
             messageId: targetMessage.id,
             attempts: result.attempts,
             totalElapsedMs: result.totalElapsedMs,
-            model: pipeline.sidecarModel.isEmpty
-                ? null
-                : pipeline.sidecarModel,
+            model: pipeline.sidecarModel.isEmpty ? null : pipeline.sidecarModel,
             summary: result.wasCleaned
                 ? 'cleaned (${result.cleanedText.length} chars)'
                 : result.status == 'ok'
@@ -1347,16 +1434,15 @@ class GenerationPipeline {
         );
 
     // ── Swipe-first finalization (Fix 1) ─────────────────────────────────
-    final genTime =
-        '${(result.totalElapsedMs / 1000).toStringAsFixed(1)}s';
+    final genTime = '${(result.totalElapsedMs / 1000).toStringAsFixed(1)}s';
     final chatRepo = ref.read(chatRepoProvider);
 
     if (result.wasCleaned) {
       final cleanedAgentSwipeId = _preCreatedCleanerSwipeId >= 0
           ? _preCreatedCleanerSwipeId
           : (targetMessage.agentSwipes.isNotEmpty
-              ? targetMessage.agentSwipes.length - 1
-              : 0);
+                ? targetMessage.agentSwipes.length - 1
+                : 0);
       if (_preCreatedCleanerSwipeId >= 0) {
         await chatRepo.updateAgentSwipeContent(
           sessionId: sessionId,
@@ -1493,9 +1579,11 @@ class GenerationPipeline {
     // ChatState copy that must be pushed.
     // Note: we do NOT check isCurrentGen here — the cleaner may run
     // after a regen, and the UI must always reflect the cleaned swipe.
+    List<ChatMessage>? refreshedMessages;
     if (ref.mounted) {
       final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
       if (refreshed != null) {
+        refreshedMessages = refreshed.messages;
         ChatSessionService.updateCache(refreshed);
         final current = getState().value;
         if (current != null) {
@@ -1508,6 +1596,359 @@ class GenerationPipeline {
         ref.invalidate(chatHistoryProvider);
       }
     }
+
+    // Stage 5: Studio Ledger — fired here so it always receives the final
+    // canonical text (cleaned when wasCleaned, skipped-original when skipped,
+    // partial when partial, raw when cleaner errored/produced nothing).
+    // Plan §Pipeline Placement: «Ledger must not run on pre-cleaner text».
+    if (ref.mounted && !isManualRerun) {
+      // Determine the best available final text for the ledger:
+      // 1. wasCleaned → cleanedText is the new canon.
+      // 2. skipped → assistantText (original preserved, cleaned rejected).
+      // 3. partial → _lastStreamedText (persisted as partial swipe).
+      // 4. error/nothing → assistantText (original unchanged in DB).
+      final ledgerText = selectStudioLedgerTextAfterCleaner(
+        cleanerStatus: result.status,
+        wasCleaned: result.wasCleaned,
+        cleanedText: result.cleanedText,
+        assistantText: assistantText,
+        streamedPartialText: _lastStreamedText,
+      );
+      final ledgerTargetMessage = refreshedMessages
+          ?.where((m) => m.id == targetMessage.id)
+          .firstOrNull;
+
+      unawaited(
+        _runStudioLedger(
+          sessionId: sessionId,
+          messages: refreshedMessages ?? recentMessages,
+          genId: genId,
+          finalAssistantText: ledgerText,
+          targetMessage: ledgerTargetMessage ?? targetMessage,
+        ),
+      );
+    }
+  }
+
+  /// Stage 5: Studio Ledger trigger.
+  ///
+  /// Fire-and-forget — does not block generation or user interaction.
+  /// Extracts entity/relationship/arc/world state and durable MemoryBook facts
+  /// from the final assistant response and persists them via
+  /// [StudioLedgerService]. Only runs when [PipelineSettings.studioLedgerEnabled].
+  ///
+  /// [finalAssistantText] — the text the ledger should analyse. When the
+  /// POST-cleaner is enabled, this is the cleaned text (plan §Pipeline
+  /// Placement: «Ledger must not run on pre-cleaner text»). When the cleaner
+  /// is disabled this is the raw streamed assistant text.
+  ///
+  /// [targetMessage] — the assistant message the text belongs to. Used for
+  /// provenance coordinates (messageId, swipeId, agentSwipeId).
+  ///
+  /// [messages] — full session message list for recent-history context.
+  ///
+  /// Staleness guard: checks [abortHandler.isCurrentGen] before writing (after
+  /// the LLM returns). The service itself never throws — errors land in
+  /// [LedgerRunResult.status].
+  Future<void> _runStudioLedger({
+    required String sessionId,
+    required List<ChatMessage> messages,
+    required int genId,
+    required String finalAssistantText,
+    required ChatMessage targetMessage,
+  }) async {
+    if (!ref.mounted) return;
+
+    try {
+      final pipeline = ref.read(pipelineSettingsProvider);
+
+      // Ledger is mandatory while Studio is enabled (plan §Product Decisions:
+      // "Studio Ledger is mandatory while Studio is enabled").
+      // studioLedgerEnabled can still be used as an explicit on-switch when
+      // Studio is disabled (standalone mode, future use).
+      var studioConfigEnabled = false;
+      bool studioLedgerActive = pipeline.studioLedgerEnabled;
+      if (!studioLedgerActive) {
+        try {
+          final studioConfig = await ref
+              .read(studioConfigRepoProvider)
+              .getBySessionId(sessionId);
+          studioConfigEnabled = studioConfig?.enabled == true;
+          studioLedgerActive = studioConfigEnabled;
+        } catch (_) {}
+      } else {
+        try {
+          final studioConfig = await ref
+              .read(studioConfigRepoProvider)
+              .getBySessionId(sessionId);
+          studioConfigEnabled = studioConfig?.enabled == true;
+        } catch (_) {}
+      }
+      if (!studioLedgerActive) {
+        await _recordLedgerDiag(
+          sessionId: sessionId,
+          targetMessage: targetMessage,
+          reason: 'skipped, studio disabled',
+        );
+        return;
+      }
+
+      // Cadence (plan §Model Cadence). Studio Ledger is mandatory while Studio
+      // is enabled, so cadence only gates standalone Ledger outside Studio.
+      final assistantTurnCount = messages
+          .where((m) => m.role == 'assistant' && !m.isTyping)
+          .length;
+      final cadenceReason = studioConfigEnabled
+          ? null
+          : _resolveLedgerCadence(
+              pipeline,
+              assistantTurnCount,
+              finalAssistantText,
+            );
+      if (cadenceReason != null) {
+        await _recordLedgerDiag(
+          sessionId: sessionId,
+          targetMessage: targetMessage,
+          reason: cadenceReason,
+        );
+        return;
+      }
+
+      if (finalAssistantText.trim().isEmpty) {
+        await _recordLedgerDiag(
+          sessionId: sessionId,
+          targetMessage: targetMessage,
+          reason: 'skipped, empty assistant text',
+        );
+        return;
+      }
+      if (!abortHandler.isCurrentGen(genId)) {
+        await _recordLedgerDiag(
+          sessionId: sessionId,
+          targetMessage: targetMessage,
+          reason: 'skipped, stale generation',
+        );
+        return;
+      }
+
+      final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
+
+      final service = ref.read(studioLedgerServiceProvider);
+      final result = await service.run(
+        sessionId: sessionId,
+        settings: pipeline,
+        finalAssistantText: finalAssistantText,
+        recentHistoryText: recentHistory,
+        messageId: targetMessage.id,
+        swipeId: targetMessage.swipeId,
+        agentSwipeId: targetMessage.agentSwipeId,
+        forceEnabled: true,
+        isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
+      );
+
+      await _recordLedgerDiag(
+        sessionId: sessionId,
+        targetMessage: targetMessage,
+        reason:
+            'ran, ${result.status} '
+            '(ops=${result.opsApplied}, facts=${result.durableFactsWritten})'
+            '${result.error == null ? '' : ': ${result.error}'}',
+      );
+
+      _recordStudioLedgerOperation(
+        sessionId: sessionId,
+        targetMessage: targetMessage,
+        result: result,
+      );
+
+      if (_ledgerStatusToOp(result.status).isFailure) {
+        GlazeToast.showWithoutContext(
+          'Studio Ledger failed. Open Agentic Ops -> Last turn to inspect or rerun.',
+          duration: 5000,
+          position: ToastPosition.top,
+          isError: true,
+        );
+      }
+
+      debugPrint(
+        '[StudioLedger] result session=$sessionId status=${result.status} '
+        'opsApplied=${result.opsApplied} '
+        'factsWritten=${result.durableFactsWritten} '
+        'elapsedMs=${result.elapsedMs} '
+        'error=${result.error ?? "none"}',
+      );
+    } catch (e) {
+      debugPrint(
+        '[StudioLedger] pipeline trigger failed session=$sessionId: $e',
+      );
+      await _recordLedgerDiag(
+        sessionId: sessionId,
+        targetMessage: targetMessage,
+        reason: 'skipped, trigger error: $e',
+      );
+      _recordStudioLedgerOperation(
+        sessionId: sessionId,
+        targetMessage: targetMessage,
+        result: LedgerRunResult(status: 'error', error: 'trigger error: $e'),
+      );
+      GlazeToast.showWithoutContext(
+        'Studio Ledger failed. Open Agentic Ops -> Last turn to inspect or rerun.',
+        duration: 5000,
+        position: ToastPosition.top,
+        isError: true,
+      );
+    }
+  }
+
+  void _recordFactCheckerOperation({
+    required String sessionId,
+    required String messageId,
+    required int startedAtMs,
+    required List<String>? issues,
+    String? error,
+    String? model,
+  }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final status = error == null && issues != null
+        ? AgentOperationStatus.ok
+        : AgentOperationStatus.error;
+    ref.read(agentOperationsLogProvider.notifier).state = ref
+        .read(agentOperationsLogProvider)
+        .append(
+          AgentOperationRecord(
+            id: 'fact-checker-$messageId-${DateTime.now().microsecondsSinceEpoch}',
+            kind: AgentOperationKind.factChecker,
+            status: status,
+            sessionId: sessionId,
+            messageId: messageId,
+            attempts: [
+              AgentOperationAttempt(
+                attempt: 1,
+                statusCode: 0,
+                status: status.label,
+                error: status.isFailure ? (error ?? 'audit failed') : null,
+                startedAtMs: startedAtMs,
+                elapsedMs: now - startedAtMs,
+              ),
+            ],
+            totalElapsedMs: now - startedAtMs,
+            model: model,
+            summary: status.isOk
+                ? 'issues=${issues?.length ?? 0}'
+                : error ?? 'audit failed',
+            startedAtMs: startedAtMs,
+            finishedAtMs: now,
+            canRegenerate: status.isFailure,
+          ),
+        );
+  }
+
+  String? _factCheckerModelLabel(PipelineSettings pipeline) {
+    if (pipeline.postCleanerAuditModel.isNotEmpty) {
+      return pipeline.postCleanerAuditModel;
+    }
+    if (pipeline.postCleanerModel.isNotEmpty) return pipeline.postCleanerModel;
+    if (pipeline.sidecarModel.isNotEmpty) return pipeline.sidecarModel;
+    return null;
+  }
+
+  void _recordStudioLedgerOperation({
+    required String sessionId,
+    required ChatMessage targetMessage,
+    required LedgerRunResult result,
+  }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final startedAt = result.attempts.isNotEmpty
+        ? result.attempts.first.startedAtMs
+        : now - result.elapsedMs;
+    final finishedAt = result.attempts.isNotEmpty
+        ? result.attempts.last.startedAtMs + result.attempts.last.elapsedMs
+        : now;
+    final status = _ledgerStatusToOp(result.status);
+    ref.read(agentOperationsLogProvider.notifier).state = ref
+        .read(agentOperationsLogProvider)
+        .append(
+          AgentOperationRecord(
+            id: 'studio-ledger-${targetMessage.id}-${DateTime.now().microsecondsSinceEpoch}',
+            kind: AgentOperationKind.studioLedger,
+            status: status,
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            attempts: result.attempts,
+            totalElapsedMs: result.elapsedMs,
+            model: result.model,
+            summary: status.isOk
+                ? 'ops=${result.opsApplied}, facts=${result.durableFactsWritten}'
+                : result.error ?? result.status,
+            startedAtMs: startedAt,
+            finishedAtMs: finishedAt,
+            canRegenerate: status.isFailure,
+          ),
+        );
+  }
+
+  /// Returns a non-null skip reason when the cadence should suppress the
+  /// ledger run, or null when the run should proceed. Applies the
+  /// per-component run mode, interval, and conditional flags (plan §Model
+  /// Cadence). The Studio forces the ledger on, but the user can opt into
+  /// a lower-power cadence.
+  String? _resolveLedgerCadence(
+    PipelineSettings pipeline,
+    int assistantTurnCount,
+    String finalAssistantText,
+  ) {
+    switch (pipeline.studioLedgerRunMode) {
+      case 'disabled':
+        return 'skipped, runMode=disabled';
+      case 'manual':
+        return 'skipped, runMode=manual';
+      case 'every_n':
+        final n = pipeline.studioLedgerIntervalN < 1
+            ? 1
+            : pipeline.studioLedgerIntervalN;
+        if (n > 1 && assistantTurnCount % n != 0) {
+          return 'skipped, runMode=every_n interval=$n turn=$assistantTurnCount';
+        }
+        return null;
+      case 'conditional':
+        final reasons = <String>[];
+        if (pipeline.studioLedgerRunWhenMentionedEntitiesChanged &&
+            !finalAssistantText.trim().isNotEmpty) {
+          reasons.add('no entities changed');
+        }
+        if (reasons.isNotEmpty) {
+          return 'skipped, conditional: ${reasons.join(', ')}';
+        }
+        return null;
+      case 'every_turn':
+      default:
+        return null;
+    }
+  }
+
+  /// Stores the last run/skip reason for the Studio Ledger as a
+  /// `_ledger_diag:<component>` tracker row so the diagnostics sheet can
+  /// show it (plan §Model Cadence: "Diagnostics should show why a component
+  /// ran or skipped"). The key is the message id, so the latest run
+  /// overwrites prior rows.
+  Future<void> _recordLedgerDiag({
+    required String sessionId,
+    required ChatMessage targetMessage,
+    required String reason,
+  }) async {
+    if (!ref.mounted) return;
+    try {
+      final repo = ref.read(trackerRepoProvider);
+      await repo.upsertValue(
+        sessionId,
+        '_ledger_diag:studio_ledger',
+        'turn=${targetMessage.id} • $reason',
+        scope: 'ledger_diagnostic',
+        provenance:
+            'message=${targetMessage.id}|swipe=${targetMessage.swipeId}|'
+            'agentSwipe=${targetMessage.agentSwipeId}',
+      );
+    } catch (_) {}
   }
 
   /// Re-run the POST-cleaner against an existing assistant message.
@@ -1549,9 +1990,7 @@ class GenerationPipeline {
 
     final session = await ref.read(chatRepoProvider).getById(sessionId);
     if (session == null) return;
-    final targetIndex = session.messages.indexWhere(
-      (m) => m.id == messageId,
-    );
+    final targetIndex = session.messages.indexWhere((m) => m.id == messageId);
     if (targetIndex < 0) return;
     final target = session.messages[targetIndex];
     if (target.role != 'assistant' || target.isError || target.isTyping) {
@@ -1629,11 +2068,13 @@ class GenerationPipeline {
             const PostCleanerState.idle();
         if (_preCreatedCleanerSwipeId >= 0) {
           try {
-            await ref.read(chatRepoProvider).removeAgentSwipe(
-              sessionId: sessionId,
-              messageId: target.id,
-              agentSwipeId: _preCreatedCleanerSwipeId,
-            );
+            await ref
+                .read(chatRepoProvider)
+                .removeAgentSwipe(
+                  sessionId: sessionId,
+                  messageId: target.id,
+                  agentSwipeId: _preCreatedCleanerSwipeId,
+                );
           } catch (_) {}
         }
       }
@@ -1651,6 +2092,21 @@ class GenerationPipeline {
   }
 }
 
+@visibleForTesting
+String selectStudioLedgerTextAfterCleaner({
+  required String cleanerStatus,
+  required bool wasCleaned,
+  required String cleanedText,
+  required String assistantText,
+  required String streamedPartialText,
+}) {
+  if (wasCleaned) return cleanedText;
+  if (cleanerStatus == 'skipped') return assistantText;
+  final partial = streamedPartialText.trim();
+  if (partial.isNotEmpty) return streamedPartialText;
+  return assistantText;
+}
+
 /// Extracts recent conversation as plain text for the agentic write-loop
 /// prompt. Format: "Role: content" per line, last [maxMessages] messages.
 /// Skips error, typing, and empty-content messages.
@@ -1660,6 +2116,7 @@ class GenerationPipeline {
 String extractRecentHistoryText(
   List<ChatMessage> messages, {
   int maxMessages = 10,
+
   /// If non-null, only messages up to AND INCLUDING the one with this id
   /// are considered. Messages after it are dropped — used at regen time
   /// so the agentic write-loop replays against the historical slice that
@@ -1677,9 +2134,7 @@ String extractRecentHistoryText(
       source = messages.sublist(0, idx + 1);
     }
   }
-  final start = source.length > maxMessages
-      ? source.length - maxMessages
-      : 0;
+  final start = source.length > maxMessages ? source.length - maxMessages : 0;
   final recent = source.sublist(start);
   final lines = <String>[];
   for (final msg in recent) {
@@ -1714,6 +2169,18 @@ AgentOperationStatus _agenticWriteStatusToOp(String status) {
     'timeout' => AgentOperationStatus.timeout,
     'error' => AgentOperationStatus.httpError,
     'invalid_output' => AgentOperationStatus.invalidOutput,
+    _ => AgentOperationStatus.error,
+  };
+}
+
+AgentOperationStatus _ledgerStatusToOp(String status) {
+  return switch (status) {
+    'ok' => AgentOperationStatus.ok,
+    'skipped' => AgentOperationStatus.disabled,
+    'disabled' => AgentOperationStatus.disabled,
+    'aborted' => AgentOperationStatus.aborted,
+    'timeout' => AgentOperationStatus.timeout,
+    'error' => AgentOperationStatus.error,
     _ => AgentOperationStatus.error,
   };
 }

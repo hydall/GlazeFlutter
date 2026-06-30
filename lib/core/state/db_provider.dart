@@ -15,7 +15,6 @@ import '../db/repositories/memory_catalog_repo.dart';
 import '../db/repositories/memory_entity_repo.dart';
 import '../db/repositories/memory_salience_repo.dart';
 import '../db/repositories/memory_cadence_repo.dart';
-import '../db/repositories/memory_consolidation_repo.dart';
 import '../db/repositories/studio_config_repo.dart';
 import '../db/repositories/tracker_repo.dart';
 import '../db/repositories/tracker_snapshot_repo.dart';
@@ -114,12 +113,6 @@ final memorySalienceRepoProvider = Provider<MemorySalienceRepo>((ref) {
 
 final memoryCadenceRepoProvider = Provider<MemoryCadenceRepo>((ref) {
   return MemoryCadenceRepo(ref.watch(appDbProvider));
-});
-
-final memoryConsolidationRepoProvider = Provider<MemoryConsolidationRepo>((
-  ref,
-) {
-  return MemoryConsolidationRepo(ref.watch(appDbProvider));
 });
 
 final studioConfigRepoProvider = Provider<StudioConfigRepo>((ref) {

@@ -47,7 +47,9 @@ class MemoryEmbeddingService {
     }
 
     try {
-      final chunks = await _embeddingService.getEmbeddingsWithChunks([text], config);
+      final chunks = await _embeddingService.getEmbeddingsWithChunks([
+        text,
+      ], config);
       final vectors = chunks.map((c) => c.vector).toList();
       final chunkTexts = chunks.map((c) => c.text).toList(growable: false);
 
@@ -57,13 +59,15 @@ class MemoryEmbeddingService {
         sourceId: 'memorybook_${charId}_$sessionId',
         vectors: vectors,
         textHash: textHash,
-        retrievalMetadata: {
-          'hints': hints,
-          'chunks': [
+        retrievalMetadata: embeddingMetadataForConfig(
+          config,
+          vectors,
+          hints: hints,
+          chunks: [
             for (int i = 0; i < chunkTexts.length; i++)
               {'index': i, 'text': chunkTexts[i]},
           ],
-        },
+        ),
       );
     } on RateLimitException {
       await _repo.putEmbeddingError(
@@ -71,8 +75,16 @@ class MemoryEmbeddingService {
         sourceType: 'memory_entry',
         sourceId: 'memorybook_${charId}_$sessionId',
         textHash: textHash,
-        error: {'type': 'rate_limit', 'message': 'Rate limited, deferred', 'retryable': true},
-        retrievalMetadata: {'hints': hints},
+        error: {
+          'type': 'rate_limit',
+          'message': 'Rate limited, deferred',
+          'retryable': true,
+        },
+        retrievalMetadata: embeddingMetadataForConfig(
+          config,
+          const [],
+          hints: hints,
+        ),
       );
       rethrow;
     } catch (e) {
@@ -81,8 +93,16 @@ class MemoryEmbeddingService {
         sourceType: 'memory_entry',
         sourceId: 'memorybook_${charId}_$sessionId',
         textHash: textHash,
-        error: {'type': 'api_error', 'message': e.toString(), 'retryable': true},
-        retrievalMetadata: {'hints': hints},
+        error: {
+          'type': 'api_error',
+          'message': e.toString(),
+          'retryable': true,
+        },
+        retrievalMetadata: embeddingMetadataForConfig(
+          config,
+          const [],
+          hints: hints,
+        ),
       );
     }
   }
@@ -108,7 +128,9 @@ class MemoryEmbeddingService {
     for (final e in excluded) {
       await _repo.deleteByEntryId(e.id);
     }
-    final indexable = entries.where((e) => !e.excludeFromVectorization).toList();
+    final indexable = entries
+        .where((e) => !e.excludeFromVectorization)
+        .toList();
 
     for (int i = 0; i < indexable.length; i++) {
       onProgress?.call(i, indexable.length);
@@ -116,7 +138,7 @@ class MemoryEmbeddingService {
         final existing = await _repo.getByEntryId(indexable[i].id);
         final text = _getEmbeddingText(indexable[i], embeddingTarget);
         final fingerprint = _buildFingerprint(indexable[i], text);
-    final textHash = computeHash(fingerprint);
+        final textHash = computeHash(fingerprint);
 
         if (existing != null &&
             existing.textHash == textHash &&

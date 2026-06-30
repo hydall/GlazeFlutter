@@ -63,11 +63,17 @@ class MagicDrawerPanel extends ConsumerStatefulWidget {
   /// it to hide us instead of popping a route.
   final VoidCallback? onClose;
 
+  /// Scroll the chat webview to a message id (used by Ledger diagnostics
+  /// "source-message navigation"). Null when the chat webview is not
+  /// available (e.g. panel opened from a non-chat context).
+  final Future<void> Function(String messageId)? onScrollToMessage;
+
   const MagicDrawerPanel({
     super.key,
     required this.charId,
     this.onClose,
     this.disableEffects = false,
+    this.onScrollToMessage,
   });
 
   @override
@@ -76,9 +82,21 @@ class MagicDrawerPanel extends ConsumerStatefulWidget {
 
 class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   static final _allItems = <MagicDrawerItemDef>[
-    MagicDrawerItemDef(id: 'context', label: 'label_tokenizer'.tr(), icon: Icons.segment),
-    MagicDrawerItemDef(id: 'summary', label: 'summary_title'.tr(), icon: Icons.subject),
-    MagicDrawerItemDef(id: 'sessions', label: 'history_title'.tr(), icon: Icons.history),
+    MagicDrawerItemDef(
+      id: 'context',
+      label: 'label_tokenizer'.tr(),
+      icon: Icons.segment,
+    ),
+    MagicDrawerItemDef(
+      id: 'summary',
+      label: 'summary_title'.tr(),
+      icon: Icons.subject,
+    ),
+    MagicDrawerItemDef(
+      id: 'sessions',
+      label: 'history_title'.tr(),
+      icon: Icons.history,
+    ),
     MagicDrawerItemDef(
       id: 'char-card',
       label: 'menu_characters'.tr(),
@@ -112,7 +130,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       label: 'menu_personas'.tr(),
       icon: Icons.manage_accounts,
     ),
-    MagicDrawerItemDef(id: 'image-gen', label: 'imggen_title'.tr(), icon: Icons.image),
+    MagicDrawerItemDef(
+      id: 'image-gen',
+      label: 'imggen_title'.tr(),
+      icon: Icons.image,
+    ),
     MagicDrawerItemDef(
       id: 'authors-note',
       label: 'magic_authors_notes'.tr(),
@@ -259,7 +281,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     if (_editing && _canAddMore) {
       list.add(
         MagicDrawerCardItem(
-          def: MagicDrawerItemDef(id: 'add-btn', label: 'btn_add'.tr(), icon: Icons.add),
+          def: MagicDrawerItemDef(
+            id: 'add-btn',
+            label: 'btn_add'.tr(),
+            icon: Icons.add,
+          ),
           isAddButton: true,
         ),
       );
@@ -542,6 +568,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       builder: (_) => StudioMenuDialog(
         charId: widget.charId,
         sessionId: session.id,
+        onScrollToMessage: widget.onScrollToMessage,
       ),
     );
   }
@@ -552,19 +579,14 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     await showDialog<void>(
       context: context,
       useRootNavigator: true,
-      builder: (_) => PostBuildingMenuDialog(
-        charId: widget.charId,
-        sessionId: session.id,
-      ),
+      builder: (_) =>
+          PostBuildingMenuDialog(charId: widget.charId, sessionId: session.id),
     );
   }
 
   Future<void> _showAgentOpsLog() async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
-    await AgenticOperationsLogDialog.show(
-      context,
-      sessionId: session?.id,
-    );
+    await AgenticOperationsLogDialog.show(context, sessionId: session?.id);
   }
 
   Future<void> _showExtBlocksSheet() async {
@@ -975,7 +997,9 @@ class _SessionsSheetContentState extends ConsumerState<_SessionsSheetContent> {
             (session) => BottomSheetSessionItem(
               title: session.sessionVars['sessionName']?.isNotEmpty == true
                   ? session.sessionVars['sessionName']!
-                  : 'session_name'.tr(namedArgs: {'id': (session.sessionIndex + 1).toString()}),
+                  : 'session_name'.tr(
+                      namedArgs: {'id': (session.sessionIndex + 1).toString()},
+                    ),
               count: session.messages.length,
               time: session.updatedAt == 0
                   ? ''

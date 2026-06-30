@@ -22,6 +22,11 @@ class MacroContext {
   final String? arcContent;
   final String? entitiesContent;
 
+  /// Compiled `<studio_session_state>` block from committed ledger tracker rows.
+  /// Injected via `{{studio_state}}` macro. Null/empty when Studio Ledger is
+  /// disabled or no state has been written yet.
+  final String? studioSessionState;
+
   const MacroContext({
     required this.charName,
     this.charDescription,
@@ -43,6 +48,7 @@ class MacroContext {
     this.macroName,
     this.arcContent,
     this.entitiesContent,
+    this.studioSessionState,
   });
 
   /// Context for preset-only token accounting: external injections (character,
@@ -68,6 +74,7 @@ class MacroContext {
       lorebooksContent: null,
       guidanceText: null,
       macroName: null,
+      studioSessionState: null,
     );
   }
 
@@ -83,6 +90,7 @@ class MacroContext {
     Object? guidanceText = _sentinel,
     Object? arcContent = _sentinel,
     Object? entitiesContent = _sentinel,
+    Object? studioSessionState = _sentinel,
   }) {
     return MacroContext(
       charName: charName,
@@ -117,6 +125,9 @@ class MacroContext {
       entitiesContent: identical(entitiesContent, _sentinel)
           ? this.entitiesContent
           : entitiesContent as String?,
+      studioSessionState: identical(studioSessionState, _sentinel)
+          ? this.studioSessionState
+          : studioSessionState as String?,
     );
   }
 
@@ -143,6 +154,7 @@ class MacroContext {
     'macroName': macroName,
     'arcContent': arcContent,
     'entitiesContent': entitiesContent,
+    'studioSessionState': studioSessionState,
   };
 
   factory MacroContext.fromJson(Map<String, dynamic> json) => MacroContext(
@@ -166,6 +178,7 @@ class MacroContext {
     macroName: json['macroName'] as String?,
     arcContent: json['arcContent'] as String?,
     entitiesContent: json['entitiesContent'] as String?,
+    studioSessionState: json['studioSessionState'] as String?,
   );
 }
 
@@ -307,6 +320,11 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   result = result.replaceAllMapped(
     RegExp(r'\{\{arc\}\}', caseSensitive: false),
     (_) => ctx.arcContent ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{studio_state\}\}', caseSensitive: false),
+    (_) => ctx.studioSessionState ?? '',
   );
 
   result = result.replaceAllMapped(

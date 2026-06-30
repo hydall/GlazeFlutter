@@ -8,6 +8,7 @@ import '../../../core/state/studio_build_provider.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../controllers/studio_menu_controller.dart';
+import 'ledger_diagnostics_sheet.dart';
 import 'post_building_menu_dialog.dart';
 
 /// Lightweight Studio tracker dialog (Phase 7.1).
@@ -27,16 +28,18 @@ import 'post_building_menu_dialog.dart';
 /// Business logic (config load, read-modify-write, build/regenerate pipeline,
 /// API-config resolution) lives in [StudioMenuController]. The widget keeps
 /// `build`, the private `_TrackerRow`/`_StatusChip` widgets, and the
-/// bottom-sheet / dialog interactions (`_editAgentModel`, `_editAgentShard`,
+/// bottom-sheet / dialog interactions (`_editAgentShard`,
 /// `_openAdvanced`).
 class StudioMenuDialog extends ConsumerStatefulWidget {
   final String charId;
   final String sessionId;
+  final Future<void> Function(String messageId)? onScrollToMessage;
 
   const StudioMenuDialog({
     super.key,
     required this.charId,
     required this.sessionId,
+    this.onScrollToMessage,
   });
 
   @override
@@ -76,84 +79,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     setState(() {});
   }
 
-  /// Edit a tracker's model override by picking from the provider's live model
-  /// list. Trackers run on the chat's resolved run API; the override only swaps
-  /// the model id (empty = use the chat model). We fetch the available models
-  /// from that provider's `/models` endpoint, exactly like the API settings
-  /// screen, and present them in a bottom sheet.
-  Future<void> _editAgentModel(StudioAgent agent) async {
-    final apiConfig = _ctrl.resolveTrackerApiConfig();
-    if (apiConfig == null) {
-      GlazeToast.show(
-        context,
-        'No chat API configured. Set one up in API settings first.',
-      );
-      return;
-    }
-
-    final models = await _ctrl.fetchModelsForTrackerConfig();
-    if (!mounted) return;
-    setState(() {});
-
-    if (models.isEmpty) {
-      GlazeToast.show(
-        context,
-        'Could not fetch models from ${apiConfig.name.isEmpty ? "the provider" : apiConfig.name}. '
-        'Check the API endpoint and key in settings.',
-      );
-      return;
-    }
-
-    // Surface the current override (and the chat's own model) so the user sees
-    // what is active and can pin it even if it is missing from the live list.
-    final current = agent.modelOverride;
-    final chatModel = apiConfig.model;
-    if (current.isNotEmpty && !models.contains(current)) {
-      models.insert(0, current);
-    }
-    final selectedIndex = current.isNotEmpty ? models.indexOf(current) : -1;
-
-    if (!mounted) return;
-    await GlazeBottomSheet.show<void>(
-      context,
-      title: agent.name.isEmpty ? agent.id : agent.name,
-      scrollToIndex: selectedIndex >= 0 ? selectedIndex : null,
-      items: [
-        // Sentinel option: clear the override and fall back to the chat model.
-        BottomSheetItem(
-          label: 'Use chat model',
-          hint: chatModel.isEmpty ? null : chatModel,
-          icon: current.isEmpty ? Icons.check : Icons.chat_bubble_outline,
-          iconColor: Theme.of(context).colorScheme.primary,
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            _setAgentModelOverride(agent, '');
-          },
-        ),
-        ...models.map(
-          (m) => BottomSheetItem(
-            label: m,
-            icon: m == current ? Icons.check : null,
-            iconColor: Theme.of(context).colorScheme.primary,
-            onTap: () {
-              Navigator.of(context, rootNavigator: true).pop();
-              _setAgentModelOverride(agent, m);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _setAgentModelOverride(
-    StudioAgent agent,
-    String modelOverride,
-  ) async {
-    await _ctrl.setAgentModelOverride(agent, modelOverride);
-    if (!mounted) return;
-    setState(() {});
-  }
-
   /// Open a multi-line editor for one tracker's `promptShard` (manual shard
   /// editing). Persists on Save; Cancel discards. This complements the auto
   /// [StudioDecompositionService.decompose] build — the user can hand-tune
@@ -168,10 +93,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     final result = await showDialog<List<PromptShardBlock>>(
       context: context,
       useRootNavigator: true,
-      builder: (context) => _ShardBlockEditorDialog(
-        agentName: agent.name,
-        blocks: edited,
-      ),
+      builder: (context) =>
+          _ShardBlockEditorDialog(agentName: agent.name, blocks: edited),
     );
     if (result == null) return;
     await _setAgentPromptShard(agent, result);
@@ -248,9 +171,76 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
+  Future<void> _editAgentModel(StudioAgent agent) async {
+    final apiConfig = _ctrl.resolveTrackerApiConfig();
+    if (apiConfig == null) {
+      GlazeToast.show(
+        context,
+        'No chat API configured. Set one up in API settings first.',
+      );
+      return;
+    }
+    final models = await _ctrl.fetchModelsForTrackerConfig();
+    if (!mounted) return;
+    setState(() {});
+    if (models.isEmpty) {
+      GlazeToast.show(
+        context,
+        'Could not fetch models from ${apiConfig.name.isEmpty ? "the provider" : apiConfig.name}. '
+        'Check the API endpoint and key in settings.',
+      );
+      return;
+    }
+    final current = agent.modelOverride;
+    if (current.isNotEmpty && !models.contains(current)) {
+      models.insert(0, current);
+    }
+    final selectedIndex = current.isNotEmpty ? models.indexOf(current) : -1;
+    if (!mounted) return;
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: agent.name.isEmpty ? agent.id : agent.name,
+      scrollToIndex: selectedIndex >= 0 ? selectedIndex : null,
+      items: [
+        BottomSheetItem(
+          label: 'Use chat/run model',
+          hint: apiConfig.model.isEmpty ? null : 'chat: ${apiConfig.model}',
+          icon: current.isEmpty ? Icons.check : Icons.chat_bubble_outline,
+          iconColor: Theme.of(context).colorScheme.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _setAgentModelOverride(agent, '');
+          },
+        ),
+        ...models.map(
+          (m) => BottomSheetItem(
+            label: m,
+            icon: m == current ? Icons.check : null,
+            iconColor: Theme.of(context).colorScheme.primary,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _setAgentModelOverride(agent, m);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _setAgentModelOverride(
+    StudioAgent agent,
+    String modelOverride,
+  ) async {
+    await _ctrl.setAgentModelOverride(agent, modelOverride);
+    if (!mounted) return;
+    setState(() {});
+  }
+
   Future<void> _setTrackerModelOverride(String modelOverride) async {
     final pipeline = ref.read(pipelineSettingsProvider);
-    final updated = pipeline.copyWith(studioTrackerModelOverride: modelOverride);
+    final updated = pipeline.copyWith(
+      studioTrackerModelOverride: modelOverride,
+    );
     await ref.read(pipelineSettingsProvider.notifier).save(updated);
     if (!mounted) return;
     setState(() {});
@@ -300,14 +290,23 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
+  Future<void> _openLedgerDiagnostics() async {
+    await LedgerDiagnosticsSheet.show(
+      context,
+      sessionId: widget.sessionId,
+      onScrollToMessage: widget.onScrollToMessage,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Re-attach to the provider-scoped build state so a build started in a
     // previous instance of this dialog (then closed) still drives the overlay
     // and fires its completion toast here. Watching keeps the overlay live;
     // listening detects the running -> finished edge to drain the result.
-    final buildStatus =
-        ref.watch(studioBuildProvider.select((m) => m[widget.sessionId]));
+    final buildStatus = ref.watch(
+      studioBuildProvider.select((m) => m[widget.sessionId]),
+    );
     ref.listen(
       studioBuildProvider.select((m) => m[widget.sessionId]?.building ?? false),
       (prev, next) {
@@ -377,11 +376,14 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       else ...[
                         // ── Trackers section (7 pre-gen controllers) ──
                         _TrackersSection(
-                          activeAgents: activeAgents.where((a) => !a.id.contains('final')).toList(),
-                          disabledAgents: disabledAgents.where((a) => !a.id.contains('final')).toList(),
+                          activeAgents: activeAgents
+                              .where((a) => !a.id.contains('final'))
+                              .toList(),
+                          disabledAgents: disabledAgents
+                              .where((a) => !a.id.contains('final'))
+                              .toList(),
                           trackerValueFor: _ctrl.trackerValueFor,
                           onToggle: _toggleAgent,
-                          onEditModel: _editAgentModel,
                           onEditShard: _editAgentShard,
                           onRegenerate: _regenerateAgentInstruction,
                           regeneratingAgentIds: _ctrl.regeneratingAgentIds,
@@ -390,8 +392,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                         const SizedBox(height: 12),
                         // ── Finalizer section (Main Responder) ──
                         _FinalizerSection(
-                          activeFinalAgents: activeAgents.where((a) => a.id.contains('final')).toList(),
-                          disabledFinalAgents: disabledAgents.where((a) => a.id.contains('final')).toList(),
+                          activeFinalAgents: activeAgents
+                              .where((a) => a.id.contains('final'))
+                              .toList(),
+                          disabledFinalAgents: disabledAgents
+                              .where((a) => a.id.contains('final'))
+                              .toList(),
                           trackerValueFor: _ctrl.trackerValueFor,
                           onToggle: _toggleAgent,
                           onEditModel: _editAgentModel,
@@ -409,6 +415,14 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                             label: const Text('Build Studio'),
                           ),
                           const Spacer(),
+                          TextButton.icon(
+                            onPressed: _openLedgerDiagnostics,
+                            icon: const Icon(
+                              Icons.menu_book_outlined,
+                              size: 16,
+                            ),
+                            label: const Text('Ledger'),
+                          ),
                           TextButton.icon(
                             onPressed: _openAdvanced,
                             icon: const Icon(Icons.open_in_new, size: 16),
@@ -449,13 +463,14 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 
 /// Compact per-tracker row in the lightweight Studio dialog (Phase 7.1).
 /// Shows: enable switch (leading), name + role badge, compact status chips
-/// (`ctx:N`, `every:N`, model override), and the current tracker value
-/// (truncated) when present.
+/// (`ctx:N`, `every:N`, activation flags), and the current tracker value
+/// (truncated) when present. Tracker model selection lives at section level
+/// because batchable trackers normally share one request.
 class _TrackerRow extends StatelessWidget {
   final StudioAgent agent;
   final String? value;
   final ValueChanged<bool> onToggle;
-  final VoidCallback onEditModel;
+  final void Function(StudioAgent)? onEditModel;
   final VoidCallback onEditShard;
   final VoidCallback onRegenerate;
   final bool regenerating;
@@ -464,7 +479,7 @@ class _TrackerRow extends StatelessWidget {
     required this.agent,
     required this.value,
     required this.onToggle,
-    required this.onEditModel,
+    this.onEditModel,
     required this.onEditShard,
     required this.onRegenerate,
     required this.regenerating,
@@ -525,9 +540,7 @@ class _TrackerRow extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       ...chips.map((c) => _chip(context, c.label, c.emphasize)),
-                      // Tappable model chip — the one piece of per-tracker
-                      // config the lightweight dialog edits inline.
-                      _modelChip(context),
+                      if (onEditModel != null) _modelChip(context),
                       // Tappable prompt-shard chip — opens a multi-line
                       // editor for the tracker's promptShard (manual shard
                       // editing, Phase B).
@@ -570,46 +583,6 @@ class _TrackerRow extends StatelessWidget {
     );
   }
 
-  Widget _modelChip(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final hasOverride = agent.modelOverride.isNotEmpty;
-    final label = hasOverride ? agent.modelOverride : 'chat model';
-    return InkWell(
-      onTap: onEditModel,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: hasOverride ? cs.primaryContainer : cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: cs.primary.withValues(alpha: 0.4),
-            width: 0.5,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.edit,
-              size: 11,
-              color: hasOverride ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-            ),
-            const SizedBox(width: 3),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: hasOverride
-                    ? cs.onPrimaryContainer
-                    : cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _shardChip(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final hasShard = agent.promptShard.any((b) => b.content.trim().isNotEmpty);
@@ -636,6 +609,57 @@ class _TrackerRow extends StatelessWidget {
               style: Theme.of(
                 context,
               ).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modelChip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final model = agent.modelOverride.isNotEmpty
+        ? agent.modelOverride
+        : agent.model.isNotEmpty
+        ? agent.model
+        : 'model';
+    return InkWell(
+      onTap: () => onEditModel?.call(agent),
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: agent.modelOverride.isNotEmpty
+              ? cs.primaryContainer
+              : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: cs.primary.withValues(alpha: 0.4),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.smart_toy_outlined,
+              size: 12,
+              color: agent.modelOverride.isNotEmpty
+                  ? cs.onPrimaryContainer
+                  : cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 3),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Text(
+                model,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: agent.modelOverride.isNotEmpty
+                      ? cs.onPrimaryContainer
+                      : cs.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -681,17 +705,16 @@ class _StudioTimeoutTile extends ConsumerWidget {
     final tt = Theme.of(context).textTheme;
     final valueText = pipeline.studioTimeoutMs == 0
         ? 'post_building_default_seconds'.tr(namedArgs: {'arg0': '90'})
-        : 'post_building_seconds_count'.tr(namedArgs: {
-            'arg0': (pipeline.studioTimeoutMs / 1000).toStringAsFixed(0),
-          });
+        : 'post_building_seconds_count'.tr(
+            namedArgs: {
+              'arg0': (pipeline.studioTimeoutMs / 1000).toStringAsFixed(0),
+            },
+          );
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
       leading: Icon(Icons.timer_outlined, size: 20, color: cs.onSurfaceVariant),
-      title: Text(
-        'post_building_studio_timeout'.tr(),
-        style: tt.bodyMedium,
-      ),
+      title: Text('post_building_studio_timeout'.tr(), style: tt.bodyMedium),
       subtitle: Text(
         '$valueText — ${'post_building_studio_timeout_desc'.tr()}',
         style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
@@ -771,11 +794,12 @@ class _StudioMaxTokensTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(Icons.text_snippet_outlined, size: 20, color: cs.onSurfaceVariant),
-      title: Text(
-        'post_building_studio_max_tokens'.tr(),
-        style: tt.bodyMedium,
+      leading: Icon(
+        Icons.text_snippet_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
       ),
+      title: Text('post_building_studio_max_tokens'.tr(), style: tt.bodyMedium),
       subtitle: Text(
         '$valueText — ${'post_building_studio_max_tokens_desc'.tr()}',
         style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
@@ -854,7 +878,11 @@ class _StudioTemperatureTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(Icons.thermostat_outlined, size: 20, color: cs.onSurfaceVariant),
+      leading: Icon(
+        Icons.thermostat_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
       title: Text(
         'post_building_studio_temperature'.tr(),
         style: tt.bodyMedium,
@@ -884,7 +912,9 @@ class _StudioTemperatureTile extends ConsumerWidget {
                 TextField(
                   controller: controller,
                   autofocus: true,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     suffixText: '0.0 – 2.0',
                     border: OutlineInputBorder(),
@@ -969,7 +999,6 @@ class _TrackersSection extends ConsumerWidget {
   final List<StudioAgent> disabledAgents;
   final String? Function(String) trackerValueFor;
   final Future<void> Function(StudioAgent, bool) onToggle;
-  final Future<void> Function(StudioAgent) onEditModel;
   final Future<void> Function(StudioAgent) onEditShard;
   final Future<void> Function(StudioAgent) onRegenerate;
   final Set<String> regeneratingAgentIds;
@@ -980,7 +1009,6 @@ class _TrackersSection extends ConsumerWidget {
     required this.disabledAgents,
     required this.trackerValueFor,
     required this.onToggle,
-    required this.onEditModel,
     required this.onEditShard,
     required this.onRegenerate,
     required this.regeneratingAgentIds,
@@ -1076,7 +1104,6 @@ class _TrackersSection extends ConsumerWidget {
               agent: a,
               value: trackerValueFor(a.name),
               onToggle: (v) => onToggle(a, v),
-              onEditModel: () => onEditModel(a),
               onEditShard: () => onEditShard(a),
               onRegenerate: () => onRegenerate(a),
               regenerating: regeneratingAgentIds.contains(a.id),
@@ -1093,7 +1120,6 @@ class _TrackersSection extends ConsumerWidget {
               agent: a,
               value: trackerValueFor(a.name),
               onToggle: (v) => onToggle(a, v),
-              onEditModel: () => onEditModel(a),
               onEditShard: () => onEditShard(a),
               onRegenerate: () => onRegenerate(a),
               regenerating: regeneratingAgentIds.contains(a.id),
@@ -1157,7 +1183,7 @@ class _FinalizerSection extends StatelessWidget {
             agent: a,
             value: trackerValueFor(a.name),
             onToggle: (v) => onToggle(a, v),
-            onEditModel: () => onEditModel(a),
+            onEditModel: (_) => onEditModel(a),
             onEditShard: () => onEditShard(a),
             onRegenerate: () => onRegenerate(a),
             regenerating: regeneratingAgentIds.contains(a.id),
@@ -1168,7 +1194,7 @@ class _FinalizerSection extends StatelessWidget {
             agent: a,
             value: trackerValueFor(a.name),
             onToggle: (v) => onToggle(a, v),
-            onEditModel: () => onEditModel(a),
+            onEditModel: (_) => onEditModel(a),
             onEditShard: () => onEditShard(a),
             onRegenerate: () => onRegenerate(a),
             regenerating: regeneratingAgentIds.contains(a.id),
@@ -1204,7 +1230,11 @@ class _StudioTrackerMaxTokensTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(Icons.text_snippet_outlined, size: 20, color: cs.onSurfaceVariant),
+      leading: Icon(
+        Icons.text_snippet_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
       title: Text(
         'post_building_studio_tracker_max_tokens'.tr(),
         style: tt.bodyMedium,
@@ -1287,7 +1317,11 @@ class _StudioTrackerTemperatureTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(Icons.thermostat_outlined, size: 20, color: cs.onSurfaceVariant),
+      leading: Icon(
+        Icons.thermostat_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
       title: Text(
         'post_building_studio_tracker_temperature'.tr(),
         style: tt.bodyMedium,
@@ -1317,7 +1351,9 @@ class _StudioTrackerTemperatureTile extends ConsumerWidget {
                 TextField(
                   controller: controller,
                   autofocus: true,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     suffixText: '0.0 – 2.0',
                     border: OutlineInputBorder(),
@@ -1443,9 +1479,7 @@ class _ShardBlockEditorDialogState extends State<_ShardBlockEditorDialog> {
       final name = _nameControllers[i].text.trim();
       final content = _contentControllers[i].text.trim();
       if (content.isEmpty) continue;
-      result.add(
-        _blocks[i].copyWith(blockName: name, content: content),
-      );
+      result.add(_blocks[i].copyWith(blockName: name, content: content));
     }
     return result;
   }

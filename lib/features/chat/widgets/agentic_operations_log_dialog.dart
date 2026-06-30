@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/studio_ledger_service.dart';
 import '../../../core/models/agent_operation_record.dart';
+import '../../../core/models/chat_message.dart';
 import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../state/agent_operations_log_provider.dart';
 import 'post_cleaner_diff_dialog.dart';
 
@@ -39,7 +43,7 @@ class _AgenticOperationsLogDialogState
         width: 720,
         height: 560,
         child: DefaultTabController(
-          length: 2,
+          length: 3,
           child: Column(
             children: [
               Padding(
@@ -71,6 +75,10 @@ class _AgenticOperationsLogDialogState
                     icon: Icon(Icons.track_changes_outlined, size: 16),
                     text: 'Tracker values',
                   ),
+                  Tab(
+                    icon: Icon(Icons.warning_amber_outlined, size: 16),
+                    text: 'Last turn',
+                  ),
                 ],
                 tabAlignment: TabAlignment.fill,
               ),
@@ -78,7 +86,11 @@ class _AgenticOperationsLogDialogState
                 child: _SessionScope(
                   sessionId: widget.sessionId,
                   child: const TabBarView(
-                    children: [_OperationsTab(), _TrackerValuesTab()],
+                    children: [
+                      _OperationsTab(),
+                      _TrackerValuesTab(),
+                      _LastTurnTab(),
+                    ],
                   ),
                 ),
               ),
@@ -229,6 +241,274 @@ class _OperationsTabState extends ConsumerState<_OperationsTab> {
   }
 }
 
+class _LastTurnTab extends ConsumerStatefulWidget {
+  const _LastTurnTab();
+
+  @override
+  ConsumerState<_LastTurnTab> createState() => _LastTurnTabState();
+}
+
+class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
+  bool _runningLedger = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final sessionId = _sessionIdOf(context);
+    if (sessionId == null) {
+      return Center(
+        child: Text(
+          'Open Agentic Ops from a chat to inspect the last turn.',
+          style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
+        ),
+      );
+    }
+    final state = ref.watch(agentOperationsLogProvider);
+    return FutureBuilder<ChatMessage?>(
+      future: _latestAssistant(sessionId),
+      builder: (context, snapshot) {
+        final last = snapshot.data;
+        final records = last == null
+            ? <AgentOperationRecord>[]
+            : state
+                  .forSession(sessionId)
+                  .where((r) => r.messageId == last.id)
+                  .toList();
+        records.sort((a, b) => a.startedAtMs.compareTo(b.startedAtMs));
+        final failed = records.where((r) => r.status.isFailure).toList();
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      last == null
+                          ? 'No assistant turn found.'
+                          : 'Latest assistant turn: ${last.id}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: last == null || _runningLedger
+                        ? null
+                        : () => _rerunLedger(sessionId, last),
+                    icon: _runningLedger
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.replay_outlined, size: 16),
+                    label: const Text('Rerun Studio Ledger'),
+                  ),
+                ],
+              ),
+            ),
+            if (failed.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${failed.length} failed operation(s) on this turn',
+                    style: TextStyle(fontSize: 11, color: context.cs.error),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: records.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No operations recorded for the latest turn yet.',
+                        style: TextStyle(
+                          color: context.cs.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemCount: records.length,
+                      separatorBuilder: (_, _) =>
+                          const Divider(height: 1, indent: 12, endIndent: 12),
+                      itemBuilder: (context, i) =>
+                          _OperationTile(record: records[i]),
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String? _sessionIdOf(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_SessionScope>();
+    return scope?.sessionId;
+  }
+
+  Future<ChatMessage?> _latestAssistant(String sessionId) async {
+    final session = await ref.read(chatRepoProvider).getById(sessionId);
+    final messages = session?.messages ?? const <ChatMessage>[];
+    for (var i = messages.length - 1; i >= 0; i--) {
+      final m = messages[i];
+      if (m.role == 'assistant' &&
+          !m.isError &&
+          !m.isTyping &&
+          m.content.trim().isNotEmpty) {
+        return m;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _rerunLedger(String sessionId, ChatMessage target) async {
+    if (_runningLedger) return;
+    setState(() => _runningLedger = true);
+    try {
+      final session = await ref.read(chatRepoProvider).getById(sessionId);
+      if (session == null) throw StateError('Session not found');
+      final recentHistory = _recentHistoryText(
+        session.messages,
+        maxMessages: 10,
+        upToMessageId: target.id,
+      );
+      final startedAt = DateTime.now().millisecondsSinceEpoch;
+      final result = await ref
+          .read(studioLedgerServiceProvider)
+          .run(
+            sessionId: sessionId,
+            settings: ref.read(pipelineSettingsProvider),
+            finalAssistantText: target.content,
+            recentHistoryText: recentHistory,
+            messageId: target.id,
+            swipeId: target.swipeId,
+            agentSwipeId: target.agentSwipeId,
+            forceEnabled: true,
+            isStillCurrent: () => mounted,
+          );
+      await ref
+          .read(trackerRepoProvider)
+          .upsertValue(
+            sessionId,
+            '_ledger_diag:studio_ledger',
+            'turn=${target.id} • manual rerun, ${result.status} '
+                '(ops=${result.opsApplied}, facts=${result.durableFactsWritten})'
+                '${result.error == null ? '' : ': ${result.error}'}',
+            scope: 'ledger_diagnostic',
+            provenance:
+                'message=${target.id}|swipe=${target.swipeId}|'
+                'agentSwipe=${target.agentSwipeId}|manual=1',
+          );
+      _appendLedgerRecord(sessionId, target, result, startedAt);
+      if (mounted) {
+        GlazeToast.show(
+          context,
+          result.status == 'ok'
+              ? 'Studio Ledger rerun ok: ops=${result.opsApplied}, facts=${result.durableFactsWritten}'
+              : 'Studio Ledger rerun failed: ${result.error ?? result.status}',
+          isError: result.status != 'ok',
+          duration: 4000,
+          position: ToastPosition.top,
+        );
+      }
+    } catch (e) {
+      final result = LedgerRunResult(status: 'error', error: '$e');
+      _appendLedgerRecord(
+        sessionId,
+        target,
+        result,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      if (mounted) {
+        GlazeToast.show(
+          context,
+          'Studio Ledger rerun failed: $e',
+          isError: true,
+          duration: 4000,
+          position: ToastPosition.top,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _runningLedger = false);
+    }
+  }
+
+  void _appendLedgerRecord(
+    String sessionId,
+    ChatMessage target,
+    LedgerRunResult result,
+    int fallbackStartedAt,
+  ) {
+    final status = _ledgerStatusToOp(result.status);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    ref.read(agentOperationsLogProvider.notifier).state = ref
+        .read(agentOperationsLogProvider)
+        .append(
+          AgentOperationRecord(
+            id: 'studio-ledger-manual-${target.id}-${DateTime.now().microsecondsSinceEpoch}',
+            kind: AgentOperationKind.studioLedger,
+            status: status,
+            sessionId: sessionId,
+            messageId: target.id,
+            attempts: result.attempts,
+            totalElapsedMs: result.elapsedMs,
+            model: result.model,
+            summary: status.isOk
+                ? 'manual rerun: ops=${result.opsApplied}, facts=${result.durableFactsWritten}'
+                : result.error ?? result.status,
+            startedAtMs: result.attempts.isNotEmpty
+                ? result.attempts.first.startedAtMs
+                : fallbackStartedAt,
+            finishedAtMs: result.attempts.isNotEmpty
+                ? result.attempts.last.startedAtMs +
+                      result.attempts.last.elapsedMs
+                : now,
+            canRegenerate: status.isFailure,
+          ),
+        );
+  }
+}
+
+String _recentHistoryText(
+  List<ChatMessage> messages, {
+  int maxMessages = 10,
+  String? upToMessageId,
+}) {
+  var source = messages;
+  if (upToMessageId != null) {
+    final idx = messages.indexWhere((m) => m.id == upToMessageId);
+    if (idx >= 0) source = messages.sublist(0, idx + 1);
+  }
+  final start = source.length > maxMessages ? source.length - maxMessages : 0;
+  final lines = <String>[];
+  for (final msg in source.sublist(start)) {
+    if (msg.isError || msg.isTyping) continue;
+    final content = msg.content.trim();
+    if (content.isEmpty) continue;
+    final role = msg.role == 'assistant' ? 'Assistant' : 'User';
+    lines.add('$role: $content');
+  }
+  return lines.join('\n\n');
+}
+
+AgentOperationStatus _ledgerStatusToOp(String status) {
+  return switch (status) {
+    'ok' => AgentOperationStatus.ok,
+    'skipped' => AgentOperationStatus.disabled,
+    'disabled' => AgentOperationStatus.disabled,
+    'aborted' => AgentOperationStatus.aborted,
+    'timeout' => AgentOperationStatus.timeout,
+    'error' => AgentOperationStatus.error,
+    _ => AgentOperationStatus.error,
+  };
+}
+
 /// Phase 7.5 — "Tracker values" tab. Lists the live [Tracker] store for the
 /// dialog's session, showing name / scope / value / provenance / updatedAt.
 /// Lets the user see what the trackers (memory tracker + post-turn
@@ -366,8 +646,10 @@ class _TrackerValuesTabState extends ConsumerState<_TrackerValuesTab> {
                   ),
                 )
               : ListView.separated(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   itemCount: trackers.length,
                   separatorBuilder: (_, _) =>
                       const Divider(height: 1, indent: 12, endIndent: 12),
@@ -621,6 +903,9 @@ class _OperationTile extends StatelessWidget {
       AgentOperationKind.classifier => Icons.category_outlined,
       AgentOperationKind.consolidation => Icons.merge_type_outlined,
       AgentOperationKind.studioTracker => Icons.auto_awesome_outlined,
+      AgentOperationKind.studioFinal => Icons.edit_note,
+      AgentOperationKind.factChecker => Icons.fact_check_outlined,
+      AgentOperationKind.studioLedger => Icons.menu_book_outlined,
     };
   }
 

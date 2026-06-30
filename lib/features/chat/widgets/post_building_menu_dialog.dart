@@ -121,6 +121,16 @@ class _PostBuildingMenuDialogState
                 onFetchModels: _fetchProviderModels,
               ),
               const SizedBox(height: 8),
+              _LedgerSection(
+                pipeline: _pipeline,
+                onSaved: _savePipeline,
+                modelsByApiConfigId: _modelsByApiConfigId,
+                fetchingModelConfigIds: _fetchingModelConfigIds,
+                onFetchModels: _fetchProviderModels,
+              ),
+              const SizedBox(height: 8),
+              _CadenceSection(pipeline: _pipeline, onSaved: _savePipeline),
+              const SizedBox(height: 8),
               _WriteLoopSection(
                 pipeline: _pipeline,
                 onSaved: _savePipeline,
@@ -152,23 +162,13 @@ class _PostBuildingMenuDialogState
                     _savePipeline((p) => p.copyWith(generationEndpoint: v)),
                 onApiKeyChanged: (v) =>
                     _savePipeline((p) => p.copyWith(generationApiKey: v)),
-                onTemperatureChanged: (v) => _savePipeline(
-                  (p) => p.copyWith(generationTemperature: v),
-                ),
-                onMaxTokensChanged: (v) => _savePipeline(
-                  (p) => p.copyWith(generationMaxTokens: v),
-                ),
+                onTemperatureChanged: (v) =>
+                    _savePipeline((p) => p.copyWith(generationTemperature: v)),
+                onMaxTokensChanged: (v) =>
+                    _savePipeline((p) => p.copyWith(generationMaxTokens: v)),
               ),
               const SizedBox(height: 8),
               _ClassifierSection(
-                pipeline: _pipeline,
-                onSaved: _savePipeline,
-                modelsByApiConfigId: _modelsByApiConfigId,
-                fetchingModelConfigIds: _fetchingModelConfigIds,
-                onFetchModels: _fetchProviderModels,
-              ),
-              const SizedBox(height: 8),
-              _ConsolidationSection(
                 pipeline: _pipeline,
                 onSaved: _savePipeline,
                 modelsByApiConfigId: _modelsByApiConfigId,
@@ -201,13 +201,14 @@ class _PostBuildingMenuDialogState
         endpoint: config.endpoint,
         apiKey: config.apiKey,
       );
-      final ids = models
-          .map((m) => m['id'])
-          .whereType<String>()
-          .where((id) => id.trim().isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
+      final ids =
+          models
+              .map((m) => m['id'])
+              .whereType<String>()
+              .where((id) => id.trim().isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
       if (config.model.isNotEmpty && !ids.contains(config.model)) {
         ids.insert(0, config.model);
       }
@@ -215,7 +216,10 @@ class _PostBuildingMenuDialogState
       setState(() => _modelsByApiConfigId[config.id] = ids);
     } catch (e) {
       if (mounted) {
-        GlazeToast.show(context, 'post_building_fetch_models_failed'.tr(namedArgs: {'arg0': '$e'}));
+        GlazeToast.show(
+          context,
+          'post_building_fetch_models_failed'.tr(namedArgs: {'arg0': '$e'}),
+        );
       }
     } finally {
       if (mounted) setState(() => _fetchingModelConfigIds.remove(config.id));
@@ -224,9 +228,8 @@ class _PostBuildingMenuDialogState
 }
 
 /// Common pattern shared by sidecar/classifier/cleaner sources.
-typedef PipelineSaver = Future<void> Function(
-  PipelineSettings Function(PipelineSettings) mutator,
-);
+typedef PipelineSaver =
+    Future<void> Function(PipelineSettings Function(PipelineSettings) mutator);
 
 /// Shared state passed to all sections.
 typedef FetchModels = Future<void> Function(ApiConfig config);
@@ -275,9 +278,8 @@ class _CleanerSection extends StatelessWidget {
           title: Text('post_building_cleaner_continuity'.tr()),
           subtitle: Text('post_building_cleaner_continuity_desc'.tr()),
           value: pipeline.postCleanerContinuityEnabled,
-          onChanged: (v) => onSaved(
-            (p) => p.copyWith(postCleanerContinuityEnabled: v),
-          ),
+          onChanged: (v) =>
+              onSaved((p) => p.copyWith(postCleanerContinuityEnabled: v)),
         ),
         SwitchListTile(
           dense: true,
@@ -285,9 +287,8 @@ class _CleanerSection extends StatelessWidget {
           title: Text('post_building_cleaner_audit'.tr()),
           subtitle: Text('post_building_cleaner_audit_desc'.tr()),
           value: pipeline.postCleanerCharacterCheckEnabled,
-          onChanged: (v) => onSaved(
-            (p) => p.copyWith(postCleanerCharacterCheckEnabled: v),
-          ),
+          onChanged: (v) =>
+              onSaved((p) => p.copyWith(postCleanerCharacterCheckEnabled: v)),
         ),
         if (pipeline.postCleanerCharacterCheckEnabled)
           Padding(
@@ -370,8 +371,9 @@ class _CleanerSection extends StatelessWidget {
           label: 'post_building_cleaner_max_tokens'.tr(),
           valueText: pipeline.postCleanerMaxTokens == 0
               ? 'post_building_auto_half_length'.tr()
-              : 'post_building_tokens_count'
-                  .tr(namedArgs: {'arg0': '${pipeline.postCleanerMaxTokens}'}),
+              : 'post_building_tokens_count'.tr(
+                  namedArgs: {'arg0': '${pipeline.postCleanerMaxTokens}'},
+                ),
           subtitleKey: 'post_building_cleaner_max_tokens_desc',
           onTap: (ctx) async {
             final v = await _editInt(
@@ -387,13 +389,17 @@ class _CleanerSection extends StatelessWidget {
         _NumberTile(
           label: 'post_building_cleaner_timeout'.tr(),
           valueText: pipeline.postCleanerTimeoutMs == 0
-              ? 'post_building_inherit_seconds'.tr(namedArgs: {
-                  'arg0': (inheritedTimeoutMs / 1000).toStringAsFixed(0),
-                })
-              : 'post_building_seconds_count'.tr(namedArgs: {
-                  'arg0': (pipeline.postCleanerTimeoutMs / 1000)
-                      .toStringAsFixed(0),
-                }),
+              ? 'post_building_inherit_seconds'.tr(
+                  namedArgs: {
+                    'arg0': (inheritedTimeoutMs / 1000).toStringAsFixed(0),
+                  },
+                )
+              : 'post_building_seconds_count'.tr(
+                  namedArgs: {
+                    'arg0': (pipeline.postCleanerTimeoutMs / 1000)
+                        .toStringAsFixed(0),
+                  },
+                ),
           subtitleKey: 'post_building_cleaner_timeout_desc',
           onTap: (ctx) async {
             final v = await _editIntSeconds(
@@ -419,9 +425,7 @@ class _CleanerSection extends StatelessWidget {
               max: 100,
             );
             if (v != null) {
-              await onSaved(
-                (p) => p.copyWith(postCleanerHistoryMessages: v),
-              );
+              await onSaved((p) => p.copyWith(postCleanerHistoryMessages: v));
             }
           },
         ),
@@ -448,8 +452,7 @@ class _CleanerSection extends StatelessWidget {
           label: 'post_building_cleaner_banned_words'.tr(),
           subtitleKey: 'post_building_cleaner_banned_words_desc',
           value: pipeline.postCleanerBannedWords,
-          onSaved: (v) =>
-              onSaved((p) => p.copyWith(postCleanerBannedWords: v)),
+          onSaved: (v) => onSaved((p) => p.copyWith(postCleanerBannedWords: v)),
         ),
         _StyleOverrideTile(
           label: 'post_building_cleaner_avoid_instructions'.tr(),
@@ -472,15 +475,334 @@ class _CleanerSection extends StatelessWidget {
           subtitle: Text(
             'post_building_cleaner_disable_reasoning_desc'.tr(),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontSize: 11,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           value: pipeline.postCleanerDisableReasoning,
           onChanged: (v) =>
               onSaved((p) => p.copyWith(postCleanerDisableReasoning: v)),
         ),
       ],
+    );
+  }
+}
+
+/// Studio Ledger model/timeout settings.
+///
+/// Ledger is mandatory while Studio is enabled; the switch below only controls
+/// standalone ledger operation for non-Studio generations. Studio-enabled chats
+/// force it on in the generation pipeline.
+class _LedgerSection extends StatelessWidget {
+  final PipelineSettings pipeline;
+  final PipelineSaver onSaved;
+  final Map<String, List<String>> modelsByApiConfigId;
+  final Set<String> fetchingModelConfigIds;
+  final FetchModels onFetchModels;
+
+  const _LedgerSection({
+    required this.pipeline,
+    required this.onSaved,
+    required this.modelsByApiConfigId,
+    required this.fetchingModelConfigIds,
+    required this.onFetchModels,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      icon: Icons.menu_book_outlined,
+      titleKey: 'post_building_studio_ledger',
+      children: [
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text('post_building_studio_ledger_enable'.tr()),
+          subtitle: Text('post_building_studio_ledger_enable_desc'.tr()),
+          value: pipeline.studioLedgerEnabled,
+          onChanged: (v) => onSaved((p) => p.copyWith(studioLedgerEnabled: v)),
+        ),
+        const SizedBox(height: 4),
+        _HelperText('post_building_studio_ledger_model_hint'.tr()),
+        const SizedBox(height: 4),
+        _HelperText('post_building_studio_ledger_defaults_hint'.tr()),
+        const SizedBox(height: 8),
+        _LedgerModelRow(
+          pipeline: pipeline,
+          modelsByApiConfigId: modelsByApiConfigId,
+          fetchingModelConfigIds: fetchingModelConfigIds,
+          onFetchModels: onFetchModels,
+          onModelChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerModel: v.trim())),
+        ),
+        _PipelineEndpointField(
+          endpoint: pipeline.studioLedgerEndpoint,
+          onEndpointChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerEndpoint: v.trim())),
+        ),
+        _PipelineApiKeyField(
+          apiKey: pipeline.studioLedgerApiKey,
+          onApiKeyChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerApiKey: v.trim())),
+        ),
+        _NumberTile(
+          label: 'post_building_studio_ledger_timeout'.tr(),
+          valueText: pipeline.studioLedgerTimeoutMs <= 0
+              ? 'post_building_inherit_sidecar'.tr()
+              : 'post_building_seconds_count'.tr(
+                  namedArgs: {
+                    'arg0': (pipeline.studioLedgerTimeoutMs / 1000)
+                        .round()
+                        .toString(),
+                  },
+                ),
+          subtitleKey: 'post_building_studio_ledger_timeout_desc',
+          onTap: (ctx) async {
+            final valueSeconds = pipeline.studioLedgerTimeoutMs <= 0
+                ? 0
+                : (pipeline.studioLedgerTimeoutMs / 1000).round();
+            final v = await _editIntSeconds(
+              ctx: ctx,
+              title: 'post_building_studio_ledger_timeout'.tr(),
+              valueSeconds: valueSeconds,
+            );
+            if (v != null) {
+              await onSaved((p) => p.copyWith(studioLedgerTimeoutMs: v * 1000));
+            }
+          },
+        ),
+        _NumberTile(
+          label: 'post_building_studio_ledger_max_tokens'.tr(),
+          valueText: pipeline.studioLedgerMaxTokens <= 0
+              ? 'post_building_default'.tr(namedArgs: {'arg0': '2000'})
+              : 'post_building_tokens_count'.tr(
+                  namedArgs: {'arg0': '${pipeline.studioLedgerMaxTokens}'},
+                ),
+          subtitleKey: 'post_building_studio_ledger_max_tokens_desc',
+          onTap: (ctx) async {
+            final v = await _editNullableInt(
+              ctx: ctx,
+              title: 'post_building_studio_ledger_max_tokens'.tr(),
+              value: pipeline.studioLedgerMaxTokens <= 0
+                  ? null
+                  : pipeline.studioLedgerMaxTokens,
+            );
+            await onSaved((p) => p.copyWith(studioLedgerMaxTokens: v ?? 0));
+          },
+        ),
+        _NumberTile(
+          label: 'post_building_studio_ledger_temperature'.tr(),
+          valueText: pipeline.studioLedgerTemperature < 0
+              ? 'post_building_default'.tr(namedArgs: {'arg0': '0.2'})
+              : pipeline.studioLedgerTemperature.toStringAsFixed(2),
+          subtitleKey: 'post_building_studio_ledger_temperature_desc',
+          onTap: (ctx) async {
+            final v = await _editNullableDouble(
+              ctx: ctx,
+              title: 'post_building_studio_ledger_temperature'.tr(),
+              value: pipeline.studioLedgerTemperature < 0
+                  ? null
+                  : pipeline.studioLedgerTemperature,
+              min: 0,
+              max: 2,
+            );
+            await onSaved(
+              (p) => p.copyWith(studioLedgerTemperature: v ?? -1.0),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Per-component cadence settings (plan §Model Cadence).
+///
+/// Shows the Run mode, interval, and conditional flags for the Studio Ledger
+/// and the Agentic write-loop. When a component is set to interval/manual,
+/// the UI warns that long-term continuity may be weaker.
+class _CadenceSection extends StatelessWidget {
+  final PipelineSettings pipeline;
+  final PipelineSaver onSaved;
+
+  const _CadenceSection({required this.pipeline, required this.onSaved});
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      icon: Icons.schedule_outlined,
+      titleKey: 'post_building_cadence',
+      subtitleKey: 'post_building_cadence_desc',
+      children: [
+        _CadenceBlock(
+          label: 'post_building_cadence_write_loop'.tr(),
+          helperText: 'post_building_cadence_write_loop_hint'.tr(),
+          runMode: pipeline.agenticWriteRunMode,
+          interval: pipeline.runAgenticEveryN,
+          blockNextGen: pipeline.agenticWriteBlockNextGen,
+          onRunModeChanged: (v) =>
+              onSaved((p) => p.copyWith(agenticWriteRunMode: v)),
+          onIntervalChanged: (v) =>
+              onSaved((p) => p.copyWith(runAgenticEveryN: v)),
+          onBlockNextGenChanged: (v) =>
+              onSaved((p) => p.copyWith(agenticWriteBlockNextGen: v)),
+        ),
+      ],
+    );
+  }
+}
+
+/// One component's cadence block. Shows the run mode, interval (when
+/// runMode == 'every_n'), and a "Block next generation" toggle.
+class _CadenceBlock extends StatelessWidget {
+  final String label;
+  final String helperText;
+  final String runMode;
+  final int interval;
+  final bool blockNextGen;
+  final Future<void> Function(String) onRunModeChanged;
+  final Future<void> Function(int) onIntervalChanged;
+  final Future<void> Function(bool) onBlockNextGenChanged;
+
+  const _CadenceBlock({
+    required this.label,
+    required this.helperText,
+    required this.runMode,
+    required this.interval,
+    required this.blockNextGen,
+    required this.onRunModeChanged,
+    required this.onIntervalChanged,
+    required this.onBlockNextGenChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: tt.titleSmall),
+        const SizedBox(height: 4),
+        _HelperText(helperText),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          segments: [
+            ButtonSegment(
+              value: 'every_turn',
+              label: Text('post_building_cadence_every_turn'.tr()),
+            ),
+            ButtonSegment(
+              value: 'every_n',
+              label: Text('post_building_cadence_every_n'.tr()),
+            ),
+            ButtonSegment(
+              value: 'conditional',
+              label: Text('post_building_cadence_conditional'.tr()),
+            ),
+            ButtonSegment(
+              value: 'manual',
+              label: Text('post_building_cadence_manual'.tr()),
+            ),
+            ButtonSegment(
+              value: 'disabled',
+              label: Text('post_building_cadence_disabled'.tr()),
+            ),
+          ],
+          selected: {runMode},
+          onSelectionChanged: (s) => onRunModeChanged(s.first),
+        ),
+        if (runMode == 'every_n') ...[
+          const SizedBox(height: 8),
+          _NumberTile(
+            label: 'post_building_cadence_interval'.tr(),
+            valueText: '$interval',
+            subtitleKey: 'post_building_cadence_interval_desc',
+            onTap: (ctx) async {
+              final v = await _editInt(
+                ctx: ctx,
+                title: 'post_building_cadence_interval'.tr(),
+                value: interval,
+                min: 1,
+                max: 100,
+              );
+              if (v != null) {
+                await onIntervalChanged(v);
+              }
+            },
+          ),
+        ],
+        if (runMode == 'manual' ||
+            runMode == 'disabled' ||
+            runMode == 'every_n') ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.warning_amber_outlined, size: 14, color: cs.tertiary),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'post_building_cadence_low_warning'.tr(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: cs.tertiary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 8),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text('post_building_cadence_block_next'.tr()),
+          subtitle: Text(
+            'post_building_cadence_block_next_desc'.tr(
+              namedArgs: {'arg0': label},
+            ),
+            style: tt.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontSize: 11,
+            ),
+          ),
+          value: blockNextGen,
+          onChanged: (v) => onBlockNextGenChanged(v),
+        ),
+      ],
+    );
+  }
+}
+
+/// Helper text for a model field. Shows the italic, tertiary-colored hint.
+class _HelperText extends StatelessWidget {
+  final String text;
+
+  const _HelperText(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lightbulb_outline, size: 13, color: cs.tertiary),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+                color: cs.tertiary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -519,9 +841,8 @@ class _WriteLoopSection extends StatelessWidget {
               title: Text('post_building_write_loop'.tr()),
               subtitle: Text('post_building_write_loop_desc'.tr()),
               value: pipeline.agenticWriteEnabled,
-              onChanged: (v) => onSaved(
-                (p) => p.copyWith(agenticWriteEnabled: v),
-              ),
+              onChanged: (v) =>
+                  onSaved((p) => p.copyWith(agenticWriteEnabled: v)),
             ),
             SwitchListTile(
               dense: true,
@@ -541,9 +862,9 @@ class _WriteLoopSection extends StatelessWidget {
               ),
               subtitle: Text(
                 sidecarLocked
-                    ? 'post_building_sidecar_locked'.tr(namedArgs: {
-                        'arg0': 'memory_mode_$memoryMode'.tr(),
-                      })
+                    ? 'post_building_sidecar_locked'.tr(
+                        namedArgs: {'arg0': 'memory_mode_$memoryMode'.tr()},
+                      )
                     : 'post_building_sidecar_enabled_desc'.tr(),
               ),
               value: pipeline.sidecarEnabled,
@@ -595,10 +916,11 @@ class _WriteLoopSection extends StatelessWidget {
               ),
             _NumberTile(
               label: 'post_building_agent_timeout'.tr(),
-              valueText: 'post_building_seconds_count'.tr(namedArgs: {
-                'arg0': (pipeline.sidecarTimeoutMs / 1000)
-                    .toStringAsFixed(0),
-              }),
+              valueText: 'post_building_seconds_count'.tr(
+                namedArgs: {
+                  'arg0': (pipeline.sidecarTimeoutMs / 1000).toStringAsFixed(0),
+                },
+              ),
               subtitleKey: 'post_building_agent_timeout_desc',
               onTap: (ctx) async {
                 final v = await _editIntSeconds(
@@ -676,10 +998,7 @@ class _PipelineLlmSection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _SourceSegment(
-              source: source,
-              onSourceChanged: onSourceChanged,
-            ),
+            _SourceSegment(source: source, onSourceChanged: onSourceChanged),
             if (source == 'custom') ...[
               _PipelineModelSelector(
                 labelKey: 'post_building_model',
@@ -729,8 +1048,9 @@ class _PipelineLlmSection extends StatelessWidget {
               label: 'post_building_max_tokens'.tr(),
               valueText: maxTokens == null
                   ? 'post_building_auto'.tr()
-                  : 'post_building_tokens_count'
-                      .tr(namedArgs: {'arg0': '$maxTokens'}),
+                  : 'post_building_tokens_count'.tr(
+                      namedArgs: {'arg0': '$maxTokens'},
+                    ),
               subtitleKey: 'post_building_max_tokens_desc',
               onTap: (ctx) async {
                 final v = await _editNullableInt(
@@ -786,7 +1106,8 @@ class _ClassifierSection extends StatelessWidget {
               title: Text('post_building_classifier_enable'.tr()),
               subtitle: Text('post_building_classifier_enable_desc'.tr()),
               value: pipeline.classifierEnabled,
-              onChanged: (v) => onSaved((p) => p.copyWith(classifierEnabled: v)),
+              onChanged: (v) =>
+                  onSaved((p) => p.copyWith(classifierEnabled: v)),
             ),
             _SourceSegment(
               source: pipeline.classifierSource,
@@ -825,9 +1146,9 @@ class _ClassifierSection extends StatelessWidget {
             ],
             _NumberTile(
               label: 'post_building_classifier_timeout'.tr(),
-              valueText: 'post_building_ms_count'.tr(namedArgs: {
-                'arg0': '${pipeline.classifierTimeoutMs}',
-              }),
+              valueText: 'post_building_ms_count'.tr(
+                namedArgs: {'arg0': '${pipeline.classifierTimeoutMs}'},
+              ),
               subtitleKey: 'post_building_classifier_timeout_desc',
               onTap: (ctx) async {
                 final v = await _editInt(
@@ -851,153 +1172,6 @@ class _ClassifierSection extends StatelessWidget {
       icon: Icons.category_outlined,
       titleKey: 'post_building_classifier_llm',
       modelHintKey: 'post_building_model_hint_classifier',
-      children: [c],
-    );
-  }
-}
-
-/// Consolidation LLM section.
-class _ConsolidationSection extends StatelessWidget {
-  final PipelineSettings pipeline;
-  final PipelineSaver onSaved;
-  final Map<String, List<String>> modelsByApiConfigId;
-  final Set<String> fetchingModelConfigIds;
-  final FetchModels onFetchModels;
-
-  const _ConsolidationSection({
-    required this.pipeline,
-    required this.onSaved,
-    required this.modelsByApiConfigId,
-    required this.fetchingModelConfigIds,
-    required this.onFetchModels,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = Consumer(
-      builder: (ctx, ref, _) {
-        final activeApi = ref.read(activeApiConfigProvider);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: context.cs.errorContainer.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 14,
-                    color: context.cs.onErrorContainer,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'post_building_consolidation_not_functional'.tr(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: context.cs.onErrorContainer,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 4),
-            SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Text('post_building_consolidation_enable'.tr()),
-              subtitle: Text('post_building_consolidation_enable_desc'.tr()),
-              value: pipeline.consolidationEnabled,
-              onChanged: (v) =>
-                  onSaved((p) => p.copyWith(consolidationEnabled: v)),
-            ),
-            _NumberTile(
-              label: 'post_building_consolidation_threshold'.tr(),
-              valueText: 'post_building_entries_count'.tr(namedArgs: {
-                'arg0': '${pipeline.consolidationThreshold}',
-              }),
-              subtitleKey: 'post_building_consolidation_threshold_desc',
-              onTap: (ctx) async {
-                final v = await _editInt(
-                  ctx: ctx,
-                  title: 'post_building_consolidation_threshold'.tr(),
-                  value: pipeline.consolidationThreshold,
-                  min: 1,
-                  max: 100,
-                );
-                if (v != null) {
-                  await onSaved((p) => p.copyWith(consolidationThreshold: v));
-                }
-              },
-            ),
-            _SourceSegment(
-              source: pipeline.consolidationSource,
-              onSourceChanged: (v) =>
-                  onSaved((p) => p.copyWith(consolidationSource: v)),
-            ),
-            if (pipeline.consolidationSource == 'custom') ...[
-              _PipelineModelSelector(
-                labelKey: 'post_building_consolidation_model',
-                model: pipeline.consolidationModel,
-                onModelChanged: (v) =>
-                    onSaved((p) => p.copyWith(consolidationModel: v)),
-              ),
-              _PipelineEndpointField(
-                endpoint: pipeline.consolidationEndpoint,
-                onEndpointChanged: (v) =>
-                    onSaved((p) => p.copyWith(consolidationEndpoint: v)),
-              ),
-              _PipelineApiKeyField(
-                apiKey: pipeline.consolidationApiKey,
-                onApiKeyChanged: (v) =>
-                    onSaved((p) => p.copyWith(consolidationApiKey: v)),
-              ),
-            ] else if (activeApi != null) ...[
-              _CurrentApiModelRow(
-                labelKey: 'post_building_consolidation_model',
-                apiConfig: activeApi,
-                modelsByApiConfigId: modelsByApiConfigId,
-                fetchingModelConfigIds: fetchingModelConfigIds,
-                onFetchModels: onFetchModels,
-                selectedModel: pipeline.consolidationModel,
-                fallbackModelLabel: activeApi.model,
-                onModelChanged: (v) =>
-                    onSaved((p) => p.copyWith(consolidationModel: v)),
-              ),
-            ],
-            _NumberTile(
-              label: 'post_building_consolidation_timeout'.tr(),
-              valueText: 'post_building_ms_count'.tr(namedArgs: {
-                'arg0': '${pipeline.consolidationTimeoutMs}',
-              }),
-              subtitleKey: 'post_building_consolidation_timeout_desc',
-              onTap: (ctx) async {
-                final v = await _editInt(
-                  ctx: ctx,
-                  title: 'post_building_consolidation_timeout'.tr(),
-                  value: pipeline.consolidationTimeoutMs,
-                  min: 1000,
-                  max: 60000,
-                  step: 1000,
-                );
-                if (v != null) {
-                  await onSaved((p) => p.copyWith(consolidationTimeoutMs: v));
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
-    return _SectionCard(
-      icon: Icons.merge_outlined,
-      titleKey: 'post_building_consolidation_llm',
-      modelHintKey: 'post_building_model_hint_consolidation',
       children: [c],
     );
   }
@@ -1264,8 +1438,7 @@ class _CurrentApiModelRow extends StatelessWidget {
       ...fetched,
       if (selectedModel.isNotEmpty && !fetched.contains(selectedModel))
         selectedModel,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     final selected = selectedModel.isEmpty ? '' : selectedModel;
     final isFetching = fetchingModelConfigIds.contains(config.id);
     return Padding(
@@ -1282,9 +1455,9 @@ class _CurrentApiModelRow extends StatelessWidget {
               decoration: InputDecoration(
                 labelText: labelKey.tr(),
                 helperText: fallbackModelLabel.isNotEmpty
-                    ? 'post_building_empty_chat_model'.tr(namedArgs: {
-                        'arg0': fallbackModelLabel,
-                      })
+                    ? 'post_building_empty_chat_model'.tr(
+                        namedArgs: {'arg0': fallbackModelLabel},
+                      )
                     : 'post_building_empty_chat_model_plain'.tr(),
                 helperMaxLines: 2,
                 border: const OutlineInputBorder(),
@@ -1294,6 +1467,141 @@ class _CurrentApiModelRow extends StatelessWidget {
                 DropdownMenuItem<String>(
                   value: '',
                   child: Text('post_building_use_chat_model'.tr()),
+                ),
+                ...models.map(
+                  (m) => DropdownMenuItem<String>(
+                    value: m,
+                    child: Text(m, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ],
+              onChanged: (m) => onModelChanged(m ?? ''),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: IconButton.filledTonal(
+              tooltip: 'post_building_fetch_models'.tr(),
+              onPressed: isFetching ? null : () => onFetchModels(config),
+              icon: isFetching
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Studio Ledger model dropdown. Ledger inherits sidecar endpoint/key/model when
+/// its override fields are empty, then falls back to the active chat API.
+class _LedgerModelRow extends ConsumerWidget {
+  final PipelineSettings pipeline;
+  final Map<String, List<String>> modelsByApiConfigId;
+  final Set<String> fetchingModelConfigIds;
+  final FetchModels onFetchModels;
+  final Future<void> Function(String) onModelChanged;
+
+  const _LedgerModelRow({
+    required this.pipeline,
+    required this.modelsByApiConfigId,
+    required this.fetchingModelConfigIds,
+    required this.onFetchModels,
+    required this.onModelChanged,
+  });
+
+  ApiConfig? _resolveLedgerConfig(ApiConfig? activeApi) {
+    final endpoint = pipeline.studioLedgerEndpoint.isNotEmpty
+        ? pipeline.studioLedgerEndpoint
+        : pipeline.sidecarEndpoint;
+    final apiKey = pipeline.studioLedgerApiKey.isNotEmpty
+        ? pipeline.studioLedgerApiKey
+        : pipeline.sidecarApiKey;
+    final inheritedModel = pipeline.sidecarModel.isNotEmpty
+        ? pipeline.sidecarModel
+        : activeApi?.model ?? '';
+
+    if (endpoint.isNotEmpty) {
+      return ApiConfig(
+        id: 'ledger-custom:$endpoint',
+        name: 'Studio Ledger (custom)',
+        endpoint: endpoint,
+        apiKey: apiKey,
+        model: pipeline.studioLedgerModel.isNotEmpty
+            ? pipeline.studioLedgerModel
+            : inheritedModel,
+        protocol: 'openai',
+      );
+    }
+    if (activeApi == null) return null;
+    return ApiConfig(
+      id: 'ledger-current:${activeApi.id}',
+      name: 'Studio Ledger (current)',
+      endpoint: activeApi.endpoint,
+      apiKey: activeApi.apiKey,
+      model: pipeline.studioLedgerModel.isNotEmpty
+          ? pipeline.studioLedgerModel
+          : inheritedModel,
+      protocol: activeApi.protocol,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeApi = ref.read(activeApiConfigProvider);
+    final config = _resolveLedgerConfig(activeApi);
+    if (config == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          'post_building_no_chat_api'.tr(),
+          style: const TextStyle(fontSize: 12),
+        ),
+      );
+    }
+
+    final fetched = modelsByApiConfigId[config.id] ?? const <String>[];
+    final models = <String>{
+      ...fetched,
+      if (pipeline.studioLedgerModel.isNotEmpty &&
+          !fetched.contains(pipeline.studioLedgerModel))
+        pipeline.studioLedgerModel,
+    }.toList()..sort();
+    final selected = pipeline.studioLedgerModel.isEmpty
+        ? ''
+        : pipeline.studioLedgerModel;
+    final isFetching = fetchingModelConfigIds.contains(config.id);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: models.contains(selected) || selected.isEmpty
+                  ? selected
+                  : null,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'post_building_studio_ledger_model'.tr(),
+                helperText: 'post_building_studio_ledger_model_helper'.tr(
+                  namedArgs: {'arg0': config.model},
+                ),
+                helperMaxLines: 2,
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: [
+                DropdownMenuItem<String>(
+                  value: '',
+                  child: Text('post_building_use_inherited_model'.tr()),
                 ),
                 ...models.map(
                   (m) => DropdownMenuItem<String>(
@@ -1413,8 +1721,7 @@ class _AuditModelRow extends ConsumerWidget {
       if (pipeline.postCleanerAuditModel.isNotEmpty &&
           !fetched.contains(pipeline.postCleanerAuditModel))
         pipeline.postCleanerAuditModel,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     final selected = pipeline.postCleanerAuditModel.isEmpty
         ? ''
         : pipeline.postCleanerAuditModel;
@@ -1434,9 +1741,9 @@ class _AuditModelRow extends ConsumerWidget {
               decoration: InputDecoration(
                 labelText: 'post_building_cleaner_audit_model'.tr(),
                 helperText: selected.isEmpty
-                    ? 'post_building_cleaner_audit_model_helper'.tr(namedArgs: {
-                        'arg0': config.model,
-                      })
+                    ? 'post_building_cleaner_audit_model_helper'.tr(
+                        namedArgs: {'arg0': config.model},
+                      )
                     : null,
                 helperMaxLines: 2,
                 border: const OutlineInputBorder(),
@@ -1525,18 +1832,16 @@ Future<double> _editDouble({
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'post_building_range'.tr(namedArgs: {
-              'arg0': '$min',
-              'arg1': '$max',
-            }),
+            'post_building_range'.tr(
+              namedArgs: {'arg0': '$min', 'arg1': '$max'},
+            ),
             style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: controller,
             autofocus: true,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
         ],
@@ -1624,8 +1929,7 @@ Future<int?> _editIntSeconds({
   required int valueSeconds,
   int minSeconds = 0,
 }) async {
-  final controller =
-      TextEditingController(text: '$valueSeconds');
+  final controller = TextEditingController(text: '$valueSeconds');
   final result = await showDialog<int>(
     context: ctx,
     builder: (c) => AlertDialog(
@@ -1691,18 +1995,16 @@ Future<double?> _editNullableDouble({
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'post_building_blank_default_range'.tr(namedArgs: {
-              'arg0': '$min',
-              'arg1': '$max',
-            }),
+            'post_building_blank_default_range'.tr(
+              namedArgs: {'arg0': '$min', 'arg1': '$max'},
+            ),
             style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: controller,
             autofocus: true,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
         ],
@@ -1910,10 +2212,12 @@ class _RecoverySection extends ConsumerWidget {
               Expanded(
                 child: Text(
                   state.totalMessages > 0
-                      ? 'post_building_recovery_progress'.tr(namedArgs: {
-                          'arg0': '${state.processedMessages}',
-                          'arg1': '${state.totalMessages}',
-                        })
+                      ? 'post_building_recovery_progress'.tr(
+                          namedArgs: {
+                            'arg0': '${state.processedMessages}',
+                            'arg1': '${state.totalMessages}',
+                          },
+                        )
                       : 'post_building_recovery_starting'.tr(),
                   style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
@@ -1966,9 +2270,8 @@ class _RecoverySection extends ConsumerWidget {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
-              onPressed: () => ref
-                  .read(trackerMemoryRecoveryServiceProvider)
-                  .cancel(),
+              onPressed: () =>
+                  ref.read(trackerMemoryRecoveryServiceProvider).cancel(),
               icon: const Icon(Icons.stop_circle_outlined, size: 16),
               label: Text('common_cancel'.tr()),
               style: TextButton.styleFrom(foregroundColor: cs.error),
@@ -1981,11 +2284,13 @@ class _RecoverySection extends ConsumerWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'post_building_recovery_done'.tr(namedArgs: {
-                    'arg0': '${state.trackersWritten}',
-                    'arg1': '${state.memoriesWritten}',
-                    'arg2': '${state.failedMessages}',
-                  }),
+                  'post_building_recovery_done'.tr(
+                    namedArgs: {
+                      'arg0': '${state.trackersWritten}',
+                      'arg1': '${state.memoriesWritten}',
+                      'arg2': '${state.failedMessages}',
+                    },
+                  ),
                   style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ),
@@ -2048,10 +2353,9 @@ class _RecoverySection extends ConsumerWidget {
     if (confirmed != true) return;
 
     unawaited(
-      ref.read(trackerMemoryRecoveryServiceProvider).recover(
-            sessionId: sessionId,
-            charId: charId,
-          ),
+      ref
+          .read(trackerMemoryRecoveryServiceProvider)
+          .recover(sessionId: sessionId, charId: charId),
     );
   }
 }
@@ -2073,9 +2377,9 @@ class _StatChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: accent ?? cs.onSurfaceVariant,
-        ),
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(color: accent ?? cs.onSurfaceVariant),
       ),
     );
   }

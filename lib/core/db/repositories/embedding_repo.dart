@@ -17,15 +17,44 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
   EmbeddingRepo(super.db);
 
   Future<EmbeddingRow?> getByEntryId(String entryId) {
-    return (select(embeddings)..where((e) => e.entryId.equals(entryId))).getSingleOrNull();
+    return (select(
+      embeddings,
+    )..where((e) => e.entryId.equals(entryId))).getSingleOrNull();
   }
 
   Future<List<EmbeddingRow>> getAll() {
     return select(embeddings).get();
   }
 
+  Future<EmbeddingStaleStats> getStaleStats(String currentSignature) async {
+    final rows = await getAll();
+    var stale = 0;
+    var missingMetadata = 0;
+    final bySource = <String, int>{};
+
+    for (final row in rows) {
+      final metadata = decodeMetadata(row);
+      final signature = metadata?['embeddingSignature'];
+      final isMissing = signature is! String || signature.isEmpty;
+      final isStale = isMissing || signature != currentSignature;
+      if (!isStale) continue;
+      stale++;
+      if (isMissing) missingMetadata++;
+      bySource[row.sourceType] = (bySource[row.sourceType] ?? 0) + 1;
+    }
+
+    return EmbeddingStaleStats(
+      total: rows.length,
+      stale: stale,
+      missingMetadata: missingMetadata,
+      bySource: bySource,
+    );
+  }
+
   Future<List<EmbeddingRow>> getBySourceType(String sourceType) {
-    return (select(embeddings)..where((e) => e.sourceType.equals(sourceType))).get();
+    return (select(
+      embeddings,
+    )..where((e) => e.sourceType.equals(sourceType))).get();
   }
 
   Future<void> put(EmbeddingsCompanion entry) {
@@ -37,7 +66,9 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> deleteBySourceType(String sourceType) {
-    return (delete(embeddings)..where((e) => e.sourceType.equals(sourceType))).go();
+    return (delete(
+      embeddings,
+    )..where((e) => e.sourceType.equals(sourceType))).go();
   }
 
   @override
@@ -61,16 +92,18 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
         ? jsonEncode(retrievalHints)
         : null;
 
-    await put(EmbeddingsCompanion.insert(
-      entryId: entryId,
-      sourceType: Value(sourceType),
-      sourceId: Value(sourceId),
-      vectorsBlob: Value(vectorsBlob),
-      textHash: Value(textHash),
-      retrievalHintsJson: Value(hintsJson),
-      errorJson: const Value(null),
-      updatedAt: Value(currentTimestampSeconds()),
-    ));
+    await put(
+      EmbeddingsCompanion.insert(
+        entryId: entryId,
+        sourceType: Value(sourceType),
+        sourceId: Value(sourceId),
+        vectorsBlob: Value(vectorsBlob),
+        textHash: Value(textHash),
+        retrievalHintsJson: Value(hintsJson),
+        errorJson: const Value(null),
+        updatedAt: Value(currentTimestampSeconds()),
+      ),
+    );
   }
 
   Future<void> putEmbeddingError({
@@ -88,16 +121,18 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
         ? jsonEncode(retrievalHints)
         : null;
 
-    await put(EmbeddingsCompanion.insert(
-      entryId: entryId,
-      sourceType: Value(sourceType),
-      sourceId: Value(sourceId),
-      vectorsBlob: const Value(null),
-      textHash: Value(textHash),
-      retrievalHintsJson: Value(hintsJson),
-      errorJson: Value(jsonEncode(error)),
-      updatedAt: Value(currentTimestampSeconds()),
-    ));
+    await put(
+      EmbeddingsCompanion.insert(
+        entryId: entryId,
+        sourceType: Value(sourceType),
+        sourceId: Value(sourceId),
+        vectorsBlob: const Value(null),
+        textHash: Value(textHash),
+        retrievalHintsJson: Value(hintsJson),
+        errorJson: Value(jsonEncode(error)),
+        updatedAt: Value(currentTimestampSeconds()),
+      ),
+    );
   }
 
   List<List<double>>? decodeVectors(EmbeddingRow row) {
@@ -144,4 +179,18 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
       return null;
     }
   }
+}
+
+class EmbeddingStaleStats {
+  final int total;
+  final int stale;
+  final int missingMetadata;
+  final Map<String, int> bySource;
+
+  const EmbeddingStaleStats({
+    required this.total,
+    required this.stale,
+    required this.missingMetadata,
+    required this.bySource,
+  });
 }

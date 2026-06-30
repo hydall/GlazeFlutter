@@ -60,6 +60,18 @@ abstract class PipelineSettings with _$PipelineSettings {
     // cadence knob is retained for users who want to opt back into the
     // throttled behavior via the UI.
     @Default(1) int runAgenticEveryN,
+    // ── Agentic write-loop cadence (plan §Model Cadence) ────────────────
+    // Run mode: 'every_turn' | 'conditional' | 'every_n' | 'manual' | 'disabled'.
+    // 'every_turn' is the default. 'every_n' uses [runAgenticEveryN] as the
+    // interval. 'disabled' suppresses the write-loop entirely.
+    @Default('every_turn') String agenticWriteRunMode,
+    // When true, block the next user-message generation until the write-loop
+    // finishes (or times out). Default false = fire-and-forget.
+    @Default(false) bool agenticWriteBlockNextGen,
+    // Conditional triggers (plan §Model Cadence Memory write-loop). Only
+    // consulted when runMode == 'conditional'.
+    @Default(true) bool agenticWriteRunWhenMentionedEntitiesChanged,
+    @Default(false) bool agenticWriteRunWhenMemoryBookCandidatesExist,
     // When true, agent writes land in `pendingDrafts` for manual user
     // approval instead of being auto-approved as `MemoryEntry`. The user
     // reviews drafts in the existing MemoryBook UI ("Pending drafts"
@@ -159,6 +171,45 @@ abstract class PipelineSettings with _$PipelineSettings {
     // think-block. Only affects the cleaner LLM call, not the audit.
     @Default(false) bool postCleanerDisableReasoning,
 
+    // ── Studio Ledger ─────────────────────────────────────────────────────
+    // Mandatory internal continuity ledger that runs after every final
+    // assistant response when Studio is enabled. Writes compact entity/
+    // relationship/arc/world state and durable MemoryBook facts.
+    // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md.
+    @Default(false) bool studioLedgerEnabled,
+    // Model for the ledger LLM call. When empty, inherits the sidecar model.
+    @Default('') String studioLedgerModel,
+    // Endpoint override for the ledger LLM. When empty, inherits sidecar.
+    @Default('') String studioLedgerEndpoint,
+    // API key override for the ledger LLM. When empty, inherits sidecar.
+    @Default('') String studioLedgerApiKey,
+    // Ledger LLM call timeout in milliseconds. 0 = use sidecarTimeoutMs.
+    @Default(0) int studioLedgerTimeoutMs,
+    // Max tokens for the ledger LLM call. 0 = use default (2000).
+    @Default(0) int studioLedgerMaxTokens,
+    // Temperature for the ledger LLM call. Negative = use default (0.2).
+    @Default(-1.0) double studioLedgerTemperature,
+    // ── Studio Ledger cadence (plan §Model Cadence) ──────────────────────
+    // Run mode: 'every_turn' | 'conditional' | 'every_n' | 'manual' | 'disabled'.
+    // 'every_turn' is the default. Studio forces it on regardless of this
+    // setting when StudioConfig.enabled is true; this field is only consulted
+    // for non-Studio generations (standalone ledger) or when the user opts
+    // into a low-power cadence inside Studio.
+    @Default('every_turn') String studioLedgerRunMode,
+    // Interval N assistant turns when runMode == 'every_n'. 1 = every turn.
+    @Default(1) int studioLedgerIntervalN,
+    // When true, block the next user-message generation until the ledger
+    // finishes (or times out). Default false = fire-and-forget; the next
+    // generation uses the previous committed canon if Ledger is still
+    // running (plan §Failure Behavior).
+    @Default(false) bool studioLedgerBlockNextGen,
+    // Conditional triggers (plan §Model Cadence Studio Ledger). Only
+    // consulted when runMode == 'conditional'. All must be true for the
+    // ledger to run; false on any one skips the run.
+    @Default(true) bool studioLedgerRunWhenMentionedEntitiesChanged,
+    @Default(true) bool studioLedgerRunWhenSceneChanged,
+    @Default(false) bool studioLedgerRunWhenMemoryBookCandidatesExist,
+
     // ── Consolidation LLM ────────────────────────────────────────────────
     @Default(false) bool consolidationEnabled,
     @Default(5) int consolidationThreshold,
@@ -167,7 +218,6 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default('') String consolidationEndpoint,
     @Default('') String consolidationApiKey,
     @Default(4000) int consolidationTimeoutMs,
-
   }) = _PipelineSettings;
 
   factory PipelineSettings.fromJson(Map<String, dynamic> json) =>

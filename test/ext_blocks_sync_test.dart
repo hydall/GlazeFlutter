@@ -246,6 +246,28 @@ class FakeTrackerSnapshotStore implements SyncTrackerSnapshotStore {
   }
 }
 
+class FakeTrackerValueStore implements SyncTrackerValueStore {
+  final Map<String, List<Map<String, dynamic>>> data = {};
+
+  @override
+  Future<List<String>> getAllSessionIds() async => data.keys.toList();
+
+  @override
+  Future<List<Map<String, dynamic>>> getBySessionId(String sessionId) async =>
+      data[sessionId] ?? [];
+
+  @override
+  Future<void> deleteBySessionId(String sessionId) async {
+    data.remove(sessionId);
+  }
+
+  @override
+  Future<void> insertRaw(Map<String, dynamic> tracker) async {
+    final sid = tracker['sessionId'] as String? ?? '';
+    data.putIfAbsent(sid, () => []).add(tracker);
+  }
+}
+
 class FakeStudioConfigStore implements SyncStudioConfigStore {
   final Map<String, StudioConfig> data = {};
 
@@ -342,22 +364,24 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     required SyncExtensionsSettingsStore extensionsSettingsStore,
     required SyncInfoBlockStore infoBlockStore,
     required SyncTrackerSnapshotStore trackerSnapshotStore,
+    required SyncTrackerValueStore trackerValueStore,
     required SyncStudioConfigStore studioConfigStore,
   }) : _builder = SyncManifestBuilder(
-          characterRepo: characterRepo,
-          chatRepo: chatRepo,
-          personaRepo: personaRepo,
-          presetRepo: presetRepo,
-          apiRepo: apiRepo,
-          memoryBookRepo: memoryBookRepo,
-          lorebookRepo: lorebookRepo,
-          themePresetRepo: themePresetRepo,
-          extensionPresetRepo: extensionPresetRepo,
-          extensionsSettingsStore: extensionsSettingsStore,
-          infoBlockStore: infoBlockStore,
-          trackerSnapshotStore: trackerSnapshotStore,
-          studioConfigStore: studioConfigStore,
-        );
+         characterRepo: characterRepo,
+         chatRepo: chatRepo,
+         personaRepo: personaRepo,
+         presetRepo: presetRepo,
+         apiRepo: apiRepo,
+         memoryBookRepo: memoryBookRepo,
+         lorebookRepo: lorebookRepo,
+         themePresetRepo: themePresetRepo,
+         extensionPresetRepo: extensionPresetRepo,
+         extensionsSettingsStore: extensionsSettingsStore,
+         infoBlockStore: infoBlockStore,
+         trackerSnapshotStore: trackerSnapshotStore,
+         trackerValueStore: trackerValueStore,
+         studioConfigStore: studioConfigStore,
+       );
 
   @override
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) async {
@@ -415,6 +439,7 @@ class SyncWorld {
       FakeExtensionsSettingsStore();
   final FakeInfoBlockStore infoBlocks = FakeInfoBlockStore();
   final FakeTrackerSnapshotStore trackerSnapshots = FakeTrackerSnapshotStore();
+  final FakeTrackerValueStore trackerValues = FakeTrackerValueStore();
   final FakeStudioConfigStore studioConfigs = FakeStudioConfigStore();
   late final InMemoryManifestProvider manifestProvider;
 
@@ -432,6 +457,7 @@ class SyncWorld {
       extensionsSettingsStore: extensionsSettings,
       infoBlockStore: infoBlocks,
       trackerSnapshotStore: trackerSnapshots,
+      trackerValueStore: trackerValues,
       studioConfigStore: studioConfigs,
     );
   }
@@ -453,6 +479,7 @@ class SyncWorld {
     extensionsSettings,
     infoBlocks,
     trackerSnapshots,
+    trackerValues,
     studioConfigs,
     (_) async {},
   );
@@ -525,8 +552,44 @@ void main() {
         cloudPath('info_block', 'session-abc'),
         equals('/Glaze/info_blocks/session-abc.json'),
       );
+      expect(
+        cloudPath('tracker_value', 'session-abc'),
+        equals('/Glaze/tracker_values/session-abc.json'),
+      );
     },
   );
+
+  test('Tracker Values push/pull round-trip preserves live rows', () async {
+    final deviceA = SyncWorld();
+    deviceA.trackerValues.data['session-1'] = [
+      {
+        'sessionId': 'session-1',
+        'name': 'arc:street_alliance.summary',
+        'value': 'Lucy and Danvi are coordinating against the threat.',
+        'scope': 'chat',
+        'provenance': 'studio_ledger',
+        'updatedAt': 1234,
+      },
+    ];
+
+    await deviceA.engine.pushEntities(onProgress: (_) {});
+
+    expect(
+      deviceA.cloud.files.containsKey(cloudPath('tracker_value', 'session-1')),
+      isTrue,
+    );
+
+    final deviceB = SyncWorld();
+    deviceB.cloud.files.addAll(deviceA.cloud.files);
+
+    await deviceB.engine.pullEntities(onProgress: (_) {}, onConflict: (_) {});
+
+    expect(deviceB.trackerValues.data['session-1'], hasLength(1));
+    expect(
+      deviceB.trackerValues.data['session-1']!.single['name'],
+      equals('arc:street_alliance.summary'),
+    );
+  });
 
   // ── Test 2: ExtensionPreset push/pull round-trip ─────────────────────
   test('ExtensionPreset push/pull round-trip preserves data', () async {

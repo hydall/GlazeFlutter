@@ -17,10 +17,14 @@ class TrackerRepo {
         .then((rows) => rows.map(_rowToModel).toList());
   }
 
-  Future<List<Tracker>> getBySessionAndScope(
-    String sessionId,
-    String scope,
-  ) {
+  Future<List<String>> getAllSessionIds() async {
+    final rows = await db
+        .customSelect('SELECT DISTINCT session_id FROM tracker_rows')
+        .get();
+    return rows.map((r) => r.read<String>('session_id')).toList();
+  }
+
+  Future<List<Tracker>> getBySessionAndScope(String sessionId, String scope) {
     return (db.select(db.trackerRows)
           ..where((t) => t.sessionId.equals(sessionId))
           ..where((t) => t.scope.equals(scope))
@@ -30,10 +34,11 @@ class TrackerRepo {
   }
 
   Future<Tracker?> get(String sessionId, String name) async {
-    final row = await (db.select(db.trackerRows)
-          ..where((t) => t.sessionId.equals(sessionId))
-          ..where((t) => t.name.equals(name)))
-        .getSingleOrNull();
+    final row =
+        await (db.select(db.trackerRows)
+              ..where((t) => t.sessionId.equals(sessionId))
+              ..where((t) => t.name.equals(name)))
+            .getSingleOrNull();
     return row == null ? null : _rowToModel(row);
   }
 
@@ -42,18 +47,22 @@ class TrackerRepo {
   /// updatedAt are overwritten. Safe under concurrent writes — Drift resolves
   /// the PK conflict in a single statement.
   Future<void> upsert(Tracker tracker) {
-    return db.into(db.trackerRows).insertOnConflictUpdate(
-      TrackerRowsCompanion.insert(
-        sessionId: tracker.sessionId,
-        name: tracker.name,
-        value: Value(tracker.value),
-        scope: Value(tracker.scope),
-        provenance: Value(tracker.provenance),
-        updatedAt: Value(tracker.updatedAt == 0
-            ? currentTimestampSeconds()
-            : tracker.updatedAt),
-      ),
-    );
+    return db
+        .into(db.trackerRows)
+        .insertOnConflictUpdate(
+          TrackerRowsCompanion.insert(
+            sessionId: tracker.sessionId,
+            name: tracker.name,
+            value: Value(tracker.value),
+            scope: Value(tracker.scope),
+            provenance: Value(tracker.provenance),
+            updatedAt: Value(
+              tracker.updatedAt == 0
+                  ? currentTimestampSeconds()
+                  : tracker.updatedAt,
+            ),
+          ),
+        );
   }
 
   /// Convenience: upsert with explicit fields (avoids constructing a Tracker
@@ -65,16 +74,18 @@ class TrackerRepo {
     String scope = 'chat',
     String provenance = '',
   }) {
-    return db.into(db.trackerRows).insertOnConflictUpdate(
-      TrackerRowsCompanion.insert(
-        sessionId: sessionId,
-        name: name,
-        value: Value(value),
-        scope: Value(scope),
-        provenance: Value(provenance),
-        updatedAt: Value(currentTimestampSeconds()),
-      ),
-    );
+    return db
+        .into(db.trackerRows)
+        .insertOnConflictUpdate(
+          TrackerRowsCompanion.insert(
+            sessionId: sessionId,
+            name: name,
+            value: Value(value),
+            scope: Value(scope),
+            provenance: Value(provenance),
+            updatedAt: Value(currentTimestampSeconds()),
+          ),
+        );
   }
 
   Future<void> delete(String sessionId, String name) {
@@ -85,18 +96,15 @@ class TrackerRepo {
   }
 
   Future<void> clearForSession(String sessionId) {
-    return (db.delete(db.trackerRows)
-          ..where((t) => t.sessionId.equals(sessionId)))
-        .go();
+    return (db.delete(
+      db.trackerRows,
+    )..where((t) => t.sessionId.equals(sessionId))).go();
   }
 
   /// Atomically replaces all trackers for [sessionId] with [trackers].
   /// Wraps delete + insert in a single transaction so a concurrent read never
   /// observes a half-replaced state.
-  Future<void> replaceForSession(
-    String sessionId,
-    List<Tracker> trackers,
-  ) {
+  Future<void> replaceForSession(String sessionId, List<Tracker> trackers) {
     return db.transaction(() async {
       await clearForSession(sessionId);
       for (final t in trackers) {

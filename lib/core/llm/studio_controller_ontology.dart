@@ -41,9 +41,7 @@ class StudioControllerSpec {
     // ignore: unused_element_parameter
     this.phase = 'pre_generation',
     // Default tracker context size (trailing chat messages forwarded to this
-    // agent). 0 = inherit the StudioAgent freezed default of 5. The
-    // Meta-Weaver overrides this to 15 so it can count meta-persona periods up to
-    // ~10. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part A.
+    // agent). 0 = inherit the StudioAgent freezed default of 5.
     this.contextSize = 0,
   });
 }
@@ -186,7 +184,6 @@ class StudioControllerOntology {
       temperature: 0.2,
       maxTokens: 1200,
       timeoutMs: 60000,
-      contextSize: 15,
     ),
     StudioControllerSpec(
       id: 'beauty',

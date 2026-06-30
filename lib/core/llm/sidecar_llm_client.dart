@@ -188,6 +188,7 @@ class SidecarLlmClient {
       protocol: cleaner.protocol,
     );
   }
+
   /// Resolves the API config for the memory consolidation LLM (Phase G5).
   ///
   /// `source='custom'` → use `consolidationEndpoint/ApiKey/Model`.
@@ -206,9 +207,7 @@ class SidecarLlmClient {
           "endpoint='${settings.consolidationEndpoint}' "
           "model='${settings.consolidationModel}'",
         );
-        throw Exception(
-          'Sidecar custom config incomplete for $errorLabel',
-        );
+        throw Exception('Sidecar custom config incomplete for $errorLabel');
       }
       debugPrint(
         '[Sidecar] resolved custom for $errorLabel '
@@ -247,6 +246,65 @@ class SidecarLlmClient {
     return settings.postCleanerTimeoutMs > 0
         ? settings.postCleanerTimeoutMs
         : settings.sidecarTimeoutMs;
+  }
+
+  /// Resolves the API config for the Studio Ledger LLM call.
+  ///
+  /// Falls back to the sidecar config when ledger-specific overrides are not
+  /// set. Follows the same pattern as [resolveConfigForCleaner].
+  Future<SidecarApiConfig> resolveConfigForLedger(
+    PipelineSettings settings, {
+    String errorLabel = 'studio-ledger',
+  }) async {
+    final endpoint = settings.studioLedgerEndpoint.isNotEmpty
+        ? settings.studioLedgerEndpoint
+        : settings.sidecarEndpoint;
+    final apiKey = settings.studioLedgerApiKey.isNotEmpty
+        ? settings.studioLedgerApiKey
+        : settings.sidecarApiKey;
+    final model = settings.studioLedgerModel.isNotEmpty
+        ? settings.studioLedgerModel
+        : settings.sidecarModel;
+
+    // Custom path: both endpoint and model must be non-empty.
+    if (endpoint.isNotEmpty && model.isNotEmpty) {
+      debugPrint('[Sidecar] resolved custom for $errorLabel model=$model');
+      return SidecarApiConfig(
+        endpoint: endpoint,
+        apiKey: apiKey,
+        model: model,
+        protocol: LlmProtocol.openai,
+      );
+    }
+
+    // Chat-fallback: read the active chat API config.
+    await _ref.read(apiListProvider.future);
+    final chatConfig = _ref.read(activeApiConfigProvider);
+    if (chatConfig == null) {
+      debugPrint('[Sidecar] no active chat API config for $errorLabel');
+      throw Exception('No chat API config available for $errorLabel');
+    }
+    final effectiveModel = model.isNotEmpty ? model : chatConfig.model;
+    debugPrint(
+      '[Sidecar] resolved chat-fallback for $errorLabel '
+      'model=$effectiveModel endpoint=${chatConfig.endpoint}',
+    );
+    return SidecarApiConfig(
+      endpoint: chatConfig.endpoint,
+      apiKey: chatConfig.apiKey,
+      model: effectiveModel,
+      protocol: chatConfig.protocol,
+    );
+  }
+
+  /// Resolves the ledger LLM timeout from settings.
+  int resolveLedgerTimeout(PipelineSettings settings) {
+    final configured = settings.studioLedgerTimeoutMs;
+    if (configured <= 0) return settings.sidecarTimeoutMs;
+    // Early UI builds edited this value as seconds while the field name stores
+    // milliseconds. Treat small persisted values as seconds to avoid accidental
+    // sub-second Ledger timeouts (for example, 180 should mean 180s).
+    return configured < 1000 ? configured * 1000 : configured;
   }
 
   /// Makes a single non-streaming LLM call and returns the raw text response.

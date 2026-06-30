@@ -24,7 +24,8 @@ class BackupExporter {
   //         Drift table was dropped in DB schema v52. The SharedPreferences
   //         payload ('pipelineSettings' key) is still captured via
   //         preferences.json.
-  static const int _schemaVersion = 7;
+  //   8 — added tracker_rows (live Tracker Values) alongside snapshots.
+  static const int _schemaVersion = 8;
 
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
@@ -189,6 +190,7 @@ class BackupExporter {
       'extension_presets',
       'info_blocks',
       'studio_config_rows',
+      'tracker_rows',
       'tracker_snapshots',
     ];
   }

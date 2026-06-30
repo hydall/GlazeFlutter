@@ -100,7 +100,9 @@ class SyncManifest {
   ///   6 — removed `pipeline_settings` entity type. Pipeline settings are now
   ///         a singleton global in SharedPreferences, no longer synced as a
   ///         per-session Drift collection.
-  static const int currentVersion = 6;
+  ///   7 — added `tracker_value` entries for live `tracker_rows` / Tracker
+  ///         Values, separate from rollback snapshots.
+  static const int currentVersion = 7;
 
   final int version;
   final String deviceId;
@@ -187,6 +189,8 @@ String cloudPath(String type, String id) {
       return '$cloudBase/info_blocks/$id.json';
     case 'tracker_snapshot':
       return '$cloudBase/tracker_snapshots/$id.json';
+    case 'tracker_value':
+      return '$cloudBase/tracker_values/$id.json';
     case 'studio_config':
       return '$cloudBase/studio_configs/$id.json';
     case 'lorebooks':
