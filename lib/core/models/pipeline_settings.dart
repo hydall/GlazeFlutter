@@ -137,6 +137,12 @@ abstract class PipelineSettings with _$PipelineSettings {
     // brief. Only effective for Gemini-protocol endpoints.
     @Default(false) bool studioTrackerDisableReasoning,
 
+    // Context size override for ALL non-final Studio agents (batch and
+    // individual). When > 0, overrides the per-agent contextSize and the
+    // batch MAX-of-all-agents logic. 0 = use per-agent contextSize (default
+    // 5 per agent, batch = max across group).
+    @Default(0) int studioTrackerContextSize,
+
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,
     @Default(0.3) double postCleanerTemperature,

@@ -180,6 +180,8 @@ class MemoryStudioService {
         apiConfig: apiConfig,
         sessionId: sessionId,
       );
+      final trackerContextOverride =
+          _ref.read(pipelineSettingsProvider).studioTrackerContextSize;
       final fetchedResults = await batcher.runPhase(
         batchGroups: grouping.batchGroups,
         individualAgents: grouping.individualAgents,
@@ -191,10 +193,14 @@ class MemoryStudioService {
           apiConfig: apiConfig,
           sessionId: sessionId,
           cancelToken: token,
-          batchContextSize: group.batchContextSize,
+          batchContextSize: trackerContextOverride > 0
+              ? trackerContextOverride
+              : group.batchContextSize,
         ),
         runIndividual: (agent) => _executor.runIndividualTracker(
-          agent: agent,
+          agent: trackerContextOverride > 0
+              ? agent.copyWith(contextSize: trackerContextOverride)
+              : agent,
           config: config,
           promptResult: promptResult,
           promptPayload: promptPayload,
@@ -434,6 +440,8 @@ class MemoryStudioService {
         sessionId: sessionId,
       );
 
+      final trackerContextOverride =
+          _ref.read(pipelineSettingsProvider).studioTrackerContextSize;
       final fetchedResults = await batcher.runPhase(
         batchGroups: grouping.batchGroups,
         individualAgents: grouping.individualAgents,
@@ -445,10 +453,14 @@ class MemoryStudioService {
           apiConfig: apiConfig,
           sessionId: sessionId,
           cancelToken: token,
-          batchContextSize: group.batchContextSize,
+          batchContextSize: trackerContextOverride > 0
+              ? trackerContextOverride
+              : group.batchContextSize,
         ),
         runIndividual: (agent) => _executor.runIndividualTracker(
-          agent: agent,
+          agent: trackerContextOverride > 0
+              ? agent.copyWith(contextSize: trackerContextOverride)
+              : agent,
           config: config,
           promptResult: promptResult,
           promptPayload: promptPayload,

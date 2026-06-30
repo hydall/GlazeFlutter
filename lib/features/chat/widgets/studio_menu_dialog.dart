@@ -1131,6 +1131,8 @@ class _TrackersSection extends ConsumerWidget {
         const SizedBox(height: 4),
         const _StudioTrackerMaxTokensTile(),
         const SizedBox(height: 4),
+        const _StudioTrackerContextSizeTile(),
+        const SizedBox(height: 4),
         const _StudioTrackerTemperatureTile(),
         const SizedBox(height: 4),
         const _StudioTrackerDisableReasoningTile(),
@@ -1298,7 +1300,88 @@ class _StudioTrackerMaxTokensTile extends ConsumerWidget {
   }
 }
 
-/// Temperature override for all Studio trackers (the 7 pre-gen controllers).
+class _StudioTrackerContextSizeTile extends ConsumerWidget {
+  const _StudioTrackerContextSizeTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioTrackerContextSize;
+    final valueText = value == 0
+        ? 'post_building_default_messages'.tr(namedArgs: {'arg0': '5'})
+        : '$value';
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(
+        Icons.history_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
+      title: Text(
+        'post_building_studio_tracker_context_size'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        valueText,
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final controller = TextEditingController(text: '$value');
+        final v = await showDialog<int>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('post_building_studio_tracker_context_size'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'post_building_studio_tracker_context_size_desc'.tr(),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    suffixText: 'msgs',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: Text('common_cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final s = int.tryParse(controller.text.trim());
+                  if (s == null || s < 0) {
+                    Navigator.of(c).pop();
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: Text('common_save'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (v != null) {
+          final updated = pipeline.copyWith(studioTrackerContextSize: v);
+          await ref.read(pipelineSettingsProvider.notifier).save(updated);
+        }
+      },
+    );
+  }
+}
 /// Reads/writes `PipelineSettings.studioTrackerTemperature`. When negative,
 /// the per-agent default (0.3) is used. Lets the user tune the creativity of
 /// all 7 pre-gen agents at once without rebuilding the Studio agents.
