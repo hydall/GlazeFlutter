@@ -1286,11 +1286,6 @@ class GenerationPipeline {
           issues: auditIssues,
           model: _factCheckerModelLabel(pipeline),
         );
-        if (!abortCheck()) {
-          ref.read(postCleanerStateProvider.notifier).state =
-              const PostCleanerState.idle();
-          return;
-        }
         debugPrint(
           '[PostCleaner] audit session=$sessionId '
           'issues=${auditIssues?.length ?? "null(timeout/failed)"}',
@@ -1353,12 +1348,11 @@ class GenerationPipeline {
       },
     );
 
-    if (!abortCheck()) {
-      // Aborted mid-cleaner. The pre-created empty 'cleaned' swipe would be
-      // left dangling — remove it and revert to the parent 'final'. We do
-      // NOT persist partial text on abort (per plan: default delete on
-      // abort). onCleanedChunk early-returns on stale genId, so
-      // _lastStreamedText is empty here.
+    if (result.status == 'aborted') {
+      // Explicit cleaner abort. The pre-created empty 'cleaned' swipe would
+      // be left dangling — remove it and revert to the parent 'final'. Do not
+      // treat a newer chat generation as a cleaner abort: the cleaner result
+      // still belongs to this persisted message/session and must be finalized.
       if (_preCreatedCleanerSwipeId >= 0) {
         try {
           await ref
@@ -1438,13 +1432,14 @@ class GenerationPipeline {
     final chatRepo = ref.read(chatRepoProvider);
 
     if (result.wasCleaned) {
-      final cleanedAgentSwipeId = _preCreatedCleanerSwipeId >= 0
+      var cleanedAgentSwipeId = _preCreatedCleanerSwipeId >= 0
           ? _preCreatedCleanerSwipeId
           : (targetMessage.agentSwipes.isNotEmpty
                 ? targetMessage.agentSwipes.length - 1
                 : 0);
+      var persisted = false;
       if (_preCreatedCleanerSwipeId >= 0) {
-        await chatRepo.updateAgentSwipeContent(
+        persisted = await chatRepo.updateAgentSwipeContent(
           sessionId: sessionId,
           messageId: targetMessage.id,
           agentSwipeId: _preCreatedCleanerSwipeId,
@@ -1452,9 +1447,18 @@ class GenerationPipeline {
           genTime: genTime,
           tokens: estimateTokens(result.cleanedText),
         );
-      } else {
+      }
+      if (!persisted) {
+        if (_preCreatedCleanerSwipeId >= 0) {
+          await chatRepo.removeAgentSwipe(
+            sessionId: sessionId,
+            messageId: targetMessage.id,
+            agentSwipeId: _preCreatedCleanerSwipeId,
+          );
+        }
         // Pre-create failed earlier — fall back to the legacy append path so
-        // the user still gets a 'cleaned' swipe.
+        // the user still gets a 'cleaned' swipe. Also covers the race where
+        // another session write invalidated the pre-created swipe id.
         await cleanerService.applyCleanedText(
           sessionId: sessionId,
           messageId: targetMessage.id,
@@ -1462,6 +1466,12 @@ class GenerationPipeline {
           genTime: genTime,
           tokens: estimateTokens(result.cleanedText),
         );
+        final postFallback = await chatRepo.getById(sessionId);
+        final postFallbackMsg = postFallback?.messages
+            .where((m) => m.id == targetMessage.id)
+            .firstOrNull;
+        cleanedAgentSwipeId =
+            postFallbackMsg?.agentSwipeId ?? cleanedAgentSwipeId;
       }
       // Launch extension blocks bound to the NEW cleaned swipe. Extensions
       // were deferred in _runPostTextSide when the cleaner is enabled, so
@@ -1476,6 +1486,27 @@ class GenerationPipeline {
             session: refreshed,
             character: character,
             agentSwipeId: cleanedAgentSwipeId,
+          );
+        }
+      }
+    } else if (result.status == 'ok') {
+      // Cleaner completed but decided the original text is already canonical.
+      // Drop the pre-created empty cleaned swipe instead of leaving a visible
+      // 2/2 blank swipe or duplicating the original as a no-op cleaned swipe.
+      if (_preCreatedCleanerSwipeId >= 0) {
+        await chatRepo.removeAgentSwipe(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          agentSwipeId: _preCreatedCleanerSwipeId,
+        );
+      }
+      if (character != null && ref.mounted) {
+        final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await _launchExtensionsForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: -1,
           );
         }
       }
@@ -1569,8 +1600,10 @@ class GenerationPipeline {
     // as isTyping. The chatHistoryProvider invalidate below pushes the
     // finalized message (with the new cleaned swipe) to the WebView.
     if (ref.mounted) {
-      ref.read(streamingStateProvider(charId).notifier).state =
-          const StreamingState();
+      if (abortHandler.isCurrentGen(genId)) {
+        ref.read(streamingStateProvider(charId).notifier).state =
+            const StreamingState();
+      }
     }
 
     // Refresh ChatNotifier state so the UI picks up the new swipe
@@ -1586,10 +1619,17 @@ class GenerationPipeline {
         refreshedMessages = refreshed.messages;
         ChatSessionService.updateCache(refreshed);
         final current = getState().value;
-        if (current != null) {
+        if (current != null &&
+            current.session?.id == sessionId &&
+            (!current.isGenerating || abortHandler.isCurrentGen(genId))) {
           setState(
             AsyncData(
-              current.copyWith(session: refreshed, isGenerating: false),
+              current.copyWith(
+                session: refreshed,
+                isGenerating: abortHandler.isCurrentGen(genId)
+                    ? false
+                    : current.isGenerating,
+              ),
             ),
           );
         }
