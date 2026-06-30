@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/api_config.dart';
 import '../models/studio_config.dart';
+import '../state/pipeline_settings_provider.dart';
 import '../utils/error_format.dart';
 import 'agent_runner.dart';
 import 'prompt_builder.dart';
@@ -218,6 +219,8 @@ class StudioAgentExecutor {
       config: config,
       priorBriefs: priorBriefs,
       isFinalResponse: true,
+      finalContextOverride:
+          _ref.read(pipelineSettingsProvider).studioFinalContextSize,
     );
     final runner = _ref.read(agentRunnerProvider);
     final result = await runner.runAgent(

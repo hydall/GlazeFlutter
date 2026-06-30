@@ -1738,6 +1738,8 @@
     "post_building_studio_timeout_desc": "Idle-таймаут до прихода любого чанка (текста или рассуждения). Как только модель отдаёт первый чанк, таймер отменяется и агент работает до завершения. 0 = по умолчанию (генератор 90с, трекеры 60с).",
     "post_building_studio_max_tokens": "Лимит токенов генератора",
     "post_building_studio_max_tokens_desc": "Бюджет токенов для Main Responder. Увеличите для моделей с рассуждениями (напр. Gemini), которые тратят бюджет на размышления и оставляют мало для ответа. 0 = по умолчанию (8000).",
+    "post_building_studio_final_context_size": "Контекст финального агента",
+    "post_building_studio_final_context_size_desc": "Кол-во сообщений истории для Main Responder. 0 = дефолт Studio (15).",
     "post_building_studio_temperature": "Температура генератора",
     "post_building_studio_temperature_desc": "Температура для Main Responder. Повысьте для более креативного/разнообразного текста, понизьте для более детерминированных ответов. Отрицательное значение = по умолчанию агента (0.8).",
     "post_building_studio_disable_reasoning": "Отключить reasoning (финал)",

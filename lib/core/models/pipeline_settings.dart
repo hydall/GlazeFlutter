@@ -103,6 +103,10 @@ abstract class PipelineSettings with _$PipelineSettings {
     // (e.g. Gemini) that spend most of the budget on thinking and leave too
     // little for the actual reply. 0 = use the agent's own maxTokens.
     @Default(0) int studioFinalMaxTokens,
+    // Chat history messages override for the Studio final generator (Main
+    // Responder). When > 0, overrides StudioConfig.maxFinalHistoryMessages.
+    // 0 = use per-session StudioConfig default (15).
+    @Default(0) int studioFinalContextSize,
     // Temperature for the Studio final generator (Main Responder). When
     // >= 0, overrides the per-agent default (0.8 for the final agent, 0.3
     // for trackers). Negative = use the agent's own temperature.

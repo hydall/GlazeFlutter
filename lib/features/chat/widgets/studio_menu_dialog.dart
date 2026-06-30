@@ -859,6 +859,89 @@ class _StudioMaxTokensTile extends ConsumerWidget {
   }
 }
 
+class _StudioFinalContextSizeTile extends ConsumerWidget {
+  const _StudioFinalContextSizeTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final value = pipeline.studioFinalContextSize;
+    final valueText = value == 0
+        ? 'post_building_default_messages'.tr(namedArgs: {'arg0': '15'})
+        : '$value';
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(
+        Icons.history_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
+      title: Text(
+        'post_building_studio_final_context_size'.tr(),
+        style: tt.bodyMedium,
+      ),
+      subtitle: Text(
+        '$valueText — ${'post_building_studio_final_context_size_desc'.tr()}',
+        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.edit_outlined, size: 18),
+      onTap: () async {
+        final controller = TextEditingController(text: '$value');
+        final v = await showDialog<int>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('post_building_studio_final_context_size'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'post_building_studio_final_context_size_desc'.tr(),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    suffixText: 'msgs',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: Text('common_cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final s = int.tryParse(controller.text.trim());
+                  if (s == null || s < 0) {
+                    Navigator.of(c).pop();
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: Text('common_save'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (v != null) {
+          final updated = pipeline.copyWith(studioFinalContextSize: v);
+          await ref.read(pipelineSettingsProvider.notifier).save(updated);
+        }
+      },
+    );
+  }
+}
+
 /// Temperature override for the Studio final generator (Main Responder).
 /// Reads/writes `PipelineSettings.studioFinalTemperature`. When negative,
 /// the per-agent default (0.8) is used. Lets the user raise/lower the
@@ -1204,6 +1287,8 @@ class _FinalizerSection extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         const _StudioMaxTokensTile(),
+        const SizedBox(height: 4),
+        const _StudioFinalContextSizeTile(),
         const SizedBox(height: 4),
         const _StudioTemperatureTile(),
         const SizedBox(height: 4),
