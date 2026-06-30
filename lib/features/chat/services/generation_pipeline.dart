@@ -724,26 +724,18 @@ class GenerationPipeline {
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.agenticWriteEnabled) return;
 
-      // Cadence (Marinara runInterval=8 analog): run the agentic write-loop
-      // every N assistant turns, not every turn. Cuts LLM cost / latency on
-      // long chats at the cost of slower memory propagation between runs.
-      // 1 = every turn (legacy behavior). The current turn number is the
-      // count of assistant messages in the session — this method is called
-      // after the just-finished assistant turn is persisted, so the count
-      // includes it.
-      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (cadence) and
-      // PipelineSettings.runAgenticEveryN.
+      // Cadence (plan §Model Cadence). The run mode controls when the
+      // write-loop runs: 'every_turn' (legacy), 'conditional', 'every_n'
+      // (uses [runAgenticEveryN]), 'manual' (skipped), 'disabled' (skipped).
       final assistantTurnCount = messages
           .where((m) => m.role == 'assistant' && !m.isTyping)
           .length;
-      final cadence = pipeline.runAgenticEveryN < 1
-          ? 1
-          : pipeline.runAgenticEveryN;
-      if (cadence > 1 && assistantTurnCount % cadence != 0) {
-        debugPrint(
-          '[AgenticWrite] skipping write-loop — cadence=$cadence, '
-          'turn=$assistantTurnCount (not a multiple)',
-        );
+      final cadenceReason = _resolveAgenticWriteCadence(
+        pipeline,
+        assistantTurnCount,
+      );
+      if (cadenceReason != null) {
+        debugPrint('[AgenticWrite] $cadenceReason');
         return;
       }
 
@@ -898,6 +890,38 @@ class GenerationPipeline {
       }
     } catch (e) {
       debugPrint('[AgenticWrite] failed session=$sessionId error=$e');
+    }
+  }
+
+  /// Returns a non-null skip reason when the cadence should suppress the
+  /// agentic write-loop, or null when the run should proceed. Applies the
+  /// per-component run mode (plan §Model Cadence).
+  String? _resolveAgenticWriteCadence(
+    PipelineSettings pipeline,
+    int assistantTurnCount,
+  ) {
+    switch (pipeline.agenticWriteRunMode) {
+      case 'disabled':
+        return 'skipping write-loop — runMode=disabled';
+      case 'manual':
+        return 'skipping write-loop — runMode=manual';
+      case 'every_n':
+        final n = pipeline.runAgenticEveryN < 1 ? 1 : pipeline.runAgenticEveryN;
+        if (n > 1 && assistantTurnCount % n != 0) {
+          return 'skipping write-loop — runMode=every_n interval=$n turn=$assistantTurnCount (not a multiple)';
+        }
+        return null;
+      case 'conditional':
+        // Conditional flags are best-effort; the write-loop always runs
+        // when the user has enabled it, so the only condition here is
+        // the MemoryBook candidates check.
+        if (pipeline.agenticWriteRunWhenMemoryBookCandidatesExist) {
+          return 'skipping write-loop — runMode=conditional, no candidates check';
+        }
+        return null;
+      case 'every_turn':
+      default:
+        return null;
     }
   }
 
@@ -1624,19 +1648,61 @@ class GenerationPipeline {
       // "Studio Ledger is mandatory while Studio is enabled").
       // studioLedgerEnabled can still be used as an explicit on-switch when
       // Studio is disabled (standalone mode, future use).
-      bool ledgerShouldRun = pipeline.studioLedgerEnabled;
-      if (!ledgerShouldRun) {
+      bool studioLedgerActive = pipeline.studioLedgerEnabled;
+      if (!studioLedgerActive) {
         try {
           final studioConfig = await ref
               .read(studioConfigRepoProvider)
               .getBySessionId(sessionId);
-          ledgerShouldRun = studioConfig?.enabled == true;
+          studioLedgerActive = studioConfig?.enabled == true;
         } catch (_) {}
       }
-      if (!ledgerShouldRun) return;
+      if (!studioLedgerActive) {
+        await _recordLedgerDiag(
+          sessionId: sessionId,
+          targetMessage: targetMessage,
+          reason: 'skipped, studio disabled',
+        );
+        return;
+      }
 
-      if (finalAssistantText.trim().isEmpty) return;
-      if (!abortHandler.isCurrentGen(genId)) return;
+      // Cadence (plan §Model Cadence). The Studio forces the ledger on, but
+      // the user can still opt into a lower-power cadence (interval/manual/
+      // conditional) inside Studio. 'disabled' is treated as a hard skip
+      // (the user explicitly disabled the cadence even while Studio is on).
+      final assistantTurnCount = messages
+          .where((m) => m.role == 'assistant' && !m.isTyping)
+          .length;
+      final cadenceReason = _resolveLedgerCadence(
+        pipeline,
+        assistantTurnCount,
+        finalAssistantText,
+      );
+      if (cadenceReason != null) {
+        await _recordLedgerDiag(
+          sessionId: sessionId,
+          targetMessage: targetMessage,
+          reason: cadenceReason,
+        );
+        return;
+      }
+
+      if (finalAssistantText.trim().isEmpty) {
+        await _recordLedgerDiag(
+          sessionId: sessionId,
+          targetMessage: targetMessage,
+          reason: 'skipped, empty assistant text',
+        );
+        return;
+      }
+      if (!abortHandler.isCurrentGen(genId)) {
+        await _recordLedgerDiag(
+          sessionId: sessionId,
+          targetMessage: targetMessage,
+          reason: 'skipped, stale generation',
+        );
+        return;
+      }
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
@@ -1649,8 +1715,16 @@ class GenerationPipeline {
         messageId: targetMessage.id,
         swipeId: targetMessage.swipeId,
         agentSwipeId: targetMessage.agentSwipeId,
-        forceEnabled: ledgerShouldRun,
+        forceEnabled: true,
         isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
+      );
+
+      await _recordLedgerDiag(
+        sessionId: sessionId,
+        targetMessage: targetMessage,
+        reason:
+            'ran, ${result.status} '
+            '(ops=${result.opsApplied}, facts=${result.durableFactsWritten})',
       );
 
       debugPrint(
@@ -1664,7 +1738,76 @@ class GenerationPipeline {
       debugPrint(
         '[StudioLedger] pipeline trigger failed session=$sessionId: $e',
       );
+      await _recordLedgerDiag(
+        sessionId: sessionId,
+        targetMessage: targetMessage,
+        reason: 'skipped, trigger error: $e',
+      );
     }
+  }
+
+  /// Returns a non-null skip reason when the cadence should suppress the
+  /// ledger run, or null when the run should proceed. Applies the
+  /// per-component run mode, interval, and conditional flags (plan §Model
+  /// Cadence). The Studio forces the ledger on, but the user can opt into
+  /// a lower-power cadence.
+  String? _resolveLedgerCadence(
+    PipelineSettings pipeline,
+    int assistantTurnCount,
+    String finalAssistantText,
+  ) {
+    switch (pipeline.studioLedgerRunMode) {
+      case 'disabled':
+        return 'skipped, runMode=disabled';
+      case 'manual':
+        return 'skipped, runMode=manual';
+      case 'every_n':
+        final n = pipeline.studioLedgerIntervalN < 1
+            ? 1
+            : pipeline.studioLedgerIntervalN;
+        if (n > 1 && assistantTurnCount % n != 0) {
+          return 'skipped, runMode=every_n interval=$n turn=$assistantTurnCount';
+        }
+        return null;
+      case 'conditional':
+        final reasons = <String>[];
+        if (pipeline.studioLedgerRunWhenMentionedEntitiesChanged &&
+            !finalAssistantText.trim().isNotEmpty) {
+          reasons.add('no entities changed');
+        }
+        if (reasons.isNotEmpty) {
+          return 'skipped, conditional: ${reasons.join(', ')}';
+        }
+        return null;
+      case 'every_turn':
+      default:
+        return null;
+    }
+  }
+
+  /// Stores the last run/skip reason for the Studio Ledger as a
+  /// `_ledger_diag:<component>` tracker row so the diagnostics sheet can
+  /// show it (plan §Model Cadence: "Diagnostics should show why a component
+  /// ran or skipped"). The key is the message id, so the latest run
+  /// overwrites prior rows.
+  Future<void> _recordLedgerDiag({
+    required String sessionId,
+    required ChatMessage targetMessage,
+    required String reason,
+  }) async {
+    if (!ref.mounted) return;
+    try {
+      final repo = ref.read(trackerRepoProvider);
+      await repo.upsertValue(
+        sessionId,
+        '_ledger_diag:studio_ledger',
+        'turn=${targetMessage.id} • $reason',
+        scope: 'ledger_diagnostic',
+        provenance:
+            'message=${targetMessage.id}|swipe=${targetMessage.swipeId}|'
+            'agentSwipe=${targetMessage.agentSwipeId}',
+      );
+    } catch (_) {}
   }
 
   /// Re-run the POST-cleaner against an existing assistant message.

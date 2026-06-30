@@ -123,6 +123,8 @@ class _PostBuildingMenuDialogState
               const SizedBox(height: 8),
               _LedgerSection(pipeline: _pipeline, onSaved: _savePipeline),
               const SizedBox(height: 8),
+              _CadenceSection(pipeline: _pipeline, onSaved: _savePipeline),
+              const SizedBox(height: 8),
               _WriteLoopSection(
                 pipeline: _pipeline,
                 onSaved: _savePipeline,
@@ -506,18 +508,20 @@ class _LedgerSection extends StatelessWidget {
             'non-Studio generations.',
           ),
           value: pipeline.studioLedgerEnabled,
-          onChanged: (v) =>
-              onSaved((p) => p.copyWith(studioLedgerEnabled: v)),
+          onChanged: (v) => onSaved((p) => p.copyWith(studioLedgerEnabled: v)),
         ),
         const SizedBox(height: 4),
-        Text(
+        _HelperText(
           'Extracts compact canon state after each final assistant response. '
-          'Medium models are recommended. Cheap models may work, but bad '
-          'output is rejected by schema validation and may reduce continuity.',
-          style: TextStyle(
-            fontSize: 11,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          'Medium models are recommended. Cheap models may work, but bad output '
+          'is rejected by schema validation and may reduce continuity.',
+        ),
+        const SizedBox(height: 4),
+        _HelperText(
+          'Model: empty = inherit sidecar model. '
+          'Timeout: 0 = inherit sidecar timeout. '
+          'Max tokens: 0 = use default structured-output budget (2000). '
+          'Temperature: negative = use default 0.2.',
         ),
         const SizedBox(height: 8),
         _PipelineModelSelector(
@@ -550,9 +554,7 @@ class _LedgerSection extends StatelessWidget {
                   ? null
                   : pipeline.studioLedgerTimeoutMs,
             );
-            await onSaved(
-              (p) => p.copyWith(studioLedgerTimeoutMs: v ?? 0),
-            );
+            await onSaved((p) => p.copyWith(studioLedgerTimeoutMs: v ?? 0));
           },
         ),
         _NumberTile(
@@ -569,9 +571,7 @@ class _LedgerSection extends StatelessWidget {
                   ? null
                   : pipeline.studioLedgerMaxTokens,
             );
-            await onSaved(
-              (p) => p.copyWith(studioLedgerMaxTokens: v ?? 0),
-            );
+            await onSaved((p) => p.copyWith(studioLedgerMaxTokens: v ?? 0));
           },
         ),
         _NumberTile(
@@ -596,6 +596,202 @@ class _LedgerSection extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+/// Per-component cadence settings (plan §Model Cadence).
+///
+/// Shows the Run mode, interval, and conditional flags for the Studio Ledger
+/// and the Agentic write-loop. When a component is set to interval/manual,
+/// the UI warns that long-term continuity may be weaker.
+class _CadenceSection extends StatelessWidget {
+  final PipelineSettings pipeline;
+  final PipelineSaver onSaved;
+
+  const _CadenceSection({required this.pipeline, required this.onSaved});
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      icon: Icons.schedule_outlined,
+      titleKey: 'Cadence',
+      subtitleKey:
+          'Per-component run cadence (every turn / conditional / every N / manual / disabled)',
+      children: [
+        _CadenceBlock(
+          label: 'Studio Ledger',
+          helperText:
+              'Default every turn. Interval/manual weakens continuity '
+              'and card-hook suppression. Studio forces it on regardless of '
+              'this setting, but the user can opt into a lower-power cadence.',
+          runMode: pipeline.studioLedgerRunMode,
+          interval: pipeline.studioLedgerIntervalN,
+          blockNextGen: pipeline.studioLedgerBlockNextGen,
+          onRunModeChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerRunMode: v)),
+          onIntervalChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerIntervalN: v)),
+          onBlockNextGenChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerBlockNextGen: v)),
+        ),
+        const Divider(height: 24),
+        _CadenceBlock(
+          label: 'Agentic write-loop',
+          helperText:
+              'Default every turn. Interval/manual slows memory '
+              'propagation. Use every N assistant turns for cost savings.',
+          runMode: pipeline.agenticWriteRunMode,
+          interval: pipeline.runAgenticEveryN,
+          blockNextGen: pipeline.agenticWriteBlockNextGen,
+          onRunModeChanged: (v) =>
+              onSaved((p) => p.copyWith(agenticWriteRunMode: v)),
+          onIntervalChanged: (v) =>
+              onSaved((p) => p.copyWith(runAgenticEveryN: v)),
+          onBlockNextGenChanged: (v) =>
+              onSaved((p) => p.copyWith(agenticWriteBlockNextGen: v)),
+        ),
+      ],
+    );
+  }
+}
+
+/// One component's cadence block. Shows the run mode, interval (when
+/// runMode == 'every_n'), and a "Block next generation" toggle.
+class _CadenceBlock extends StatelessWidget {
+  final String label;
+  final String helperText;
+  final String runMode;
+  final int interval;
+  final bool blockNextGen;
+  final Future<void> Function(String) onRunModeChanged;
+  final Future<void> Function(int) onIntervalChanged;
+  final Future<void> Function(bool) onBlockNextGenChanged;
+
+  const _CadenceBlock({
+    required this.label,
+    required this.helperText,
+    required this.runMode,
+    required this.interval,
+    required this.blockNextGen,
+    required this.onRunModeChanged,
+    required this.onIntervalChanged,
+    required this.onBlockNextGenChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: tt.titleSmall),
+        const SizedBox(height: 4),
+        _HelperText(helperText),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'every_turn', label: Text('Every turn')),
+            ButtonSegment(value: 'every_n', label: Text('Every N')),
+            ButtonSegment(value: 'conditional', label: Text('Conditional')),
+            ButtonSegment(value: 'manual', label: Text('Manual')),
+            ButtonSegment(value: 'disabled', label: Text('Disabled')),
+          ],
+          selected: {runMode},
+          onSelectionChanged: (s) => onRunModeChanged(s.first),
+        ),
+        if (runMode == 'every_n') ...[
+          const SizedBox(height: 8),
+          _NumberTile(
+            label: 'Interval (assistant turns)',
+            valueText: '$interval',
+            subtitleKey: 'Run every N assistant turns',
+            onTap: (ctx) async {
+              final v = await _editInt(
+                ctx: ctx,
+                title: 'Interval',
+                value: interval,
+                min: 1,
+                max: 100,
+              );
+              if (v != null) {
+                await onIntervalChanged(v);
+              }
+            },
+          ),
+        ],
+        if (runMode == 'manual' ||
+            runMode == 'disabled' ||
+            runMode == 'every_n') ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.warning_amber_outlined, size: 14, color: cs.tertiary),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Lower cadence may weaken long-term continuity and '
+                  'card-hook suppression.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: cs.tertiary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 8),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text('Block next generation'),
+          subtitle: Text(
+            'When true, block the next user-message generation until the '
+            '$label finishes (or times out). Default false = fire-and-forget.',
+            style: tt.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontSize: 11,
+            ),
+          ),
+          value: blockNextGen,
+          onChanged: (v) => onBlockNextGenChanged(v),
+        ),
+      ],
+    );
+  }
+}
+
+/// Helper text for a model field. Shows the italic, tertiary-colored hint.
+class _HelperText extends StatelessWidget {
+  final String text;
+
+  const _HelperText(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lightbulb_outline, size: 13, color: cs.tertiary),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+                color: cs.tertiary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

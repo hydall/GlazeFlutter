@@ -1419,6 +1419,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                               disableEffects:
                                   batterySaver &&
                                   widget.drawerCtrl.isDrawerAnimating,
+                              onScrollToMessage: (id) =>
+                                  _scrollToTargetMessage(id),
                             ),
                     ),
                   Positioned(

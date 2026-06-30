@@ -137,28 +137,80 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
       final proceed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Not recommended with Studio Canon'),
-          content: const Text(
-            'User InfBlocks can conflict with Studio Canon State and may cause '
-            'duplicated, stale, or lower-authority facts to enter the prompt. '
-            'Studio Canon already tracks scene, entity, relationship, arc, and '
-            'world state.\n\n'
-            'Recommended: keep user InfBlocks visible in panels only.\n\n'
-            'Allowed alternatives: image generation services, JS runner tools, '
-            'and manual panel workflows.\n\n'
-            'Continue anyway?',
+        builder: (ctx) => Dialog(
+          insetPadding: EdgeInsets.zero,
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text('Not recommended with Studio Canon'),
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(ctx).pop(false),
+              ),
+            ),
+            body: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 48,
+                      color: Theme.of(ctx).colorScheme.tertiary,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'User InfBlocks can conflict with Studio Canon State and may '
+                      'cause duplicated, stale, or lower-authority facts to enter '
+                      'the prompt. Studio Canon already tracks scene, entity, '
+                      'relationship, arc, and world state.',
+                      style: TextStyle(fontSize: 14, height: 1.5),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Recommended: keep user InfBlocks visible in panels only.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Allowed alternatives: image generation services, JS runner '
+                      'tools, and manual panel workflows.',
+                      style: TextStyle(fontSize: 14, height: 1.5),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'If you continue, user InfBlocks will be injected only as '
+                      'low-authority hints. They must never outrank Studio Canon '
+                      'State.',
+                      style: TextStyle(fontSize: 14, height: 1.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            bottomNavigationBar: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: Text('common_cancel'.tr()),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('Continue anyway'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text('common_cancel'.tr()),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Continue anyway'),
-            ),
-          ],
         ),
       );
       if (proceed != true) return;

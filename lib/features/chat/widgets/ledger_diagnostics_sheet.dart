@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/db/repositories/tracker_repo.dart';
 import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
 
@@ -16,19 +17,41 @@ import '../../../core/state/db_provider.dart';
 ///   - canon_override:* — user manual overrides
 ///   - canon_lock:*     — user locks (prevent ledger writes)
 ///   - _ledger:*        — raw visible ledger diagnostic blobs
+///   - _ledger_diag:*   — last run/skip reason per component
+///
+/// Each row supports:
+///   - edit value (inline)
+///   - lock (creates canon_lock:<key>=true)
+///   - unlock (removes canon_lock:<key>)
+///   - override (creates canon_override:<key>)
+///   - reset (removes canon_override:<key> only)
+///   - delete
+///   - source-message navigation (when [onScrollToMessage] is provided)
 ///
 /// Opened from [StudioMenuDialog] via the "Ledger State" button.
 class LedgerDiagnosticsSheet extends ConsumerStatefulWidget {
   final String sessionId;
+  final Future<void> Function(String messageId)? onScrollToMessage;
 
-  const LedgerDiagnosticsSheet({super.key, required this.sessionId});
+  const LedgerDiagnosticsSheet({
+    super.key,
+    required this.sessionId,
+    this.onScrollToMessage,
+  });
 
-  static Future<void> show(BuildContext context, {required String sessionId}) {
+  static Future<void> show(
+    BuildContext context, {
+    required String sessionId,
+    Future<void> Function(String messageId)? onScrollToMessage,
+  }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => LedgerDiagnosticsSheet(sessionId: sessionId),
+      builder: (_) => LedgerDiagnosticsSheet(
+        sessionId: sessionId,
+        onScrollToMessage: onScrollToMessage,
+      ),
     );
   }
 
@@ -51,7 +74,6 @@ class _LedgerDiagnosticsSheetState
   Future<void> _load() async {
     final repo = ref.read(trackerRepoProvider);
     final all = await repo.getBySessionId(widget.sessionId);
-    // Only show ledger-scoped rows.
     final ledger =
         all
             .where(
@@ -83,7 +105,6 @@ class _LedgerDiagnosticsSheetState
       builder: (context, scrollController) {
         return Column(
           children: [
-            // Handle bar
             Padding(
               padding: const EdgeInsets.only(top: 10, bottom: 4),
               child: Container(
@@ -95,7 +116,6 @@ class _LedgerDiagnosticsSheetState
                 ),
               ),
             ),
-            // Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
@@ -125,7 +145,6 @@ class _LedgerDiagnosticsSheetState
               ),
             ),
             const Divider(height: 1),
-            // Body
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
@@ -153,6 +172,7 @@ class _LedgerDiagnosticsSheetState
                       scrollController: scrollController,
                       onDeleted: _load,
                       sessionId: widget.sessionId,
+                      onScrollToMessage: widget.onScrollToMessage,
                     ),
             ),
           ],
@@ -167,17 +187,19 @@ class _LedgerRowList extends ConsumerWidget {
   final ScrollController scrollController;
   final VoidCallback onDeleted;
   final String sessionId;
+  final Future<void> Function(String messageId)? onScrollToMessage;
 
   const _LedgerRowList({
     required this.rows,
     required this.scrollController,
     required this.onDeleted,
     required this.sessionId,
+    this.onScrollToMessage,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Group by section.
+    final diag = rows.where((t) => t.name.startsWith('_ledger_diag:')).toList();
     final npc = rows.where((t) => t.name.startsWith('npc:')).toList();
     final rel = rows.where((t) => t.name.startsWith('relationship:')).toList();
     final arc = rows.where((t) => t.name.startsWith('arc:')).toList();
@@ -187,45 +209,85 @@ class _LedgerRowList extends ConsumerWidget {
         .where((t) => t.name.startsWith('canon_override:'))
         .toList();
     final locks = rows.where((t) => t.name.startsWith('canon_lock:')).toList();
-    final diag = rows.where((t) => t.name.startsWith('_ledger:')).toList();
+    final diagBlob = rows.where((t) => t.name.startsWith('_ledger:')).toList();
 
     return ListView(
       controller: scrollController,
       padding: const EdgeInsets.only(bottom: 24),
       children: [
+        if (diag.isNotEmpty) ...[
+          _sectionHeader(
+            context,
+            Icons.history_outlined,
+            'Run / Skip Diagnostics',
+          ),
+          ...diag.map(
+            (t) => _DiagTile(t: t, onScrollToMessage: onScrollToMessage),
+          ),
+        ],
         if (npc.isNotEmpty) ...[
           _sectionHeader(context, Icons.person_outline, 'Entity State (NPC)'),
           ...npc.map(
-            (t) =>
-                _TrackerTile(t: t, sessionId: sessionId, onDeleted: onDeleted),
+            (t) => _TrackerTile(
+              t: t,
+              sessionId: sessionId,
+              onDeleted: onDeleted,
+              locks: locks,
+              overrides: overrides,
+              onScrollToMessage: onScrollToMessage,
+            ),
           ),
         ],
         if (rel.isNotEmpty) ...[
           _sectionHeader(context, Icons.people_outline, 'Relationship State'),
           ...rel.map(
-            (t) =>
-                _TrackerTile(t: t, sessionId: sessionId, onDeleted: onDeleted),
+            (t) => _TrackerTile(
+              t: t,
+              sessionId: sessionId,
+              onDeleted: onDeleted,
+              locks: locks,
+              overrides: overrides,
+              onScrollToMessage: onScrollToMessage,
+            ),
           ),
         ],
         if (arc.isNotEmpty) ...[
           _sectionHeader(context, Icons.timeline_outlined, 'Arc State'),
           ...arc.map(
-            (t) =>
-                _TrackerTile(t: t, sessionId: sessionId, onDeleted: onDeleted),
+            (t) => _TrackerTile(
+              t: t,
+              sessionId: sessionId,
+              onDeleted: onDeleted,
+              locks: locks,
+              overrides: overrides,
+              onScrollToMessage: onScrollToMessage,
+            ),
           ),
         ],
         if (world.isNotEmpty) ...[
           _sectionHeader(context, Icons.public_outlined, 'World State'),
           ...world.map(
-            (t) =>
-                _TrackerTile(t: t, sessionId: sessionId, onDeleted: onDeleted),
+            (t) => _TrackerTile(
+              t: t,
+              sessionId: sessionId,
+              onDeleted: onDeleted,
+              locks: locks,
+              overrides: overrides,
+              onScrollToMessage: onScrollToMessage,
+            ),
           ),
         ],
         if (scene.isNotEmpty) ...[
           _sectionHeader(context, Icons.theaters_outlined, 'Scene State'),
           ...scene.map(
-            (t) =>
-                _TrackerTile(t: t, sessionId: sessionId, onDeleted: onDeleted),
+            (t) => _TrackerTile(
+              t: t,
+              sessionId: sessionId,
+              onDeleted: onDeleted,
+              locks: locks,
+              overrides: overrides,
+              onScrollToMessage: onScrollToMessage,
+            ),
           ),
         ],
         if (overrides.isNotEmpty) ...[
@@ -235,7 +297,10 @@ class _LedgerRowList extends ConsumerWidget {
               t: t,
               sessionId: sessionId,
               onDeleted: onDeleted,
+              locks: locks,
+              overrides: overrides,
               accent: Colors.orange,
+              onScrollToMessage: onScrollToMessage,
             ),
           ),
         ],
@@ -246,22 +311,27 @@ class _LedgerRowList extends ConsumerWidget {
               t: t,
               sessionId: sessionId,
               onDeleted: onDeleted,
+              locks: locks,
+              overrides: overrides,
               accent: Colors.red,
             ),
           ),
         ],
-        if (diag.isNotEmpty) ...[
+        if (diagBlob.isNotEmpty) ...[
           _sectionHeader(
             context,
             Icons.biotech_outlined,
             'Raw Visible Ledger (Diagnostic)',
           ),
-          ...diag.map(
+          ...diagBlob.map(
             (t) => _TrackerTile(
               t: t,
               sessionId: sessionId,
               onDeleted: onDeleted,
+              locks: locks,
+              overrides: overrides,
               isLongValue: true,
+              onScrollToMessage: onScrollToMessage,
             ),
           ),
         ],
@@ -291,31 +361,54 @@ class _LedgerRowList extends ConsumerWidget {
   }
 }
 
-class _TrackerTile extends ConsumerWidget {
+class _TrackerTile extends ConsumerStatefulWidget {
   final Tracker t;
   final String sessionId;
   final VoidCallback onDeleted;
+  final List<Tracker> locks;
+  final List<Tracker> overrides;
   final Color? accent;
   final bool isLongValue;
+  final Future<void> Function(String messageId)? onScrollToMessage;
 
   const _TrackerTile({
     required this.t,
     required this.sessionId,
     required this.onDeleted,
+    required this.locks,
+    required this.overrides,
     this.accent,
     this.isLongValue = false,
+    this.onScrollToMessage,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_TrackerTile> createState() => _TrackerTileState();
+}
+
+class _TrackerTileState extends ConsumerState<_TrackerTile> {
+  bool get _isCanonLock => widget.t.name.startsWith('canon_lock:');
+  bool get _isCanonOverride => widget.t.name.startsWith('canon_override:');
+
+  bool get _isLocked =>
+      widget.locks.any((l) => l.name == 'canon_lock:${widget.t.name}');
+
+  String? get _messageIdFromProvenance {
+    final match = RegExp(r'message=([^|]+)').firstMatch(widget.t.provenance);
+    return match?.group(1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final effectiveAccent = accent ?? cs.onSurfaceVariant;
+    final effectiveAccent = widget.accent ?? cs.onSurfaceVariant;
+    final repo = ref.read(trackerRepoProvider);
 
     return ListTile(
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       title: Text(
-        t.name,
+        widget.t.name,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
@@ -323,31 +416,101 @@ class _TrackerTile extends ConsumerWidget {
           fontFamily: 'monospace',
         ),
       ),
-      subtitle: isLongValue
-          ? GestureDetector(
-              onTap: () => _showFullValue(context, t),
-              child: _TrackerValue(t: t, isLongValue: true),
-            )
-          : _TrackerValue(t: t),
+      subtitle: _TrackerValue(t: widget.t, isLongValue: widget.isLongValue),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Edit (only for canon rows, not for lock/override rows)
+          if (!_isCanonLock && !_isCanonOverride)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Edit value',
+              onPressed: () => _editValue(context, repo),
+            ),
+          // Lock/unlock (only for canon rows)
+          if (!_isCanonLock && !_isCanonOverride)
+            IconButton(
+              icon: Icon(
+                _isLocked ? Icons.lock : Icons.lock_open_outlined,
+                size: 16,
+                color: _isLocked ? Colors.red : null,
+              ),
+              visualDensity: VisualDensity.compact,
+              tooltip: _isLocked ? 'Unlock' : 'Lock (prevent ledger writes)',
+              onPressed: () async {
+                final lockKey = 'canon_lock:${widget.t.name}';
+                if (_isLocked) {
+                  await repo.delete(widget.sessionId, lockKey);
+                } else {
+                  await repo.upsertValue(
+                    widget.sessionId,
+                    lockKey,
+                    'true',
+                    scope: 'ledger',
+                  );
+                }
+                widget.onDeleted();
+              },
+            ),
+          // Override (only for canon rows, not for override rows)
+          if (!_isCanonLock && !_isCanonOverride)
+            IconButton(
+              icon: const Icon(
+                Icons.edit_outlined,
+                size: 16,
+                color: Colors.orange,
+              ),
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Create manual override',
+              onPressed: () => _createOverride(context, repo),
+            ),
+          // Reset (only for override rows) — removes the override
+          if (_isCanonOverride)
+            IconButton(
+              icon: const Icon(
+                Icons.restart_alt,
+                size: 16,
+                color: Colors.orange,
+              ),
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Reset (remove override)',
+              onPressed: () async {
+                await repo.delete(widget.sessionId, widget.t.name);
+                widget.onDeleted();
+              },
+            ),
+          // Source-message navigation
+          if (widget.onScrollToMessage != null &&
+              _messageIdFromProvenance != null)
+            IconButton(
+              icon: const Icon(Icons.location_on_outlined, size: 16),
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Go to source message',
+              onPressed: () async {
+                final msgId = _messageIdFromProvenance;
+                if (msgId != null) {
+                  await widget.onScrollToMessage!(msgId);
+                }
+              },
+            ),
+          // Copy
           IconButton(
             icon: const Icon(Icons.copy, size: 16),
             visualDensity: VisualDensity.compact,
             tooltip: 'Copy value',
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: t.value));
+              Clipboard.setData(ClipboardData(text: widget.t.value));
             },
           ),
+          // Delete
           IconButton(
             icon: Icon(Icons.delete_outline, size: 16, color: cs.error),
             visualDensity: VisualDensity.compact,
             tooltip: 'Delete row',
             onPressed: () async {
-              final repo = ref.read(trackerRepoProvider);
-              await repo.delete(sessionId, t.name);
-              onDeleted();
+              await repo.delete(widget.sessionId, widget.t.name);
+              widget.onDeleted();
             },
           ),
         ],
@@ -355,22 +518,105 @@ class _TrackerTile extends ConsumerWidget {
     );
   }
 
-  void _showFullValue(BuildContext ctx, Tracker t) {
-    showDialog<void>(
-      context: ctx,
-      builder: (_) => AlertDialog(
-        title: Text(t.name, style: const TextStyle(fontSize: 13)),
-        content: SingleChildScrollView(
-          child: SelectableText(t.value, style: const TextStyle(fontSize: 12)),
+  Future<void> _editValue(BuildContext context, TrackerRepo repo) async {
+    final controller = TextEditingController(text: widget.t.value);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(widget.t.name, style: const TextStyle(fontSize: 13)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 8,
+          minLines: 2,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            labelText: 'Value',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Save'),
           ),
         ],
       ),
     );
+    if (result != null) {
+      final trimmed = result.trim();
+      if (trimmed.isEmpty) {
+        await repo.delete(widget.sessionId, widget.t.name);
+      } else {
+        await repo.upsertValue(
+          widget.sessionId,
+          widget.t.name,
+          trimmed,
+          scope: 'ledger',
+        );
+      }
+      widget.onDeleted();
+    }
+  }
+
+  Future<void> _createOverride(BuildContext context, TrackerRepo repo) async {
+    final controller = TextEditingController(text: widget.t.value);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Override: ${widget.t.name}',
+          style: const TextStyle(fontSize: 13),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Manual override value outranks the model-written ledger value. '
+              'The model cannot overwrite it. Reset removes the override.',
+              style: TextStyle(fontSize: 11),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 8,
+              minLines: 2,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Override value',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result != null) {
+      final trimmed = result.trim();
+      if (trimmed.isNotEmpty) {
+        await repo.upsertValue(
+          widget.sessionId,
+          'canon_override:${widget.t.name}',
+          trimmed,
+          scope: 'ledger',
+        );
+        widget.onDeleted();
+      }
+    }
   }
 }
 
@@ -404,5 +650,71 @@ class _TrackerValue extends StatelessWidget {
         ],
       ],
     );
+  }
+}
+
+class _DiagTile extends ConsumerWidget {
+  final Tracker t;
+  final Future<void> Function(String messageId)? onScrollToMessage;
+
+  const _DiagTile({required this.t, this.onScrollToMessage});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final value = t.value;
+    final isRan = value.startsWith('ran,');
+    final isSkipped = value.startsWith('skipped,');
+    final icon = isRan
+        ? Icons.check_circle_outline
+        : isSkipped
+        ? Icons.skip_next_outlined
+        : Icons.info_outline;
+    final color = isRan
+        ? cs.primary
+        : isSkipped
+        ? cs.onSurfaceVariant
+        : cs.tertiary;
+
+    return ListTile(
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      leading: Icon(icon, size: 18, color: color),
+      title: Text(
+        t.name,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'monospace',
+        ),
+      ),
+      subtitle: Text(
+        value,
+        style: TextStyle(
+          fontSize: 11,
+          color: isRan ? cs.primary : cs.onSurfaceVariant,
+        ),
+      ),
+      trailing:
+          onScrollToMessage != null &&
+              _messageIdFromProvenance(t.provenance) != null
+          ? IconButton(
+              icon: const Icon(Icons.location_on_outlined, size: 16),
+              tooltip: 'Go to source message',
+              visualDensity: VisualDensity.compact,
+              onPressed: () async {
+                final msgId = _messageIdFromProvenance(t.provenance);
+                if (msgId != null) {
+                  await onScrollToMessage!(msgId);
+                }
+              },
+            )
+          : null,
+    );
+  }
+
+  String? _messageIdFromProvenance(String provenance) {
+    final match = RegExp(r'message=([^|]+)').firstMatch(provenance);
+    return match?.group(1);
   }
 }

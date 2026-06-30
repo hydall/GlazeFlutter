@@ -33,11 +33,13 @@ import 'post_building_menu_dialog.dart';
 class StudioMenuDialog extends ConsumerStatefulWidget {
   final String charId;
   final String sessionId;
+  final Future<void> Function(String messageId)? onScrollToMessage;
 
   const StudioMenuDialog({
     super.key,
     required this.charId,
     required this.sessionId,
+    this.onScrollToMessage,
   });
 
   @override
@@ -224,7 +226,11 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   }
 
   Future<void> _openLedgerDiagnostics() async {
-    await LedgerDiagnosticsSheet.show(context, sessionId: widget.sessionId);
+    await LedgerDiagnosticsSheet.show(
+      context,
+      sessionId: widget.sessionId,
+      onScrollToMessage: widget.onScrollToMessage,
+    );
   }
 
   @override
