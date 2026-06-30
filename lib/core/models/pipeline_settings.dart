@@ -159,6 +159,25 @@ abstract class PipelineSettings with _$PipelineSettings {
     // think-block. Only affects the cleaner LLM call, not the audit.
     @Default(false) bool postCleanerDisableReasoning,
 
+    // ── Studio Ledger ─────────────────────────────────────────────────────
+    // Mandatory internal continuity ledger that runs after every final
+    // assistant response when Studio is enabled. Writes compact entity/
+    // relationship/arc/world state and durable MemoryBook facts.
+    // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md.
+    @Default(false) bool studioLedgerEnabled,
+    // Model for the ledger LLM call. When empty, inherits the sidecar model.
+    @Default('') String studioLedgerModel,
+    // Endpoint override for the ledger LLM. When empty, inherits sidecar.
+    @Default('') String studioLedgerEndpoint,
+    // API key override for the ledger LLM. When empty, inherits sidecar.
+    @Default('') String studioLedgerApiKey,
+    // Ledger LLM call timeout in milliseconds. 0 = use sidecarTimeoutMs.
+    @Default(0) int studioLedgerTimeoutMs,
+    // Max tokens for the ledger LLM call. 0 = use default (2000).
+    @Default(0) int studioLedgerMaxTokens,
+    // Temperature for the ledger LLM call. Negative = use default (0.2).
+    @Default(-1.0) double studioLedgerTemperature,
+
     // ── Consolidation LLM ────────────────────────────────────────────────
     @Default(false) bool consolidationEnabled,
     @Default(5) int consolidationThreshold,

@@ -18,6 +18,7 @@ import '../llm/studio_decomposition_service.dart';
 import '../llm/studio_cleaner_rules_extractor.dart';
 import '../llm/studio_build_llm_client.dart';
 import '../llm/post_cleaner_service.dart';
+import '../llm/studio_ledger_service.dart';
 import 'memory_settings_provider.dart';
 import '../llm/sidecar_llm_client.dart';
 
@@ -127,4 +128,12 @@ final studioCleanerRulesExtractorProvider =
 /// to remove clichés and repetition. Fire-and-forget after generation.
 final postCleanerServiceProvider = Provider<PostCleanerService>((ref) {
   return PostCleanerService(ref);
+});
+
+/// Studio Ledger service (Stage 5). Runs after the POST-cleaner to extract
+/// and persist continuity state (entity/relationship/arc/world/scene) and
+/// durable MemoryBook facts from the final assistant response.
+/// See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md.
+final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
+  return StudioLedgerService(ref);
 });

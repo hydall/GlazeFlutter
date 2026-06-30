@@ -249,6 +249,64 @@ class SidecarLlmClient {
         : settings.sidecarTimeoutMs;
   }
 
+  /// Resolves the API config for the Studio Ledger LLM call.
+  ///
+  /// Falls back to the sidecar config when ledger-specific overrides are not
+  /// set. Follows the same pattern as [resolveConfigForCleaner].
+  Future<SidecarApiConfig> resolveConfigForLedger(
+    PipelineSettings settings, {
+    String errorLabel = 'studio-ledger',
+  }) async {
+    final endpoint = settings.studioLedgerEndpoint.isNotEmpty
+        ? settings.studioLedgerEndpoint
+        : settings.sidecarEndpoint;
+    final apiKey = settings.studioLedgerApiKey.isNotEmpty
+        ? settings.studioLedgerApiKey
+        : settings.sidecarApiKey;
+    final model = settings.studioLedgerModel.isNotEmpty
+        ? settings.studioLedgerModel
+        : settings.sidecarModel;
+
+    // Custom path: both endpoint and model must be non-empty.
+    if (endpoint.isNotEmpty && model.isNotEmpty) {
+      debugPrint(
+        '[Sidecar] resolved custom for $errorLabel model=$model',
+      );
+      return SidecarApiConfig(
+        endpoint: endpoint,
+        apiKey: apiKey,
+        model: model,
+        protocol: LlmProtocol.openai,
+      );
+    }
+
+    // Chat-fallback: read the active chat API config.
+    await _ref.read(apiListProvider.future);
+    final chatConfig = _ref.read(activeApiConfigProvider);
+    if (chatConfig == null) {
+      debugPrint('[Sidecar] no active chat API config for $errorLabel');
+      throw Exception('No chat API config available for $errorLabel');
+    }
+    final effectiveModel = model.isNotEmpty ? model : chatConfig.model;
+    debugPrint(
+      '[Sidecar] resolved chat-fallback for $errorLabel '
+      'model=$effectiveModel endpoint=${chatConfig.endpoint}',
+    );
+    return SidecarApiConfig(
+      endpoint: chatConfig.endpoint,
+      apiKey: chatConfig.apiKey,
+      model: effectiveModel,
+      protocol: chatConfig.protocol,
+    );
+  }
+
+  /// Resolves the ledger LLM timeout from settings.
+  int resolveLedgerTimeout(PipelineSettings settings) {
+    return settings.studioLedgerTimeoutMs > 0
+        ? settings.studioLedgerTimeoutMs
+        : settings.sidecarTimeoutMs;
+  }
+
   /// Makes a single non-streaming LLM call and returns the raw text response.
   ///
   /// Retries on 5xx server errors (502/503/500) and timeouts using a 3-attempt
