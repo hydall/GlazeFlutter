@@ -80,7 +80,7 @@ class GenerationPipeline {
 
   /// Latest accumulated chunk from the cleaner's onCleanedChunk callback.
   /// Captured so we can persist partial text when the cleaner fails
-  /// mid-stream (Fix 1): SidecarCallOutcome.text is null on any failure, so
+  /// mid-stream (Fix 1): AuxCallOutcome.text is null on any failure, so
   /// the partial text the user saw live is only reachable via the callback.
   /// Reset in `_runPostCleaner`'s finally block.
   String _lastStreamedText = '';
@@ -797,8 +797,8 @@ class GenerationPipeline {
 
       debugPrint(
         '[AgenticWrite] starting write-loop session=$sessionId '
-        'model=${pipeline.sidecarModel.isEmpty ? "<chat>" : pipeline.sidecarModel} '
-        'timeoutMs=${pipeline.sidecarTimeoutMs} '
+        'model=${pipeline.auxModel.isEmpty ? "<chat>" : pipeline.auxModel} '
+        'timeoutMs=${pipeline.auxTimeoutMs} '
         'existingTrackers=${trackers.length} '
         'historyChars=${recentHistory.length}',
       );
@@ -873,9 +873,7 @@ class GenerationPipeline {
                 messageId: messages.isNotEmpty ? messages.last.id : null,
                 attempts: result.attempts,
                 totalElapsedMs: result.totalElapsedMs,
-                model: pipeline.sidecarModel.isEmpty
-                    ? null
-                    : pipeline.sidecarModel,
+                model: pipeline.auxModel.isEmpty ? null : pipeline.auxModel,
                 summary: status == AgentOperationStatus.ok
                     ? (totalWritten > 0
                           ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
@@ -1152,8 +1150,8 @@ class GenerationPipeline {
 
     debugPrint(
       '[PostCleaner] starting session=$sessionId '
-      'model=${pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : (pipeline.sidecarModel.isEmpty ? "<chat>" : pipeline.sidecarModel)} '
-      'timeoutMs=${pipeline.postCleanerTimeoutMs > 0 ? pipeline.postCleanerTimeoutMs : pipeline.sidecarTimeoutMs} '
+      'model=${pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : (pipeline.auxModel.isEmpty ? "<chat>" : pipeline.auxModel)} '
+      'timeoutMs=${pipeline.postCleanerTimeoutMs > 0 ? pipeline.postCleanerTimeoutMs : pipeline.auxTimeoutMs} '
       'textChars=${assistantText.length} '
       'broadcastBlocks=${broadcastBlocks.length} '
       'historyMessages=${recentMessages.length} '
@@ -1336,7 +1334,7 @@ class GenerationPipeline {
         ref.read(streamingStateProvider(charId).notifier).state =
             StreamingState(text: text, targetMessageId: targetMessage.id);
         // Track the latest accumulated chunk (Fix 1 — "preserve partial
-        // text on failure"). SidecarCallOutcome.text is null on any failure
+        // text on failure"). AuxCallOutcome.text is null on any failure
         // (timeout, error, abort), so the partial text the user saw live is
         // only available via this callback. Retries reset the accumulator
         // and re-call onChunk from '', so only overwrite lastStreamedText
@@ -1405,7 +1403,7 @@ class GenerationPipeline {
             messageId: targetMessage.id,
             attempts: result.attempts,
             totalElapsedMs: result.totalElapsedMs,
-            model: pipeline.sidecarModel.isEmpty ? null : pipeline.sidecarModel,
+            model: pipeline.auxModel.isEmpty ? null : pipeline.auxModel,
             summary: result.wasCleaned
                 ? 'cleaned (${result.cleanedText.length} chars)'
                 : result.status == 'ok'
@@ -1888,7 +1886,7 @@ class GenerationPipeline {
       return pipeline.postCleanerAuditModel;
     }
     if (pipeline.postCleanerModel.isNotEmpty) return pipeline.postCleanerModel;
-    if (pipeline.sidecarModel.isNotEmpty) return pipeline.sidecarModel;
+    if (pipeline.auxModel.isNotEmpty) return pipeline.auxModel;
     return null;
   }
 

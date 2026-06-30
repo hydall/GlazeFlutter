@@ -1,10 +1,4 @@
-enum MemoryDerivedArtifactKind {
-  catalog,
-  sidecar,
-  tracker,
-  proposedMemory,
-  scene,
-}
+enum MemoryDerivedArtifactKind { tracker, proposedMemory, scene }
 
 enum MemoryProvenanceStaleReason {
   sessionChanged,

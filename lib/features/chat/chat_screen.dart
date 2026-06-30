@@ -21,7 +21,6 @@ import '../../core/state/character_provider.dart';
 import '../../core/llm/regex_service.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/memory_settings_provider.dart';
-import '../../core/state/memory_agent_providers.dart';
 import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/shell/desktop/desktop_layout_provider.dart'
@@ -1042,9 +1041,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         ref
                             .read(chatProvider(widget.charId).notifier)
                             .changeSwipe(idx, dir, fromSwipe: true);
-                        ref
-                            .read(memorySidecarPrewarmCacheProvider)
-                            .invalidateSession(widget.state.session?.id ?? '');
                       },
                       onAgentSwipe: (id, direction) {
                         final idx = widget.state.messages.indexWhere(
@@ -1069,9 +1065,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         ref
                             .read(chatProvider(widget.charId).notifier)
                             .regenerateLastAssistant();
-                        ref
-                            .read(memorySidecarPrewarmCacheProvider)
-                            .invalidateSession(widget.state.session?.id ?? '');
                       },
                       onRerunCleaner: (id) {
                         ref

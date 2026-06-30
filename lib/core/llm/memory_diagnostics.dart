@@ -35,8 +35,6 @@ class MemoryCandidateDiagnostics {
   final bool isCore;
   final List<String> emotionalTags;
   final List<String> narrativeFlags;
-  final String? sidecarSelectedReason;
-  final String? sidecarRejectedReason;
 
   const MemoryCandidateDiagnostics({
     required this.entryId,
@@ -69,8 +67,6 @@ class MemoryCandidateDiagnostics {
     this.isCore = false,
     this.emotionalTags = const [],
     this.narrativeFlags = const [],
-    this.sidecarSelectedReason,
-    this.sidecarRejectedReason,
   });
 
   Map<String, dynamic> toJson() => {
@@ -104,10 +100,6 @@ class MemoryCandidateDiagnostics {
     'isCore': isCore,
     'emotionalTags': emotionalTags,
     'narrativeFlags': narrativeFlags,
-    if (sidecarSelectedReason != null)
-      'sidecarSelectedReason': sidecarSelectedReason,
-    if (sidecarRejectedReason != null)
-      'sidecarRejectedReason': sidecarRejectedReason,
   };
 }
 
@@ -128,17 +120,9 @@ class MemoryDiagnostics {
   final bool budgetTrimmed;
   final int excludedBySourceWindow;
   final int latencyMs;
-  final String? classifierStatus;
-  final int? classifierLatencyMs;
-  final bool? classifierNeedsMemory;
-  final double? classifierConfidence;
-  final String? sidecarStatus;
-  final int? sidecarLatencyMs;
-  final List<AgentOperationAttempt> sidecarAttempts;
   final String? agenticStatus;
   final int? agenticLatencyMs;
   final List<AgentOperationAttempt> agenticAttempts;
-  final bool prewarmHit;
 
   const MemoryDiagnostics({
     required this.selectedEntryIds,
@@ -157,17 +141,9 @@ class MemoryDiagnostics {
     required this.budgetTrimmed,
     required this.excludedBySourceWindow,
     this.latencyMs = 0,
-    this.classifierStatus,
-    this.classifierLatencyMs,
-    this.classifierNeedsMemory,
-    this.classifierConfidence,
-    this.sidecarStatus,
-    this.sidecarLatencyMs,
-    this.sidecarAttempts = const [],
     this.agenticStatus,
     this.agenticLatencyMs,
     this.agenticAttempts = const [],
-    this.prewarmHit = false,
   });
 
   factory MemoryDiagnostics.fromSelection(
@@ -181,17 +157,9 @@ class MemoryDiagnostics {
     MemoryExcerptSelection? excerptSelection,
     int excerptTokensPerChunk = defaultMemoryExcerptTokensPerEntry,
     int Function(String text)? chunkTokenCounter,
-    String? classifierStatus,
-    int? classifierLatencyMs,
-    bool? classifierNeedsMemory,
-    double? classifierConfidence,
-    String? sidecarStatus,
-    int? sidecarLatencyMs,
-    List<AgentOperationAttempt> sidecarAttempts = const [],
     String? agenticStatus,
     List<AgentOperationAttempt> agenticAttempts = const [],
     int? agenticLatencyMs,
-    bool prewarmHit = false,
   }) {
     final selectedIds = (excerptSelection?.entries ?? selection.entries)
         .map((e) => e.id)
@@ -293,17 +261,9 @@ class MemoryDiagnostics {
       budgetTrimmed: excerptSelection?.budgetTrimmed ?? selection.budgetTrimmed,
       excludedBySourceWindow: selection.excludedBySourceWindow,
       latencyMs: latencyMs,
-      classifierStatus: classifierStatus,
-      classifierLatencyMs: classifierLatencyMs,
-      classifierNeedsMemory: classifierNeedsMemory,
-      classifierConfidence: classifierConfidence,
-      sidecarStatus: sidecarStatus,
-      sidecarLatencyMs: sidecarLatencyMs,
-      sidecarAttempts: sidecarAttempts,
       agenticStatus: agenticStatus,
       agenticLatencyMs: agenticLatencyMs,
       agenticAttempts: agenticAttempts,
-      prewarmHit: prewarmHit,
     );
   }
 
@@ -323,22 +283,10 @@ class MemoryDiagnostics {
     'budgetTrimmed': budgetTrimmed,
     'excludedBySourceWindow': excludedBySourceWindow,
     'latencyMs': latencyMs,
-    if (classifierStatus != null) 'classifierStatus': classifierStatus,
-    if (classifierLatencyMs != null)
-      'classifierLatencyMs': classifierLatencyMs,
-    if (classifierNeedsMemory != null)
-      'classifierNeedsMemory': classifierNeedsMemory,
-    if (classifierConfidence != null)
-      'classifierConfidence': classifierConfidence,
-    if (sidecarStatus != null) 'sidecarStatus': sidecarStatus,
-    if (sidecarLatencyMs != null) 'sidecarLatencyMs': sidecarLatencyMs,
-    if (sidecarAttempts.isNotEmpty)
-      'sidecarAttempts': sidecarAttempts.map((a) => a.toJson()).toList(),
     if (agenticStatus != null) 'agenticStatus': agenticStatus,
     if (agenticLatencyMs != null) 'agenticLatencyMs': agenticLatencyMs,
     if (agenticAttempts.isNotEmpty)
       'agenticAttempts': agenticAttempts.map((a) => a.toJson()).toList(),
-    'prewarmHit': prewarmHit,
     'candidates': candidates.map((c) => c.toJson()).toList(),
   };
 

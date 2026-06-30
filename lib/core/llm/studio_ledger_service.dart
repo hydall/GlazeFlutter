@@ -13,7 +13,7 @@ import '../models/studio_ledger_export.dart';
 import '../state/db_provider.dart';
 import '../utils/id_generator.dart';
 import '../utils/time_helpers.dart';
-import 'sidecar_llm_client.dart';
+import 'aux_llm_client.dart';
 import 'studio_ledger_export_parser.dart';
 import 'studio_ledger_prompt.dart';
 
@@ -74,7 +74,7 @@ class LedgerRunResult {
 /// Thin orchestrator:
 ///   1. Resolve LLM config.
 ///   2. Build prompt (via [StudioLedgerPrompt]).
-///   3. Call LLM (via [SidecarLlmClient]).
+///   3. Call LLM (via [AuxLlmClient]).
 ///   4. Parse + validate (via [StudioLedgerExportParser]).
 ///   5. Apply ops to [TrackerRepo].
 ///   6. Write durable facts to [MemoryBookRepo].
@@ -82,12 +82,12 @@ class LedgerRunResult {
 /// Constructor-injected [Ref] for accessing repos/providers.
 class StudioLedgerService {
   final Ref _ref;
-  final SidecarLlmClient _llm;
+  final AuxLlmClient _llm;
   final StudioLedgerExportParser _parser;
   final StudioLedgerPrompt _promptBuilder;
 
   StudioLedgerService(this._ref)
-    : _llm = SidecarLlmClient(_ref),
+    : _llm = AuxLlmClient(_ref),
       _parser = const StudioLedgerExportParser(),
       _promptBuilder = const StudioLedgerPrompt();
 

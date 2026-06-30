@@ -13,11 +13,11 @@ import '../utils/id_generator.dart';
 import 'agentic_write_request_parser.dart';
 import 'memory_agentic_policy.dart';
 import 'memory_agentic_tools.dart';
-import 'sidecar_llm_client.dart';
+import 'aux_llm_client.dart';
 
 /// Agentic write-loop service (Stage 1).
 ///
-/// After a turn is finalized, this service runs a sidecar LLM call that
+/// After a turn is finalized, this service runs an auxiliary LLM call that
 /// decides what to persist: trackers (lightweight key-value state) and/or
 /// memory drafts (pending human-approval entries). All writes go through
 /// the policy gate (default-deny).
@@ -26,10 +26,12 @@ import 'sidecar_llm_client.dart';
 /// and focused on one responsibility (CODE_STYLE: one class = one job).
 class MemoryAgenticWriteService {
   final Ref _ref;
-  final SidecarLlmClient _llm;
-  late final AgenticWriteRequestParser _parser = AgenticWriteRequestParser(_llm);
+  final AuxLlmClient _llm;
+  late final AgenticWriteRequestParser _parser = AgenticWriteRequestParser(
+    _llm,
+  );
 
-  MemoryAgenticWriteService(this._ref) : _llm = SidecarLlmClient(_ref);
+  MemoryAgenticWriteService(this._ref) : _llm = AuxLlmClient(_ref);
 
   /// Run the agentic write-loop after a turn is finalized.
   ///
@@ -71,9 +73,9 @@ class MemoryAgenticWriteService {
       // docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
       List<MemoryEntry> existingMemories = const [];
       try {
-        final book = await _ref.read(memoryBookRepoProvider).getBySessionId(
-          sessionId,
-        );
+        final book = await _ref
+            .read(memoryBookRepoProvider)
+            .getBySessionId(sessionId);
         if (book != null) {
           existingMemories = book.entries;
         }
@@ -379,9 +381,7 @@ class MemoryAgenticWriteService {
           written++;
         }
       } catch (e) {
-        debugPrint(
-          '[MemoryAgenticWriteService] appendFactsToEntry failed: $e',
-        );
+        debugPrint('[MemoryAgenticWriteService] appendFactsToEntry failed: $e');
         errors.add('Append error on "${req.title}": $e');
       }
     }
@@ -390,7 +390,9 @@ class MemoryAgenticWriteService {
       try {
         await repo.appendApprovedEntries(sessionId, newEntries);
       } catch (e) {
-        debugPrint('[MemoryAgenticWriteService] appendApprovedEntries failed: $e');
+        debugPrint(
+          '[MemoryAgenticWriteService] appendApprovedEntries failed: $e',
+        );
         errors.add('Batch write error: $e');
         written = 0;
       }

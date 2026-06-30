@@ -88,7 +88,6 @@ class StreamGenerationService {
         charId: _charId,
         session: session,
         guidanceText: guidanceText,
-        skipMemoryLlmSidecars: studioConfig != null,
         shouldAbort: _isAborted,
         cancelToken: cancelToken,
       );
@@ -438,7 +437,7 @@ class StreamGenerationService {
             diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
             updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
           );
-          _recordSidecarOperation(
+          _recordMemoryAgentOperation(
             finalState.session!.id,
             memoryMessageId,
             memoryDiagnostics,
@@ -597,7 +596,7 @@ class StreamGenerationService {
               diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
               updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
             );
-            _recordSidecarOperation(
+            _recordMemoryAgentOperation(
               finalState!.session!.id,
               messageId,
               memoryDiagnostics,
@@ -713,48 +712,12 @@ class StreamGenerationService {
         .toList(growable: false);
   }
 
-  /// Records a memory sidecar reranker operation in the agentic operations log
-  /// when the diagnostics carry a `sidecarAttempts` array (deep mode only).
-  void _recordSidecarOperation(
+  /// Records memory agent operations in the agentic operations log.
+  void _recordMemoryAgentOperation(
     String sessionId,
     String? messageId,
     Map<String, dynamic> diagnostics,
   ) {
-    // Memory sidecar (reranker) operation.
-    final sidecarStatus = diagnostics['sidecarStatus'] as String?;
-    if (sidecarStatus != null && sidecarStatus != 'disabled') {
-      final rawAttempts = diagnostics['sidecarAttempts'];
-      if (rawAttempts is List) {
-        final attempts = rawAttempts
-            .whereType<Map<dynamic, dynamic>>()
-            .map(
-              (e) =>
-                  AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)),
-            )
-            .toList();
-        if (attempts.isNotEmpty) {
-          final status = _sidecarStatusToOp(sidecarStatus);
-          _appendOperation(
-            AgentOperationRecord(
-              id: 'sidecar-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
-              kind: AgentOperationKind.memorySidecar,
-              status: status,
-              sessionId: sessionId,
-              messageId: messageId,
-              attempts: attempts,
-              totalElapsedMs: attempts.fold(0, (sum, a) => sum + a.elapsedMs),
-              summary: status == AgentOperationStatus.ok
-                  ? 'reranked ${diagnostics['selectedCount'] ?? 0} entries'
-                  : sidecarStatus,
-              startedAtMs: attempts.first.startedAtMs,
-              finishedAtMs: attempts.last.startedAtMs + attempts.last.elapsedMs,
-              canRegenerate: status.isFailure,
-            ),
-          );
-        }
-      }
-    }
-
     // Agentic search (searchMemory tool) operation.
     final agenticStatus = diagnostics['agenticStatus'] as String?;
     if (agenticStatus != null &&
@@ -770,7 +733,7 @@ class StreamGenerationService {
             )
             .toList();
         if (attempts.isNotEmpty) {
-          final status = _sidecarStatusToOp(agenticStatus);
+          final status = _memoryAgentStatusToOp(agenticStatus);
           _appendOperation(
             AgentOperationRecord(
               id: 'agentic-search-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
@@ -991,7 +954,7 @@ class StreamGenerationService {
     }
   }
 
-  static AgentOperationStatus _sidecarStatusToOp(String status) {
+  static AgentOperationStatus _memoryAgentStatusToOp(String status) {
     return switch (status) {
       'ok' => AgentOperationStatus.ok,
       'disabled' => AgentOperationStatus.disabled,

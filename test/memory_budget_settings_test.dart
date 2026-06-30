@@ -57,8 +57,7 @@ void main() {
             const PipelineSettings(
               postCleanerEnabled: true,
               postCleanerBannedWords: 'suddenly, palpable',
-              classifierEnabled: true,
-              classifierModel: 'classifier-mini',
+              auxModel: 'aux-mini',
             ),
           );
       container1.dispose();
@@ -69,15 +68,17 @@ void main() {
       addTearDown(container2.dispose);
 
       // Before load(), state is defaults (proves load() is what restores it).
-      expect(container2.read(pipelineSettingsProvider).postCleanerEnabled, false);
+      expect(
+        container2.read(pipelineSettingsProvider).postCleanerEnabled,
+        false,
+      );
 
       await container2.read(pipelineSettingsProvider.notifier).load();
 
       final loaded = container2.read(pipelineSettingsProvider);
       expect(loaded.postCleanerEnabled, true);
       expect(loaded.postCleanerBannedWords, 'suddenly, palpable');
-      expect(loaded.classifierEnabled, true);
-      expect(loaded.classifierModel, 'classifier-mini');
+      expect(loaded.auxModel, 'aux-mini');
     },
   );
 
@@ -132,18 +133,11 @@ void main() {
         .read(pipelineSettingsProvider.notifier)
         .save(
           const PipelineSettings(
-            classifierEnabled: true,
-            classifierSource: 'custom',
-            classifierModel: 'classifier-mini',
-            classifierEndpoint: 'https://classifier.example/v1',
-            classifierApiKey: 'classifier-key',
-            classifierTimeoutMs: 3500,
-            sidecarEnabled: true,
-            sidecarSource: 'custom',
-            sidecarModel: 'sidecar-mini',
-            sidecarEndpoint: 'https://sidecar.example/v1',
-            sidecarApiKey: 'sidecar-key',
-            sidecarTimeoutMs: 4500,
+            auxSource: 'custom',
+            auxModel: 'aux-mini',
+            auxEndpoint: 'https://aux.example/v1',
+            auxApiKey: 'aux-key',
+            auxTimeoutMs: 4500,
           ),
         );
 
@@ -151,7 +145,8 @@ void main() {
     final memoryJson =
         jsonDecode(prefs.getString('memorySettings')!) as Map<String, dynamic>;
     final pipelineJson =
-        jsonDecode(prefs.getString('pipelineSettings')!) as Map<String, dynamic>;
+        jsonDecode(prefs.getString('pipelineSettings')!)
+            as Map<String, dynamic>;
 
     expect(memoryJson['memoryPackingMode'], 'chunk_first');
     expect(memoryJson['memoryExcerptTokensPerChunk'], 300);
@@ -168,18 +163,11 @@ void main() {
     expect(memoryJson['queryRecentTurns'], 4);
     expect(memoryJson['queryMaxChars'], 750);
 
-    expect(pipelineJson['classifierEnabled'], true);
-    expect(pipelineJson['classifierSource'], 'custom');
-    expect(pipelineJson['classifierModel'], 'classifier-mini');
-    expect(pipelineJson['classifierEndpoint'], 'https://classifier.example/v1');
-    expect(pipelineJson['classifierApiKey'], 'classifier-key');
-    expect(pipelineJson['classifierTimeoutMs'], 3500);
-    expect(pipelineJson['sidecarEnabled'], true);
-    expect(pipelineJson['sidecarSource'], 'custom');
-    expect(pipelineJson['sidecarModel'], 'sidecar-mini');
-    expect(pipelineJson['sidecarEndpoint'], 'https://sidecar.example/v1');
-    expect(pipelineJson['sidecarApiKey'], 'sidecar-key');
-    expect(pipelineJson['sidecarTimeoutMs'], 4500);
+    expect(pipelineJson['auxSource'], 'custom');
+    expect(pipelineJson['auxModel'], 'aux-mini');
+    expect(pipelineJson['auxEndpoint'], 'https://aux.example/v1');
+    expect(pipelineJson['auxApiKey'], 'aux-key');
+    expect(pipelineJson['auxTimeoutMs'], 4500);
   });
 
   test('new memory books inherit advanced selector tuning', () async {
@@ -212,16 +200,7 @@ void main() {
 
     await container
         .read(pipelineSettingsProvider.notifier)
-        .save(
-          const PipelineSettings(
-            classifierEnabled: true,
-            classifierModel: 'classifier-mini',
-            classifierTimeoutMs: 3500,
-            sidecarEnabled: true,
-            sidecarModel: 'sidecar-mini',
-            sidecarTimeoutMs: 4500,
-          ),
-        );
+        .save(const PipelineSettings(auxModel: 'aux-mini', auxTimeoutMs: 4500));
 
     final repo = container.read(memoryBookRepoProvider);
     final book = await repo.ensureForSession('session_advanced');
@@ -242,12 +221,8 @@ void main() {
     // Pipeline settings are now a singleton global — the same instance is
     // returned by the StateNotifierProvider for every session.
     final pipeline = container.read(pipelineSettingsProvider);
-    expect(pipeline.classifierEnabled, true);
-    expect(pipeline.classifierModel, 'classifier-mini');
-    expect(pipeline.classifierTimeoutMs, 3500);
-    expect(pipeline.sidecarEnabled, true);
-    expect(pipeline.sidecarModel, 'sidecar-mini');
-    expect(pipeline.sidecarTimeoutMs, 4500);
+    expect(pipeline.auxModel, 'aux-mini');
+    expect(pipeline.auxTimeoutMs, 4500);
   });
 
   test('memory book settings update persists selector inputs', () async {

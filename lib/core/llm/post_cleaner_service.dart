@@ -14,8 +14,8 @@ import '../state/db_provider.dart';
 import '../utils/think_tags.dart';
 import '../../features/chat/chat_session_service.dart';
 import '../../features/chat_history/chat_history_provider.dart';
-import 'sidecar_llm_client.dart';
-import 'sidecar_retry_runner.dart';
+import 'aux_llm_client.dart';
+import 'aux_retry_runner.dart';
 
 /// POST-cleaner service (Stage 4).
 ///
@@ -25,14 +25,14 @@ import 'sidecar_retry_runner.dart';
 /// swipe UI. The original text is preserved as a swipe so the user can
 /// still access it.
 ///
-/// Uses [SidecarLlmClient] for the sidecar LLM call and
+/// Uses [AuxLlmClient] for the auxiliary LLM call and
 /// [ChatRepo.appendAgentSwipe] for the atomic DB update.
 /// Falls back to the original text on any error.
 class PostCleanerService {
   final Ref _ref;
-  final SidecarLlmClient _llm;
+  final AuxLlmClient _llm;
 
-  PostCleanerService(this._ref) : _llm = SidecarLlmClient(_ref);
+  PostCleanerService(this._ref) : _llm = AuxLlmClient(_ref);
 
   /// Run the POST-cleaner on the last assistant message.
   ///
@@ -258,8 +258,8 @@ class PostCleanerService {
     };
   }
 
-  Future<SidecarCallOutcome> _askLlmForCleanedText({
-    required SidecarApiConfig config,
+  Future<AuxCallOutcome> _askLlmForCleanedText({
+    required AuxApiConfig config,
     required PipelineSettings settings,
     required String assistantText,
     List<String> broadcastBlocks = const [],
@@ -406,7 +406,9 @@ class PostCleanerService {
         ..writeln();
       if (hasBanned) {
         buffer
-          ..writeln('BANNED WORDS (never use these, even if the original has them):')
+          ..writeln(
+            'BANNED WORDS (never use these, even if the original has them):',
+          )
           ..writeln(bannedWords.trim())
           ..writeln();
       }

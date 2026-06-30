@@ -3,16 +3,14 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:glaze_flutter/core/llm/sidecar_retry_runner.dart';
+import 'package:glaze_flutter/core/llm/aux_retry_runner.dart';
 import 'package:glaze_flutter/core/models/agent_operation_record.dart';
 
 void main() {
-  group('SidecarRetryRunner', () {
+  group('AuxRetryRunner', () {
     test('returns ok on first success', () async {
-      final runner = const SidecarRetryRunner();
-      final outcome = await runner.run(
-        attempt: (_) async => 'hello',
-      );
+      final runner = const AuxRetryRunner();
+      final outcome = await runner.run(attempt: (_) async => 'hello');
       expect(outcome.isOk, isTrue);
       expect(outcome.text, 'hello');
       expect(outcome.attempts.length, 1);
@@ -21,8 +19,8 @@ void main() {
     });
 
     test('retries on 5xx DioException up to maxAttempts', () async {
-      final runner = const SidecarRetryRunner(
-        policy: SidecarRetryPolicy(
+      final runner = const AuxRetryRunner(
+        policy: AuxRetryPolicy(
           maxAttempts: 3,
           backoffDelays: [Duration.zero, Duration.zero, Duration.zero],
         ),
@@ -55,7 +53,7 @@ void main() {
     });
 
     test('fails fast on 4xx (no retry)', () async {
-      final runner = const SidecarRetryRunner();
+      final runner = const AuxRetryRunner();
       var calls = 0;
       final outcome = await runner.run(
         attempt: (_) async {
@@ -78,8 +76,8 @@ void main() {
     });
 
     test('retries on TimeoutException when retryOnTimeout=true', () async {
-      final runner = const SidecarRetryRunner(
-        policy: SidecarRetryPolicy(
+      final runner = const AuxRetryRunner(
+        policy: AuxRetryPolicy(
           maxAttempts: 2,
           backoffDelays: [Duration.zero],
           retryOnTimeout: true,
@@ -100,21 +98,23 @@ void main() {
       expect(outcome.attempts.last.status, 'ok');
     });
 
-    test('does NOT retry on TimeoutException when retryOnTimeout=false',
-        () async {
-      final runner = const SidecarRetryRunner(
-        policy: SidecarRetryPolicy(retryOnTimeout: false),
-      );
-      final outcome = await runner.run(
-        attempt: (_) async => throw TimeoutException('timed out'),
-      );
-      expect(outcome.isOk, isFalse);
-      expect(outcome.status, AgentOperationStatus.timeout);
-      expect(outcome.attempts.length, 1);
-    });
+    test(
+      'does NOT retry on TimeoutException when retryOnTimeout=false',
+      () async {
+        final runner = const AuxRetryRunner(
+          policy: AuxRetryPolicy(retryOnTimeout: false),
+        );
+        final outcome = await runner.run(
+          attempt: (_) async => throw TimeoutException('timed out'),
+        );
+        expect(outcome.isOk, isFalse);
+        expect(outcome.status, AgentOperationStatus.timeout);
+        expect(outcome.attempts.length, 1);
+      },
+    );
 
     test('exits early with aborted when cancelToken cancelled', () async {
-      final runner = const SidecarRetryRunner();
+      final runner = const AuxRetryRunner();
       final token = CancelToken();
       token.cancel();
       final outcome = await runner.run(
@@ -127,8 +127,8 @@ void main() {
     });
 
     test('stops retrying after maxAttempts on persistent 5xx', () async {
-      final runner = const SidecarRetryRunner(
-        policy: SidecarRetryPolicy(
+      final runner = const AuxRetryRunner(
+        policy: AuxRetryPolicy(
           maxAttempts: 3,
           backoffDelays: [Duration.zero, Duration.zero, Duration.zero],
         ),
@@ -182,16 +182,13 @@ void main() {
       );
       expect(rec.wasRetried, isTrue);
       expect(rec.attemptCount, 2);
-      expect(
-        rec.tileLabel,
-        'POST-cleaner · ok · 2 attempts · 300ms',
-      );
+      expect(rec.tileLabel, 'POST-cleaner · ok · 2 attempts · 300ms');
     });
 
     test('tileLabel omits attempt count when not retried', () {
       final rec = AgentOperationRecord(
         id: 'r2',
-        kind: AgentOperationKind.memorySidecar,
+        kind: AgentOperationKind.postCleaner,
         status: AgentOperationStatus.ok,
         attempts: [
           const AgentOperationAttempt(
@@ -207,7 +204,7 @@ void main() {
         finishedAtMs: 50,
       );
       expect(rec.wasRetried, isFalse);
-      expect(rec.tileLabel, 'Memory sidecar · ok · 50ms');
+      expect(rec.tileLabel, 'POST-cleaner · ok · 50ms');
     });
 
     test('toJson/fromJson roundtrip preserves all fields', () {
@@ -261,9 +258,9 @@ void main() {
     });
   });
 
-  group('SidecarRetryPolicy', () {
+  group('AuxRetryPolicy', () {
     test('default policy has 3 attempts and 1s/2s/4s backoff', () {
-      const policy = SidecarRetryPolicy();
+      const policy = AuxRetryPolicy();
       expect(policy.maxAttempts, 3);
       expect(policy.backoffDelays.length, 3);
       expect(policy.backoffDelays[0], const Duration(seconds: 1));
@@ -272,18 +269,18 @@ void main() {
     });
 
     test('delayBefore: no delay for first attempt', () {
-      const policy = SidecarRetryPolicy();
+      const policy = AuxRetryPolicy();
       expect(policy.delayBefore(0), Duration.zero);
     });
 
     test('delayBefore: returns backoff for subsequent attempts', () {
-      const policy = SidecarRetryPolicy();
+      const policy = AuxRetryPolicy();
       expect(policy.delayBefore(1), const Duration(seconds: 1));
       expect(policy.delayBefore(2), const Duration(seconds: 2));
     });
 
     test('shouldRetry: false for 4xx', () {
-      const policy = SidecarRetryPolicy();
+      const policy = AuxRetryPolicy();
       final err = DioException(
         requestOptions: RequestOptions(path: ''),
         response: Response(
@@ -296,7 +293,7 @@ void main() {
     });
 
     test('shouldRetry: false on last attempt', () {
-      const policy = SidecarRetryPolicy();
+      const policy = AuxRetryPolicy();
       final err = DioException(
         requestOptions: RequestOptions(path: ''),
         response: Response(

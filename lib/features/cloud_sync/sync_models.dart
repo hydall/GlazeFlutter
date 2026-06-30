@@ -96,7 +96,7 @@ class SyncManifest {
   /// Version history:
   ///   4 — baseline before pipeline_settings sync.
   ///   5 — added `pipeline_settings` entity type (per-session pipeline LLM
-  ///         settings: cleaner/sidecar/classifier/consolidation config).
+  ///         settings: cleaner/aux/consolidation config).
   ///   6 — removed `pipeline_settings` entity type. Pipeline settings are now
   ///         a singleton global in SharedPreferences, no longer synced as a
   ///         per-session Drift collection.

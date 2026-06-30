@@ -12,13 +12,10 @@ import '../db/repositories/memory_catalog_repo.dart';
 import '../db/repositories/memory_salience_repo.dart';
 import '../db/repositories/memory_entity_repo.dart';
 import '../models/chat_message.dart';
-import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/memory_graph.dart';
-import '../models/pipeline_settings.dart';
 import '../state/db_provider.dart';
 import '../state/memory_settings_provider.dart';
-import '../state/memory_agent_providers.dart';
 import 'embedding_service.dart';
 import 'embedding_types.dart';
 import 'chat_message_embedding_service.dart';
@@ -28,11 +25,8 @@ import 'memory_diagnostics.dart';
 import 'memory_embedding_service.dart';
 import 'memory_excerpt_selector.dart';
 import 'memory_formatting.dart';
-import 'memory_needs_classifier_service.dart';
 import 'message_recall_service.dart';
 import 'memory_selector.dart';
-import 'memory_sidecar_prewarm_cache.dart';
-import 'memory_sidecar_reranker_service.dart';
 import 'retrieval_query_builder.dart';
 import 'vector_math.dart';
 
@@ -78,29 +72,21 @@ class MemoryCandidateBuildResult {
 
 class MemoryInjectionService {
   final MemoryBookRepo _repo;
-  final PipelineSettings Function() _readPipelineSettings;
   final EmbeddingRepo _embeddingRepo;
   final MemoryCatalogRepo _catalogRepo;
   final MemorySalienceRepo? _salienceRepo;
   final MemoryEntityRepo? _entityRepo;
   final EmbeddingService _embeddingService;
   final MemoryGlobalSettings Function() _readGlobalSettings;
-  final MemoryNeedsClassifierService? _classifierService;
-  final MemorySidecarRerankerService? _sidecarService;
-  final MemorySidecarPrewarmCache? _prewarmCache;
 
   MemoryInjectionService(
     this._repo,
-    this._readPipelineSettings,
     this._embeddingRepo,
     this._catalogRepo,
     this._embeddingService,
     this._readGlobalSettings, {
     this._salienceRepo,
     this._entityRepo,
-    this._classifierService,
-    this._sidecarService,
-    this._prewarmCache,
   });
 
   /// Build injection candidates + diagnostics. Returns the raw selection
@@ -117,7 +103,6 @@ class MemoryInjectionService {
     CancelToken? cancelToken,
     int? contextBudgetTokens,
     Set<String> visibleMessageIds = const {},
-    bool skipLlmSidecars = false,
   }) async {
     final result = await buildCandidatesWithDiagnostics(
       sessionId: sessionId,
@@ -128,7 +113,6 @@ class MemoryInjectionService {
       cancelToken: cancelToken,
       contextBudgetTokens: contextBudgetTokens,
       visibleMessageIds: visibleMessageIds,
-      skipLlmSidecars: skipLlmSidecars,
     );
     return result.selection;
   }
@@ -142,7 +126,6 @@ class MemoryInjectionService {
     CancelToken? cancelToken,
     int? contextBudgetTokens,
     Set<String> visibleMessageIds = const {},
-    bool skipLlmSidecars = false,
   }) async {
     final sw = Stopwatch()..start();
     MemoryCandidateBuildResult finish(
@@ -151,17 +134,8 @@ class MemoryInjectionService {
         source: 'none',
       ),
       MemoryBookSettings? settings,
-      String? classifierStatus,
-      int? classifierLatencyMs,
-      bool? classifierNeedsMemory,
-      double? classifierConfidence,
-      String? sidecarStatus,
-      int? sidecarLatencyMs,
-      List<AgentOperationAttempt> sidecarAttempts = const [],
       String? agenticStatus,
-      List<AgentOperationAttempt> agenticAttempts = const [],
       int? agenticLatencyMs,
-      bool prewarmHit = false,
     }) {
       sw.stop();
       final resolvedSettings = settings ?? const MemoryBookSettings();
@@ -178,17 +152,9 @@ class MemoryInjectionService {
                 memoryMode: resolvedSettings.memoryMode,
                 factualContinuityGuardEnabled:
                     resolvedSettings.factualContinuityGuardEnabled,
-                classifierStatus: classifierStatus,
-                classifierLatencyMs: classifierLatencyMs,
-                classifierNeedsMemory: classifierNeedsMemory,
-                classifierConfidence: classifierConfidence,
-                sidecarStatus: sidecarStatus,
-                sidecarLatencyMs: sidecarLatencyMs,
-                sidecarAttempts: sidecarAttempts,
                 agenticStatus: agenticStatus,
-                agenticAttempts: agenticAttempts,
+                agenticAttempts: const [],
                 agenticLatencyMs: agenticLatencyMs,
-                prewarmHit: prewarmHit,
               ),
       );
     }
@@ -201,11 +167,6 @@ class MemoryInjectionService {
       return finish(const MemorySelection());
     }
     if (book == null) {
-      return finish(const MemorySelection());
-    }
-
-    final pipeline = _readPipelineSettings();
-    if (shouldAbort?.call() == true) {
       return finish(const MemorySelection());
     }
 
@@ -319,131 +280,13 @@ class MemoryInjectionService {
       ),
     );
 
-    var finalSelection = selection;
-    MemoryClassifierResult? classifierResult = const MemoryClassifierResult(
-      status: 'disabled',
-    );
-    MemorySidecarResult? sidecarResult;
-    var prewarmHit = false;
-
-    // Balanced mode: classifier for missing-context detection
-    if (book.settings.memoryMode == 'balanced' &&
-        _classifierService != null &&
-        pipeline.classifierEnabled &&
-        !skipLlmSidecars &&
-        !selection.allScores.every(
-          (s) => s.excludedBySourceWindow || s.score == 0,
-        )) {
-      final candidateTitles = selection.allScores
-          .where((s) => !s.excludedBySourceWindow && s.score > 0)
-          .map((s) => s.entry.title)
-          .toList();
-      classifierResult = await _classifierService.classify(
-        MemoryClassifierRequest(
-          settings: pipeline,
-          currentText: currentText,
-          candidateTitles: candidateTitles,
-          missingContextReasons: const [],
-        ),
-        cancelToken: cancelToken,
-      );
-      if (shouldAbort?.call() == true) {
-        return finish(finalSelection, budget: budget, settings: book.settings);
-      }
-      // If classifier says memory needed but no reliable candidate found,
-      // and queryExpansion is provided, we could broaden retrieval here.
-      // For now, the classifier output is recorded in diagnostics.
-    }
-
-    // Deep mode: sidecar reranker with prewarm
-    if (book.settings.memoryMode == 'deep' &&
-        _sidecarService != null &&
-        !skipLlmSidecars &&
-        pipeline.sidecarEnabled) {
-      // Try prewarm cache first
-      if (_prewarmCache != null) {
-        final prewarmKey = MemorySidecarPrewarmKey(
-          sessionId: sessionId,
-          branchId: sessionId,
-          anchorMessageId: history.isNotEmpty ? history.last.id : sessionId,
-          anchorSwipeId: history.isNotEmpty ? history.last.swipeId : 0,
-          settingsRevision: '',
-          memoryRevision: book.updatedAt.toString(),
-          historyRevision: '${history.length}',
-        );
-        final prewarmEntry = _prewarmCache.takeIfFresh(prewarmKey);
-        if (prewarmEntry != null) {
-          prewarmHit = true;
-          sidecarResult = prewarmEntry.result;
-          finalSelection = prewarmEntry.result.selection;
-        }
-      }
-
-      // If no prewarm hit, run sidecar on-demand
-      if (!prewarmHit) {
-        sidecarResult = await _sidecarService.rerank(
-          MemorySidecarRequest(
-            settings: pipeline,
-            candidates: selection.allScores
-                .where((s) => !s.excludedBySourceWindow)
-                .toList(),
-            fallbackSelection: selection,
-            visibleMessageIds: visibleMessageIds,
-            maxInjectionTokens: budget.effectiveTokens,
-            maxInjectedEntries: book.settings.maxInjectedEntries,
-          ),
-          cancelToken: cancelToken,
-        );
-        if (shouldAbort?.call() == true) {
-          return finish(
-            finalSelection,
-            budget: budget,
-            settings: book.settings,
-          );
-        }
-        finalSelection = sidecarResult.selection;
-
-        // Store for next-turn prewarm
-        if (_prewarmCache != null && sidecarResult.status == 'ok') {
-          _prewarmCache.put(
-            MemorySidecarPrewarmEntry(
-              key: MemorySidecarPrewarmKey(
-                sessionId: sessionId,
-                branchId: sessionId,
-                anchorMessageId: history.isNotEmpty
-                    ? history.last.id
-                    : sessionId,
-                anchorSwipeId: history.isNotEmpty ? history.last.swipeId : 0,
-                settingsRevision: '',
-                memoryRevision: book.updatedAt.toString(),
-                historyRevision: '${history.length}',
-              ),
-              result: sidecarResult,
-              createdAtMillis: DateTime.now().millisecondsSinceEpoch,
-            ),
-          );
-        }
-      }
-    }
-
     // Agentic read (searchMemory tool) was previously gated by
     // `memoryMode == 'agentic'`, but that mode was removed in Phase 4 of
     // docs/PLAN_AGENTIC_STUDIO.md. Agentic read will be wired as a
     // pre-generation memory tracker in a later phase; until then it is
     // disabled.
 
-    return finish(
-      finalSelection,
-      budget: budget,
-      settings: book.settings,
-      classifierStatus: classifierResult.status,
-      classifierNeedsMemory: classifierResult.output?.needsMemory,
-      classifierConfidence: classifierResult.output?.confidence,
-      sidecarStatus: sidecarResult?.status,
-      sidecarLatencyMs: sidecarResult?.totalElapsedMs,
-      sidecarAttempts: sidecarResult?.attempts ?? const [],
-      prewarmHit: prewarmHit,
-    );
+    return finish(selection, budget: budget, settings: book.settings);
   }
 
   /// Backwards-compatible facade for callers that still expect an
@@ -460,7 +303,6 @@ class MemoryInjectionService {
     CancelToken? cancelToken,
     int? contextBudgetTokens,
     Set<String> visibleMessageIds = const {},
-    bool skipLlmSidecars = false,
   }) async {
     final chatHistory = (history ?? const [])
         .map((m) => ChatMessage(id: '', role: m.role, content: m.content))
@@ -474,7 +316,6 @@ class MemoryInjectionService {
       cancelToken: cancelToken,
       contextBudgetTokens: contextBudgetTokens,
       visibleMessageIds: visibleMessageIds,
-      skipLlmSidecars: skipLlmSidecars,
     );
     final selection = candidateResult.selection;
     final settings = candidateResult.settings ?? const MemoryBookSettings();
@@ -871,16 +712,12 @@ class _CatalogMatchResult {
 final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
   return MemoryInjectionService(
     ref.watch(memoryBookRepoProvider),
-    () => ref.read(pipelineSettingsProvider),
     ref.watch(embeddingRepoProvider),
     ref.watch(memoryCatalogRepoProvider),
     EmbeddingService(),
     () => ref.read(memoryGlobalSettingsProvider),
     salienceRepo: ref.watch(memorySalienceRepoProvider),
     entityRepo: ref.watch(memoryEntityRepoProvider),
-    classifierService: ref.watch(memoryClassifierServiceProvider),
-    sidecarService: ref.watch(memorySidecarRerankerServiceProvider),
-    prewarmCache: ref.watch(memorySidecarPrewarmCacheProvider),
   );
 });
 

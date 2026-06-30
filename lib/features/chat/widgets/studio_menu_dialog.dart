@@ -21,7 +21,7 @@ import 'post_building_menu_dialog.dart';
 /// The full 8-controller editor that previously lived here was removed in
 /// Phase 2 of docs/PLAN_AGENTIC_STUDIO.md. Per Phase 7.1 this dialog is
 /// deliberately lightweight: it does NOT duplicate any LLM/pipeline settings
-/// (POST-cleaner, write-loop sidecar, model selectors) — those stay in
+/// (POST-cleaner, write-loop helper, model selectors) - those stay in
 /// [PostBuildingMenuDialog]. This dialog only surfaces tracker state and
 /// quick toggles.
 ///
@@ -1467,6 +1467,7 @@ class _StudioTrackerContextSizeTile extends ConsumerWidget {
     );
   }
 }
+
 /// Reads/writes `PipelineSettings.studioTrackerTemperature`. When negative,
 /// the per-agent default (0.3) is used. Lets the user tune the creativity of
 /// all 7 pre-gen agents at once without rebuilding the Studio agents.

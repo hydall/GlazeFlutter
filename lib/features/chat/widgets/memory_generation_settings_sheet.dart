@@ -5,9 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/memory_budget.dart';
 import '../../../core/models/memory_book.dart';
-import '../../../core/models/pipeline_settings.dart';
 import '../../../core/services/memory_prompt_presets.dart';
-import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -17,6 +15,7 @@ import 'post_building_menu_dialog.dart';
 class MemoryGenerationSettingsSheet extends ConsumerStatefulWidget {
   final MemoryBookSettings settings;
   final String? sessionId;
+
   /// Phase 7.3 — needed to launch [PostBuildingMenuDialog] from the
   /// "LLM config →" link. When null, the link is hidden (preserves backward
   /// compatibility for any caller that doesn't have a charId handy).
@@ -38,8 +37,6 @@ class _MemoryGenerationSettingsSheetState
     extends ConsumerState<MemoryGenerationSettingsSheet> {
   late bool _enabled;
   late String _memoryMode;
-  PipelineSettings? _pipeline;
-  bool _pipelineLoaded = false;
   late bool _autoCreate;
   late bool _autoGenerate;
   late int _maxInjected;
@@ -92,8 +89,8 @@ class _MemoryGenerationSettingsSheetState
     );
     _memoryExcerptChunksPerEntry = s.memoryExcerptChunksPerEntry.clamp(1, 10);
     _chunkFirstTopEntries = s.chunkFirstTopEntries.clamp(0, 20);
-    _chunkFirstTopChunks = (s.chunkFirstTopChunks <= 0 ? 1 : s.chunkFirstTopChunks)
-        .clamp(1, 10);
+    _chunkFirstTopChunks =
+        (s.chunkFirstTopChunks <= 0 ? 1 : s.chunkFirstTopChunks).clamp(1, 10);
     _memoryBudgetPreset = _normalizeMemoryBudgetPreset(
       s.memoryBudgetPreset,
       s.maxInjectedTokens,
@@ -126,26 +123,7 @@ class _MemoryGenerationSettingsSheetState
     _queryIncludeAssistant = s.queryIncludeAssistant;
     _queryRecentTurns = s.queryRecentTurns;
     _queryMaxChars = s.queryMaxChars;
-    _loadPipeline();
   }
-
-  Future<void> _loadPipeline() async {
-    // Pipeline settings are a singleton global (SharedPreferences). Read is
-    // synchronous via the StateNotifierProvider; we still gate the setState on
-    // mounted to keep the async signature for callers that await this.
-    final pipeline = ref.read(pipelineSettingsProvider);
-    if (mounted) {
-      setState(() {
-        _pipeline = pipeline;
-        _pipelineLoaded = true;
-      });
-    }
-  }
-
-  bool get _needsSidecar => _memoryMode == 'deep';
-
-  bool get _sidecarReady =>
-      _pipeline != null && _pipeline!.sidecarEnabled;
 
   @override
   void dispose() {
@@ -267,8 +245,14 @@ class _MemoryGenerationSettingsSheetState
             _sectionLabel('label_embedding_target'.tr()),
             SegmentedButton<String>(
               segments: [
-                ButtonSegment(value: 'hard_block', label: Text('memory_injection_hard_block'.tr())),
-                ButtonSegment(value: 'macro', label: Text('memory_injection_macro'.tr())),
+                ButtonSegment(
+                  value: 'hard_block',
+                  label: Text('memory_injection_hard_block'.tr()),
+                ),
+                ButtonSegment(
+                  value: 'macro',
+                  label: Text('memory_injection_macro'.tr()),
+                ),
               ],
               selected: {_injectionTarget},
               onSelectionChanged: (s) =>
@@ -299,9 +283,18 @@ class _MemoryGenerationSettingsSheetState
               const SizedBox(height: 8),
               SegmentedButton<String>(
                 segments: [
-                  ButtonSegment(value: 'plain', label: Text('memory_packing_plain'.tr())),
-                  ButtonSegment(value: 'glaze', label: Text('memory_packing_glaze'.tr())),
-                  ButtonSegment(value: 'both', label: Text('memory_packing_both'.tr())),
+                  ButtonSegment(
+                    value: 'plain',
+                    label: Text('memory_packing_plain'.tr()),
+                  ),
+                  ButtonSegment(
+                    value: 'glaze',
+                    label: Text('memory_packing_glaze'.tr()),
+                  ),
+                  ButtonSegment(
+                    value: 'both',
+                    label: Text('memory_packing_both'.tr()),
+                  ),
                 ],
                 selected: {_keyMatchMode},
                 onSelectionChanged: (s) =>
@@ -557,39 +550,10 @@ class _MemoryGenerationSettingsSheetState
               : 'memory_mode_fast_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
-        if (_needsSidecar && _pipelineLoaded) ...[
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(
-                _sidecarReady
-                    ? Icons.link_outlined
-                    : Icons.warning_amber_rounded,
-                size: 14,
-                color: _sidecarReady
-                    ? context.cs.primary
-                    : context.cs.error,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  _sidecarReady
-                      ? 'memory_mode_sidecar_configured'.tr()
-                      : 'memory_mode_sidecar_not_configured'.tr(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _sidecarReady
-                        ? context.cs.onSurfaceVariant
-                        : context.cs.error,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
         // Phase 7.3 — "LLM config →" link to the Post-Building menu. This
-        // sheet is retrieval-only; the actual LLM endpoint/model/key for the
-        // sidecar, classifier, and consolidation live in [PostBuildingMenuDialog].
+        // sheet is retrieval-only; the actual LLM endpoint/model/key for
+        // generation, write-loop, cleaner, ledger, and consolidation live in
+        // [PostBuildingMenuDialog].
         // The link replaces the LLM fields that used to be inlined here before
         // the Phase 1/4 UI refactor.
         if (widget.charId != null && widget.sessionId != null) ...[
@@ -1105,8 +1069,7 @@ String _normalizeMemoryMode(String raw) {
   if (raw == 'deep') return 'deep';
   if (raw == 'legacy') return 'legacy';
   // `agentic` was removed in Phase 4 — migrate to `deep` (closest
-  // backward-compatible retrieval depth; the LLM sidecar layer is now
-  // a separate tracker concern).
+  // backward-compatible retrieval depth).
   if (raw == 'agentic') return 'deep';
   return raw == 'balanced' ? 'balanced' : 'fast';
 }
