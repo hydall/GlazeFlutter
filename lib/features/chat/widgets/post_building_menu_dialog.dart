@@ -121,7 +121,13 @@ class _PostBuildingMenuDialogState
                 onFetchModels: _fetchProviderModels,
               ),
               const SizedBox(height: 8),
-              _LedgerSection(pipeline: _pipeline, onSaved: _savePipeline),
+              _LedgerSection(
+                pipeline: _pipeline,
+                onSaved: _savePipeline,
+                modelsByApiConfigId: _modelsByApiConfigId,
+                fetchingModelConfigIds: _fetchingModelConfigIds,
+                onFetchModels: _fetchProviderModels,
+              ),
               const SizedBox(height: 8),
               _CadenceSection(pipeline: _pipeline, onSaved: _savePipeline),
               const SizedBox(height: 8),
@@ -490,43 +496,42 @@ class _CleanerSection extends StatelessWidget {
 class _LedgerSection extends StatelessWidget {
   final PipelineSettings pipeline;
   final PipelineSaver onSaved;
+  final Map<String, List<String>> modelsByApiConfigId;
+  final Set<String> fetchingModelConfigIds;
+  final FetchModels onFetchModels;
 
-  const _LedgerSection({required this.pipeline, required this.onSaved});
+  const _LedgerSection({
+    required this.pipeline,
+    required this.onSaved,
+    required this.modelsByApiConfigId,
+    required this.fetchingModelConfigIds,
+    required this.onFetchModels,
+  });
 
   @override
   Widget build(BuildContext context) {
     return _SectionCard(
       icon: Icons.menu_book_outlined,
-      titleKey: 'Studio Ledger',
+      titleKey: 'post_building_studio_ledger',
       children: [
         SwitchListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
-          title: const Text('Enable outside Studio'),
-          subtitle: const Text(
-            'Studio chats run Ledger automatically. Disable this only affects '
-            'non-Studio generations.',
-          ),
+          title: Text('post_building_studio_ledger_enable'.tr()),
+          subtitle: Text('post_building_studio_ledger_enable_desc'.tr()),
           value: pipeline.studioLedgerEnabled,
           onChanged: (v) => onSaved((p) => p.copyWith(studioLedgerEnabled: v)),
         ),
         const SizedBox(height: 4),
-        _HelperText(
-          'Extracts compact canon state after each final assistant response. '
-          'Medium models are recommended. Cheap models may work, but bad output '
-          'is rejected by schema validation and may reduce continuity.',
-        ),
+        _HelperText('post_building_studio_ledger_model_hint'.tr()),
         const SizedBox(height: 4),
-        _HelperText(
-          'Model: empty = inherit sidecar model. '
-          'Timeout: 0 = inherit sidecar timeout. '
-          'Max tokens: 0 = use default structured-output budget (2000). '
-          'Temperature: negative = use default 0.2.',
-        ),
+        _HelperText('post_building_studio_ledger_defaults_hint'.tr()),
         const SizedBox(height: 8),
-        _PipelineModelSelector(
-          labelKey: 'Studio Ledger model',
-          model: pipeline.studioLedgerModel,
+        _LedgerModelRow(
+          pipeline: pipeline,
+          modelsByApiConfigId: modelsByApiConfigId,
+          fetchingModelConfigIds: fetchingModelConfigIds,
+          onFetchModels: onFetchModels,
           onModelChanged: (v) =>
               onSaved((p) => p.copyWith(studioLedgerModel: v.trim())),
         ),
@@ -541,15 +546,17 @@ class _LedgerSection extends StatelessWidget {
               onSaved((p) => p.copyWith(studioLedgerApiKey: v.trim())),
         ),
         _NumberTile(
-          label: 'Studio Ledger timeout',
+          label: 'post_building_studio_ledger_timeout'.tr(),
           valueText: pipeline.studioLedgerTimeoutMs <= 0
-              ? 'inherit sidecar'
-              : '${pipeline.studioLedgerTimeoutMs} ms',
-          subtitleKey: '0 inherits sidecar timeout',
+              ? 'post_building_inherit_sidecar'.tr()
+              : 'post_building_ms_count'.tr(
+                  namedArgs: {'arg0': '${pipeline.studioLedgerTimeoutMs}'},
+                ),
+          subtitleKey: 'post_building_studio_ledger_timeout_desc',
           onTap: (ctx) async {
             final v = await _editNullableInt(
               ctx: ctx,
-              title: 'Studio Ledger timeout (ms)',
+              title: 'post_building_studio_ledger_timeout'.tr(),
               value: pipeline.studioLedgerTimeoutMs <= 0
                   ? null
                   : pipeline.studioLedgerTimeoutMs,
@@ -558,15 +565,17 @@ class _LedgerSection extends StatelessWidget {
           },
         ),
         _NumberTile(
-          label: 'Studio Ledger max tokens',
+          label: 'post_building_studio_ledger_max_tokens'.tr(),
           valueText: pipeline.studioLedgerMaxTokens <= 0
-              ? 'default'
-              : '${pipeline.studioLedgerMaxTokens}',
-          subtitleKey: '0 uses default structured-output budget',
+              ? 'post_building_default'.tr(namedArgs: {'arg0': '2000'})
+              : 'post_building_tokens_count'.tr(
+                  namedArgs: {'arg0': '${pipeline.studioLedgerMaxTokens}'},
+                ),
+          subtitleKey: 'post_building_studio_ledger_max_tokens_desc',
           onTap: (ctx) async {
             final v = await _editNullableInt(
               ctx: ctx,
-              title: 'Studio Ledger max tokens',
+              title: 'post_building_studio_ledger_max_tokens'.tr(),
               value: pipeline.studioLedgerMaxTokens <= 0
                   ? null
                   : pipeline.studioLedgerMaxTokens,
@@ -575,15 +584,15 @@ class _LedgerSection extends StatelessWidget {
           },
         ),
         _NumberTile(
-          label: 'Studio Ledger temperature',
+          label: 'post_building_studio_ledger_temperature'.tr(),
           valueText: pipeline.studioLedgerTemperature < 0
-              ? 'default'
+              ? 'post_building_default'.tr(namedArgs: {'arg0': '0.2'})
               : pipeline.studioLedgerTemperature.toStringAsFixed(2),
-          subtitleKey: 'negative uses default 0.2',
+          subtitleKey: 'post_building_studio_ledger_temperature_desc',
           onTap: (ctx) async {
             final v = await _editNullableDouble(
               ctx: ctx,
-              title: 'Studio Ledger temperature',
+              title: 'post_building_studio_ledger_temperature'.tr(),
               value: pipeline.studioLedgerTemperature < 0
                   ? null
                   : pipeline.studioLedgerTemperature,
@@ -615,16 +624,12 @@ class _CadenceSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SectionCard(
       icon: Icons.schedule_outlined,
-      titleKey: 'Cadence',
-      subtitleKey:
-          'Per-component run cadence (every turn / conditional / every N / manual / disabled)',
+      titleKey: 'post_building_cadence',
+      subtitleKey: 'post_building_cadence_desc',
       children: [
         _CadenceBlock(
-          label: 'Studio Ledger',
-          helperText:
-              'Default every turn. Interval/manual weakens continuity '
-              'and card-hook suppression. Studio forces it on regardless of '
-              'this setting, but the user can opt into a lower-power cadence.',
+          label: 'post_building_studio_ledger'.tr(),
+          helperText: 'post_building_cadence_studio_ledger_hint'.tr(),
           runMode: pipeline.studioLedgerRunMode,
           interval: pipeline.studioLedgerIntervalN,
           blockNextGen: pipeline.studioLedgerBlockNextGen,
@@ -637,10 +642,8 @@ class _CadenceSection extends StatelessWidget {
         ),
         const Divider(height: 24),
         _CadenceBlock(
-          label: 'Agentic write-loop',
-          helperText:
-              'Default every turn. Interval/manual slows memory '
-              'propagation. Use every N assistant turns for cost savings.',
+          label: 'post_building_cadence_write_loop'.tr(),
+          helperText: 'post_building_cadence_write_loop_hint'.tr(),
           runMode: pipeline.agenticWriteRunMode,
           interval: pipeline.runAgenticEveryN,
           blockNextGen: pipeline.agenticWriteBlockNextGen,
@@ -691,12 +694,27 @@ class _CadenceBlock extends StatelessWidget {
         _HelperText(helperText),
         const SizedBox(height: 8),
         SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'every_turn', label: Text('Every turn')),
-            ButtonSegment(value: 'every_n', label: Text('Every N')),
-            ButtonSegment(value: 'conditional', label: Text('Conditional')),
-            ButtonSegment(value: 'manual', label: Text('Manual')),
-            ButtonSegment(value: 'disabled', label: Text('Disabled')),
+          segments: [
+            ButtonSegment(
+              value: 'every_turn',
+              label: Text('post_building_cadence_every_turn'.tr()),
+            ),
+            ButtonSegment(
+              value: 'every_n',
+              label: Text('post_building_cadence_every_n'.tr()),
+            ),
+            ButtonSegment(
+              value: 'conditional',
+              label: Text('post_building_cadence_conditional'.tr()),
+            ),
+            ButtonSegment(
+              value: 'manual',
+              label: Text('post_building_cadence_manual'.tr()),
+            ),
+            ButtonSegment(
+              value: 'disabled',
+              label: Text('post_building_cadence_disabled'.tr()),
+            ),
           ],
           selected: {runMode},
           onSelectionChanged: (s) => onRunModeChanged(s.first),
@@ -704,13 +722,13 @@ class _CadenceBlock extends StatelessWidget {
         if (runMode == 'every_n') ...[
           const SizedBox(height: 8),
           _NumberTile(
-            label: 'Interval (assistant turns)',
+            label: 'post_building_cadence_interval'.tr(),
             valueText: '$interval',
-            subtitleKey: 'Run every N assistant turns',
+            subtitleKey: 'post_building_cadence_interval_desc',
             onTap: (ctx) async {
               final v = await _editInt(
                 ctx: ctx,
-                title: 'Interval',
+                title: 'post_building_cadence_interval'.tr(),
                 value: interval,
                 min: 1,
                 max: 100,
@@ -731,8 +749,7 @@ class _CadenceBlock extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  'Lower cadence may weaken long-term continuity and '
-                  'card-hook suppression.',
+                  'post_building_cadence_low_warning'.tr(),
                   style: TextStyle(
                     fontSize: 11,
                     fontStyle: FontStyle.italic,
@@ -747,10 +764,11 @@ class _CadenceBlock extends StatelessWidget {
         SwitchListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
-          title: Text('Block next generation'),
+          title: Text('post_building_cadence_block_next'.tr()),
           subtitle: Text(
-            'When true, block the next user-message generation until the '
-            '$label finishes (or times out). Default false = fire-and-forget.',
+            'post_building_cadence_block_next_desc'.tr(
+              namedArgs: {'arg0': label},
+            ),
             style: tt.bodySmall?.copyWith(
               color: cs.onSurfaceVariant,
               fontSize: 11,
@@ -1456,6 +1474,141 @@ class _CurrentApiModelRow extends StatelessWidget {
                 DropdownMenuItem<String>(
                   value: '',
                   child: Text('post_building_use_chat_model'.tr()),
+                ),
+                ...models.map(
+                  (m) => DropdownMenuItem<String>(
+                    value: m,
+                    child: Text(m, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ],
+              onChanged: (m) => onModelChanged(m ?? ''),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: IconButton.filledTonal(
+              tooltip: 'post_building_fetch_models'.tr(),
+              onPressed: isFetching ? null : () => onFetchModels(config),
+              icon: isFetching
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Studio Ledger model dropdown. Ledger inherits sidecar endpoint/key/model when
+/// its override fields are empty, then falls back to the active chat API.
+class _LedgerModelRow extends ConsumerWidget {
+  final PipelineSettings pipeline;
+  final Map<String, List<String>> modelsByApiConfigId;
+  final Set<String> fetchingModelConfigIds;
+  final FetchModels onFetchModels;
+  final Future<void> Function(String) onModelChanged;
+
+  const _LedgerModelRow({
+    required this.pipeline,
+    required this.modelsByApiConfigId,
+    required this.fetchingModelConfigIds,
+    required this.onFetchModels,
+    required this.onModelChanged,
+  });
+
+  ApiConfig? _resolveLedgerConfig(ApiConfig? activeApi) {
+    final endpoint = pipeline.studioLedgerEndpoint.isNotEmpty
+        ? pipeline.studioLedgerEndpoint
+        : pipeline.sidecarEndpoint;
+    final apiKey = pipeline.studioLedgerApiKey.isNotEmpty
+        ? pipeline.studioLedgerApiKey
+        : pipeline.sidecarApiKey;
+    final inheritedModel = pipeline.sidecarModel.isNotEmpty
+        ? pipeline.sidecarModel
+        : activeApi?.model ?? '';
+
+    if (endpoint.isNotEmpty) {
+      return ApiConfig(
+        id: 'ledger-custom:$endpoint',
+        name: 'Studio Ledger (custom)',
+        endpoint: endpoint,
+        apiKey: apiKey,
+        model: pipeline.studioLedgerModel.isNotEmpty
+            ? pipeline.studioLedgerModel
+            : inheritedModel,
+        protocol: 'openai',
+      );
+    }
+    if (activeApi == null) return null;
+    return ApiConfig(
+      id: 'ledger-current:${activeApi.id}',
+      name: 'Studio Ledger (current)',
+      endpoint: activeApi.endpoint,
+      apiKey: activeApi.apiKey,
+      model: pipeline.studioLedgerModel.isNotEmpty
+          ? pipeline.studioLedgerModel
+          : inheritedModel,
+      protocol: activeApi.protocol,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeApi = ref.read(activeApiConfigProvider);
+    final config = _resolveLedgerConfig(activeApi);
+    if (config == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          'post_building_no_chat_api'.tr(),
+          style: const TextStyle(fontSize: 12),
+        ),
+      );
+    }
+
+    final fetched = modelsByApiConfigId[config.id] ?? const <String>[];
+    final models = <String>{
+      ...fetched,
+      if (pipeline.studioLedgerModel.isNotEmpty &&
+          !fetched.contains(pipeline.studioLedgerModel))
+        pipeline.studioLedgerModel,
+    }.toList()..sort();
+    final selected = pipeline.studioLedgerModel.isEmpty
+        ? ''
+        : pipeline.studioLedgerModel;
+    final isFetching = fetchingModelConfigIds.contains(config.id);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: models.contains(selected) || selected.isEmpty
+                  ? selected
+                  : null,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'post_building_studio_ledger_model'.tr(),
+                helperText: 'post_building_studio_ledger_model_helper'.tr(
+                  namedArgs: {'arg0': config.model},
+                ),
+                helperMaxLines: 2,
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: [
+                DropdownMenuItem<String>(
+                  value: '',
+                  child: Text('post_building_use_inherited_model'.tr()),
                 ),
                 ...models.map(
                   (m) => DropdownMenuItem<String>(
