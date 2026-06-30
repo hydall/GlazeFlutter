@@ -246,16 +246,33 @@ class GenerationPipeline {
             ),
           );
 
-          // Stage 5: Studio Ledger — runs after POST-cleaner (fire-and-forget).
-          // Extracts entity/relationship/arc/world state and durable facts from
-          // the final assistant response on regen path.
-          unawaited(
-            _runStudioLedger(
-              sessionId: result.session!.id,
-              messages: result.session!.messages,
-              genId: genId,
-            ),
-          );
+          // Stage 5: Studio Ledger — same as normal path: launched from
+          // _executeAndApplyCleaner when cleaner is enabled, or fired here
+          // directly on raw text when cleaner is disabled.
+          if (!ref.read(pipelineSettingsProvider).postCleanerEnabled) {
+            ChatMessage? lastAssistant;
+            for (var i = result.session!.messages.length - 1; i >= 0; i--) {
+              final m = result.session!.messages[i];
+              if (m.role == 'assistant' &&
+                  !m.isError &&
+                  !m.isTyping &&
+                  m.content.trim().isNotEmpty) {
+                lastAssistant = m;
+                break;
+              }
+            }
+            if (lastAssistant != null) {
+              unawaited(
+                _runStudioLedger(
+                  sessionId: result.session!.id,
+                  messages: result.session!.messages,
+                  genId: genId,
+                  finalAssistantText: lastAssistant.content,
+                  targetMessage: lastAssistant,
+                ),
+              );
+            }
+          }
         }
         return regenOutcome;
       }
@@ -354,20 +371,34 @@ class GenerationPipeline {
           ),
         );
 
-        // Stage 5: Studio Ledger — extracts entity/relationship/arc/world
-        // state and durable MemoryBook facts from the final assistant response.
-        // Fire-and-forget; never blocks generation or user interaction.
-        // Runs after POST-cleaner is dispatched (both are fire-and-forget,
-        // so the ledger may race with the cleaner — that is intentional:
-        // the ledger uses the raw streamed text, the cleaner rewrites it).
+        // Stage 5: Studio Ledger — launched from _executeAndApplyCleaner
+        // when the cleaner is enabled (so it uses cleaned text). When the
+        // cleaner is disabled, fire here on the raw assistant text.
         // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Pipeline Placement.
-        unawaited(
-          _runStudioLedger(
-            sessionId: result.session!.id,
-            messages: result.session!.messages,
-            genId: genId,
-          ),
-        );
+        if (!ref.read(pipelineSettingsProvider).postCleanerEnabled) {
+          ChatMessage? lastAssistant;
+          for (var i = result.session!.messages.length - 1; i >= 0; i--) {
+            final m = result.session!.messages[i];
+            if (m.role == 'assistant' &&
+                !m.isError &&
+                !m.isTyping &&
+                m.content.trim().isNotEmpty) {
+              lastAssistant = m;
+              break;
+            }
+          }
+          if (lastAssistant != null) {
+            unawaited(
+              _runStudioLedger(
+                sessionId: result.session!.id,
+                messages: result.session!.messages,
+                genId: genId,
+                finalAssistantText: lastAssistant.content,
+                targetMessage: lastAssistant,
+              ),
+            );
+          }
+        }
       }
 
       return GenerationOutcome(
@@ -1506,9 +1537,11 @@ class GenerationPipeline {
     // ChatState copy that must be pushed.
     // Note: we do NOT check isCurrentGen here — the cleaner may run
     // after a regen, and the UI must always reflect the cleaned swipe.
+    List<ChatMessage>? refreshedMessages;
     if (ref.mounted) {
       final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
       if (refreshed != null) {
+        refreshedMessages = refreshed.messages;
         ChatSessionService.updateCache(refreshed);
         final current = getState().value;
         if (current != null) {
@@ -1521,6 +1554,35 @@ class GenerationPipeline {
         ref.invalidate(chatHistoryProvider);
       }
     }
+
+    // Stage 5: Studio Ledger — fired here so it always receives the final
+    // canonical text (cleaned when wasCleaned, skipped-original when skipped,
+    // partial when partial, raw when cleaner errored/produced nothing).
+    // Plan §Pipeline Placement: «Ledger must not run on pre-cleaner text».
+    if (ref.mounted && !isManualRerun) {
+      // Determine the best available final text for the ledger:
+      // 1. wasCleaned → cleanedText is the new canon.
+      // 2. skipped → assistantText (original preserved, cleaned rejected).
+      // 3. partial → _lastStreamedText (persisted as partial swipe).
+      // 4. error/nothing → assistantText (original unchanged in DB).
+      final ledgerText = result.wasCleaned
+          ? result.cleanedText
+          : result.status == 'skipped'
+          ? assistantText
+          : _lastStreamedText.trim().isNotEmpty
+          ? _lastStreamedText
+          : assistantText;
+
+      unawaited(
+        _runStudioLedger(
+          sessionId: sessionId,
+          messages: refreshedMessages ?? recentMessages,
+          genId: genId,
+          finalAssistantText: ledgerText,
+          targetMessage: targetMessage,
+        ),
+      );
+    }
   }
 
   /// Stage 5: Studio Ledger trigger.
@@ -1530,9 +1592,15 @@ class GenerationPipeline {
   /// from the final assistant response and persists them via
   /// [StudioLedgerService]. Only runs when [PipelineSettings.studioLedgerEnabled].
   ///
-  /// Uses the raw final assistant text (not the POST-cleaner rewrite) because
-  /// both are dispatched concurrently. The ledger captures what the narrative
-  /// SAID, not what the cleaner polished — style rewrites do not change facts.
+  /// [finalAssistantText] — the text the ledger should analyse. When the
+  /// POST-cleaner is enabled, this is the cleaned text (plan §Pipeline
+  /// Placement: «Ledger must not run on pre-cleaner text»). When the cleaner
+  /// is disabled this is the raw streamed assistant text.
+  ///
+  /// [targetMessage] — the assistant message the text belongs to. Used for
+  /// provenance coordinates (messageId, swipeId, agentSwipeId).
+  ///
+  /// [messages] — full session message list for recent-history context.
   ///
   /// Staleness guard: checks [abortHandler.isCurrentGen] before writing (after
   /// the LLM returns). The service itself never throws — errors land in
@@ -1541,40 +1609,43 @@ class GenerationPipeline {
     required String sessionId,
     required List<ChatMessage> messages,
     required int genId,
+    required String finalAssistantText,
+    required ChatMessage targetMessage,
   }) async {
     if (!ref.mounted) return;
 
     try {
       final pipeline = ref.read(pipelineSettingsProvider);
-      if (!pipeline.studioLedgerEnabled) return;
 
-      // Find the last non-error, non-typing assistant message.
-      final lastAssistant = messages.lastWhere(
-        (m) => m.role == 'assistant' && !m.isError && !m.isTyping,
-        orElse: () => messages.last,
-      );
-      if (lastAssistant.role != 'assistant' ||
-          lastAssistant.isError ||
-          lastAssistant.content.trim().isEmpty) {
-        return;
+      // Ledger is mandatory while Studio is enabled (plan §Product Decisions:
+      // "Studio Ledger is mandatory while Studio is enabled").
+      // studioLedgerEnabled can still be used as an explicit on-switch when
+      // Studio is disabled (standalone mode, future use).
+      bool ledgerShouldRun = pipeline.studioLedgerEnabled;
+      if (!ledgerShouldRun) {
+        try {
+          final studioConfig = await ref
+              .read(studioConfigRepoProvider)
+              .getBySessionId(sessionId);
+          ledgerShouldRun = studioConfig?.enabled == true;
+        } catch (_) {}
       }
+      if (!ledgerShouldRun) return;
 
+      if (finalAssistantText.trim().isEmpty) return;
       if (!abortHandler.isCurrentGen(genId)) return;
 
-      final recentHistory = extractRecentHistoryText(
-        messages,
-        maxMessages: 10,
-      );
+      final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
       final service = ref.read(studioLedgerServiceProvider);
       final result = await service.run(
         sessionId: sessionId,
         settings: pipeline,
-        finalAssistantText: lastAssistant.content,
+        finalAssistantText: finalAssistantText,
         recentHistoryText: recentHistory,
-        messageId: lastAssistant.id,
-        swipeId: lastAssistant.swipeId,
-        agentSwipeId: lastAssistant.agentSwipeId,
+        messageId: targetMessage.id,
+        swipeId: targetMessage.swipeId,
+        agentSwipeId: targetMessage.agentSwipeId,
         isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
       );
 
@@ -1586,7 +1657,9 @@ class GenerationPipeline {
         'error=${result.error ?? "none"}',
       );
     } catch (e) {
-      debugPrint('[StudioLedger] pipeline trigger failed session=$sessionId: $e');
+      debugPrint(
+        '[StudioLedger] pipeline trigger failed session=$sessionId: $e',
+      );
     }
   }
 

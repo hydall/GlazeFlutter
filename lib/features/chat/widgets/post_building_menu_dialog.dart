@@ -121,6 +121,8 @@ class _PostBuildingMenuDialogState
                 onFetchModels: _fetchProviderModels,
               ),
               const SizedBox(height: 8),
+              _LedgerSection(pipeline: _pipeline, onSaved: _savePipeline),
+              const SizedBox(height: 8),
               _WriteLoopSection(
                 pipeline: _pipeline,
                 onSaved: _savePipeline,
@@ -472,6 +474,126 @@ class _CleanerSection extends StatelessWidget {
           value: pipeline.postCleanerDisableReasoning,
           onChanged: (v) =>
               onSaved((p) => p.copyWith(postCleanerDisableReasoning: v)),
+        ),
+      ],
+    );
+  }
+}
+
+/// Studio Ledger model/timeout settings.
+///
+/// Ledger is mandatory while Studio is enabled; the switch below only controls
+/// standalone ledger operation for non-Studio generations. Studio-enabled chats
+/// force it on in the generation pipeline.
+class _LedgerSection extends StatelessWidget {
+  final PipelineSettings pipeline;
+  final PipelineSaver onSaved;
+
+  const _LedgerSection({required this.pipeline, required this.onSaved});
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      icon: Icons.menu_book_outlined,
+      titleKey: 'Studio Ledger',
+      children: [
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Enable outside Studio'),
+          subtitle: const Text(
+            'Studio chats run Ledger automatically. Disable this only affects '
+            'non-Studio generations.',
+          ),
+          value: pipeline.studioLedgerEnabled,
+          onChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerEnabled: v)),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Extracts compact canon state after each final assistant response. '
+          'Medium models are recommended. Cheap models may work, but bad '
+          'output is rejected by schema validation and may reduce continuity.',
+          style: TextStyle(
+            fontSize: 11,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _PipelineModelSelector(
+          labelKey: 'Studio Ledger model',
+          model: pipeline.studioLedgerModel,
+          onModelChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerModel: v.trim())),
+        ),
+        _PipelineEndpointField(
+          endpoint: pipeline.studioLedgerEndpoint,
+          onEndpointChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerEndpoint: v.trim())),
+        ),
+        _PipelineApiKeyField(
+          apiKey: pipeline.studioLedgerApiKey,
+          onApiKeyChanged: (v) =>
+              onSaved((p) => p.copyWith(studioLedgerApiKey: v.trim())),
+        ),
+        _NumberTile(
+          label: 'Studio Ledger timeout',
+          valueText: pipeline.studioLedgerTimeoutMs <= 0
+              ? 'inherit sidecar'
+              : '${pipeline.studioLedgerTimeoutMs} ms',
+          subtitleKey: '0 inherits sidecar timeout',
+          onTap: (ctx) async {
+            final v = await _editNullableInt(
+              ctx: ctx,
+              title: 'Studio Ledger timeout (ms)',
+              value: pipeline.studioLedgerTimeoutMs <= 0
+                  ? null
+                  : pipeline.studioLedgerTimeoutMs,
+            );
+            await onSaved(
+              (p) => p.copyWith(studioLedgerTimeoutMs: v ?? 0),
+            );
+          },
+        ),
+        _NumberTile(
+          label: 'Studio Ledger max tokens',
+          valueText: pipeline.studioLedgerMaxTokens <= 0
+              ? 'default'
+              : '${pipeline.studioLedgerMaxTokens}',
+          subtitleKey: '0 uses default structured-output budget',
+          onTap: (ctx) async {
+            final v = await _editNullableInt(
+              ctx: ctx,
+              title: 'Studio Ledger max tokens',
+              value: pipeline.studioLedgerMaxTokens <= 0
+                  ? null
+                  : pipeline.studioLedgerMaxTokens,
+            );
+            await onSaved(
+              (p) => p.copyWith(studioLedgerMaxTokens: v ?? 0),
+            );
+          },
+        ),
+        _NumberTile(
+          label: 'Studio Ledger temperature',
+          valueText: pipeline.studioLedgerTemperature < 0
+              ? 'default'
+              : pipeline.studioLedgerTemperature.toStringAsFixed(2),
+          subtitleKey: 'negative uses default 0.2',
+          onTap: (ctx) async {
+            final v = await _editNullableDouble(
+              ctx: ctx,
+              title: 'Studio Ledger temperature',
+              value: pipeline.studioLedgerTemperature < 0
+                  ? null
+                  : pipeline.studioLedgerTemperature,
+              min: 0,
+              max: 2,
+            );
+            await onSaved(
+              (p) => p.copyWith(studioLedgerTemperature: v ?? -1.0),
+            );
+          },
         ),
       ],
     );

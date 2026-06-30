@@ -8,6 +8,7 @@ import '../../../core/state/studio_build_provider.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../controllers/studio_menu_controller.dart';
+import 'ledger_diagnostics_sheet.dart';
 import 'post_building_menu_dialog.dart';
 
 /// Lightweight Studio tracker dialog (Phase 7.1).
@@ -90,10 +91,8 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     final result = await showDialog<List<PromptShardBlock>>(
       context: context,
       useRootNavigator: true,
-      builder: (context) => _ShardBlockEditorDialog(
-        agentName: agent.name,
-        blocks: edited,
-      ),
+      builder: (context) =>
+          _ShardBlockEditorDialog(agentName: agent.name, blocks: edited),
     );
     if (result == null) return;
     await _setAgentPromptShard(agent, result);
@@ -172,7 +171,9 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
 
   Future<void> _setTrackerModelOverride(String modelOverride) async {
     final pipeline = ref.read(pipelineSettingsProvider);
-    final updated = pipeline.copyWith(studioTrackerModelOverride: modelOverride);
+    final updated = pipeline.copyWith(
+      studioTrackerModelOverride: modelOverride,
+    );
     await ref.read(pipelineSettingsProvider.notifier).save(updated);
     if (!mounted) return;
     setState(() {});
@@ -222,14 +223,19 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
+  Future<void> _openLedgerDiagnostics() async {
+    await LedgerDiagnosticsSheet.show(context, sessionId: widget.sessionId);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Re-attach to the provider-scoped build state so a build started in a
     // previous instance of this dialog (then closed) still drives the overlay
     // and fires its completion toast here. Watching keeps the overlay live;
     // listening detects the running -> finished edge to drain the result.
-    final buildStatus =
-        ref.watch(studioBuildProvider.select((m) => m[widget.sessionId]));
+    final buildStatus = ref.watch(
+      studioBuildProvider.select((m) => m[widget.sessionId]),
+    );
     ref.listen(
       studioBuildProvider.select((m) => m[widget.sessionId]?.building ?? false),
       (prev, next) {
@@ -299,8 +305,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                       else ...[
                         // ── Trackers section (7 pre-gen controllers) ──
                         _TrackersSection(
-                          activeAgents: activeAgents.where((a) => !a.id.contains('final')).toList(),
-                          disabledAgents: disabledAgents.where((a) => !a.id.contains('final')).toList(),
+                          activeAgents: activeAgents
+                              .where((a) => !a.id.contains('final'))
+                              .toList(),
+                          disabledAgents: disabledAgents
+                              .where((a) => !a.id.contains('final'))
+                              .toList(),
                           trackerValueFor: _ctrl.trackerValueFor,
                           onToggle: _toggleAgent,
                           onEditShard: _editAgentShard,
@@ -311,8 +321,12 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                         const SizedBox(height: 12),
                         // ── Finalizer section (Main Responder) ──
                         _FinalizerSection(
-                          activeFinalAgents: activeAgents.where((a) => a.id.contains('final')).toList(),
-                          disabledFinalAgents: disabledAgents.where((a) => a.id.contains('final')).toList(),
+                          activeFinalAgents: activeAgents
+                              .where((a) => a.id.contains('final'))
+                              .toList(),
+                          disabledFinalAgents: disabledAgents
+                              .where((a) => a.id.contains('final'))
+                              .toList(),
                           trackerValueFor: _ctrl.trackerValueFor,
                           onToggle: _toggleAgent,
                           onEditShard: _editAgentShard,
@@ -329,6 +343,14 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                             label: const Text('Build Studio'),
                           ),
                           const Spacer(),
+                          TextButton.icon(
+                            onPressed: _openLedgerDiagnostics,
+                            icon: const Icon(
+                              Icons.menu_book_outlined,
+                              size: 16,
+                            ),
+                            label: const Text('Ledger'),
+                          ),
                           TextButton.icon(
                             onPressed: _openAdvanced,
                             icon: const Icon(Icons.open_in_new, size: 16),
@@ -557,17 +579,16 @@ class _StudioTimeoutTile extends ConsumerWidget {
     final tt = Theme.of(context).textTheme;
     final valueText = pipeline.studioTimeoutMs == 0
         ? 'post_building_default_seconds'.tr(namedArgs: {'arg0': '90'})
-        : 'post_building_seconds_count'.tr(namedArgs: {
-            'arg0': (pipeline.studioTimeoutMs / 1000).toStringAsFixed(0),
-          });
+        : 'post_building_seconds_count'.tr(
+            namedArgs: {
+              'arg0': (pipeline.studioTimeoutMs / 1000).toStringAsFixed(0),
+            },
+          );
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
       leading: Icon(Icons.timer_outlined, size: 20, color: cs.onSurfaceVariant),
-      title: Text(
-        'post_building_studio_timeout'.tr(),
-        style: tt.bodyMedium,
-      ),
+      title: Text('post_building_studio_timeout'.tr(), style: tt.bodyMedium),
       subtitle: Text(
         '$valueText — ${'post_building_studio_timeout_desc'.tr()}',
         style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
@@ -647,11 +668,12 @@ class _StudioMaxTokensTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(Icons.text_snippet_outlined, size: 20, color: cs.onSurfaceVariant),
-      title: Text(
-        'post_building_studio_max_tokens'.tr(),
-        style: tt.bodyMedium,
+      leading: Icon(
+        Icons.text_snippet_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
       ),
+      title: Text('post_building_studio_max_tokens'.tr(), style: tt.bodyMedium),
       subtitle: Text(
         '$valueText — ${'post_building_studio_max_tokens_desc'.tr()}',
         style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11),
@@ -730,7 +752,11 @@ class _StudioTemperatureTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(Icons.thermostat_outlined, size: 20, color: cs.onSurfaceVariant),
+      leading: Icon(
+        Icons.thermostat_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
       title: Text(
         'post_building_studio_temperature'.tr(),
         style: tt.bodyMedium,
@@ -760,7 +786,9 @@ class _StudioTemperatureTile extends ConsumerWidget {
                 TextField(
                   controller: controller,
                   autofocus: true,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     suffixText: '0.0 – 2.0',
                     border: OutlineInputBorder(),
@@ -1072,7 +1100,11 @@ class _StudioTrackerMaxTokensTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(Icons.text_snippet_outlined, size: 20, color: cs.onSurfaceVariant),
+      leading: Icon(
+        Icons.text_snippet_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
       title: Text(
         'post_building_studio_tracker_max_tokens'.tr(),
         style: tt.bodyMedium,
@@ -1155,7 +1187,11 @@ class _StudioTrackerTemperatureTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(Icons.thermostat_outlined, size: 20, color: cs.onSurfaceVariant),
+      leading: Icon(
+        Icons.thermostat_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
       title: Text(
         'post_building_studio_tracker_temperature'.tr(),
         style: tt.bodyMedium,
@@ -1185,7 +1221,9 @@ class _StudioTrackerTemperatureTile extends ConsumerWidget {
                 TextField(
                   controller: controller,
                   autofocus: true,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     suffixText: '0.0 – 2.0',
                     border: OutlineInputBorder(),
@@ -1311,9 +1349,7 @@ class _ShardBlockEditorDialogState extends State<_ShardBlockEditorDialog> {
       final name = _nameControllers[i].text.trim();
       final content = _contentControllers[i].text.trim();
       if (content.isEmpty) continue;
-      result.add(
-        _blocks[i].copyWith(blockName: name, content: content),
-      );
+      result.add(_blocks[i].copyWith(blockName: name, content: content));
     }
     return result;
   }

@@ -42,7 +42,8 @@ import 'studio_ledger_prompt.dart';
 
 /// Result of a single Studio Ledger run.
 class LedgerRunResult {
-  final String status; // 'ok' | 'skipped' | 'disabled' | 'timeout' | 'error' | 'aborted'
+  final String
+  status; // 'ok' | 'skipped' | 'disabled' | 'timeout' | 'error' | 'aborted'
   final String? visibleLedger;
   final int opsApplied;
   final int durableFactsWritten;
@@ -81,9 +82,9 @@ class StudioLedgerService {
   final StudioLedgerPrompt _promptBuilder;
 
   StudioLedgerService(this._ref)
-      : _llm = SidecarLlmClient(_ref),
-        _parser = const StudioLedgerExportParser(),
-        _promptBuilder = const StudioLedgerPrompt();
+    : _llm = SidecarLlmClient(_ref),
+      _parser = const StudioLedgerExportParser(),
+      _promptBuilder = const StudioLedgerPrompt();
 
   /// Run the Studio Ledger for [sessionId] on [finalAssistantText].
   ///
@@ -132,10 +133,8 @@ class StudioLedgerService {
 
       final currentTrackers = await trackerRepo.getBySessionId(sessionId);
       final book = await bookRepo.getBySessionId(sessionId);
-      final recentEntries = book?.entries
-              .where((e) => e.status == 'active')
-              .take(20)
-              .toList() ??
+      final recentEntries =
+          book?.entries.where((e) => e.status == 'active').take(20).toList() ??
           const <MemoryEntry>[];
 
       if (token.isCancelled || isStillCurrent?.call() == false) {
@@ -313,6 +312,15 @@ class StudioLedgerService {
     required String messageId,
     required TrackerRepo trackerRepo,
   }) async {
+    // Plan §Manual Overrides and Locks: if canon_lock:<key> = 'true',
+    // Studio Ledger must not update that state key.
+    final lockKey = 'canon_lock:${op.key}';
+    final lock = await trackerRepo.get(sessionId, lockKey);
+    if (lock != null && lock.value.trim().toLowerCase() == 'true') {
+      debugPrint('[StudioLedger] op blocked by canon_lock key=${op.key}');
+      return;
+    }
+
     final provenance =
         'studio_ledger:$messageId${op.evidence.isNotEmpty ? ':${op.evidence.substring(0, op.evidence.length.clamp(0, 80))}' : ''}';
 
@@ -399,7 +407,7 @@ class StudioLedgerService {
           title: fact.title.trim(),
           content: fact.content.trim(),
           keys: fact.keys,
-          kind: 'agent',
+          kind: 'studio_ledger',
           source: 'studio_ledger',
           sourceHash: hash,
           messageIds: [messageId],

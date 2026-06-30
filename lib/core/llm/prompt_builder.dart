@@ -107,6 +107,12 @@ class PromptPayload {
   final String? arcContent;
   final String? entitiesContent;
 
+  /// Compiled `<studio_session_state>` block from committed ledger tracker rows.
+  /// Injected via `{{studio_state}}` macro and as a hard system block at the
+  /// start of the prompt. Null/empty when Studio Ledger is disabled or no
+  /// state has been committed for this session yet.
+  final String? studioSessionStateContent;
+
   /// Lossless backstop for the lossy MemoryBook compression — top-K raw
   /// chat-message chunks semantically closest to the current user message,
   /// returned by [MessageRecallService]. Injected into the prompt as a
@@ -163,6 +169,7 @@ class PromptPayload {
     this.chunkFirstTopChunks = 1,
     this.arcContent,
     this.entitiesContent,
+    this.studioSessionStateContent,
     this.recalledMessagesContent,
     this.memoryInjectionFingerprint = '',
   });
@@ -301,6 +308,7 @@ PromptResult buildPrompt(PromptPayload payload) {
     memoryContent: payload.memoryMacroContent,
     arcContent: payload.arcContent,
     entitiesContent: payload.entitiesContent,
+    studioSessionState: payload.studioSessionStateContent,
   );
 
   var currentSessionVars = Map<String, String>.from(payload.sessionVars);
@@ -937,6 +945,20 @@ PromptResult _assembleMessages({
     // 'macro' target: skip hard block, user must place {{memory}} in preset
   }
 
+  // Studio Session State: inject <studio_session_state> canon block so
+  // the LLM sees committed entity/relationship/arc/world state overriding
+  // character-card baseline. Placed before recalled_messages so it has
+  // higher authority in the context window.
+  // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Prompt Injection.
+  if (payload.studioSessionStateContent != null &&
+      payload.studioSessionStateContent!.isNotEmpty) {
+    _injectStudioSessionStateBlock(
+      messages,
+      attributionBlocks,
+      payload.studioSessionStateContent!,
+    );
+  }
+
   // NEW (patch #3): inject <recalled_messages> BEFORE the memory block so
   // the LLM sees the raw original chunks first, then the compressed
   // MemoryBook facts on top. Recall is the lossless backstop; MemoryBook
@@ -1237,9 +1259,7 @@ void _injectRecalledMessagesBlock(
   List<StaticBlock> attributionBlocks,
   String content,
 ) {
-  attributionBlocks.add(
-    StaticBlock(id: 'recalled_messages', content: content),
-  );
+  attributionBlocks.add(StaticBlock(id: 'recalled_messages', content: content));
   final recallMsg = PromptMessage(
     role: 'system',
     content: content,
@@ -1251,6 +1271,33 @@ void _injectRecalledMessagesBlock(
     messages.insert(historyIdx, recallMsg);
   } else {
     messages.add(recallMsg);
+  }
+}
+
+/// Injects the `<studio_session_state>` system block before the first history
+/// message so the LLM sees committed entity/relationship/arc/world canon state
+/// overriding character-card baseline. Placed before recalled_messages to give
+/// it higher context-window authority.
+/// See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Prompt Injection.
+void _injectStudioSessionStateBlock(
+  List<PromptMessage> messages,
+  List<StaticBlock> attributionBlocks,
+  String content,
+) {
+  attributionBlocks.add(
+    StaticBlock(id: 'studio_session_state', content: content),
+  );
+  final stateMsg = PromptMessage(
+    role: 'system',
+    content: content,
+    blockId: 'studio_session_state',
+    blockName: 'Studio Session State',
+  );
+  final historyIdx = messages.indexWhere((m) => m.isHistory);
+  if (historyIdx >= 0) {
+    messages.insert(historyIdx, stateMsg);
+  } else {
+    messages.add(stateMsg);
   }
 }
 
