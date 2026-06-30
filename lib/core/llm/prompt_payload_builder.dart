@@ -56,6 +56,7 @@ class PromptPayloadBuilder {
     required ChatSession? session,
     String? guidanceText,
     bool skipVectorSearch = false,
+    bool skipMemoryLlmSidecars = false,
     bool Function()? shouldAbort,
     CancelToken? cancelToken,
   }) async {
@@ -180,6 +181,7 @@ class PromptPayloadBuilder {
         shouldAbort: shouldAbort,
         cancelToken: cancelToken,
         contextBudgetTokens: chatApi.contextSize,
+        skipLlmSidecars: skipMemoryLlmSidecars,
       );
 
       // NEW (patch #3): raw-message recall — cosine search over

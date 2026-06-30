@@ -73,11 +73,22 @@ class StreamGenerationService {
       );
     }
     try {
+      final studioService = _ref.read(memoryStudioServiceProvider);
+      final studioConfig = await studioService.getEnabledConfig(session.id);
+      if (_isAborted()) {
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
+      }
+
       final builder = _ref.read(promptPayloadBuilderProvider);
       final payload = await builder.buildFromSession(
         charId: _charId,
         session: session,
         guidanceText: guidanceText,
+        skipMemoryLlmSidecars: studioConfig != null,
         shouldAbort: _isAborted,
         cancelToken: cancelToken,
       );
@@ -89,17 +100,6 @@ class StreamGenerationService {
         );
       }
       final apiConfig = payload.apiConfig;
-
-      final studioConfig = await _ref
-          .read(memoryStudioServiceProvider)
-          .getEnabledConfig(session.id);
-      if (_isAborted()) {
-        return ChatState(
-          session: saveSession ?? session,
-          isGenerating: false,
-          visibleStartIndex: vsi,
-        );
-      }
 
       final effectivePayload = studioConfig != null
           ? PromptPayload(
@@ -243,7 +243,6 @@ class StreamGenerationService {
           });
         }
 
-        final studioService = _ref.read(memoryStudioServiceProvider);
         final studioResult = await studioService.runTrackerCycle(
           config: studioConfig,
           promptResult: promptResult,
@@ -950,8 +949,9 @@ class StreamGenerationService {
   }
 
   String _resolvedTrackerModel(ApiConfig apiConfig) {
-    final override =
-        _ref.read(pipelineSettingsProvider).studioTrackerModelOverride;
+    final override = _ref
+        .read(pipelineSettingsProvider)
+        .studioTrackerModelOverride;
     return override.isNotEmpty ? override : apiConfig.model;
   }
 

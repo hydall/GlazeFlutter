@@ -117,6 +117,7 @@ class MemoryInjectionService {
     CancelToken? cancelToken,
     int? contextBudgetTokens,
     Set<String> visibleMessageIds = const {},
+    bool skipLlmSidecars = false,
   }) async {
     final result = await buildCandidatesWithDiagnostics(
       sessionId: sessionId,
@@ -127,6 +128,7 @@ class MemoryInjectionService {
       cancelToken: cancelToken,
       contextBudgetTokens: contextBudgetTokens,
       visibleMessageIds: visibleMessageIds,
+      skipLlmSidecars: skipLlmSidecars,
     );
     return result.selection;
   }
@@ -140,6 +142,7 @@ class MemoryInjectionService {
     CancelToken? cancelToken,
     int? contextBudgetTokens,
     Set<String> visibleMessageIds = const {},
+    bool skipLlmSidecars = false,
   }) async {
     final sw = Stopwatch()..start();
     MemoryCandidateBuildResult finish(
@@ -233,7 +236,9 @@ class MemoryInjectionService {
         final lowerQuery = scanText.toLowerCase();
         for (final entity in entities) {
           final names = [entity.name, ...entity.aliases];
-          if (names.any((n) => n.isNotEmpty && lowerQuery.contains(n.toLowerCase()))) {
+          if (names.any(
+            (n) => n.isNotEmpty && lowerQuery.contains(n.toLowerCase()),
+          )) {
             entityOverlapByEntryId = Map.fromEntries([
               ...entityOverlapByEntryId.entries,
             ]);
@@ -315,7 +320,9 @@ class MemoryInjectionService {
     );
 
     var finalSelection = selection;
-    MemoryClassifierResult? classifierResult = const MemoryClassifierResult(status: 'disabled');
+    MemoryClassifierResult? classifierResult = const MemoryClassifierResult(
+      status: 'disabled',
+    );
     MemorySidecarResult? sidecarResult;
     var prewarmHit = false;
 
@@ -323,7 +330,10 @@ class MemoryInjectionService {
     if (book.settings.memoryMode == 'balanced' &&
         _classifierService != null &&
         pipeline.classifierEnabled &&
-        !selection.allScores.every((s) => s.excludedBySourceWindow || s.score == 0)) {
+        !skipLlmSidecars &&
+        !selection.allScores.every(
+          (s) => s.excludedBySourceWindow || s.score == 0,
+        )) {
       final candidateTitles = selection.allScores
           .where((s) => !s.excludedBySourceWindow && s.score > 0)
           .map((s) => s.entry.title)
@@ -348,6 +358,7 @@ class MemoryInjectionService {
     // Deep mode: sidecar reranker with prewarm
     if (book.settings.memoryMode == 'deep' &&
         _sidecarService != null &&
+        !skipLlmSidecars &&
         pipeline.sidecarEnabled) {
       // Try prewarm cache first
       if (_prewarmCache != null) {
@@ -384,25 +395,33 @@ class MemoryInjectionService {
           cancelToken: cancelToken,
         );
         if (shouldAbort?.call() == true) {
-          return finish(finalSelection, budget: budget, settings: book.settings);
+          return finish(
+            finalSelection,
+            budget: budget,
+            settings: book.settings,
+          );
         }
         finalSelection = sidecarResult.selection;
 
         // Store for next-turn prewarm
         if (_prewarmCache != null && sidecarResult.status == 'ok') {
-          _prewarmCache.put(MemorySidecarPrewarmEntry(
-            key: MemorySidecarPrewarmKey(
-              sessionId: sessionId,
-              branchId: sessionId,
-              anchorMessageId: history.isNotEmpty ? history.last.id : sessionId,
-              anchorSwipeId: history.isNotEmpty ? history.last.swipeId : 0,
-              settingsRevision: '',
-              memoryRevision: book.updatedAt.toString(),
-              historyRevision: '${history.length}',
+          _prewarmCache.put(
+            MemorySidecarPrewarmEntry(
+              key: MemorySidecarPrewarmKey(
+                sessionId: sessionId,
+                branchId: sessionId,
+                anchorMessageId: history.isNotEmpty
+                    ? history.last.id
+                    : sessionId,
+                anchorSwipeId: history.isNotEmpty ? history.last.swipeId : 0,
+                settingsRevision: '',
+                memoryRevision: book.updatedAt.toString(),
+                historyRevision: '${history.length}',
+              ),
+              result: sidecarResult,
+              createdAtMillis: DateTime.now().millisecondsSinceEpoch,
             ),
-            result: sidecarResult,
-            createdAtMillis: DateTime.now().millisecondsSinceEpoch,
-          ));
+          );
         }
       }
     }
@@ -441,6 +460,7 @@ class MemoryInjectionService {
     CancelToken? cancelToken,
     int? contextBudgetTokens,
     Set<String> visibleMessageIds = const {},
+    bool skipLlmSidecars = false,
   }) async {
     final chatHistory = (history ?? const [])
         .map((m) => ChatMessage(id: '', role: m.role, content: m.content))
@@ -454,6 +474,7 @@ class MemoryInjectionService {
       cancelToken: cancelToken,
       contextBudgetTokens: contextBudgetTokens,
       visibleMessageIds: visibleMessageIds,
+      skipLlmSidecars: skipLlmSidecars,
     );
     final selection = candidateResult.selection;
     final settings = candidateResult.settings ?? const MemoryBookSettings();
@@ -874,11 +895,11 @@ final memoryEmbeddingServiceProvider = Provider<MemoryEmbeddingService>((ref) {
 // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
 final chatMessageEmbeddingServiceProvider =
     Provider<ChatMessageEmbeddingService>((ref) {
-  return ChatMessageEmbeddingService(
-    ref.watch(embeddingRepoProvider),
-    EmbeddingService(),
-  );
-});
+      return ChatMessageEmbeddingService(
+        ref.watch(embeddingRepoProvider),
+        EmbeddingService(),
+      );
+    });
 
 final messageRecallServiceProvider = Provider<MessageRecallService>((ref) {
   return MessageRecallService(

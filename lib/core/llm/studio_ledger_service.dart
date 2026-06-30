@@ -186,13 +186,19 @@ class StudioLedgerService {
       }
 
       if (!outcome.isOk || outcome.text == null || outcome.text!.isEmpty) {
+        final lastAttempt = outcome.attempts.lastOrNull;
         debugPrint(
           '[StudioLedger] LLM call failed session=$sessionId '
-          'status=${outcome.attempts.lastOrNull?.status}',
+          'status=${lastAttempt?.status} '
+          'statusCode=${lastAttempt?.statusCode ?? 0} '
+          'elapsedMs=${lastAttempt?.elapsedMs ?? 0} '
+          'error=${lastAttempt?.error ?? "none"}',
         );
         return LedgerRunResult(
           status: 'error',
-          error: 'LLM call failed: ${outcome.attempts.lastOrNull?.status}',
+          error:
+              'LLM call failed: ${lastAttempt?.status}'
+              '${lastAttempt?.error != null ? ': ${lastAttempt!.error}' : ''}',
           elapsedMs: sw.elapsedMilliseconds,
           attempts: outcome.attempts,
           model: config.model,
