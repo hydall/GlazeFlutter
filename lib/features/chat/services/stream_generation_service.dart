@@ -17,8 +17,10 @@ import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/agent_operation_record.dart';
+import '../../../core/models/api_config.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
+import '../../../core/state/pipeline_settings_provider.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../state/agent_operations_log_provider.dart';
@@ -294,7 +296,8 @@ class StreamGenerationService {
             startGenTime: startGenTime,
             finalStartTime: finalStartTime,
             result: studioResult,
-            model: apiConfig.model,
+            trackerModel: _resolvedTrackerModel(apiConfig),
+            finalModel: apiConfig.model,
           );
           return finalState;
         }
@@ -309,7 +312,8 @@ class StreamGenerationService {
             sessionId: session.id,
             startGenTime: startGenTime,
             result: studioResult,
-            model: apiConfig.model,
+            trackerModel: _resolvedTrackerModel(apiConfig),
+            finalModel: apiConfig.model,
           );
           _ref.read(studioCycleStateProvider.notifier).state =
               const StudioCycleState.error(sessionId: '');
@@ -379,7 +383,8 @@ class StreamGenerationService {
           startGenTime: startGenTime,
           finalStartTime: finalStartTime,
           result: studioResult,
-          model: apiConfig.model,
+          trackerModel: _resolvedTrackerModel(apiConfig),
+          finalModel: apiConfig.model,
         );
         if (memoryDiagnostics is Map<String, dynamic> &&
             finalState.session != null) {
@@ -779,7 +784,8 @@ class StreamGenerationService {
     required DateTime startGenTime,
     DateTime? finalStartTime,
     required StudioPipelineResult result,
-    String? model,
+    required String trackerModel,
+    required String finalModel,
   }) {
     final status = _studioStatusToOp(result.status);
     if (status == AgentOperationStatus.aborted ||
@@ -811,7 +817,7 @@ class StreamGenerationService {
             ),
           ],
           totalElapsedMs: elapsedMs,
-          model: model,
+          model: trackerModel,
           summary: result.error ?? result.status,
           startedAtMs: startedAtMs,
           finishedAtMs: now.millisecondsSinceEpoch,
@@ -851,7 +857,7 @@ class StreamGenerationService {
             ),
           ],
           totalElapsedMs: elapsedMs,
-          model: model,
+          model: trackerModel,
           summary: summary,
           startedAtMs: opStartedAt,
           finishedAtMs: opStartedAt,
@@ -881,7 +887,7 @@ class StreamGenerationService {
           ),
         ],
         totalElapsedMs: finalElapsedMs < 0 ? elapsedMs : finalElapsedMs,
-        model: model,
+        model: finalModel,
         summary: status.isOk
             ? 'final reply · ${result.response.length} chars'
             : result.error ?? result.status,
@@ -902,6 +908,12 @@ class StreamGenerationService {
       'agent_errors' => AgentOperationStatus.error,
       _ => AgentOperationStatus.error,
     };
+  }
+
+  String _resolvedTrackerModel(ApiConfig apiConfig) {
+    final override =
+        _ref.read(pipelineSettingsProvider).studioTrackerModelOverride;
+    return override.isNotEmpty ? override : apiConfig.model;
   }
 
   /// Builds the terminal `StudioCycleState` from a `StudioPipelineResult`,

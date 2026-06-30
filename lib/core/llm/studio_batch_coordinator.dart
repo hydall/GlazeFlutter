@@ -122,6 +122,7 @@ class StudioBatchCoordinator {
         sessionId: sessionId,
         isFinalResponse: false,
         cancelToken: cancelToken,
+        preResolvedConfig: group.resolved,
       );
       final parsed = batcher.parseBatchResponse(result.text, group);
       // Layer 1 — in-batch invalid-JSON retry: if ANY agent's block came back
@@ -143,6 +144,7 @@ class StudioBatchCoordinator {
         sessionId: sessionId,
         isFinalResponse: false,
         cancelToken: cancelToken,
+        preResolvedConfig: group.resolved,
       );
       final retryParsed = batcher.parseBatchResponse(retryResult.text, group);
       if (_allOk(retryParsed)) {
