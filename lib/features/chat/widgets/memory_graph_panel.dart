@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/memory_graph.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -95,7 +96,7 @@ class _MemoryGraphPanelState extends ConsumerState<MemoryGraphPanel>
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final entities = snapshot.data!;
+        final entities = _mergeEntities(snapshot.data!);
         if (entities.isEmpty) {
           return const Center(
             child: Text('No entities extracted yet. Run Rebuild to populate.'),
@@ -135,6 +136,40 @@ class _MemoryGraphPanelState extends ConsumerState<MemoryGraphPanel>
         );
       },
     );
+  }
+
+  List<MemoryEntity> _mergeEntities(List<MemoryEntity> rows) {
+    final byName = <String, MemoryEntity>{};
+    for (final row in rows) {
+      final key = '${row.entityType}:${row.name.trim().toLowerCase()}';
+      final existing = byName[key];
+      if (existing == null) {
+        byName[key] = row;
+        continue;
+      }
+
+      final aliases = <String>{...existing.aliases, ...row.aliases}.toList()
+        ..sort();
+      byName[key] = existing.copyWith(
+        aliases: aliases,
+        mentionCount: existing.mentionCount + row.mentionCount,
+        salienceAvg: existing.salienceAvg > row.salienceAvg
+            ? existing.salienceAvg
+            : row.salienceAvg,
+        saliencePeak: existing.saliencePeak > row.saliencePeak
+            ? existing.saliencePeak
+            : row.saliencePeak,
+        lastSeenMessageIndex:
+            existing.lastSeenMessageIndex > row.lastSeenMessageIndex
+            ? existing.lastSeenMessageIndex
+            : row.lastSeenMessageIndex,
+        updatedAt: existing.updatedAt > row.updatedAt
+            ? existing.updatedAt
+            : row.updatedAt,
+      );
+    }
+    return byName.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
 
   Future<void> _rebuildGraph() async {

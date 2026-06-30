@@ -26,28 +26,36 @@ class MemorySalienceRepo {
   }
 
   Future<void> upsert(MemorySalience salience) {
-    return db.into(db.memorySalienceRows).insertOnConflictUpdate(
-      MemorySalienceRowsCompanion.insert(
-        id: salience.id,
-        chatSessionId: salience.chatSessionId,
-        memoryEntryId: salience.memoryEntryId,
-        score: Value(salience.score),
-        emotionalTagsJson: Value(jsonEncode(salience.emotionalTags)),
-        narrativeFlagsJson: Value(jsonEncode(salience.narrativeFlags)),
-        hasDialogue: Value(salience.hasDialogue),
-        hasAction: Value(salience.hasAction),
-        wordCount: Value(salience.wordCount),
-        scoreSource: Value(salience.scoreSource),
-        scoredAt: Value(currentTimestampSeconds()),
-        createdAt: Value(salience.createdAt),
-      ),
-    );
+    return db
+        .into(db.memorySalienceRows)
+        .insertOnConflictUpdate(
+          MemorySalienceRowsCompanion.insert(
+            id: salience.id,
+            chatSessionId: salience.chatSessionId,
+            memoryEntryId: salience.memoryEntryId,
+            score: Value(salience.score),
+            emotionalTagsJson: Value(jsonEncode(salience.emotionalTags)),
+            narrativeFlagsJson: Value(jsonEncode(salience.narrativeFlags)),
+            hasDialogue: Value(salience.hasDialogue),
+            hasAction: Value(salience.hasAction),
+            wordCount: Value(salience.wordCount),
+            scoreSource: Value(salience.scoreSource),
+            scoredAt: Value(currentTimestampSeconds()),
+            createdAt: Value(salience.createdAt),
+          ),
+        );
   }
 
   Future<void> deleteByEntryId(String entryId) {
     return (db.delete(
       db.memorySalienceRows,
     )..where((row) => row.memoryEntryId.equals(entryId))).go();
+  }
+
+  Future<void> deleteBySessionId(String sessionId) {
+    return (db.delete(
+      db.memorySalienceRows,
+    )..where((row) => row.chatSessionId.equals(sessionId))).go();
   }
 
   MemorySalience _rowToModel(MemorySalienceRow row) {

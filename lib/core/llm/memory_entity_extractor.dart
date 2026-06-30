@@ -14,34 +14,147 @@ class MemoryEntityExtractor {
   const MemoryEntityExtractor._();
 
   static const _locationSuffixes = [
-    'street', 'avenue', 'road', 'quarter', 'district', 'bridge',
-    'tower', 'castle', 'keep', 'hall', 'inn', 'tavern', 'market',
-    'square', 'plaza', 'gate', 'wall', 'harbor', 'dock', 'port',
-    'forest', 'woods', 'river', 'lake', 'mountain', 'valley', 'cave',
+    'street',
+    'avenue',
+    'road',
+    'quarter',
+    'district',
+    'bridge',
+    'tower',
+    'castle',
+    'keep',
+    'hall',
+    'inn',
+    'tavern',
+    'market',
+    'square',
+    'plaza',
+    'gate',
+    'wall',
+    'harbor',
+    'dock',
+    'port',
+    'forest',
+    'woods',
+    'river',
+    'lake',
+    'mountain',
+    'valley',
+    'cave',
   ];
 
   static const _placeNouns = [
-    'city', 'town', 'village', 'castle', 'tavern', 'temple', 'church',
-    'palace', 'fortress', 'camp', 'ship', 'island', 'ruins', 'sanctuary',
+    'city',
+    'town',
+    'village',
+    'castle',
+    'tavern',
+    'temple',
+    'church',
+    'palace',
+    'fortress',
+    'camp',
+    'ship',
+    'island',
+    'ruins',
+    'sanctuary',
   ];
 
   static const _locativePhrases = [
-    'arrived at', 'here in', 'left ', 'entered ', 'reached ', 'heading to',
-    'going to', 'returned to', 'came from', 'near ', 'beyond ', 'outside ',
+    'arrived at',
+    'here in',
+    'left ',
+    'entered ',
+    'reached ',
+    'heading to',
+    'going to',
+    'returned to',
+    'came from',
+    'near ',
+    'beyond ',
+    'outside ',
   ];
 
   static const _verbAdjacency = [
-    'said', 'spoke', 'walked', 'ran', 'grabbed', 'struck', 'looked',
-    'turned', 'stepped', 'reached', 'smiled', 'laughed', 'whispered',
-    'shouted', 'nodded', 'sighed', 'frowned', 'stared', 'approached',
-    'attacked', 'defended', 'fled', 'followed', 'greeted', 'embraced',
+    'said',
+    'spoke',
+    'walked',
+    'ran',
+    'grabbed',
+    'struck',
+    'looked',
+    'turned',
+    'stepped',
+    'reached',
+    'smiled',
+    'laughed',
+    'whispered',
+    'shouted',
+    'nodded',
+    'sighed',
+    'frowned',
+    'stared',
+    'approached',
+    'attacked',
+    'defended',
+    'fled',
+    'followed',
+    'greeted',
+    'embraced',
+    'extracted',
+    'completed',
+    'called',
   ];
 
   static const _honorifics = [
-    'mr', 'mrs', 'ms', 'dr', 'lord', 'lady', 'sir', 'captain',
-    'ser', 'master', 'mistress', 'prince', 'princess', 'king', 'queen',
-    'father', 'sister', 'brother', 'uncle', 'aunt',
+    'mr',
+    'mrs',
+    'ms',
+    'dr',
+    'lord',
+    'lady',
+    'sir',
+    'captain',
+    'ser',
+    'master',
+    'mistress',
+    'prince',
+    'princess',
+    'king',
+    'queen',
+    'father',
+    'sister',
+    'brother',
+    'uncle',
+    'aunt',
   ];
+
+  static const _properNounStopwords = {
+    'a',
+    'an',
+    'and',
+    'as',
+    'at',
+    'but',
+    'call',
+    'contracts',
+    'digital',
+    'during',
+    'encryption',
+    'for',
+    'from',
+    'he',
+    'helmet',
+    'not',
+    'non',
+    'reported',
+    'routers',
+    'she',
+    'storm',
+    'the',
+    'they',
+    'unknown',
+  };
 
   /// Extract entities from a [MemoryEntry].
   ///
@@ -82,7 +195,15 @@ class MemoryEntityExtractor {
     for (final name in knownNames) {
       if (name.isEmpty || name.length < 2) continue;
       if (text.toLowerCase().contains(name.toLowerCase())) {
-        _addEntity(sink, name, 'character', entry, sessionId, now, aliases: _firstNameAlias(name));
+        _addEntity(
+          sink,
+          name,
+          'character',
+          entry,
+          sessionId,
+          now,
+          aliases: _firstNameAlias(name),
+        );
       }
     }
 
@@ -91,15 +212,15 @@ class MemoryEntityExtractor {
     final properNounRe = RegExp(r'(?<=[.!?]\s|^\s*)[A-Z][a-z]{2,}');
     for (final match in properNounRe.allMatches(text)) {
       final word = match.group(0)!;
-      if (_honorifics.contains(word.toLowerCase())) continue;
+      if (_isRejectedCharacterName(word)) continue;
       properNounCounts[word] = (properNounCounts[word] ?? 0) + 1;
     }
 
     // Also catch proper nouns after commas/space (vocative, mid-sentence)
-    final midSentenceRe = RegExp(r'(?:,\s+|.\s+)([A-Z][a-z]{2,})');
+    final midSentenceRe = RegExp(r'(?:,\s+|\.\s+)([A-Z][a-z]{2,})');
     for (final match in midSentenceRe.allMatches(text)) {
       final word = match.group(1)!;
-      if (_honorifics.contains(word.toLowerCase())) continue;
+      if (_isRejectedCharacterName(word)) continue;
       properNounCounts[word] = (properNounCounts[word] ?? 0) + 1;
     }
 
@@ -122,7 +243,7 @@ class MemoryEntityExtractor {
       final re = RegExp(r'([A-Z][a-z]{2,})\s+' + verb + r'\b');
       for (final match in re.allMatches(text)) {
         final name = match.group(1)!;
-        if (_honorifics.contains(name.toLowerCase())) continue;
+        if (_isRejectedCharacterName(name)) continue;
         _addEntity(
           sink,
           name,
@@ -136,10 +257,12 @@ class MemoryEntityExtractor {
     }
 
     // 4. Possessive: "Name's eyes/voice/hand"
-    final possessiveRe = RegExp(r"([A-Z][a-z]{2,})'s\s+(?:eyes|voice|hand|face|heart|body|arm|lips|gaze)");
+    final possessiveRe = RegExp(
+      r"([A-Z][a-z]{2,})'s\s+(?:eyes|voice|hand|face|heart|body|arm|lips|gaze)",
+    );
     for (final match in possessiveRe.allMatches(text)) {
       final name = match.group(1)!;
-      if (_honorifics.contains(name.toLowerCase())) continue;
+      if (_isRejectedCharacterName(name)) continue;
       _addEntity(
         sink,
         name,
@@ -155,7 +278,7 @@ class MemoryEntityExtractor {
     final vocativeRe = RegExp(r',\s+([A-Z][a-z]{2,}),\s+');
     for (final match in vocativeRe.allMatches(text)) {
       final name = match.group(1)!;
-      if (_honorifics.contains(name.toLowerCase())) continue;
+      if (_isRejectedCharacterName(name)) continue;
       _addEntity(
         sink,
         name,
@@ -168,9 +291,12 @@ class MemoryEntityExtractor {
     }
 
     // 6. Quote attribution: "...", said Name
-    final quoteRe = RegExp(r'"[^"]*"\s+(?:said|whispered|shouted|replied)\s+([A-Z][a-z]{2,})');
+    final quoteRe = RegExp(
+      r'"[^"]*"\s+(?:said|whispered|shouted|replied)\s+([A-Z][a-z]{2,})',
+    );
     for (final match in quoteRe.allMatches(text)) {
       final name = match.group(1)!;
+      if (_isRejectedCharacterName(name)) continue;
       _addEntity(
         sink,
         name,
@@ -191,11 +317,12 @@ class MemoryEntityExtractor {
       for (final match in re.allMatches(text)) {
         final name = match.group(1)!;
         final fullName = '${_capitalize(honorific)} $name';
-        final existing = sink[name];
+        final key = 'character:${_normalizeName(name).toLowerCase()}';
+        final existing = sink[key];
         if (existing != null) {
           // Add full name as alias
           if (!existing.aliases.contains(fullName)) {
-            sink[name] = existing.copyWith(
+            sink[key] = existing.copyWith(
               aliases: [...existing.aliases, fullName],
               mentionCount: existing.mentionCount + 1,
             );
@@ -227,12 +354,13 @@ class MemoryEntityExtractor {
     // 1. Location suffixes: "... Bridge", "... Tower"
     for (final suffix in _locationSuffixes) {
       final re = RegExp(
-        r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+' + suffix + r'\b',
-        caseSensitive: false,
+        r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+' + _capitalize(suffix) + r'\b',
       );
       for (final match in re.allMatches(text)) {
         final name = '${match.group(1)} ${_capitalize(suffix)}';
-        _addEntity(sink, name, 'location', entry, sessionId, now);
+        if (_locationNameLooksValid(name)) {
+          _addEntity(sink, name, 'location', entry, sessionId, now);
+        }
       }
     }
 
@@ -241,9 +369,14 @@ class MemoryEntityExtractor {
       final idx = lower.indexOf(phrase);
       if (idx >= 0) {
         final after = text.substring(idx + phrase.length).trim();
-        final match = RegExp(r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)').firstMatch(after);
+        final match = RegExp(
+          r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+        ).firstMatch(after);
         if (match != null) {
-          _addEntity(sink, match.group(1)!, 'location', entry, sessionId, now);
+          final name = match.group(1)!;
+          if (_locationNameLooksValid(name)) {
+            _addEntity(sink, name, 'location', entry, sessionId, now);
+          }
         }
       }
     }
@@ -273,7 +406,14 @@ class MemoryEntityExtractor {
     int now, {
     List<String> aliases = const [],
   }) {
-    final key = '$entityType:$name';
+    final normalizedName = _normalizeName(name);
+    if (normalizedName.isEmpty) return;
+    if (entityType == 'character' && _isRejectedCharacterName(normalizedName)) {
+      return;
+    }
+
+    final displayName = _displayName(name);
+    final key = '$entityType:${normalizedName.toLowerCase()}';
     final existing = sink[key];
     if (existing != null) {
       final mergedAliases = <String>{...existing.aliases, ...aliases}.toList();
@@ -283,20 +423,59 @@ class MemoryEntityExtractor {
       );
     } else {
       sink[key] = MemoryEntity(
-        id: 'entity_${entry.id}_${entityType}_${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}',
+        id: 'entity_${entry.id}_${entityType}_${_entityIdPart(normalizedName)}',
         chatSessionId: sessionId,
         memoryEntryId: entry.id,
-        name: name,
+        name: displayName,
         entityType: entityType,
         aliases: aliases,
+        mentionCount: 1,
         createdAt: now,
         updatedAt: now,
       );
     }
   }
 
+  static bool _isRejectedCharacterName(String name) {
+    final normalized = _normalizeName(name).toLowerCase();
+    return normalized.length < 3 ||
+        _honorifics.contains(normalized) ||
+        _properNounStopwords.contains(normalized);
+  }
+
+  static bool _locationNameLooksValid(String name) {
+    final normalized = _normalizeName(name);
+    if (normalized.isEmpty) return false;
+    if (normalized.split(' ').length > 3) return false;
+    return normalized
+        .split(' ')
+        .every((part) => part.isNotEmpty && part[0].toUpperCase() == part[0]);
+  }
+
+  static String _normalizeName(String name) => name
+      .replaceAll(
+        RegExp(
+          r'[\u0000-\u002C\u002E-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u007F]+',
+        ),
+        ' ',
+      )
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  static String _displayName(String name) => _normalizeName(name);
+
+  static String _entityIdPart(String name) {
+    final normalized = name.toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+    return normalized.replaceAll(
+      RegExp(
+        r'[\u0000-\u002C\u002E-\u002F\u003A-\u0040\u005B-\u005E\u0060\u007B-\u007F]+',
+      ),
+      '_',
+    );
+  }
+
   static List<String> _firstNameAlias(String name) {
-    final parts = name.split(' ');
+    final parts = _normalizeName(name).split(' ');
     if (parts.length >= 2 && parts[0].length >= 3) {
       return [parts[0]];
     }
