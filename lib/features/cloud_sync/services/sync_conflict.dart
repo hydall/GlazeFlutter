@@ -67,6 +67,10 @@ class SyncConflictDetector {
         return 'Theme State';
       case 'local_storage':
         return 'Local Settings';
+      case 'studio_config':
+        return (localEntity?['profileName'] ?? cloudEntity?['profileName'] ?? id) as String;
+      case 'studio_preset':
+        return (localEntity?['name'] ?? cloudEntity?['name'] ?? id) as String;
       default:
         return '$type $id';
     }

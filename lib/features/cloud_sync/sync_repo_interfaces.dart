@@ -122,6 +122,13 @@ abstract class SyncStudioConfigStore {
   Future<void> delete(String id);
 }
 
+abstract class SyncStudioPresetStore {
+  Future<List<StudioPreset>> getAll();
+  Future<StudioPreset?> getById(String id);
+  Future<void> put(StudioPreset preset);
+  Future<void> delete(String id);
+}
+
 abstract class SyncManifestProvider {
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest});
   Future<SyncManifest> readLocalManifest();

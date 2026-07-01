@@ -554,6 +554,7 @@ class SyncWorld {
     FakeTrackerSnapshotStore(),
     FakeTrackerValueStore(),
     FakeStudioConfigStore(),
+    null,
     (_) async {},
   );
 }

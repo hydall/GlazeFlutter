@@ -102,7 +102,8 @@ class SyncManifest {
   ///         per-session Drift collection.
   ///   7 — added `tracker_value` entries for live `tracker_rows` / Tracker
   ///         Values, separate from rollback snapshots.
-  static const int currentVersion = 7;
+  ///   8 — added `studio_preset` entity type (DB-backed StudioPresetRows).
+  static const int currentVersion = 8;
 
   final int version;
   final String deviceId;
@@ -193,6 +194,8 @@ String cloudPath(String type, String id) {
       return '$cloudBase/tracker_values/$id.json';
     case 'studio_config':
       return '$cloudBase/studio_configs/$id.json';
+    case 'studio_preset':
+      return '$cloudBase/studio_presets/$id.json';
     case 'lorebooks':
       return '$cloudBase/lorebooks.json';
     case 'api_presets':

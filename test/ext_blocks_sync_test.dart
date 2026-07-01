@@ -481,6 +481,7 @@ class SyncWorld {
     trackerSnapshots,
     trackerValues,
     studioConfigs,
+    null,
     (_) async {},
   );
 }

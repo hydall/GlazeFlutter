@@ -23,6 +23,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncTrackerSnapshotStore _trackerSnapshotStore;
   final SyncTrackerValueStore _trackerValueStore;
   final SyncStudioConfigStore _studioConfigStore;
+  final SyncStudioPresetStore? _studioPresetStore;
   final SyncImageStore? _imageStore;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
@@ -44,6 +45,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required this._trackerSnapshotStore,
     required this._trackerValueStore,
     required this._studioConfigStore,
+    this._studioPresetStore,
     this._imageStore,
   });
 
@@ -288,6 +290,32 @@ class SyncManifestBuilder implements SyncManifestProvider {
         updatedAt: updatedAt,
         hash: hash,
       );
+    }
+
+    if (_studioPresetStore != null) {
+      final studioPresets = await _studioPresetStore.getAll();
+      for (final preset in studioPresets) {
+        final json = preset.toJson();
+        final hash = SyncSerialization.computeSyncHash(json);
+        final key = entryKey('studio_preset', preset.id);
+        final prevEntry = previous.entries[key];
+        final cloudEntry = cloudManifest?.entries[key];
+        var updatedAt = _resolveUpdatedAt(
+          hash: hash,
+          prevEntry: prevEntry,
+          cloudEntry: cloudEntry,
+          now: now,
+        );
+        if (preset.updatedAt > updatedAt) updatedAt = preset.updatedAt;
+
+        entries[key] = SyncManifestEntry(
+          type: 'studio_preset',
+          id: preset.id,
+          path: cloudPath('studio_preset', preset.id),
+          updatedAt: updatedAt,
+          hash: hash,
+        );
+      }
     }
 
     await _addSingletons(entries, previous, now, cloudManifest);

@@ -39,6 +39,7 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
     ),
     trackerValueStore: TrackerValueSyncStore(ref.watch(trackerRepoProvider)),
     studioConfigStore: ref.watch(studioConfigRepoProvider),
+    studioPresetStore: ref.watch(studioPresetRepoProvider),
     saveLorebookActivations: saveLorebookActivations,
   );
   await service.init();

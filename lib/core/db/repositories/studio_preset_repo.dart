@@ -2,14 +2,16 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import '../../../features/cloud_sync/sync_repo_interfaces.dart';
 import '../../models/studio_config.dart';
 import '../app_db.dart';
 
-class StudioPresetRepo {
+class StudioPresetRepo implements SyncStudioPresetStore {
   final AppDatabase db;
 
   const StudioPresetRepo(this.db);
 
+  @override
   Future<StudioPreset?> getById(String id) async {
     final row = await (db.select(
       db.studioPresetRows,
@@ -20,10 +22,14 @@ class StudioPresetRepo {
 
   Future<StudioPreset?> getDefault() => getById('default');
 
+  @override
   Future<List<StudioPreset>> getAll() async {
     final rows = await db.select(db.studioPresetRows).get();
     return rows.map(_rowToModel).toList();
   }
+
+  @override
+  Future<void> put(StudioPreset preset) => upsert(preset);
 
   Future<void> upsert(StudioPreset preset) async {
     await db.into(db.studioPresetRows).insertOnConflictUpdate(
@@ -35,6 +41,9 @@ class StudioPresetRepo {
       ),
     );
   }
+
+  @override
+  Future<void> delete(String id) => deleteById(id);
 
   Future<void> deleteById(String id) async {
     await (db.delete(
