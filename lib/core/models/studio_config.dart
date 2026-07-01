@@ -108,10 +108,27 @@ abstract class StudioPresetBlock with _$StudioPresetBlock {
     @Default('') String content,
     @Default(true) bool enabled,
     @Default(0) int order,
+    @Default('pregen') String section,
   }) = _StudioPresetBlock;
 
   factory StudioPresetBlock.fromJson(Map<String, dynamic> json) =>
       _$StudioPresetBlockFromJson(json);
+}
+
+/// A complete Studio preset: a flat list of [StudioPresetBlock]s grouped by
+/// `section` (`pregen`, `final`, `cleaner`, `ledger`, `writeloop`, `build`,
+/// `brief_parser`). Stored in `studio_preset_rows` as a JSON blob.
+@freezed
+abstract class StudioPreset with _$StudioPreset {
+  const factory StudioPreset({
+    required String id,
+    @Default('') String name,
+    @Default([]) List<StudioPresetBlock> blocks,
+    @Default(0) int updatedAt,
+  }) = _StudioPreset;
+
+  factory StudioPreset.fromJson(Map<String, dynamic> json) =>
+      _$StudioPresetFromJson(json);
 }
 
 /// A single agent in the Studio pipeline.

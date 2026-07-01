@@ -382,6 +382,20 @@ class StudioConfigRows extends Table {
   Set<Column> get primaryKey => {sessionId};
 }
 
+@DataClassName('StudioPresetRow')
+class StudioPresetRows extends Table {
+  @override
+  String get tableName => 'studio_preset_rows';
+
+  TextColumn get presetId => text()();
+  TextColumn get name => text()();
+  TextColumn get blocksJson => text().withDefault(const Constant('[]'))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {presetId};
+}
+
 @DataClassName('PresetRow')
 class Presets extends Table {
   @override

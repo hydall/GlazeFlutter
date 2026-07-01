@@ -16,6 +16,8 @@ import '../db/repositories/memory_entity_repo.dart';
 import '../db/repositories/memory_salience_repo.dart';
 import '../db/repositories/memory_cadence_repo.dart';
 import '../db/repositories/studio_config_repo.dart';
+import '../db/repositories/studio_preset_repo.dart';
+import '../models/studio_config.dart';
 import '../db/repositories/tracker_repo.dart';
 import '../db/repositories/tracker_snapshot_repo.dart';
 import '../db/repositories/extension_presets_repository.dart';
@@ -117,6 +119,14 @@ final memoryCadenceRepoProvider = Provider<MemoryCadenceRepo>((ref) {
 
 final studioConfigRepoProvider = Provider<StudioConfigRepo>((ref) {
   return StudioConfigRepo(ref.watch(appDbProvider));
+});
+
+final studioPresetRepoProvider = Provider<StudioPresetRepo>((ref) {
+  return StudioPresetRepo(ref.watch(appDbProvider));
+});
+
+final studioPresetProvider = FutureProvider<StudioPreset?>((ref) async {
+  return ref.watch(studioPresetRepoProvider).getDefault();
 });
 
 final trackerRepoProvider = Provider<TrackerRepo>((ref) {
