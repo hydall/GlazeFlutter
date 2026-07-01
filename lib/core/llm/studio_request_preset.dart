@@ -262,24 +262,3 @@ const studioRequestPresets = <StudioRequestPreset>[
 
 const defaultAgentStudioPresetId = 'norimyn_studio_agent';
 const defaultFinalStudioPresetId = 'norimyn_studio_final';
-
-StudioRequestPreset studioRequestPresetById(
-  String id, {
-  required bool finalPreset,
-}) {
-  final fallbackId = finalPreset
-      ? defaultFinalStudioPresetId
-      : defaultAgentStudioPresetId;
-  final resolvedId = id.isNotEmpty ? id : fallbackId;
-  return studioRequestPresets.firstWhere(
-    (preset) => preset.id == resolvedId,
-    orElse: () => studioRequestPresets.firstWhere((p) => p.id == fallbackId),
-  );
-}
-
-StudioRequestPreset defaultStudioRequestPresetById(String id) {
-  return studioRequestPresets.firstWhere(
-    (preset) => preset.id == id,
-    orElse: () => studioRequestPresets.first,
-  );
-}
