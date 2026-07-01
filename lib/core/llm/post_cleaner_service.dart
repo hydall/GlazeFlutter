@@ -55,10 +55,12 @@ class PostCleanerService {
     List<String>? auditIssues,
     CancelToken? cancelToken,
     void Function(String accumulatedText)? onCleanedChunk,
+    String studioApiConfigId = '',
+    bool useStudioApiConfigSlot = false,
   }) async {
-    if (!settings.postCleanerEnabled) {
-      return PostCleanerResult(status: 'disabled', cleanedText: assistantText);
-    }
+    // Post-cleaner is always-on (hardcoded in backend). The postCleanerEnabled
+    // toggle was removed from the UI — the cleaner always runs when Studio is
+    // enabled. The old early-return on !settings.postCleanerEnabled is gone.
 
     // Strip any hidden reasoning (`<think>…</think>` / `<thinking>…`) that the
     // generator left inside the saved message content. If it reaches the
@@ -78,10 +80,15 @@ class PostCleanerService {
     }
 
     try {
-      final config = await _llm.resolveConfigForCleaner(
-        settings,
-        errorLabel: 'post-cleaner',
-      );
+      final config = useStudioApiConfigSlot || studioApiConfigId.isNotEmpty
+          ? await _llm.resolveStudioSlotConfig(
+              studioApiConfigId,
+              errorLabel: 'post-cleaner',
+            )
+          : await _llm.resolveConfigForCleaner(
+              settings,
+              errorLabel: 'post-cleaner',
+            );
       if (token.isCancelled) {
         return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
       }
@@ -121,6 +128,7 @@ class PostCleanerService {
                 : null,
             attempts: outcome.attempts,
             totalElapsedMs: outcome.totalElapsedMs,
+            model: config.model,
           );
         }
         return PostCleanerResult(
@@ -128,6 +136,7 @@ class PostCleanerService {
           cleanedText: assistantText,
           attempts: outcome.attempts,
           totalElapsedMs: outcome.totalElapsedMs,
+          model: config.model,
         );
       }
 
@@ -143,6 +152,7 @@ class PostCleanerService {
           cleanedText: assistantText,
           attempts: outcome.attempts,
           totalElapsedMs: outcome.totalElapsedMs,
+          model: config.model,
         );
       }
 
@@ -171,6 +181,7 @@ class PostCleanerService {
           cleanedText: assistantText,
           attempts: outcome.attempts,
           totalElapsedMs: outcome.totalElapsedMs,
+          model: config.model,
         );
       }
 
@@ -181,6 +192,7 @@ class PostCleanerService {
         wasCleaned: cleaned != assistantText,
         attempts: outcome.attempts,
         totalElapsedMs: outcome.totalElapsedMs,
+        model: config.model,
       );
     } on TimeoutException {
       return PostCleanerResult(status: 'timeout', cleanedText: assistantText);
@@ -651,6 +663,8 @@ class PostCleanerService {
     List<ChatMessage> recentMessages = const [],
     required PipelineSettings settings,
     CancelToken? cancelToken,
+    String studioApiConfigId = '',
+    bool useStudioApiConfigSlot = false,
   }) async {
     if (assistantText.trim().isEmpty) return const [];
 
@@ -658,10 +672,15 @@ class PostCleanerService {
     if (token.isCancelled) return null;
 
     try {
-      final config = await _llm.resolveConfigForAudit(
-        settings,
-        errorLabel: 'post-cleaner-audit',
-      );
+      final config = useStudioApiConfigSlot || studioApiConfigId.isNotEmpty
+          ? await _llm.resolveStudioSlotConfig(
+              studioApiConfigId,
+              errorLabel: 'post-cleaner-audit',
+            )
+          : await _llm.resolveConfigForAudit(
+              settings,
+              errorLabel: 'post-cleaner-audit',
+            );
       if (token.isCancelled) return null;
 
       final prompt = buildAuditPrompt(
@@ -883,6 +902,7 @@ class PostCleanerResult {
   final String? error;
   final List<AgentOperationAttempt> attempts;
   final int totalElapsedMs;
+  final String? model;
 
   const PostCleanerResult({
     required this.status,
@@ -892,5 +912,6 @@ class PostCleanerResult {
     this.error,
     this.attempts = const [],
     this.totalElapsedMs = 0,
+    this.model,
   });
 }

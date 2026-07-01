@@ -60,6 +60,7 @@ class AgentRunner {
     required bool isFinalResponse,
     CancelToken? cancelToken,
     ResolvedAgentConfig? preResolvedConfig,
+    String? apiConfigId,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
@@ -81,6 +82,7 @@ class AgentRunner {
         isFinalResponse: isFinalResponse,
         cancelToken: token,
         preResolvedConfig: preResolvedConfig,
+        apiConfigId: apiConfigId,
         onFinalResponseUpdate: onFinalResponseUpdate,
         onIntermediateUpdate: onIntermediateUpdate,
       );
@@ -112,6 +114,7 @@ class AgentRunner {
     required bool isFinalResponse,
     required CancelToken cancelToken,
     ResolvedAgentConfig? preResolvedConfig,
+    String? apiConfigId,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
@@ -122,6 +125,7 @@ class AgentRunner {
           apiConfig,
           sessionId,
           isFinalResponse: isFinalResponse,
+          apiConfigId: apiConfigId,
         );
     if (resolved.endpoint.isEmpty || resolved.model.isEmpty) {
       throw Exception('Studio agent "${agent.name}" API is not configured');
@@ -167,44 +171,57 @@ class AgentRunner {
     );
   }
 
-  /// Resolve which API config an agent uses. Ports Marinara's
-  /// `resolveAgentApiConfig`:
-  /// - `modelSource == 'custom'` → use the [StudioAgent.model] id to pick an
-  ///   [ApiConfig] from the saved list, then apply [StudioAgent.modelOverride]
-  ///   on top. If the id is unknown, fall back to the agent's own endpoint /
-  ///   model fields with the *current* chat API's key.
-  /// - otherwise → use the chat session's configured run API (or the active
-  ///   API), with [StudioAgent.modelOverride] on top.
-  ///
-  /// For non-final agents, when [PipelineSettings.studioTrackerModelOverride]
-  /// is non-empty it wins over the per-agent `modelOverride` so the user can
-  /// re-target all 7 trackers at once from the Studio menu.
+  /// Resolve which API config an agent uses. With the 3-slot model (v55):
+  /// - [apiConfigId] — if non-empty, overrides `runApiConfigId` from the
+  ///   StudioConfig. Callers pass `cheapApiConfigId` for trackers,
+  ///   `expensiveApiConfigId` for the final generator, `cleanerApiConfigId`
+  ///   for post-processing agents. When empty, falls back to `runApiConfigId`
+  ///   then to the active chat config.
+  /// - Model overrides are global PipelineSettings values configured from the
+  ///   Studio menu: generationModel for the final response, postCleanerModel
+  ///   for post-processing trackers, studioTrackerModelOverride for pre-gen
+  ///   trackers.
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,
     ApiConfig current,
     String sessionId, {
     bool isFinalResponse = false,
+    String? apiConfigId,
   }) async {
     await _ref.read(apiListProvider.future);
     final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
-    final runApiConfigId = await _readRunApiConfigId(sessionId);
+    final runApiConfigId = (apiConfigId != null && apiConfigId.isNotEmpty)
+        ? apiConfigId
+        : await _readRunApiConfigId(sessionId);
     final resolver = StudioApiConfigResolver(
       apiConfigs: apiConfigs,
       activeConfig: _ref.read(activeApiConfigProvider),
     );
-    if (!isFinalResponse) {
-      final trackerModel = _ref
-          .read(pipelineSettingsProvider)
-          .studioTrackerModelOverride;
-      if (trackerModel.isNotEmpty) {
+    final pipeline = _ref.read(pipelineSettingsProvider);
+    if (isFinalResponse) {
+      if (pipeline.generationModel.isNotEmpty) {
         return resolver.resolveAgentConfig(
-          agent.copyWith(modelOverride: trackerModel, modelSource: 'current'),
           current,
           runApiConfigId,
+          pipeline.generationModel,
         );
       }
+    } else if (agent.phase == 'post_processing') {
+      if (pipeline.postCleanerModel.isNotEmpty) {
+        return resolver.resolveAgentConfig(
+          current,
+          runApiConfigId,
+          pipeline.postCleanerModel,
+        );
+      }
+    } else if (pipeline.studioTrackerModelOverride.isNotEmpty) {
+      return resolver.resolveAgentConfig(
+        current,
+        runApiConfigId,
+        pipeline.studioTrackerModelOverride,
+      );
     }
-    return resolver.resolveAgentConfig(agent, current, runApiConfigId);
+    return resolver.resolveAgentConfig(current, runApiConfigId, '');
   }
 
   Future<String> _readRunApiConfigId(String sessionId) async {

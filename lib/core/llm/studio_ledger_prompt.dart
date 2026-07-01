@@ -58,6 +58,15 @@ Now produce the Studio Ledger output. Return BOTH blocks:
 1. <studio_ledger>…</studio_ledger> — compact visible scene/continuity snapshot.
 2. <glaze_memory_export>…</glaze_memory_export> — machine JSON with ops list.
 
+Required response template. Do not omit either block, even when there is no
+state to write:
+<studio_ledger>
+Compact continuity snapshot here.
+</studio_ledger>
+<glaze_memory_export>
+{"ops":[],"durableFacts":[]}
+</glaze_memory_export>
+
 Ops format:
 {"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"durableFacts":[{"title":"…","content":"…","keys":["…"],"entities":["…"]}]}
 

@@ -4,8 +4,12 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/chat_message.dart';
 import '../../../core/models/memory_book.dart';
+import '../../../core/models/pipeline_settings.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
+import '../../../core/state/pipeline_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_error_dialog.dart';
@@ -17,8 +21,14 @@ import 'memory_generation_settings_sheet.dart';
 class MemoryBooksSheet extends ConsumerStatefulWidget {
   final String sessionId;
   final String charId;
+  final List<ChatMessage> messages;
 
-  const MemoryBooksSheet({super.key, required this.sessionId, required this.charId});
+  const MemoryBooksSheet({
+    super.key,
+    required this.sessionId,
+    required this.charId,
+    this.messages = const [],
+  });
 
   @override
   ConsumerState<MemoryBooksSheet> createState() => _MemoryBooksSheetState();
@@ -27,6 +37,22 @@ class MemoryBooksSheet extends ConsumerStatefulWidget {
 class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   late final MemoryBookController _ctrl;
   Timer? _elapsedTimer;
+  bool _hideUnselectedMemories = false;
+
+  /// Extract the set of memory entry IDs that were injected (via
+  /// `triggeredMemories`) for the currently selected swipe of each
+  /// assistant message. Used to filter the memory list so only entries
+  /// bound to visible swipes are shown.
+  Set<String> _getSelectedSwipeMemoryIds() {
+    final ids = <String>{};
+    for (final msg in widget.messages) {
+      if (msg.role != 'assistant') continue;
+      for (final tm in msg.triggeredMemories) {
+        if (tm.id.isNotEmpty) ids.add(tm.id);
+      }
+    }
+    return ids;
+  }
 
   @override
   void initState() {
@@ -88,25 +114,40 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     final draftsNeedingGen = _ctrl.draftsNeedingGeneration;
     final isGenerating = _ctrl.isGenerating;
 
-    // Phase 7.2 — split drafts by source for tabbed display. Agent-sourced
-    // drafts (source == 'agentic', written by the post-turn write-loop) are
-    // shown in their own "Agent memories" tab so they don't mix with bulk
-    // scan drafts (source == 'scan_chat' or empty).
+    // Split drafts by source. Agent-sourced drafts (source == 'agentic') go
+    // to "Agent memories" tab; studio-ledger drafts (source == 'studio_ledger')
+    // go to "LLM studio memories" tab; everything else is a bulk scan draft.
     final scanDrafts = pendingDrafts
-        .where((d) => d.source != 'agentic')
+        .where((d) => d.source != 'agentic' && d.source != 'studio_ledger')
         .toList();
     final agentDrafts = pendingDrafts
         .where((d) => d.source == 'agentic')
         .toList();
-    // Approved entries are also source-aware (Phase 7.4): entries promoted
-    // from agent drafts keep `source == 'agentic'` and `kind == 'agent'`,
-    // letting the "Agent memories" tab show approved agent memories next
-    // to pending agent drafts.
+    final studioDrafts = pendingDrafts
+        .where((d) => d.source == 'studio_ledger')
+        .toList();
+    // Approved entries are also source-aware: entries promoted from agent
+    // drafts keep `source == 'agentic'`, studio ledger entries have
+    // `source == 'studio_ledger'`, everything else is curated/manual.
     final agentEntries = entries.where((e) => e.source == 'agentic').toList();
-    final curatedEntries = entries.where((e) => e.source != 'agentic').toList();
+    final studioEntries = entries.where((e) => e.source == 'studio_ledger').toList();
+    final curatedEntries = entries.where(
+      (e) => e.source != 'agentic' && e.source != 'studio_ledger',
+    ).toList();
+
+    // Swipe filter: when enabled, only show entries that were injected via
+    // triggeredMemories for the currently selected swipes.
+    final selectedMemoryIds = _getSelectedSwipeMemoryIds();
+    final filterFn = (MemoryEntry e) =>
+        !_hideUnselectedMemories ||
+        selectedMemoryIds.isEmpty ||
+        selectedMemoryIds.contains(e.id);
+    final filteredCurated = curatedEntries.where(filterFn).toList();
+    final filteredAgent = agentEntries.where(filterFn).toList();
+    final filteredStudio = studioEntries.where(filterFn).toList();
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
           // ── Static header (overview + status + actions) ──
@@ -129,12 +170,13 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               ],
             ),
           ),
-          // ── Tab bar (Phase 7.2) ──
+          // ── Tab bar ──
           TabBar(
             tabs: [
-              Tab(text: 'memory_books_tab_approved'.tr(args: [curatedEntries.length.toString()])),
+              Tab(text: 'memory_books_tab_approved'.tr(args: [filteredCurated.length.toString()])),
               Tab(text: 'memory_books_tab_scan_drafts'.tr(args: [scanDrafts.length.toString()])),
-              Tab(text: 'memory_books_tab_agent_memories'.tr(args: [(agentDrafts.length + agentEntries.length).toString()])),
+              Tab(text: 'memory_books_tab_agent_memories'.tr(args: [(agentDrafts.length + filteredAgent.length).toString()])),
+              Tab(text: 'LLM (${(studioDrafts.length + filteredStudio.length)})'),
             ],
             tabAlignment: TabAlignment.fill,
           ),
@@ -142,9 +184,10 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
           Expanded(
             child: TabBarView(
               children: [
-                _buildApprovedTab(curatedEntries),
+                _buildApprovedTab(filteredCurated),
                 _buildScanDraftsTab(scanDrafts),
-                _buildAgentMemoriesTab(agentDrafts, agentEntries),
+                _buildAgentMemoriesTab(agentDrafts, filteredAgent),
+                _buildStudioMemoriesTab(studioDrafts, filteredStudio),
               ],
             ),
           ),
@@ -234,6 +277,56 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               ),
               const SizedBox(height: 8),
               ...agentEntries.map((entry) => _buildEntryCard(entry)),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// "LLM studio memories" tab: pending studio-ledger drafts + approved
+  /// studio-ledger entries. Both share the `source == 'studio_ledger'`
+  /// marker, keeping them separate from agent memories (write-loop) and
+  /// curated/scan entries.
+  Widget _buildStudioMemoriesTab(
+    List<MemoryDraft> studioDrafts,
+    List<MemoryEntry> studioEntries,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (studioDrafts.isEmpty && studioEntries.isEmpty)
+            Text(
+              'No LLM studio memories yet.',
+              style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
+            )
+          else ...[
+            if (studioDrafts.isNotEmpty) ...[
+              Text(
+                'Pending drafts',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: context.cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...studioDrafts.map((draft) => _buildDraftCard(draft)),
+              const SizedBox(height: 12),
+            ],
+            if (studioEntries.isNotEmpty) ...[
+              Text(
+                'Approved',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: context.cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...studioEntries.map((entry) => _buildEntryCard(entry)),
             ],
           ],
         ],
@@ -417,6 +510,47 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                   side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.2)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _dedupMemories,
+                icon: Icon(Icons.auto_fix_high, size: 16, color: context.cs.onSurfaceVariant),
+                label: Text('Dedup', style: TextStyle(color: context.cs.onSurface)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilterChip(
+                label: Text(
+                  'Only selected swipes',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _hideUnselectedMemories
+                        ? context.cs.primary
+                        : context.cs.onSurfaceVariant,
+                  ),
+                ),
+                selected: _hideUnselectedMemories,
+                onSelected: (v) => setState(() => _hideUnselectedMemories = v),
+                showCheckmark: false,
+                avatar: Icon(
+                  Icons.visibility_off,
+                  size: 14,
+                  color: _hideUnselectedMemories
+                      ? context.cs.primary
+                      : context.cs.onSurfaceVariant,
                 ),
               ),
             ),
@@ -828,7 +962,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       child: MemoryGenerationSettingsSheet(
         settings: currentSettings,
         sessionId: widget.sessionId,
-        charId: widget.charId,
       ),
     );
     if (newResult != null && mounted) {
@@ -927,5 +1060,55 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       await _ctrl.editDraft(draft, result);
       if (mounted) setState(() {});
     }
+  }
+
+  void _dedupMemories() async {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final dedupService = ref.read(memoryDedupServiceProvider);
+
+    // Scope dedup to entries from selected swipes when the filter is on.
+    Set<String>? entryIds;
+    if (_hideUnselectedMemories) {
+      entryIds = _getSelectedSwipeMemoryIds();
+    }
+
+    GlazeToast.show(context, 'Deduplicating memories...');
+
+    final result = await dedupService.runDedup(
+      sessionId: widget.sessionId,
+      settings: pipeline,
+      entryIds: entryIds,
+      threshold: pipeline.memoryDedupThreshold,
+    );
+
+    if (!mounted) return;
+
+    String toastText;
+    switch (result.status) {
+      case 'ok':
+        toastText = 'Dedup: ${result.merged} merged, ${result.dropped} dropped, ${result.kept} kept '
+            '(${result.pairsSentToLlm} pairs from ${result.candidatesChecked} entries)';
+        await _ctrl.load();
+        if (mounted) setState(() {});
+        break;
+      case 'no_book':
+        toastText = 'No memory book found.';
+        break;
+      case 'aborted':
+        toastText = 'Dedup aborted.';
+        break;
+      case 'timeout':
+        toastText = 'Dedup timed out.';
+        break;
+      case 'llm_error':
+        toastText = 'Dedup: LLM error (${result.pairsSentToLlm} pairs found).';
+        break;
+      case 'error':
+        toastText = 'Dedup failed.';
+        break;
+      default:
+        toastText = 'Dedup: ${result.status}';
+    }
+    GlazeToast.show(context, toastText);
   }
 }

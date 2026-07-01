@@ -72,7 +72,7 @@ enum AgentOperationKind {
     AgentOperationKind.agenticWrite => 'Agentic write',
     AgentOperationKind.classifier => 'Classifier',
     AgentOperationKind.consolidation => 'Consolidation',
-    AgentOperationKind.studioTracker => 'Studio agent',
+    AgentOperationKind.studioTracker => 'Studio tracker',
     AgentOperationKind.studioFinal => 'Studio final',
     AgentOperationKind.factChecker => 'Fact checker',
     AgentOperationKind.studioLedger => 'Studio Ledger',

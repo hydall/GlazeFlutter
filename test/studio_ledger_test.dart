@@ -161,6 +161,57 @@ $_validJson
       expect(result.wasRejected, isTrue);
     });
 
+    test('normalizes non-string LLM fields before generated parsing', () {
+      const raw = '''
+<studio_ledger>
+Ledger text.
+</studio_ledger>
+<glaze_memory_export>
+{
+  "sceneState": {
+    "time": ["night", "late"],
+    "location": {"name":"Watson"},
+    "immediateThread": ["Lucy waits", "Danvi answers"],
+    "presentEntities": ["Lucy", {"name":"Danvi", "reason":["driver", "speaker"]}],
+    "activeTensions": [{"tension":"distrust"}]
+  },
+  "entities": [
+    {
+      "name": "Lucy",
+      "knowledge": [{"fact":"Danvi knows"}],
+      "durableFacts": ["accepted a ride"]
+    }
+  ],
+  "durableFacts": [
+    {
+      "title": ["Shared", "ride"],
+      "content": {"fact":"Lucy accepted the ride"},
+      "keys": [{"key":"Lucy"}],
+      "entities": ["Lucy"]
+    }
+  ],
+  "ops": [
+    {
+      "op": "set",
+      "key": "npc:Lucy.knowledge",
+      "value": ["Danvi knows", "Lucy reacted"],
+      "evidence": {"source":"assistant"},
+      "eventState": "completed"
+    }
+  ]
+}
+</glaze_memory_export>
+''';
+
+      final result = parser.parse(raw);
+
+      expect(result.export, isNotNull);
+      expect(result.export!.ops.single.value, 'Danvi knows; Lucy reacted');
+      expect(result.export!.sceneState!.time, 'night; late');
+      expect(result.export!.sceneState!.presentEntities, hasLength(2));
+      expect(result.export!.durableFacts, hasLength(1));
+    });
+
     test('missing export block returns null export', () {
       final result = parser.parse('Just some text with no export block.');
       expect(result.export, isNull);

@@ -4,28 +4,25 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/memory_budget.dart';
+import '../../../core/llm/sse_client.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/services/memory_prompt_presets.dart';
 import '../../../core/state/memory_settings_provider.dart';
+import '../../../core/state/pipeline_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_toast.dart';
+import '../../settings/api_list_provider.dart';
 import 'custom_prompt_manager_sheet.dart';
-import 'post_building_menu_dialog.dart';
 
 class MemoryGenerationSettingsSheet extends ConsumerStatefulWidget {
   final MemoryBookSettings settings;
   final String? sessionId;
 
-  /// Phase 7.3 — needed to launch [PostBuildingMenuDialog] from the
-  /// "LLM config →" link. When null, the link is hidden (preserves backward
-  /// compatibility for any caller that doesn't have a charId handy).
-  final String? charId;
-
   const MemoryGenerationSettingsSheet({
     super.key,
     required this.settings,
     this.sessionId,
-    this.charId,
   });
 
   @override
@@ -71,6 +68,16 @@ class _MemoryGenerationSettingsSheetState
   late int _queryMaxChars;
 
   late final TextEditingController _memoryBudgetCtrl;
+
+  // ── Memory generation model ──────────────────────────────────────────
+  // Restored from pre-eec6d6f2 (pipeline settings separation). The model
+  // dropdown lives here in the MemoryBooks sheet; it reads/writes
+  // PipelineSettings.generationModel. Endpoint/key are always inherited
+  // from the active chat API (generationSource='current').
+  List<String> _fetchedModels = const [];
+  bool _fetchingModels = false;
+
+  late String _generationModel;
 
   @override
   void initState() {
@@ -123,6 +130,9 @@ class _MemoryGenerationSettingsSheetState
     _queryIncludeAssistant = s.queryIncludeAssistant;
     _queryRecentTurns = s.queryRecentTurns;
     _queryMaxChars = s.queryMaxChars;
+    // Load the generation model from PipelineSettings.
+    _generationModel =
+        ref.read(pipelineSettingsProvider).generationModel;
   }
 
   @override
@@ -262,6 +272,9 @@ class _MemoryGenerationSettingsSheetState
             const SizedBox(height: 12),
             _sectionLabel('regex_script_settings'.tr()),
             _promptPresetSelector(),
+            const SizedBox(height: 12),
+            _sectionLabel('tab_api'.tr()),
+            _buildModelSelector(),
             const SizedBox(height: 12),
             _sectionLabel('search'.tr()),
             _switchTile(
@@ -550,36 +563,7 @@ class _MemoryGenerationSettingsSheetState
               : 'memory_mode_fast_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
-        // Phase 7.3 — "LLM config →" link to the Post-Building menu. This
-        // sheet is retrieval-only; the actual LLM endpoint/model/key for
-        // generation, write-loop, cleaner, ledger, and consolidation live in
-        // [PostBuildingMenuDialog].
-        // The link replaces the LLM fields that used to be inlined here before
-        // the Phase 1/4 UI refactor.
-        if (widget.charId != null && widget.sessionId != null) ...[
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: _openPostBuildingMenu,
-              icon: const Icon(Icons.open_in_new, size: 14),
-              label: Text('memory_settings_llm_config_link'.tr()),
-            ),
-          ),
-        ],
       ],
-    );
-  }
-
-  void _openPostBuildingMenu() {
-    Navigator.of(context).pop();
-    showDialog<void>(
-      context: context,
-      useRootNavigator: true,
-      builder: (_) => PostBuildingMenuDialog(
-        charId: widget.charId!,
-        sessionId: widget.sessionId!,
-      ),
     );
   }
 
@@ -1041,6 +1025,114 @@ class _MemoryGenerationSettingsSheetState
         ],
       ),
     );
+  }
+
+  /// Model dropdown for the Memory Generation LLM. Fetches models from the
+  /// active chat API endpoint on open. Writes the selection to
+  /// PipelineSettings.generationModel.
+  Widget _buildModelSelector() {
+    final models = <String>{
+      ..._fetchedModels,
+      if (_generationModel.isNotEmpty && !_fetchedModels.contains(_generationModel))
+        _generationModel,
+    }.toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: models.contains(_generationModel) ||
+                        _generationModel.isEmpty
+                    ? _generationModel
+                    : null,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'label_model'.tr(),
+                  helperText: _generationModel.isEmpty
+                      ? 'memory_leave_blank_hint'.tr()
+                      : null,
+                  helperMaxLines: 2,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: [
+                  DropdownMenuItem<String>(
+                    value: '',
+                    child: Text(
+                      _fetchedModels.isEmpty
+                          ? 'memory_books_loading_models'.tr()
+                          : 'post_building_use_chat_model'.tr(),
+                    ),
+                  ),
+                  ...models.map(
+                    (m) => DropdownMenuItem<String>(
+                      value: m,
+                      child: Text(m, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: (v) async {
+                  final model = v ?? '';
+                  setState(() => _generationModel = model);
+                  final pipeline = ref.read(pipelineSettingsProvider);
+                  await ref
+                      .read(pipelineSettingsProvider.notifier)
+                      .save(pipeline.copyWith(generationModel: model));
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: 'memory_books_loading_models'.tr(),
+              onPressed: _fetchingModels ? null : _fetchModels,
+              icon: _fetchingModels
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 18),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _fetchModels() async {
+    final config = ref.read(activeApiConfigProvider);
+    if (config == null) {
+      if (mounted) GlazeToast.show(context, 'settings_no_api_configs'.tr());
+      return;
+    }
+    setState(() => _fetchingModels = true);
+    try {
+      final models = await SseClient().fetchModels(
+        endpoint: config.endpoint,
+        apiKey: config.apiKey,
+      );
+      final ids = models
+          .map((m) => m['id'])
+          .whereType<String>()
+          .where((id) => id.trim().isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+      if (config.model.isNotEmpty && !ids.contains(config.model)) {
+        ids.insert(0, config.model);
+      }
+      if (!mounted) return;
+      setState(() => _fetchedModels = ids);
+    } catch (e) {
+      if (mounted) {
+        GlazeToast.show(context, '${'settings_err_failed'.tr()} $e');
+      }
+    } finally {
+      if (mounted) setState(() => _fetchingModels = false);
+    }
   }
 }
 

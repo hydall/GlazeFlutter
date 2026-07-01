@@ -26,6 +26,7 @@ class _FakeAgentRunner extends AgentRunner {
     ApiConfig current,
     String sessionId, {
     bool isFinalResponse = false,
+    String? apiConfigId,
   }) async {
     return ResolvedAgentConfig(
       endpoint: 'https://test',

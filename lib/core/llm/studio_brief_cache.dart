@@ -115,19 +115,14 @@ class StudioBriefCache {
     required String sceneKey,
   }) {
     final base = <String, dynamic>{
-      'v': 1,
+      'v': 2,
       'profileId': config.profileId,
-      'sourcePresetHash': config.sourcePresetHash,
+      'studioPresetId': config.studioPresetId,
       'configUpdatedAt': config.updatedAt,
       'agentId': agent.id,
-      'promptShard': agent.promptShard
-          .map((b) => {'role': b.role, 'content': b.content, 'blockName': b.blockName, 'blockId': b.blockId})
-          .toList(),
       'sourceBlockNames': agent.sourceBlockNames,
       'refreshPolicy': policy,
       'invalidationSignals': agent.invalidationSignals,
-      'agentPreset': config.agentStudioPresetId,
-      'finalPreset': config.finalStudioPresetId,
       if (policy == 'scene') 'sceneKey': sceneKey,
     };
     return computeHash(jsonEncode(base));
@@ -182,7 +177,6 @@ class StudioBriefCache {
     final text = [
       agent.name,
       agent.sourceBlockNames,
-      agent.promptShard.map((s) => s.content).join('\n'),
     ].join('\n').toLowerCase();
     if (RegExp(
       r'ban|banned|forbidden|clich|клиш|запрет|forbidden words',

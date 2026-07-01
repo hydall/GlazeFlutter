@@ -110,7 +110,7 @@ class StudioLedgerExportParser {
           rejectionReason: 'export root is not a JSON object',
         );
       }
-      export = StudioLedgerExport.fromJson(decoded);
+      export = StudioLedgerExport.fromJson(_normalizeExportJson(decoded));
     } catch (e) {
       debugPrint('[StudioLedger] JSON parse error: $e');
       return LedgerParseResult(
@@ -173,6 +173,210 @@ class StudioLedgerExportParser {
     return source.substring(contentStart, end).trim();
   }
 
+  // ── LLM JSON normalization ────────────────────────────────────────────────
+
+  /// Ledger output is produced by an LLM, so fields that are specified as
+  /// strings sometimes arrive as lists or objects. Normalize those shapes before
+  /// handing them to generated `fromJson` code so malformed optional diagnostics
+  /// do not discard otherwise-valid ops.
+  Map<String, dynamic> _normalizeExportJson(Map<String, dynamic> json) {
+    return {
+      'sceneState': _normalizeSceneState(json['sceneState']),
+      'entities': _normalizeEntities(json['entities']),
+      'arcState': _normalizeArcState(json['arcState']),
+      'durableFacts': _normalizeDurableFacts(json['durableFacts']),
+      'ops': _normalizeOps(json['ops']),
+    };
+  }
+
+  Map<String, dynamic>? _normalizeSceneState(dynamic value) {
+    final map = _asMap(value);
+    if (map == null) return null;
+    return {
+      'time': _stringValue(map['time']),
+      'date': _stringValue(map['date']),
+      'location': _stringValue(map['location']),
+      'immediateThread': _stringValue(map['immediateThread']),
+      'presentEntities': _normalizePresentEntities(map['presentEntities']),
+      'activeTensions': _stringList(map['activeTensions']),
+    };
+  }
+
+  List<Map<String, dynamic>> _normalizePresentEntities(dynamic value) {
+    return _listItems(value)
+        .map((item) {
+          final map = _asMap(item);
+          if (map == null) {
+            return {
+              'name': _stringValue(item),
+              'status': 'present',
+              'reason': '',
+              'confidence': 'high',
+            };
+          }
+          return {
+            'name': _stringValue(map['name']),
+            'status': _stringValue(map['status']).ifBlank('present'),
+            'reason': _stringValue(map['reason']),
+            'confidence': _stringValue(map['confidence']).ifBlank('high'),
+          };
+        })
+        .where((item) => (item['name'] as String).isNotEmpty)
+        .toList();
+  }
+
+  List<Map<String, dynamic>> _normalizeEntities(dynamic value) {
+    return _listItems(value)
+        .map((item) {
+          final map = _asMap(item);
+          if (map == null) {
+            return {
+              'name': _stringValue(item),
+              'aliases': <String>[],
+              'type': '',
+              'relationshipToUser': '',
+              'attitudeToUser': '',
+              'knowledge': <String>[],
+              'boundaries': <String>[],
+              'durableFacts': <String>[],
+              'cardOverrides': <String>[],
+            };
+          }
+          return {
+            'name': _stringValue(map['name']),
+            'aliases': _stringList(map['aliases']),
+            'type': _stringValue(map['type']),
+            'relationshipToUser': _stringValue(map['relationshipToUser']),
+            'attitudeToUser': _stringValue(map['attitudeToUser']),
+            'knowledge': _stringList(map['knowledge']),
+            'boundaries': _stringList(map['boundaries']),
+            'durableFacts': _stringList(map['durableFacts']),
+            'cardOverrides': _stringList(map['cardOverrides']),
+          };
+        })
+        .where((item) => (item['name'] as String).isNotEmpty)
+        .toList();
+  }
+
+  List<Map<String, dynamic>> _normalizeArcState(dynamic value) {
+    return _listItems(value)
+        .map((item) {
+          final map = _asMap(item);
+          if (map == null) {
+            final id = _stringValue(item);
+            return {
+              'id': id,
+              'title': id,
+              'status': 'seeded',
+              'summary': '',
+              'doNotReopen': false,
+              'cardOverride': '',
+              'entities': <String>[],
+              'topics': <String>[],
+            };
+          }
+          return {
+            'id': _stringValue(map['id']),
+            'title': _stringValue(map['title']),
+            'status': _stringValue(map['status']).ifBlank('seeded'),
+            'summary': _stringValue(map['summary']),
+            'doNotReopen': _boolValue(map['doNotReopen']),
+            'cardOverride': _stringValue(map['cardOverride']),
+            'entities': _stringList(map['entities']),
+            'topics': _stringList(map['topics']),
+          };
+        })
+        .where((item) => (item['id'] as String).isNotEmpty)
+        .toList();
+  }
+
+  List<Map<String, dynamic>> _normalizeDurableFacts(dynamic value) {
+    return _listItems(value)
+        .map((item) {
+          final map = _asMap(item);
+          if (map == null) {
+            final content = _stringValue(item);
+            return {
+              'title': content,
+              'content': content,
+              'keys': <String>[],
+              'entities': <String>[],
+            };
+          }
+          return {
+            'title': _stringValue(map['title']),
+            'content': _stringValue(map['content']),
+            'keys': _stringList(map['keys']),
+            'entities': _stringList(map['entities']),
+          };
+        })
+        .where((item) {
+          return (item['title'] as String).isNotEmpty &&
+              (item['content'] as String).isNotEmpty;
+        })
+        .toList();
+  }
+
+  List<Map<String, dynamic>> _normalizeOps(dynamic value) {
+    return _listItems(value).map((item) {
+      final map = _asMap(item);
+      if (map == null) {
+        return {
+          'op': '',
+          'key': '',
+          'value': _stringValue(item),
+          'evidence': '',
+          'eventState': '',
+        };
+      }
+      return {
+        'op': _stringValue(map['op']),
+        'key': _stringValue(map['key']),
+        'value': _stringValue(map['value']),
+        'evidence': _stringValue(map['evidence']),
+        'eventState': _stringValue(map['eventState']),
+      };
+    }).toList();
+  }
+
+  Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is! Map) return null;
+    return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+
+  List<dynamic> _listItems(dynamic value) {
+    if (value is List) return value;
+    if (value == null) return const [];
+    return [value];
+  }
+
+  List<String> _stringList(dynamic value) {
+    return _listItems(
+      value,
+    ).map(_stringValue).where((item) => item.trim().isNotEmpty).toList();
+  }
+
+  String _stringValue(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value.trim();
+    if (value is num || value is bool) return value.toString();
+    if (value is List) {
+      return value
+          .map(_stringValue)
+          .where((item) => item.isNotEmpty)
+          .join('; ');
+    }
+    if (value is Map) return jsonEncode(value);
+    return value.toString().trim();
+  }
+
+  bool _boolValue(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) return value.toLowerCase().trim() == 'true';
+    return false;
+  }
+
   // ── Validation ──────────────────────────────────────────────────────────────
 
   /// Returns a rejection reason string, or null when the op is valid.
@@ -212,4 +416,8 @@ class StudioLedgerExportParser {
 
     return null;
   }
+}
+
+extension _LedgerStringFallback on String {
+  String ifBlank(String fallback) => trim().isEmpty ? fallback : this;
 }

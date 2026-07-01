@@ -294,8 +294,8 @@ GoRouter buildRouter(
         ),
       ],
     ),
-      ],
-    ),
+    ],
+  ),
   ],
 );
 

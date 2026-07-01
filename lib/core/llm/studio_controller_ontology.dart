@@ -1,5 +1,4 @@
 import '../models/studio_config.dart';
-import 'beauty_shard_instruction.dart';
 
 /// One hard-coded Studio controller slot. The decomposition engine assigns
 /// preset blocks to these stable slots and synthesizes one agent per slot.
@@ -8,7 +7,6 @@ class StudioControllerSpec {
   final String name;
   final String purpose;
   final String outputContract;
-  final String fallbackPrompt;
   final String refreshPolicy;
   final List<String> invalidationSignals;
   final double temperature;
@@ -23,7 +21,6 @@ class StudioControllerSpec {
     required this.name,
     required this.purpose,
     required this.outputContract,
-    required this.fallbackPrompt,
     required this.refreshPolicy,
     required this.invalidationSignals,
     required this.temperature,
@@ -61,8 +58,6 @@ class StudioControllerOntology {
           'Track source-of-truth facts, recent chat state, unresolved threads, who knows what, and contradictions to avoid.',
       outputContract:
           'At chat time, output a compact continuity brief only: facts, constraints, risks, and next-turn continuity notes. No scene prose.',
-      fallbackPrompt:
-          'Review character, persona, scenario, memory, summary, lore, and recent chat. Produce a compact continuity brief with established facts, who knows what, active constraints, unresolved threads, and contradictions to avoid. Do not write scene prose or dialogue.',
       refreshPolicy: 'turn',
       invalidationSignals: ['last_user_message_changed', 'memory_changed'],
       temperature: 0.3,
@@ -76,8 +71,6 @@ class StudioControllerOntology {
           'Enforce user sovereignty, character autonomy, character psychology, subjective knowledge, and believable behavior.',
       outputContract:
           'At chat time, output actionable constraints for user agency and character behavior. No scene prose, no drafted actions, no dialogue. You may add an optional "Options" list of 1-3 branchable character-behavior approaches the final writer can pick from (describe the approach only, e.g. "let the character deflect" vs "let a crack of honesty show"); never write ready-made lines or actions.',
-      fallbackPrompt:
-          'Enforce user autonomy and character authenticity. Never write the user\'s dialogue, actions, thoughts, feelings, intentions, or decisions. Characters act only from established knowledge, psychology, history, physical limits, and current pressure. Produce constraints only, not prose.',
       refreshPolicy: 'turn',
       invalidationSignals: [
         'active_cast_changed',
@@ -101,8 +94,6 @@ class StudioControllerOntology {
           'DO NOT collapse a turn that contains physical movement, travel, object handling, or executed decisions into "conversational" just because it also has dialogue. Dialogue inside an action beat does NOT make it conversational. When in doubt between action and conversational, prefer action.\n\n'
           'CRITICAL: do NOT invent paragraph numbers. State the beat type and a qualitative tempo (short / medium / long). The final writer\'s preset supplies the exact paragraph/word budget — your tempo hint helps the preset apply the right tier. If the preset is dynamic, the final writer maps your tempo to its own tiers. If the preset is fixed-length, the final writer just writes to that length with your beat-type guidance.\n\n'
           'Always state the chosen beat type, the tempo word, and a one-line note on why this tempo warrants it. You may add an optional "Options" list of 1-3 branchable structural/style approaches the final writer can pick from (describe the approach only, e.g. "open on a physical action" vs "open on a single line of dialogue"); never write ready-made prose.',
-      fallbackPrompt:
-          'Extract narrative mode, pacing, style, POV, tone, genre, and sensory budget into a concise response contract. Classify the user\'s last turn as ACTION (physical movement, travel, object handling, executed decision — even when dialogue is present), CONVERSATIONAL (mostly speech, no physical progression), ATMOSPHERIC (slow/reflective), or DYNAMIC/MIXED (action + dialogue comparable). Set a qualitative tempo: short, medium, or long. Do NOT invent paragraph counts — the user\'s preset owns the numbers. When in doubt between action and conversational, prefer action. Include dialogue/action balance and where the response should stop. Do not draft the reply.',
       refreshPolicy: 'turn',
       invalidationSignals: ['scene_changed', 'tone_changed', 'pacing_changed'],
       temperature: 0.3,
@@ -116,8 +107,6 @@ class StudioControllerOntology {
           'Control dialogue cadence, speech texture, monologue segmentation, interaction balance, and when silence is appropriate. Your job is dialogue RATIO and TEXTURE — you do NOT decide beat type or paragraph budget (that is the Narrative Controller\'s lane). Provide a dialogue ratio that is compatible with the scene\'s actual beat: action beats can still be dialogue-heavy (characters talk while moving/riding/fighting); a high dialogue ratio does NOT downgrade an action beat into a short conversational one.',
       outputContract:
           'At chat time, output dialogue guidance only: who may plausibly speak, desired dialogue ratio (low / medium / high — relative to the beat, not absolute), speech constraints, and silence constraints. State the ratio as a proportion of the response that should be spoken lines vs physical action/narration, compatible with whatever beat type the Narrative Controller chose. No drafted lines. You may add an optional "Options" list of 1-3 branchable dialogue approaches the final writer can pick from (describe the approach only, e.g. "answer with silence and a gesture" vs "give one clipped deflecting line"); never write the actual dialogue.',
-      fallbackPrompt:
-          'Guide dialogue cadence and interaction. Prefer purposeful speech when characters can plausibly speak; segment monologues naturally; preserve character voice and subtext. Set a dialogue ratio compatible with the current beat (action beats can be dialogue-heavy; a high ratio does not make an action beat "conversational"). Do not draft dialogue.',
       refreshPolicy: 'turn',
       invalidationSignals: [
         'last_user_message_changed',
@@ -134,8 +123,6 @@ class StudioControllerOntology {
           'Enforce anti-loop, anti-echo, banlists, anti-cliche, anti-slop, no-tells, and stable prose quality rules.',
       outputContract:
           'At chat time, output a compact guard checklist and forbidden items for this turn. No rewritten scene prose.',
-      fallbackPrompt:
-          'Check the last user message and recent assistant replies for repetition risks. Enforce anti-echo, anti-loop, banlists, forbidden cliches, and prose quality constraints. Produce a guard brief only.',
       refreshPolicy: 'turn',
       invalidationSignals: [
         'last_3_replies_changed',
@@ -152,8 +139,6 @@ class StudioControllerOntology {
           'Control living-world texture, NPC ecology, offscreen pressure, public-space activity, and background consequences without stealing focus.',
       outputContract:
           'At chat time, output world/NPC guidance only: active NPCs, off-focus thread, environmental pressure, and what not to add. No prose. You may add an optional "Options" list of 1-3 branchable world-texture approaches the final writer can pick from (describe the approach only, e.g. "let an offscreen sound intrude" vs "keep the world still and pressureless"); never write ready-made prose.',
-      fallbackPrompt:
-          'Guide living-world and NPC activity. NPCs should act only when the scene supports it and should affect the scene without stealing focus. Produce practical world-state guidance only.',
       refreshPolicy: 'turn',
       invalidationSignals: [
         'scene_changed',
@@ -174,8 +159,6 @@ class StudioControllerOntology {
           '`meta_ooc: due | topic: <X>` (user addressed the meta-persona OOC), '
           '`meta_periodic_note: due | last_note: <N turns ago> | voice: <from block> | length: <from block> | format: <from block>` (the Nth assistant turn fired the period rule — relay the voice/length/format/wrapper from the assigned meta block so the Main Responder writes in the user\'s chosen style), '
           'or `meta: silent` (neither condition met). Never write in-scene prose, never write the actual OOC reply — that is the Main Responder\'s job, guided by your brief.',
-      fallbackPrompt:
-          'You are the meta-weaver / OOC interface. Count the assistant messages in the history you see. Read the period rule, persona name, voice, length, format, and wrapper from your assigned meta block (e.g. period "Every 4 assistant responses", voice "warm, maternal", wrapper "<lumiaooc>...</lumiaooc>", length "1-3 sentences"). The persona name and voice come entirely from the block — do NOT assume any specific name or voice. If the count since the last meta note matches the period, output `meta_periodic_note: due` and relay the block\'s persona/voice/length/wrapper instructions so the Main Responder writes the note correctly. If the user explicitly addressed the meta-persona in OOC brackets (e.g. `((<persona>: ...))`, `[OOC: ...]`), output `meta_ooc: due` with the detected topic. Otherwise output `meta: silent`. Do NOT write the actual OOC reply — only the brief telling the Main Responder whether to emit one.',
       refreshPolicy: 'turn',
       invalidationSignals: [
         'last_user_message_changed',
@@ -192,7 +175,6 @@ class StudioControllerOntology {
           'Track reusable visual styling state only: HTML/CSS palette, background, text/font colors, speaker colors, typography, gradients, and art-style labels. Skip concrete HTML widgets, trackers, infoblocks, and image-generation instructions.',
       outputContract:
           'At chat time, output a compact beauty-state brief only: current reusable style variables, constraints for preserving/updating them, and items to avoid. Do NOT write scene prose. Do NOT handle concrete UI artifacts (phone screens, taxi menus, terminals), trackers, infoblocks, topbars, or image-gen blocks.',
-      fallbackPrompt: beautyShardTrackerFallbackPrompt,
       refreshPolicy: 'turn',
       invalidationSignals: ['last_user_message_changed', 'style_state_changed'],
       temperature: 0.2,
@@ -206,8 +188,6 @@ class StudioControllerOntology {
           'Write the final visible RP response using the full prompt and the prior controller briefs.',
       outputContract:
           'At chat time, output only the final visible RP response. Obey all controller briefs and final formatting/content constraints.',
-      fallbackPrompt:
-          'Write the final RP response using the assembled chat prompt, character/scenario/persona instructions, memory, and prior Studio controller briefs. Obey user agency, character truth, dialogue, pacing, style, formatting, and guard constraints. Output only the final visible reply.',
       refreshPolicy: 'turn',
       invalidationSignals: ['last_user_message_changed'],
       temperature: 0.8,
@@ -216,6 +196,37 @@ class StudioControllerOntology {
       isFinal: true,
     ),
   ];
+
+  /// Build the default fixed Studio controller agents for a session.
+  ///
+  /// Kept here so Studio creation, rebuild, and legacy empty-config recovery
+  /// all use the same agent set.
+  static List<StudioAgent> buildDefaultAgents({
+    required String sessionId,
+    required int now,
+  }) {
+    final agents = <StudioAgent>[];
+    for (var i = 0; i < specs.length; i++) {
+      final spec = specs[i];
+      agents.add(
+        StudioAgent(
+          id: 'agent_${sessionId}_${spec.id}_$now',
+          name: spec.name,
+          role: 'system',
+          order: i,
+          enabled: spec.id != 'meta',
+          temperature: spec.temperature,
+          maxTokens: spec.maxTokens,
+          timeoutMs: spec.timeoutMs,
+          refreshPolicy: spec.refreshPolicy,
+          invalidationSignals: spec.invalidationSignals,
+          phase: spec.phase,
+          contextSize: spec.contextSize > 0 ? spec.contextSize : 5,
+        ),
+      );
+    }
+    return agents;
+  }
 
   /// Map an existing agent back to its controller spec — by id/name match,
   /// falling back to pipeline-order position. Used by single-agent regen.

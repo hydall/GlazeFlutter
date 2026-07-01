@@ -1,17 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/studio_api_config_resolver.dart';
-import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
-import '../../../core/models/preset.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../core/state/memory_agent_providers.dart';
-import '../../../core/state/preset_resolution.dart';
 import '../../../core/state/studio_build_provider.dart';
-import '../../../core/utils/time_helpers.dart';
 import '../../settings/api_list_provider.dart';
 
 /// Controller for the Studio tracker dialog, separating business logic from
@@ -31,7 +26,6 @@ class StudioMenuController {
   List<Tracker> _trackers = const [];
   bool _loading = true;
   bool _loadingModels = false;
-  final Set<String> _regeneratingAgentIds = {};
 
   StudioMenuController(this._ref, this._sessionId, this._charId);
 
@@ -45,7 +39,6 @@ class StudioMenuController {
   /// dialog being closed and re-opened mid-build.
   bool get building =>
       _ref.read(studioBuildProvider.notifier).isBuilding(_sessionId);
-  Set<String> get regeneratingAgentIds => Set.unmodifiable(_regeneratingAgentIds);
 
   Future<void> load() async {
     final repo = _ref.read(studioConfigRepoProvider);
@@ -68,34 +61,13 @@ class StudioMenuController {
 
   /// Resolve the [ApiConfig] a tracker runs against, mirroring
   /// [AgentRunner]'s resolution: the Studio's `runApiConfigId` if set,
-  /// otherwise the chat's active API config. Trackers reuse this config's
-  /// provider/endpoint/key — only the model id is overridden per agent — so
-  /// the model list must come from this exact provider.
+  /// otherwise the chat's active API config.
   ApiConfig? resolveTrackerApiConfig() {
     return StudioApiConfigResolver(
       apiConfigs: _ref.read(apiListProvider).value ?? const <ApiConfig>[],
       activeConfig: _ref.read(activeApiConfigProvider),
     ).resolveRunConfig(_config?.runApiConfigId ?? '');
   }
-
-  /// Resolve the [ApiConfig] used for the one-shot build-time decomposition
-  /// LLM call. The Studio's `buildApiConfigId` if set, otherwise the chat's
-  /// active API config. The Studio's `buildModelOverride` is applied on top
-  /// when set so the user can run the builder on a different model than chat.
-  ApiConfig? resolveBuildApiConfig() {
-    return StudioApiConfigResolver(
-      apiConfigs: _ref.read(apiListProvider).value ?? const <ApiConfig>[],
-      activeConfig: _ref.read(activeApiConfigProvider),
-    ).resolveBuildConfig(
-      _config?.buildApiConfigId ?? '',
-      _config?.buildModelOverride ?? '',
-    );
-  }
-
-  /// The chat's effective preset, or `null` if none is selected.
-  Preset? get effectivePreset => _ref.read(
-    effectivePresetForChatProvider((charId: _charId, sessionId: _sessionId)),
-  );
 
   Future<void> toggleEnabled(bool enabled) async {
     final repo = _ref.read(studioConfigRepoProvider);
@@ -115,41 +87,6 @@ class StudioMenuController {
       return a;
     }).toList();
     final updated = current.copyWith(agents: agents);
-    await repo.upsert(updated);
-    _config = updated;
-  }
-
-  Future<void> setAgentModelOverride(
-    StudioAgent agent,
-    String modelOverride,
-  ) async {
-    final repo = _ref.read(studioConfigRepoProvider);
-    final current = _config;
-    if (current == null) return;
-    final agents = current.agents.map((a) {
-      if (a.id == agent.id) return a.copyWith(modelOverride: modelOverride);
-      return a;
-    }).toList();
-    final updated = current.copyWith(agents: agents);
-    await repo.upsert(updated);
-    _config = updated;
-  }
-
-  Future<void> setAgentPromptShard(
-    StudioAgent agent,
-    List<PromptShardBlock> shard,
-  ) async {
-    final repo = _ref.read(studioConfigRepoProvider);
-    final current = _config;
-    if (current == null) return;
-    final agents = current.agents.map((a) {
-      if (a.id == agent.id) return a.copyWith(promptShard: shard);
-      return a;
-    }).toList();
-    final updated = current.copyWith(
-      agents: agents,
-      updatedAt: currentTimestampSeconds(),
-    );
     await repo.upsert(updated);
     _config = updated;
   }
@@ -206,62 +143,6 @@ class StudioMenuController {
           );
     }
     return message;
-  }
-
-  /// Regenerate one tracker's `promptShard` from its source preset blocks via
-  /// [StudioDecompositionService.regenerateAgentInstruction]. Uses the same
-  /// build API config as [buildStudio]. Single-agent regen reuses the
-  /// deterministic keyword bucketing (no LLM router call); the build-time LLM
-  /// map only matters for a full decompose.
-  ///
-  /// Returns the toast message to surface. No-ops if the agent is already
-  /// regenerating or the config is missing.
-  Future<String> regenerateAgentInstruction(StudioAgent agent) async {
-    final current = _config;
-    if (current == null || _regeneratingAgentIds.contains(agent.id)) {
-      return '';
-    }
-    _regeneratingAgentIds.add(agent.id);
-    try {
-      final preset = effectivePreset;
-      if (preset == null) {
-        return 'No preset available. Cannot regenerate instruction.';
-      }
-      final apiConfig = resolveBuildApiConfig();
-      if (apiConfig == null) {
-        return 'No API configured. Set one up in API settings first.';
-      }
-
-      final decompositionService = _ref.read(studioDecompositionServiceProvider);
-      final updatedAgent = await decompositionService.regenerateAgentInstruction(
-        preset: preset,
-        agent: agent,
-        apiConfig: apiConfig,
-        builderPromptTemplate: current.builderPromptTemplate,
-        routingMode: current.routingMode.isNotEmpty
-            ? current.routingMode
-            : 'verbatim',
-      );
-      if (_config == null) return '';
-      final agents = current.agents.map((a) {
-        return a.id == agent.id ? updatedAgent.copyWith(order: a.order) : a;
-      }).toList();
-      final updatedConfig = current.copyWith(
-        agents: agents,
-        sourcePresetHash: StudioDecompositionService.computePresetHash(
-          preset.blocks.where((b) => b.enabled).toList(),
-        ),
-        buildApiConfigId: apiConfig.id,
-        updatedAt: currentTimestampSeconds(),
-      );
-      await _ref.read(studioConfigRepoProvider).upsert(updatedConfig);
-      _config = updatedConfig;
-      return 'Instruction regenerated for "${agent.name.isEmpty ? agent.id : agent.name}".';
-    } catch (e) {
-      return 'Regenerate failed: $e';
-    } finally {
-      _regeneratingAgentIds.remove(agent.id);
-    }
   }
 
   /// Find the current [Tracker.value] for [name], truncated for display.

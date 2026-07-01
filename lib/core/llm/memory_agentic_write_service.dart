@@ -48,9 +48,9 @@ class MemoryAgenticWriteService {
     CancelToken? cancelToken,
     bool Function()? isStillCurrent,
   }) async {
-    if (!settings.agenticWriteEnabled) {
-      return const MemoryWriteLoopResult(status: 'disabled');
-    }
+    // Agentic write-loop is always-on. The agenticWriteEnabled toggle was
+    // removed from the UI — the write-loop always runs (subject to cadence).
+    // The old early-return on !settings.agenticWriteEnabled is gone.
 
     final token = cancelToken ?? CancelToken();
     if (token.isCancelled) {

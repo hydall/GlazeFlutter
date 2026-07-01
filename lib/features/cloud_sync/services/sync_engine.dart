@@ -50,6 +50,7 @@ class SyncEngine {
   final SyncTrackerSnapshotStore _trackerSnapshotStore;
   final SyncTrackerValueStore _trackerValueStore;
   final SyncStudioConfigStore _studioConfigStore;
+  final SyncStudioPresetStore? _studioPresetStore;
   final SyncQueue _queue = SyncQueue();
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
   late final SyncBinaryAssetSyncer _binarySyncer;
@@ -74,6 +75,7 @@ class SyncEngine {
     this._trackerSnapshotStore,
     this._trackerValueStore,
     this._studioConfigStore,
+    this._studioPresetStore,
     this._saveLorebookActivations,
   ) {
     _binarySyncer = SyncBinaryAssetSyncer(
@@ -100,6 +102,7 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/tracker_snapshots');
     await _adapter.ensureFolder('$cloudBase/tracker_values');
     await _adapter.ensureFolder('$cloudBase/studio_configs');
+    await _adapter.ensureFolder('$cloudBase/studio_presets');
 
     onProgress(const SyncProgress(message: 'Building sync manifest...'));
     final localManifest = await _manifestBuilder.buildLocalManifest();
@@ -751,6 +754,10 @@ class SyncEngine {
         case 'studio_config':
           final config = await _studioConfigStore.getById(id);
           return config?.toJson();
+        case 'studio_preset':
+          if (_studioPresetStore == null) return null;
+          final preset = await _studioPresetStore.getById(id);
+          return preset?.toJson();
         default:
           return null;
       }
@@ -817,6 +824,11 @@ class SyncEngine {
           break;
         case 'studio_config':
           await _studioConfigStore.put(StudioConfig.fromJson(data));
+          break;
+        case 'studio_preset':
+          if (_studioPresetStore != null) {
+            await _studioPresetStore.put(StudioPreset.fromJson(data));
+          }
           break;
       }
     } catch (_) {}
@@ -1123,6 +1135,11 @@ class SyncEngine {
           break;
         case 'studio_config':
           await _studioConfigStore.delete(id);
+          break;
+        case 'studio_preset':
+          if (_studioPresetStore != null) {
+            await _studioPresetStore.delete(id);
+          }
           break;
         // extensions_settings has no meaningful "delete" — it's always present.
       }

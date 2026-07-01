@@ -80,35 +80,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   }
 
   /// Open a multi-line editor for one tracker's `promptShard` (manual shard
-  /// editing). Persists on Save; Cancel discards. This complements the auto
-  /// [StudioDecompositionService.decompose] build — the user can hand-tune
-  /// any agent's instruction after a build.
-  Future<void> _editAgentShard(StudioAgent agent) async {
-    // Preset-style editor: each PromptShardBlock is its own card with editable
-    // blockName + content. Save returns List<PromptShardBlock>.
-    final edited = List<PromptShardBlock>.from(agent.promptShard);
-    if (edited.isEmpty) {
-      edited.add(const PromptShardBlock());
-    }
-    final result = await showDialog<List<PromptShardBlock>>(
-      context: context,
-      useRootNavigator: true,
-      builder: (context) =>
-          _ShardBlockEditorDialog(agentName: agent.name, blocks: edited),
-    );
-    if (result == null) return;
-    await _setAgentPromptShard(agent, result);
-  }
-
-  Future<void> _setAgentPromptShard(
-    StudioAgent agent,
-    List<PromptShardBlock> shard,
-  ) async {
-    await _ctrl.setAgentPromptShard(agent, shard);
-    if (!mounted) return;
-    setState(() {});
-  }
-
   /// Edit the shared tracker model override (applies to all 7 pre-gen
   /// controllers). Fetches the live model list from the resolved tracker API
   /// config's provider and writes the selection to
@@ -171,71 +142,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     );
   }
 
-  Future<void> _editAgentModel(StudioAgent agent) async {
-    final apiConfig = _ctrl.resolveTrackerApiConfig();
-    if (apiConfig == null) {
-      GlazeToast.show(
-        context,
-        'No chat API configured. Set one up in API settings first.',
-      );
-      return;
-    }
-    final models = await _ctrl.fetchModelsForTrackerConfig();
-    if (!mounted) return;
-    setState(() {});
-    if (models.isEmpty) {
-      GlazeToast.show(
-        context,
-        'Could not fetch models from ${apiConfig.name.isEmpty ? "the provider" : apiConfig.name}. '
-        'Check the API endpoint and key in settings.',
-      );
-      return;
-    }
-    final current = agent.modelOverride;
-    if (current.isNotEmpty && !models.contains(current)) {
-      models.insert(0, current);
-    }
-    final selectedIndex = current.isNotEmpty ? models.indexOf(current) : -1;
-    if (!mounted) return;
-    await GlazeBottomSheet.show<void>(
-      context,
-      title: agent.name.isEmpty ? agent.id : agent.name,
-      scrollToIndex: selectedIndex >= 0 ? selectedIndex : null,
-      items: [
-        BottomSheetItem(
-          label: 'Use chat/run model',
-          hint: apiConfig.model.isEmpty ? null : 'chat: ${apiConfig.model}',
-          icon: current.isEmpty ? Icons.check : Icons.chat_bubble_outline,
-          iconColor: Theme.of(context).colorScheme.primary,
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            _setAgentModelOverride(agent, '');
-          },
-        ),
-        ...models.map(
-          (m) => BottomSheetItem(
-            label: m,
-            icon: m == current ? Icons.check : null,
-            iconColor: Theme.of(context).colorScheme.primary,
-            onTap: () {
-              Navigator.of(context, rootNavigator: true).pop();
-              _setAgentModelOverride(agent, m);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _setAgentModelOverride(
-    StudioAgent agent,
-    String modelOverride,
-  ) async {
-    await _ctrl.setAgentModelOverride(agent, modelOverride);
-    if (!mounted) return;
-    setState(() {});
-  }
-
   Future<void> _setTrackerModelOverride(String modelOverride) async {
     final pipeline = ref.read(pipelineSettingsProvider);
     final updated = pipeline.copyWith(
@@ -260,19 +166,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
   /// running -> finished. Drains the buffered toast and reloads the config.
   Future<void> _onBuildFinished() async {
     final message = await _ctrl.consumeBuildResult();
-    if (!mounted) return;
-    setState(() {});
-    if (message.isNotEmpty) GlazeToast.show(context, message);
-  }
-
-  /// Regenerate one tracker's `promptShard` from its source preset blocks via
-  /// [StudioDecompositionService.regenerateAgentInstruction]. Uses the same
-  /// build API config as [_buildStudio]. Single-agent regen reuses the
-  /// deterministic keyword bucketing (no LLM router call); the build-time LLM
-  /// map only matters for a full decompose.
-  Future<void> _regenerateAgentInstruction(StudioAgent agent) async {
-    setState(() {}); // show regenerating chip immediately
-    final message = await _ctrl.regenerateAgentInstruction(agent);
     if (!mounted) return;
     setState(() {});
     if (message.isNotEmpty) GlazeToast.show(context, message);
@@ -384,9 +277,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                               .toList(),
                           trackerValueFor: _ctrl.trackerValueFor,
                           onToggle: _toggleAgent,
-                          onEditShard: _editAgentShard,
-                          onRegenerate: _regenerateAgentInstruction,
-                          regeneratingAgentIds: _ctrl.regeneratingAgentIds,
                           onEditSharedModel: _editTrackerModel,
                         ),
                         const SizedBox(height: 12),
@@ -400,10 +290,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                               .toList(),
                           trackerValueFor: _ctrl.trackerValueFor,
                           onToggle: _toggleAgent,
-                          onEditModel: _editAgentModel,
-                          onEditShard: _editAgentShard,
-                          onRegenerate: _regenerateAgentInstruction,
-                          regeneratingAgentIds: _ctrl.regeneratingAgentIds,
                         ),
                       ],
                       const SizedBox(height: 12),
@@ -470,19 +356,11 @@ class _TrackerRow extends StatelessWidget {
   final StudioAgent agent;
   final String? value;
   final ValueChanged<bool> onToggle;
-  final void Function(StudioAgent)? onEditModel;
-  final VoidCallback onEditShard;
-  final VoidCallback onRegenerate;
-  final bool regenerating;
 
   const _TrackerRow({
     required this.agent,
     required this.value,
     required this.onToggle,
-    this.onEditModel,
-    required this.onEditShard,
-    required this.onRegenerate,
-    required this.regenerating,
   });
 
   @override
@@ -540,11 +418,6 @@ class _TrackerRow extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       ...chips.map((c) => _chip(context, c.label, c.emphasize)),
-                      if (onEditModel != null) _modelChip(context),
-                      // Tappable prompt-shard chip — opens a multi-line
-                      // editor for the tracker's promptShard (manual shard
-                      // editing, Phase B).
-                      _shardChip(context),
                     ],
                   ),
                 ),
@@ -563,106 +436,8 @@ class _TrackerRow extends StatelessWidget {
                   ),
               ],
             ),
-          ),
-          // Regenerate this tracker's instruction from its source preset
-          // blocks (Phase B). Spinner while the LLM build call is in flight.
-          IconButton(
-            onPressed: regenerating ? null : onRegenerate,
-            icon: regenerating
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(Icons.refresh, size: 18, color: cs.onSurfaceVariant),
-            tooltip: 'Regenerate instruction from preset',
-            visualDensity: VisualDensity.compact,
-          ),
+           ),
         ],
-      ),
-    );
-  }
-
-  Widget _shardChip(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final hasShard = agent.promptShard.any((b) => b.content.trim().isNotEmpty);
-    return InkWell(
-      onTap: onEditShard,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: cs.primary.withValues(alpha: 0.4),
-            width: 0.5,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.edit_note, size: 12, color: cs.onSurfaceVariant),
-            const SizedBox(width: 3),
-            Text(
-              hasShard ? 'prompt' : 'add prompt',
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _modelChip(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final model = agent.modelOverride.isNotEmpty
-        ? agent.modelOverride
-        : agent.model.isNotEmpty
-        ? agent.model
-        : 'model';
-    return InkWell(
-      onTap: () => onEditModel?.call(agent),
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: agent.modelOverride.isNotEmpty
-              ? cs.primaryContainer
-              : cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: cs.primary.withValues(alpha: 0.4),
-            width: 0.5,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.smart_toy_outlined,
-              size: 12,
-              color: agent.modelOverride.isNotEmpty
-                  ? cs.onPrimaryContainer
-                  : cs.onSurfaceVariant,
-            ),
-            const SizedBox(width: 3),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 160),
-              child: Text(
-                model,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: agent.modelOverride.isNotEmpty
-                      ? cs.onPrimaryContainer
-                      : cs.onSurfaceVariant,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1082,9 +857,6 @@ class _TrackersSection extends ConsumerWidget {
   final List<StudioAgent> disabledAgents;
   final String? Function(String) trackerValueFor;
   final Future<void> Function(StudioAgent, bool) onToggle;
-  final Future<void> Function(StudioAgent) onEditShard;
-  final Future<void> Function(StudioAgent) onRegenerate;
-  final Set<String> regeneratingAgentIds;
   final VoidCallback onEditSharedModel;
 
   const _TrackersSection({
@@ -1092,9 +864,6 @@ class _TrackersSection extends ConsumerWidget {
     required this.disabledAgents,
     required this.trackerValueFor,
     required this.onToggle,
-    required this.onEditShard,
-    required this.onRegenerate,
-    required this.regeneratingAgentIds,
     required this.onEditSharedModel,
   });
 
@@ -1187,9 +956,6 @@ class _TrackersSection extends ConsumerWidget {
               agent: a,
               value: trackerValueFor(a.name),
               onToggle: (v) => onToggle(a, v),
-              onEditShard: () => onEditShard(a),
-              onRegenerate: () => onRegenerate(a),
-              regenerating: regeneratingAgentIds.contains(a.id),
             ),
           ),
         if (disabledAgents.isNotEmpty) ...[
@@ -1203,9 +969,6 @@ class _TrackersSection extends ConsumerWidget {
               agent: a,
               value: trackerValueFor(a.name),
               onToggle: (v) => onToggle(a, v),
-              onEditShard: () => onEditShard(a),
-              onRegenerate: () => onRegenerate(a),
-              regenerating: regeneratingAgentIds.contains(a.id),
             ),
           ),
         ],
@@ -1232,20 +995,12 @@ class _FinalizerSection extends StatelessWidget {
   final List<StudioAgent> disabledFinalAgents;
   final String? Function(String) trackerValueFor;
   final Future<void> Function(StudioAgent, bool) onToggle;
-  final Future<void> Function(StudioAgent) onEditModel;
-  final Future<void> Function(StudioAgent) onEditShard;
-  final Future<void> Function(StudioAgent) onRegenerate;
-  final Set<String> regeneratingAgentIds;
 
   const _FinalizerSection({
     required this.activeFinalAgents,
     required this.disabledFinalAgents,
     required this.trackerValueFor,
     required this.onToggle,
-    required this.onEditModel,
-    required this.onEditShard,
-    required this.onRegenerate,
-    required this.regeneratingAgentIds,
   });
 
   @override
@@ -1268,10 +1023,6 @@ class _FinalizerSection extends StatelessWidget {
             agent: a,
             value: trackerValueFor(a.name),
             onToggle: (v) => onToggle(a, v),
-            onEditModel: (_) => onEditModel(a),
-            onEditShard: () => onEditShard(a),
-            onRegenerate: () => onRegenerate(a),
-            regenerating: regeneratingAgentIds.contains(a.id),
           ),
         ),
         ...disabledFinalAgents.map(
@@ -1279,10 +1030,6 @@ class _FinalizerSection extends StatelessWidget {
             agent: a,
             value: trackerValueFor(a.name),
             onToggle: (v) => onToggle(a, v),
-            onEditModel: (_) => onEditModel(a),
-            onEditShard: () => onEditShard(a),
-            onRegenerate: () => onRegenerate(a),
-            regenerating: regeneratingAgentIds.contains(a.id),
           ),
         ),
         const SizedBox(height: 8),

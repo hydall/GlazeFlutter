@@ -156,10 +156,15 @@ class TrackerBatcher {
   /// are returned in [individualAgents]; the rest are batched by
   /// `(provider, model)` in [batchGroups]. Order within a group is preserved
   /// (sorted by `agent.order`).
+  ///
+  /// [apiConfigId] — the StudioConfig slot id to use for resolution (e.g.
+  /// `cheapApiConfigId` for trackers). When null/empty, falls back to
+  /// `runApiConfigId` from StudioConfig, then to the active chat config.
   Future<TrackerGrouping> groupAgents({
     required List<StudioAgent> agents,
     required ApiConfig apiConfig,
     required String sessionId,
+    String? apiConfigId,
   }) async {
     final sorted = agents.toList()..sort((a, b) => a.order.compareTo(b.order));
     final individual = <StudioAgent>[];
@@ -187,6 +192,7 @@ class TrackerBatcher {
         agent,
         apiConfig,
         sessionId,
+        apiConfigId: apiConfigId,
       );
       // Feature 6 — postProcessingDataKey: the grouping key now includes
       // the agent's `phase`. A pre-generation tracker and a post-processing
