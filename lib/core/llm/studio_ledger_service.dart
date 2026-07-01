@@ -111,6 +111,7 @@ class StudioLedgerService {
     bool forceEnabled = false,
     bool Function()? isStillCurrent,
     CancelToken? cancelToken,
+    String studioApiConfigId = '',
   }) async {
     // Studio Ledger is always-on when Studio is enabled. The studioLedgerEnabled
     // toggle was removed from the UI — the ledger always runs. The old
@@ -129,7 +130,10 @@ class StudioLedgerService {
 
     try {
       // ── 1. Resolve LLM config ───────────────────────────────────────────
-      final config = await _llm.resolveConfigForLedger(settings);
+      final config = await _llm.resolveStudioSlotConfig(
+        studioApiConfigId,
+        errorLabel: 'studio-ledger',
+      );
       if (token.isCancelled || isStillCurrent?.call() == false) {
         return LedgerRunResult.aborted;
       }

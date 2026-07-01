@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
+import '../models/api_config.dart';
 import '../models/pipeline_settings.dart';
 import 'aux_retry_runner.dart';
 import 'transport/chat_transport_request.dart';
@@ -248,52 +249,36 @@ class AuxLlmClient {
         : settings.auxTimeoutMs;
   }
 
-  /// Resolves the API config for the Studio Ledger LLM call.
+  /// Resolves one of Studio's saved API-config slots for an auxiliary call.
   ///
-  /// Falls back to the aux config when ledger-specific overrides are not
-  /// set. Follows the same pattern as [resolveConfigForCleaner].
-  Future<AuxApiConfig> resolveConfigForLedger(
-    PipelineSettings settings, {
-    String errorLabel = 'studio-ledger',
+  /// Studio Ledger is part of the Studio sidecar set, so when Studio is enabled
+  /// it should use the cheap slot alongside the pre-gen trackers instead of the
+  /// legacy aux/ledger model fields. Empty or missing slot ids fall back to the
+  /// active chat config, matching Studio agent slot behavior.
+  Future<AuxApiConfig> resolveStudioSlotConfig(
+    String apiConfigId, {
+    String errorLabel = 'studio-slot',
   }) async {
-    final endpoint = settings.studioLedgerEndpoint.isNotEmpty
-        ? settings.studioLedgerEndpoint
-        : settings.auxEndpoint;
-    final apiKey = settings.studioLedgerApiKey.isNotEmpty
-        ? settings.studioLedgerApiKey
-        : settings.auxApiKey;
-    final model = settings.studioLedgerModel.isNotEmpty
-        ? settings.studioLedgerModel
-        : settings.auxModel;
-
-    // Custom path: both endpoint and model must be non-empty.
-    if (endpoint.isNotEmpty && model.isNotEmpty) {
-      debugPrint('[Aux] resolved custom for $errorLabel model=$model');
-      return AuxApiConfig(
-        endpoint: endpoint,
-        apiKey: apiKey,
-        model: model,
-        protocol: LlmProtocol.openai,
-      );
-    }
-
-    // Chat-fallback: read the active chat API config.
     await _ref.read(apiListProvider.future);
-    final chatConfig = _ref.read(activeApiConfigProvider);
-    if (chatConfig == null) {
-      debugPrint('[Aux] no active chat API config for $errorLabel');
-      throw Exception('No chat API config available for $errorLabel');
+    final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    final activeConfig = _ref.read(activeApiConfigProvider);
+    final selected = apiConfigId.isNotEmpty
+        ? apiConfigs.where((c) => c.id == apiConfigId).firstOrNull
+        : null;
+    final config = selected ?? activeConfig;
+    if (config == null) {
+      debugPrint('[Aux] no Studio API config available for $errorLabel');
+      throw Exception('No Studio API config available for $errorLabel');
     }
-    final effectiveModel = model.isNotEmpty ? model : chatConfig.model;
     debugPrint(
-      '[Aux] resolved chat-fallback for $errorLabel '
-      'model=$effectiveModel endpoint=${chatConfig.endpoint}',
+      '[Aux] resolved Studio slot for $errorLabel '
+      'model=${config.model} endpoint=${config.endpoint}',
     );
     return AuxApiConfig(
-      endpoint: chatConfig.endpoint,
-      apiKey: chatConfig.apiKey,
-      model: effectiveModel,
-      protocol: chatConfig.protocol,
+      endpoint: config.endpoint,
+      apiKey: config.apiKey,
+      model: config.model,
+      protocol: config.protocol,
     );
   }
 

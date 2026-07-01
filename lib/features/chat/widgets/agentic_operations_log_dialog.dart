@@ -372,7 +372,12 @@ class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
     setState(() => _runningLedger = true);
     try {
       final session = await ref.read(chatRepoProvider).getById(sessionId);
+      if (!mounted) return;
       if (session == null) throw StateError('Session not found');
+      final studioConfig = await ref
+          .read(studioConfigRepoProvider)
+          .getBySessionId(sessionId);
+      if (!mounted) return;
       final recentHistory = _recentHistoryText(
         session.messages,
         maxMessages: 10,
@@ -391,7 +396,11 @@ class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
             agentSwipeId: target.agentSwipeId,
             forceEnabled: true,
             isStillCurrent: () => mounted,
+            studioApiConfigId: studioConfig?.enabled == true
+                ? studioConfig?.cheapApiConfigId ?? ''
+                : '',
           );
+      if (!mounted) return;
       await ref
           .read(trackerRepoProvider)
           .upsertValue(
@@ -405,6 +414,7 @@ class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
                 'message=${target.id}|swipe=${target.swipeId}|'
                 'agentSwipe=${target.agentSwipeId}|manual=1',
           );
+      if (!mounted) return;
       _appendLedgerRecord(sessionId, target, result, startedAt);
       if (mounted) {
         GlazeToast.show(
@@ -418,6 +428,7 @@ class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       final result = LedgerRunResult(status: 'error', error: '$e');
       _appendLedgerRecord(
         sessionId,
@@ -445,6 +456,7 @@ class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
     LedgerRunResult result,
     int fallbackStartedAt,
   ) {
+    if (!mounted) return;
     final status = _ledgerStatusToOp(result.status);
     final now = DateTime.now().millisecondsSinceEpoch;
     ref.read(agentOperationsLogProvider.notifier).state = ref
