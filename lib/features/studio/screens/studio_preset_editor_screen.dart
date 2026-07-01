@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/db/app_db.dart' show studioPresetSeedBlocks;
+import '../../../core/db/studio_seed_blocks.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/state/db_provider.dart';
 import '../widgets/studio_block_editor_dialog.dart';

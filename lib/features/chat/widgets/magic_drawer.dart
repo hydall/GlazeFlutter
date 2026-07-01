@@ -42,7 +42,6 @@ import '../services/magic_drawer_stats_service.dart';
 import 'magic_drawer_widgets.dart';
 import 'memory_books_sheet.dart';
 import 'post_building_menu_dialog.dart';
-import 'studio_menu_dialog.dart';
 import 'prompt_preview_screen.dart';
 import 'summary_sheet.dart';
 import '../state/token_breakdown_cache.dart';
@@ -562,15 +561,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   Future<void> _showStudioMenu() async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
     if (session == null) return;
-    await showDialog<void>(
-      context: context,
-      useRootNavigator: true,
-      builder: (_) => StudioMenuDialog(
-        charId: widget.charId,
-        sessionId: session.id,
-        onScrollToMessage: widget.onScrollToMessage,
-      ),
-    );
+    context.go('/studio/${widget.charId}/${session.id}');
   }
 
   Future<void> _showPostBuildingMenu() async {
