@@ -717,11 +717,12 @@ class GenerationPipeline {
   }) async {
     if (!ref.mounted) return;
 
+    final pipeline = ref.read(pipelineSettingsProvider);
+
     try {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      final pipeline = ref.read(pipelineSettingsProvider);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       if (book == null || !pipeline.agenticWriteEnabled) return;
 
@@ -758,11 +759,11 @@ class GenerationPipeline {
 
       final recentHistory = extractRecentHistoryText(
         messages,
-        maxMessages: 10,
+        maxMessages: 12,
         // Historical replay (Marinara `buildHistoricalLorebookKeeperContext`
         // analog): at regen, slice messages up to AND INCLUDING the regen
-        // target so the write-loop sees the same context the original
-        // turn saw, not the current post-regen state. Without this, regen
+        // target so the write-loop sees the same context the original turn
+        // saw, not the current post-regen state. Without this, regen
         // would produce different entries than the original turn.
         // See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2.
         upToMessageId: regenTargetId,
@@ -889,6 +890,29 @@ class GenerationPipeline {
       }
     } catch (e) {
       debugPrint('[AgenticWrite] failed session=$sessionId error=$e');
+    }
+
+    // Auto-dedup: if enabled, run a delayed dedup pass after the write-loop
+    // completes. Fire-and-forget — does not block generation. Only runs when
+    // the write-loop actually executed (not skipped by cadence) and
+    // memoryDedupAutoEnabled is true.
+    if (ref.mounted && pipeline.memoryDedupAutoEnabled) {
+      try {
+        final dedupService = ref.read(memoryDedupServiceProvider);
+        final dedupResult = await dedupService.runDedup(
+          sessionId: sessionId,
+          settings: pipeline,
+          threshold: pipeline.memoryDedupThreshold,
+          isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
+        );
+        debugPrint(
+          '[MemoryDedup] auto result session=$sessionId status=${dedupResult.status} '
+          'merged=${dedupResult.merged} dropped=${dedupResult.dropped} '
+          'kept=${dedupResult.kept} pairs=${dedupResult.pairsSentToLlm}',
+        );
+      } catch (e) {
+        debugPrint('[MemoryDedup] auto failed session=$sessionId error=$e');
+      }
     }
   }
 

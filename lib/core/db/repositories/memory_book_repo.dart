@@ -215,6 +215,52 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     return didAppend;
   }
 
+  /// Atomically replaces the entry with [entryId] in the memory book for
+  /// [sessionId] with [updated]. Wraps the read-modify-write in a transaction
+  /// (database.md Rule 3). Used by the memory dedup service to merge
+  /// near-duplicate entries.
+  ///
+  /// Returns true if the entry was found and updated, false otherwise.
+  Future<bool> updateEntry({
+    required String sessionId,
+    required String entryId,
+    required MemoryEntry updated,
+  }) async {
+    var didUpdate = false;
+    await transaction(() async {
+      final existing = await getBySessionId(sessionId);
+      if (existing == null) return;
+      final idx = existing.entries.indexWhere((e) => e.id == entryId);
+      if (idx < 0) return;
+      didUpdate = true;
+      final updatedEntries = List<MemoryEntry>.from(existing.entries);
+      updatedEntries[idx] = updated;
+      await put(existing.copyWith(entries: updatedEntries));
+    });
+    return didUpdate;
+  }
+
+  /// Atomically removes the entry with [entryId] from the memory book for
+  /// [sessionId]. Wraps the read-modify-write in a transaction (database.md
+  /// Rule 3). Used by the memory dedup service to drop redundant entries.
+  ///
+  /// Returns true if the entry was found and deleted, false otherwise.
+  Future<bool> deleteEntry({
+    required String sessionId,
+    required String entryId,
+  }) async {
+    var didDelete = false;
+    await transaction(() async {
+      final existing = await getBySessionId(sessionId);
+      if (existing == null) return;
+      final kept = existing.entries.where((e) => e.id != entryId).toList();
+      if (kept.length == existing.entries.length) return;
+      didDelete = true;
+      await put(existing.copyWith(entries: kept));
+    });
+    return didDelete;
+  }
+
   /// Atomically removes all `MemoryEntry` and `MemoryDraft` items whose
   /// `messageIds` contain [messageId] from the memory book for [sessionId].
   /// Wraps the read-modify-write in a transaction (database.md Rule 3).

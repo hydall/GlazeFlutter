@@ -61,9 +61,9 @@ class AgenticWriteRequestParser {
               .join('\n');
 
     final prompt =
-        '''You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.
+        '''You are a memory agent for a roleplay conversation. You run every 5 turns and analyze the recent conversation batch to decide what facts to persist so they survive context truncation.
 
-Recent conversation:
+Recent conversation (last ~5 turns):
 $recentHistoryText
 
 Current trackers:
@@ -90,6 +90,7 @@ Respond with ONLY a JSON object (no markdown, no explanation):
 }
 
 Rules:
+- You are analyzing ~5 turns at once. Focus on significant changes across the batch, not every minor detail.
 - Only write trackers that CHANGED or are NEW. Don't repeat unchanged trackers.
 - Only create memory drafts for SIGNIFICANT events (not every turn).
 - If an event merely ADDS detail to an existing memory entry, write a memory request whose `existingEntryId` is the id of the existing entry and whose `content` contains only the NEW facts — do not restate or rewrite the existing entry. The pipeline will append your newFacts to the existing entry verbatim.

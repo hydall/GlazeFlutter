@@ -7,6 +7,7 @@ import '../llm/memory_cadence_service.dart';
 import '../llm/memory_post_turn_service.dart';
 import '../llm/memory_agentic_service.dart';
 import '../llm/memory_agentic_write_service.dart';
+import '../llm/memory_dedup_service.dart';
 import '../llm/memory_studio_service.dart';
 import '../llm/post_cleaner_service.dart';
 import '../llm/studio_ledger_service.dart';
@@ -71,7 +72,14 @@ final postCleanerServiceProvider = Provider<PostCleanerService>((ref) {
 /// Studio Ledger service (Stage 5). Runs after the POST-cleaner to extract
 /// and persist continuity state (entity/relationship/arc/world/scene) and
 /// durable MemoryBook facts from the final assistant response.
-/// See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md.
+/// See docs/plans/STUDIO_LEDGER_MEMORY.md.
 final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
   return StudioLedgerService(ref);
+});
+
+/// Memory dedup service. Cosine pre-filter + batch LLM call to merge/drop/keep
+/// near-duplicate memory entries. Runs on-demand (UI button) or automatically
+/// after generation (delayed, fire-and-forget).
+final memoryDedupServiceProvider = Provider<MemoryDedupService>((ref) {
+  return MemoryDedupService(ref);
 });

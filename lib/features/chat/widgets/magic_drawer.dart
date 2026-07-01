@@ -591,11 +591,16 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _showMemoryBooks() async {
-    final session = ref.read(chatProvider(widget.charId)).value?.session;
+    final chatState = ref.read(chatProvider(widget.charId)).value;
+    final session = chatState?.session;
     if (session == null) return;
     await GlazeBottomSheet.show<void>(
       context,
-      child: MemoryBooksSheet(sessionId: session.id, charId: widget.charId),
+      child: MemoryBooksSheet(
+        sessionId: session.id,
+        charId: widget.charId,
+        messages: session.messages,
+      ),
     );
   }
 

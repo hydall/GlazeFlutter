@@ -42,22 +42,14 @@ abstract class PipelineSettings with _$PipelineSettings {
 
     // ── Agentic write-loop ────────────────────────────────────────────────
     @Default(false) bool agenticWriteEnabled,
-    // Cadence: run the agentic write-loop every N assistant turns. 1 = every
-    // turn. Mirrors Marinara-Engine's tracker-agent model, where built-in
-    // trackers (`world-state`, `character-tracker`, `persona-stats`, `quest`,
-    // `custom-tracker`) run unconditionally every turn — no cadence gate.
-    // Higher values were considered for cost savings, but stale tracker
-    // values between runs degraded the final response (the final responder
-    // reads stale state, the post-cleaner audits against stale facts, and
-    // the user sees outdated Tracker Values in the UI for N-1 turns). The
-    // cadence knob is retained for users who want to opt back into the
-    // throttled behavior via the UI.
-    @Default(1) int runAgenticEveryN,
+    // Cadence: run the agentic write-loop every N assistant turns. 5 = every
+    // 5th turn (batch mode — the LLM analyzes 5 U-A turns at once and writes
+    // a concise short-term memory summary, not per-turn entries).
+    @Default(5) int runAgenticEveryN,
     // ── Agentic write-loop cadence (plan §Model Cadence) ────────────────
     // Run mode: 'every_turn' | 'conditional' | 'every_n' | 'manual' | 'disabled'.
-    // 'every_turn' is the default. 'every_n' uses [runAgenticEveryN] as the
-    // interval. 'disabled' suppresses the write-loop entirely.
-    @Default('every_turn') String agenticWriteRunMode,
+    // 'every_n' is the default (batch 5 turns → 1 LLM call).
+    @Default('every_n') String agenticWriteRunMode,
     // When true, block the next user-message generation until the write-loop
     // finishes (or times out). Default false = fire-and-forget.
     @Default(false) bool agenticWriteBlockNextGen,
@@ -212,6 +204,15 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default(true) bool studioLedgerRunWhenMentionedEntitiesChanged,
     @Default(true) bool studioLedgerRunWhenSceneChanged,
     @Default(false) bool studioLedgerRunWhenMemoryBookCandidatesExist,
+
+    // ── Memory dedup ─────────────────────────────────────────────────────
+    // When true, the dedup pass runs automatically after each agentic
+    // write-loop cycle (delayed, fire-and-forget). When false, dedup only
+    // runs when the user clicks the "Dedup" button in the memory book UI.
+    @Default(false) bool memoryDedupAutoEnabled,
+    // Cosine similarity threshold for candidate pairs (0.0-1.0).
+    // Pairs with cosine >= this value are sent to the LLM for merge/drop/keep.
+    @Default(0.85) double memoryDedupThreshold,
 
     // ── Consolidation LLM ────────────────────────────────────────────────
     @Default(false) bool consolidationEnabled,
