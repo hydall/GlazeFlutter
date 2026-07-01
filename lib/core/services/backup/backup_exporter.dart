@@ -25,7 +25,8 @@ class BackupExporter {
   //         payload ('pipelineSettings' key) is still captured via
   //         preferences.json.
   //   8 — added tracker_rows (live Tracker Values) alongside snapshots.
-  static const int _schemaVersion = 8;
+  //   9 — added studio_preset_rows (DB-backed Studio prompt block presets).
+  static const int _schemaVersion = 9;
 
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
@@ -190,6 +191,7 @@ class BackupExporter {
       'extension_presets',
       'info_blocks',
       'studio_config_rows',
+      'studio_preset_rows',
       'tracker_rows',
       'tracker_snapshots',
     ];

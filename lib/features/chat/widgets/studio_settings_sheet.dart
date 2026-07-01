@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/sse_client.dart';
-import '../../../core/models/api_config.dart';
+import '../../../core/models/pipeline_settings.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -19,8 +19,8 @@ import 'studio_preset_editor_sheet.dart';
 ///
 /// Contents:
 /// - Studio enable/disable toggle
-/// - 3 API config dropdowns (expensive/cheap/cleaner) with model dropdowns
-///   that fetch /v1/models from the selected provider on refresh
+/// - 3 model dropdowns (final/tracker/cleaner) fetched from the active API
+///   provider and stored in PipelineSettings
 /// - Edit Preset Blocks button → opens [StudioPresetEditorSheet]
 /// - Recovery button (re-run tracker/memory cycles)
 class StudioSettingsSheet extends ConsumerStatefulWidget {
@@ -53,12 +53,10 @@ class StudioSettingsSheet extends ConsumerStatefulWidget {
 
 class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   StudioConfig? _config;
-  List<ApiConfig> _apiConfigs = const [];
   bool _loading = true;
 
-  // Fetched models per API config id.
-  final Map<String, List<String>> _modelsByApiConfigId = {};
-  final Set<String> _fetchingModelConfigIds = {};
+  List<String> _fetchedModels = const [];
+  bool _fetchingModels = false;
 
   @override
   void initState() {
@@ -70,12 +68,9 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     await ref.read(apiListProvider.future);
     final repo = ref.read(studioConfigRepoProvider);
     final config = await repo.getBySessionId(widget.sessionId);
-    final apiConfigs =
-        ref.read(apiListProvider).value ?? const <ApiConfig>[];
     if (!mounted) return;
     setState(() {
       _config = config;
-      _apiConfigs = apiConfigs;
       _loading = false;
     });
   }
@@ -119,10 +114,7 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   }
 
   Future<void> _createDefaultConfig() async {
-    final config = StudioConfig(
-      sessionId: widget.sessionId,
-      enabled: true,
-    );
+    final config = StudioConfig(sessionId: widget.sessionId, enabled: true);
     await _save(config);
   }
 
@@ -141,34 +133,42 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             onChanged: (v) => _save(config.copyWith(enabled: v)),
           ),
           const Divider(),
-          Text('API Configuration',
-              style: Theme.of(context).textTheme.titleSmall),
+          Text('Models', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          _buildApiConfigDropdown(
-            label: 'Expensive (Final Generator)',
-            value: config.expensiveApiConfigId,
-            onChanged: (v) =>
-                _save(config.copyWith(expensiveApiConfigId: v)),
+          _buildModelSelector(
+            label: 'Final Generator',
+            emptyLabel: 'Use active chat model',
+            value: ref.watch(pipelineSettingsProvider).generationModel,
+            onChanged: (model) => _savePipelineModel(
+              (pipeline) => pipeline.copyWith(generationModel: model),
+            ),
           ),
           const SizedBox(height: 8),
-          _buildApiConfigDropdown(
-            label: 'Cheap (Trackers)',
-            value: config.cheapApiConfigId,
-            onChanged: (v) => _save(config.copyWith(cheapApiConfigId: v)),
+          _buildModelSelector(
+            label: 'Trackers',
+            emptyLabel: 'Use active chat model',
+            value: ref
+                .watch(pipelineSettingsProvider)
+                .studioTrackerModelOverride,
+            onChanged: (model) => _savePipelineModel(
+              (pipeline) =>
+                  pipeline.copyWith(studioTrackerModelOverride: model),
+            ),
           ),
           const SizedBox(height: 8),
-          _buildApiConfigDropdown(
+          _buildModelSelector(
             label: 'Cleaner (Post-Processing)',
-            value: config.cleanerApiConfigId,
-            onChanged: (v) => _save(config.copyWith(cleanerApiConfigId: v)),
+            emptyLabel: 'Use tracker/chat model',
+            value: ref.watch(pipelineSettingsProvider).postCleanerModel,
+            onChanged: (model) => _savePipelineModel(
+              (pipeline) => pipeline.copyWith(postCleanerModel: model),
+            ),
           ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.edit_note),
             title: const Text('Edit Preset Blocks'),
-            subtitle: const Text(
-              'Trackers, Final Agent, Cleaner, Ledger',
-            ),
+            subtitle: const Text('Trackers, Final Agent, Cleaner, Ledger'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
               final presetId = config.studioPresetId;
@@ -186,133 +186,87 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     );
   }
 
-  Widget _buildApiConfigDropdown({
+  Future<void> _savePipelineModel(
+    PipelineSettings Function(PipelineSettings pipeline) mutate,
+  ) async {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    await ref.read(pipelineSettingsProvider.notifier).save(mutate(pipeline));
+  }
+
+  Widget _buildModelSelector({
     required String label,
     required String value,
+    required String emptyLabel,
     required ValueChanged<String> onChanged,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue:
-              value.isNotEmpty && _apiConfigs.any((c) => c.id == value)
-                  ? value
-                  : '',
-          decoration: InputDecoration(
-            labelText: label,
-            border: const OutlineInputBorder(),
-            isDense: true,
-          ),
-          items: [
-            const DropdownMenuItem<String>(
-              value: '',
-              child: Text('Use active chat API'),
-            ),
-            ..._apiConfigs.map(
-              (c) => DropdownMenuItem<String>(
-                value: c.id,
-                child: Text(
-                  c.name.isNotEmpty ? c.name : c.id,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-          ],
-          onChanged: (v) => onChanged(v ?? ''),
+    final models = <String>{
+      ..._fetchedModels,
+      if (value.isNotEmpty) value,
+    }.toList()..sort();
+
+    return DropdownButtonFormField<String>(
+      initialValue: models.contains(value) || value.isEmpty ? value : null,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: _fetchingModels
+            ? 'Loading models...'
+            : _fetchedModels.isEmpty
+            ? 'Open this field to load models from the active API config'
+            : '${_fetchedModels.length} models available',
+        helperMaxLines: 2,
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+      items: [
+        DropdownMenuItem<String>(
+          value: '',
+          child: Text(emptyLabel, overflow: TextOverflow.ellipsis),
         ),
-        if (value.isNotEmpty && _apiConfigs.any((c) => c.id == value)) ...[
-          const SizedBox(height: 8),
-          _buildModelDropdown(apiConfigId: value, label: 'Model'),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildModelDropdown({
-    required String apiConfigId,
-    required String label,
-  }) {
-    final config = _apiConfigs.where((c) => c.id == apiConfigId).firstOrNull;
-    if (config == null) return const SizedBox.shrink();
-
-    final fetched = _modelsByApiConfigId[apiConfigId] ?? const <String>[];
-    final isFetching = _fetchingModelConfigIds.contains(apiConfigId);
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            initialValue: fetched.isNotEmpty ? config.model : null,
-            isExpanded: true,
-            decoration: InputDecoration(
-              labelText: label,
-              helperText: fetched.isEmpty
-                  ? 'Tap refresh to load models'
-                  : '${fetched.length} models available',
-              helperMaxLines: 2,
-              border: const OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: fetched
-                .map(
-                  (m) => DropdownMenuItem<String>(
-                    value: m,
-                    child: Text(m, overflow: TextOverflow.ellipsis),
-                  ),
-                )
-                .toList(),
-            onChanged: (m) {
-              if (m == null) return;
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: IconButton.filledTonal(
-            tooltip: 'Fetch models',
-            onPressed: isFetching ? null : () => _fetchModels(config),
-            icon: isFetching
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh, size: 18),
+        ...models.map(
+          (model) => DropdownMenuItem<String>(
+            value: model,
+            child: Text(model, overflow: TextOverflow.ellipsis),
           ),
         ),
       ],
+      onTap: _fetchingModels ? null : () => unawaited(_fetchModels()),
+      onChanged: (model) => onChanged(model ?? ''),
     );
   }
 
-  Future<void> _fetchModels(ApiConfig config) async {
-    if (_fetchingModelConfigIds.contains(config.id)) return;
-    setState(() => _fetchingModelConfigIds.add(config.id));
+  Future<void> _fetchModels() async {
+    if (_fetchingModels) return;
+    final config = ref.read(activeApiConfigProvider);
+    if (config == null) {
+      GlazeToast.show(context, 'No API configs found.');
+      return;
+    }
+    setState(() => _fetchingModels = true);
     try {
       final models = await SseClient().fetchModels(
         endpoint: config.endpoint,
         apiKey: config.apiKey,
       );
-      final ids = models
-          .map((m) => m['id'])
-          .whereType<String>()
-          .where((id) => id.trim().isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
+      final ids =
+          models
+              .map((m) => m['id'])
+              .whereType<String>()
+              .where((id) => id.trim().isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
       if (config.model.isNotEmpty && !ids.contains(config.model)) {
         ids.insert(0, config.model);
       }
       if (!mounted) return;
-      setState(() => _modelsByApiConfigId[config.id] = ids);
+      setState(() => _fetchedModels = ids);
     } catch (e) {
       if (mounted) {
         GlazeToast.show(context, 'Failed to fetch models: $e');
       }
     } finally {
-      if (mounted) setState(() => _fetchingModelConfigIds.remove(config.id));
+      if (mounted) setState(() => _fetchingModels = false);
     }
   }
 

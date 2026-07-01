@@ -1,9 +1,14 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/db/studio_seed_blocks.dart';
 import '../../../core/models/studio_config.dart';
+import '../../../core/services/file_export_service.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../../studio/widgets/studio_block_editor_dialog.dart';
 
 /// Studio Preset Editor as a bottom sheet — replaces the full-screen
@@ -15,10 +20,7 @@ import '../../studio/widgets/studio_block_editor_dialog.dart';
 class StudioPresetEditorSheet extends ConsumerStatefulWidget {
   final String presetId;
 
-  const StudioPresetEditorSheet({
-    super.key,
-    required this.presetId,
-  });
+  const StudioPresetEditorSheet({super.key, required this.presetId});
 
   @override
   ConsumerState<StudioPresetEditorSheet> createState() =>
@@ -102,15 +104,19 @@ class _StudioPresetEditorSheetState
                         color: Theme.of(context).colorScheme.errorContainer,
                         alignment: Alignment.centerLeft,
                         padding: const EdgeInsets.only(left: 16),
-                        child: Icon(Icons.delete,
-                            color: Theme.of(context).colorScheme.onError),
+                        child: Icon(
+                          Icons.delete,
+                          color: Theme.of(context).colorScheme.onError,
+                        ),
                       ),
                       secondaryBackground: Container(
                         color: Theme.of(context).colorScheme.errorContainer,
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 16),
-                        child: Icon(Icons.delete,
-                            color: Theme.of(context).colorScheme.onError),
+                        child: Icon(
+                          Icons.delete,
+                          color: Theme.of(context).colorScheme.onError,
+                        ),
                       ),
                       confirmDismiss: (_) async {
                         final ok = await showDialog<bool>(
@@ -122,11 +128,13 @@ class _StudioPresetEditorSheetState
                             ),
                             actions: [
                               TextButton(
-                                onPressed: () => Navigator.of(context).pop(false),
+                                onPressed: () =>
+                                    Navigator.of(context).pop(false),
                                 child: const Text('Cancel'),
                               ),
                               FilledButton(
-                                onPressed: () => Navigator.of(context).pop(true),
+                                onPressed: () =>
+                                    Navigator.of(context).pop(true),
                                 child: const Text('Delete'),
                               ),
                             ],
@@ -155,6 +163,16 @@ class _StudioPresetEditorSheetState
                 onPressed: _resetToDefaults,
                 icon: const Icon(Icons.restore, size: 18),
                 label: const Text('Reset'),
+              ),
+              TextButton.icon(
+                onPressed: _importPreset,
+                icon: const Icon(Icons.file_upload_outlined, size: 18),
+                label: const Text('Import'),
+              ),
+              TextButton.icon(
+                onPressed: _exportPreset,
+                icon: const Icon(Icons.file_download_outlined, size: 18),
+                label: const Text('Export'),
               ),
             ],
           ),
@@ -197,10 +215,12 @@ class _StudioPresetEditorSheetState
         .where((b) => b.section != _activeSection)
         .toList();
     final rebuilt = [...otherBlocks, ...sectionBlocks];
-    await _save(_preset!.copyWith(
-      blocks: rebuilt,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await _save(
+      _preset!.copyWith(
+        blocks: rebuilt,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   Widget _buildBlockTile(StudioPresetBlock block, int index) {
@@ -248,9 +268,7 @@ class _StudioPresetEditorSheetState
       builder: (_) => StudioBlockEditorDialog(block: newBlock, isNew: true),
     );
     if (result == null || _preset == null) return;
-    final updated = _preset!.copyWith(
-      blocks: [..._preset!.blocks, result],
-    );
+    final updated = _preset!.copyWith(blocks: [..._preset!.blocks, result]);
     await _save(updated);
   }
 
@@ -323,20 +341,73 @@ class _StudioPresetEditorSheetState
     if (confirmed != true || _preset == null) return;
     final seedData = studioPresetSeedBlocks();
     final seedBlocks = seedData
-        .map((m) => StudioPresetBlock(
-              id: m['id'] as String? ?? '',
-              title: (m['name'] as String?) ?? (m['title'] as String?) ?? '',
-              kind: (m['kind'] as String?) ?? 'custom_text',
-              role: (m['role'] as String?) ?? 'system',
-              content: (m['content'] as String?) ?? '',
-              enabled: (m['enabled'] as bool?) ?? true,
-              order: (m['order'] as int?) ?? 0,
-              section: (m['section'] as String?) ?? 'pregen',
-            ))
+        .map(
+          (m) => StudioPresetBlock(
+            id: m['id'] as String? ?? '',
+            title: (m['name'] as String?) ?? (m['title'] as String?) ?? '',
+            kind: (m['kind'] as String?) ?? 'custom_text',
+            role: (m['role'] as String?) ?? 'system',
+            content: (m['content'] as String?) ?? '',
+            enabled: (m['enabled'] as bool?) ?? true,
+            order: (m['order'] as int?) ?? 0,
+            section: (m['section'] as String?) ?? 'pregen',
+          ),
+        )
         .toList();
-    await _save(_preset!.copyWith(
-      blocks: seedBlocks,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await _save(
+      _preset!.copyWith(
+        blocks: seedBlocks,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<void> _importPreset() async {
+    final current = _preset;
+    if (current == null) return;
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    try {
+      final bytes = result.files.single.bytes;
+      if (bytes == null) {
+        if (mounted) GlazeToast.show(context, 'Could not read preset file.');
+        return;
+      }
+      final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+      final imported = StudioPreset.fromJson(decoded);
+      await _save(
+        imported.copyWith(
+          id: current.id,
+          name: imported.name.isNotEmpty ? imported.name : current.name,
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      if (mounted) GlazeToast.show(context, 'Preset imported.');
+    } catch (e) {
+      if (mounted) GlazeToast.show(context, 'Failed to import preset: $e');
+    }
+  }
+
+  Future<void> _exportPreset() async {
+    final preset = _preset;
+    if (preset == null) return;
+    final safeName = (preset.name.isNotEmpty ? preset.name : preset.id)
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+    final data = const JsonEncoder.withIndent('  ').convert(preset.toJson());
+    try {
+      final path = await FileExportService.export(
+        data: data,
+        filename: 'studio_preset_$safeName.json',
+        subfolder: 'studio_presets',
+      );
+      if (mounted) GlazeToast.show(context, 'Preset exported to $path');
+    } catch (e) {
+      if (mounted) GlazeToast.show(context, 'Failed to export preset: $e');
+    }
   }
 }

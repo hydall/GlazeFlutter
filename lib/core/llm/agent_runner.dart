@@ -177,10 +177,10 @@ class AgentRunner {
   ///   `expensiveApiConfigId` for the final generator, `cleanerApiConfigId`
   ///   for post-processing agents. When empty, falls back to `runApiConfigId`
   ///   then to the active chat config.
-  /// - For non-final agents, when
-  ///   [PipelineSettings.studioTrackerModelOverride] is non-empty it wins
-  ///   over the resolved model so the user can re-target all trackers at
-  ///   once from the Studio menu.
+  /// - Model overrides are global PipelineSettings values configured from the
+  ///   Studio menu: generationModel for the final response, postCleanerModel
+  ///   for post-processing trackers, studioTrackerModelOverride for pre-gen
+  ///   trackers.
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,
     ApiConfig current,
@@ -197,17 +197,29 @@ class AgentRunner {
       apiConfigs: apiConfigs,
       activeConfig: _ref.read(activeApiConfigProvider),
     );
-    if (!isFinalResponse) {
-      final trackerModel = _ref
-          .read(pipelineSettingsProvider)
-          .studioTrackerModelOverride;
-      if (trackerModel.isNotEmpty) {
+    final pipeline = _ref.read(pipelineSettingsProvider);
+    if (isFinalResponse) {
+      if (pipeline.generationModel.isNotEmpty) {
         return resolver.resolveAgentConfig(
           current,
           runApiConfigId,
-          trackerModel,
+          pipeline.generationModel,
         );
       }
+    } else if (agent.phase == 'post_processing') {
+      if (pipeline.postCleanerModel.isNotEmpty) {
+        return resolver.resolveAgentConfig(
+          current,
+          runApiConfigId,
+          pipeline.postCleanerModel,
+        );
+      }
+    } else if (pipeline.studioTrackerModelOverride.isNotEmpty) {
+      return resolver.resolveAgentConfig(
+        current,
+        runApiConfigId,
+        pipeline.studioTrackerModelOverride,
+      );
     }
     return resolver.resolveAgentConfig(current, runApiConfigId, '');
   }
