@@ -90,7 +90,10 @@ class MessageRecallService {
                   ),
                 )
                 .toList(),
-            metadata: {'chunkTexts': chunkTexts},
+            metadata: {
+              'chunkTexts': chunkTexts,
+              'messageIds': _decodeMessageIds(row),
+            },
           ),
         );
       }
@@ -170,7 +173,17 @@ class MessageRecallService {
           // further trim if needed.
           break;
         }
-        matched.add(MessageRecallMatch(entryId: result.id, text: text, score: result.score));
+        final rawIds = result.metadata['messageIds'];
+        matched.add(
+          MessageRecallMatch(
+            entryId: result.id,
+            text: text,
+            score: result.score,
+            messageIds: rawIds is List
+                ? rawIds.whereType<String>().toList(growable: false)
+                : const [],
+          ),
+        );
         totalChars += text.length;
       }
       return MessageRecallResult(matches: matched);
@@ -207,6 +220,13 @@ class MessageRecallService {
     }
     return texts;
   }
+
+  List<String> _decodeMessageIds(EmbeddingRow row) {
+    final metadata = _repo.decodeMetadata(row);
+    final ids = metadata?['messageIds'];
+    if (ids is! List) return const [];
+    return ids.whereType<String>().toList(growable: false);
+  }
 }
 
 /// One matched raw-message chunk.
@@ -214,10 +234,12 @@ class MessageRecallMatch {
   final String entryId;
   final String text;
   final double score;
+  final List<String> messageIds;
   const MessageRecallMatch({
     required this.entryId,
     required this.text,
     required this.score,
+    this.messageIds = const [],
   });
 }
 

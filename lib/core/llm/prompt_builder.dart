@@ -53,6 +53,27 @@ class RuntimePromptBlock {
       );
 }
 
+class RecalledMessageChunk {
+  final String text;
+  final List<String> messageIds;
+
+  const RecalledMessageChunk({
+    required this.text,
+    this.messageIds = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+    'text': text,
+    'messageIds': messageIds,
+  };
+
+  factory RecalledMessageChunk.fromJson(Map<String, dynamic> json) =>
+      RecalledMessageChunk(
+        text: json['text'] as String? ?? '',
+        messageIds: (json['messageIds'] as List? ?? const []).cast<String>(),
+      );
+}
+
 const _stToInternalBlockId = <String, String>{
   'personaDescription': 'user_persona',
   'charDescription': 'char_card',
@@ -120,6 +141,11 @@ class PromptPayload {
   /// message. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3).
   final String? recalledMessagesContent;
 
+  /// Structured recalled chunks with source message ids. When present, this is
+  /// preferred over [recalledMessagesContent] so source-window filtering can
+  /// keep raw recall out of the prompt while the source chunk is still visible.
+  final List<RecalledMessageChunk> recalledMessageChunks;
+
   /// When true, MemoryBook entries whose source messages fall inside the
   /// visible window are NOT excluded. Studio tracker briefs are compact
   /// JSON — they never carry the source messages themselves, so
@@ -127,6 +153,12 @@ class PromptPayload {
   /// durable facts that the tracker would otherwise leverage. Default
   /// false = legacy source-window exclusion applies.
   final bool disableSourceWindowExclusion;
+
+  /// Overrides the message ids treated as visible for message-bound memory
+  /// source-window exclusion. Empty means use the final token-cutoff window.
+  /// Studio uses this to align memory injection with the final generator's
+  /// `maxFinalHistoryMessages` window, which is applied after base prompt build.
+  final Set<String> sourceWindowVisibleMessageIds;
 
   /// djb2-style hash of the compiled memory injection content for this
   /// turn. Used by the next generation to detect "memory changed since
@@ -179,7 +211,9 @@ class PromptPayload {
     this.entitiesContent,
     this.studioSessionStateContent,
     this.recalledMessagesContent,
+    this.recalledMessageChunks = const [],
     this.disableSourceWindowExclusion = false,
+    this.sourceWindowVisibleMessageIds = const {},
     this.memoryInjectionFingerprint = '',
   });
 }
@@ -972,12 +1006,12 @@ PromptResult _assembleMessages({
   // the LLM sees the raw original chunks first, then the compressed
   // MemoryBook facts on top. Recall is the lossless backstop; MemoryBook
   // is the lossy compression. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
-  if (payload.recalledMessagesContent != null &&
-      payload.recalledMessagesContent!.isNotEmpty) {
+  final recalledMessagesContent = effectiveRecalledMessagesContent(payload);
+  if (recalledMessagesContent != null && recalledMessagesContent.isNotEmpty) {
     _injectRecalledMessagesBlock(
       messages,
       attributionBlocks,
-      payload.recalledMessagesContent!,
+      recalledMessagesContent,
     );
   }
 
@@ -1126,9 +1160,12 @@ _DeferredMemoryResult _finalizeDeferredMemory({
 }) {
   var breakdown = baseBreakdown;
   final selection = payload.memorySelection!;
+  final visibleMessageIds = payload.sourceWindowVisibleMessageIds.isNotEmpty
+      ? payload.sourceWindowVisibleMessageIds
+      : breakdown.visibleMessageIds;
   final refiltered = _refilterMemorySelection(
     selection,
-    visibleMessageIds: breakdown.visibleMessageIds,
+    visibleMessageIds: visibleMessageIds,
     chunkBudgeting: payload.memoryPackingMode == 'chunk_first',
     disableSourceWindowExclusion: payload.disableSourceWindowExclusion,
   );
@@ -1198,7 +1235,7 @@ _DeferredMemoryResult _finalizeDeferredMemory({
       vectorLoreTokens: vectorLoreTokens,
       memoryContent: memoryContent,
       memoryMacroContent: memoryMacroContent,
-      visibleMessageIds: breakdown.visibleMessageIds,
+      visibleMessageIds: visibleMessageIds,
     );
   } else if (refiltered.entries.isEmpty &&
       _shouldInjectFactualContinuityGuard(payload)) {
@@ -1220,7 +1257,7 @@ _DeferredMemoryResult _finalizeDeferredMemory({
       vectorLoreTokens: vectorLoreTokens,
       memoryContent: guard,
       memoryMacroContent: '',
-      visibleMessageIds: breakdown.visibleMessageIds,
+      visibleMessageIds: visibleMessageIds,
     );
   }
 
@@ -1309,6 +1346,53 @@ void _injectStudioSessionStateBlock(
   } else {
     messages.add(stateMsg);
   }
+}
+
+/// Filters [PromptPayload.recalledMessageChunks] by the source-window
+/// visibility override, then formats the surviving chunks into a
+/// `<recalled_messages>` block. Falls back to
+/// [PromptPayload.recalledMessagesContent] when no structured chunks exist.
+///
+/// When [PromptPayload.sourceWindowVisibleMessageIds] is non-empty, chunks
+/// whose *any* [RecalledMessageChunk.messageIds] overlaps with it are
+/// excluded (their content is already visible in the prompt history).
+/// When empty, the base token-cutoff window is assumed to have already
+/// filtered, so all chunks pass through.
+@visibleForTesting
+String? effectiveRecalledMessagesContent(PromptPayload payload) {
+  if (payload.recalledMessageChunks.isEmpty) {
+    return payload.recalledMessagesContent;
+  }
+  final visible = payload.sourceWindowVisibleMessageIds;
+  final chunks = payload.disableSourceWindowExclusion || visible.isEmpty
+      ? payload.recalledMessageChunks
+      : payload.recalledMessageChunks
+            .where(
+              (chunk) =>
+                  chunk.messageIds.isEmpty ||
+                  !chunk.messageIds.any(visible.contains),
+            )
+            .toList(growable: false);
+  if (chunks.isEmpty) return null;
+
+  final block = StringBuffer();
+  block.writeln('<recalled_messages>');
+  block.writeln(
+    'Semantically relevant raw message chunks from earlier in this chat. '
+    'Do not explicitly reference "remembering" these — use them as ground '
+    'truth context.',
+  );
+  for (final chunk in chunks) {
+    final text = chunk.text.trim();
+    if (text.isEmpty) continue;
+    block.writeln('---');
+    block.writeln(text);
+  }
+  block.writeln('</recalled_messages>');
+  final content = block.toString().trim();
+  return content == '<recalled_messages>\n</recalled_messages>'
+      ? null
+      : content;
 }
 
 /// Appends the contents of preset blocks with `appendToLastMessage = true` to

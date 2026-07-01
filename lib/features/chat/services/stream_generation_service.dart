@@ -100,6 +100,17 @@ class StreamGenerationService {
       }
       final apiConfig = payload.apiConfig;
 
+      final studioFinalContextSize = studioConfig == null
+          ? 0
+          : _ref.read(pipelineSettingsProvider).studioFinalContextSize > 0
+          ? _ref.read(pipelineSettingsProvider).studioFinalContextSize
+          : studioConfig.maxFinalHistoryMessages;
+      final studioFinalVisibleMessageIds = studioConfig == null
+          ? const <String>{}
+          : computeStudioFinalVisibleMessageIds(
+              payload.history,
+              studioFinalContextSize,
+            );
       final effectivePayload = studioConfig != null
           ? PromptPayload(
               character: payload.character,
@@ -140,7 +151,8 @@ class StreamGenerationService {
               entitiesContent: payload.entitiesContent,
               studioSessionStateContent: payload.studioSessionStateContent,
               recalledMessagesContent: payload.recalledMessagesContent,
-              disableSourceWindowExclusion: true,
+              recalledMessageChunks: payload.recalledMessageChunks,
+              sourceWindowVisibleMessageIds: studioFinalVisibleMessageIds,
               memoryInjectionFingerprint: payload.memoryInjectionFingerprint,
             )
           : payload;
@@ -624,6 +636,22 @@ class StreamGenerationService {
     if (_lastRequestsBySession.length > 64) {
       _lastRequestsBySession.remove(_lastRequestsBySession.keys.first);
     }
+  }
+
+  @visibleForTesting
+  static Set<String> computeStudioFinalVisibleMessageIds(
+    List<ChatMessage> history,
+    int finalContextSize,
+  ) {
+    if (finalContextSize <= 0) return const <String>{};
+    final nonHidden = history.where((m) => !m.isHidden).toList();
+    final start = nonHidden.length > finalContextSize
+        ? nonHidden.length - finalContextSize
+        : 0;
+    return nonHidden
+        .skip(start)
+        .map((m) => m.id)
+        .toSet();
   }
 
   static String? _lastAssistantId(ChatSession session, String? regenTargetId) {

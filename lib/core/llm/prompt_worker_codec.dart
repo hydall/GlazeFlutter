@@ -54,6 +54,10 @@ Map<String, dynamic> serializePayload(PromptPayload p) => {
       'arcContent': p.arcContent,
       'entitiesContent': p.entitiesContent,
       'recalledMessagesContent': p.recalledMessagesContent,
+      'recalledMessageChunks':
+          p.recalledMessageChunks.map((c) => c.toJson()).toList(),
+      'disableSourceWindowExclusion': p.disableSourceWindowExclusion,
+      'sourceWindowVisibleMessageIds': p.sourceWindowVisibleMessageIds.toList(),
       'memoryInjectionFingerprint': p.memoryInjectionFingerprint,
     };
 
@@ -155,6 +159,17 @@ PromptPayload deserializePayload(Map<String, dynamic> json) {
     arcContent: json['arcContent'] as String?,
     entitiesContent: json['entitiesContent'] as String?,
     recalledMessagesContent: json['recalledMessagesContent'] as String?,
+    recalledMessageChunks: (json['recalledMessageChunks'] as List? ?? const [])
+        .map(
+          (c) => RecalledMessageChunk.fromJson(c as Map<String, dynamic>),
+        )
+        .toList(),
+    disableSourceWindowExclusion:
+        json['disableSourceWindowExclusion'] as bool? ?? false,
+    sourceWindowVisibleMessageIds:
+        (json['sourceWindowVisibleMessageIds'] as List? ?? const [])
+            .cast<String>()
+            .toSet(),
     memoryInjectionFingerprint:
         json['memoryInjectionFingerprint'] as String? ?? '',
   );
