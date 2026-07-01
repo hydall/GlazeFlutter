@@ -28,6 +28,8 @@ import '../../features/tools/tools_screen.dart';
 import '../../features/glossary/glossary_sheet.dart';
 import '../../features/extensions/screens/extensions_screen.dart';
 import '../../features/extensions/screens/preset_editor_screen.dart';
+import '../../features/studio/screens/studio_settings_screen.dart';
+import '../../features/studio/screens/studio_preset_editor_screen.dart';
 import '../../shared/shell/shell_screen.dart';
 import '../../shared/shell/desktop/desktop_shell.dart';
 
@@ -293,6 +295,25 @@ GoRouter buildRouter(
           ),
         ),
       ],
+    ),
+    GoRoute(
+      path: '/studio/:charId/:sessionId',
+      pageBuilder: (_, state) => _adaptivePage(
+        state: state,
+        child: StudioSettingsScreen(
+          charId: state.pathParameters['charId']!,
+          sessionId: state.pathParameters['sessionId']!,
+        ),
+      ),
+    ),
+    GoRoute(
+      path: '/studio/preset/:presetId',
+      pageBuilder: (_, state) => _adaptivePage(
+        state: state,
+        child: StudioPresetEditorScreen(
+          presetId: state.pathParameters['presetId']!,
+        ),
+      ),
     ),
       ],
     ),

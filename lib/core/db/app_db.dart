@@ -812,7 +812,7 @@ class AppDatabase extends _$AppDatabase {
           'SELECT COUNT(*) AS cnt FROM studio_preset_rows',
         ).getSingle();
         if (existing.read<int>('cnt') == 0) {
-          final seedBlocks = _studioPresetSeedBlocks();
+          final seedBlocks = studioPresetSeedBlocks();
           await customStatement(
             'INSERT INTO studio_preset_rows '
             '(preset_id, name, blocks_json, updated_at) VALUES '
@@ -915,7 +915,7 @@ LazyDatabase _openConnection() {
 /// IMPORTANT: keep these in sync with the Dart fallback constants until the
 /// fallbacks are removed in the cleanup PR. The resolver tries DB first, then
 /// falls back to the constant.
-List<Map<String, dynamic>> _studioPresetSeedBlocks() {
+List<Map<String, dynamic>> studioPresetSeedBlocks() {
   return <Map<String, dynamic>>[
     // ─── pregen section (agent layout + tracker instructions + slots) ───
     {
