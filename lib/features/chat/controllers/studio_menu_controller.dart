@@ -1,15 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/studio_api_config_resolver.dart';
-import '../../../core/llm/studio_decomposition_service.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
-import '../../../core/models/preset.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
-import '../../../core/state/preset_resolution.dart';
 import '../../../core/state/studio_build_provider.dart';
 import '../../../core/utils/time_helpers.dart';
 import '../../settings/api_list_provider.dart';
@@ -31,7 +28,6 @@ class StudioMenuController {
   List<Tracker> _trackers = const [];
   bool _loading = true;
   bool _loadingModels = false;
-  final Set<String> _regeneratingAgentIds = {};
 
   StudioMenuController(this._ref, this._sessionId, this._charId);
 
@@ -45,7 +41,6 @@ class StudioMenuController {
   /// dialog being closed and re-opened mid-build.
   bool get building =>
       _ref.read(studioBuildProvider.notifier).isBuilding(_sessionId);
-  Set<String> get regeneratingAgentIds => Set.unmodifiable(_regeneratingAgentIds);
 
   Future<void> load() async {
     final repo = _ref.read(studioConfigRepoProvider);
@@ -91,11 +86,6 @@ class StudioMenuController {
       _config?.buildModelOverride ?? '',
     );
   }
-
-  /// The chat's effective preset, or `null` if none is selected.
-  Preset? get effectivePreset => _ref.read(
-    effectivePresetForChatProvider((charId: _charId, sessionId: _sessionId)),
-  );
 
   Future<void> toggleEnabled(bool enabled) async {
     final repo = _ref.read(studioConfigRepoProvider);
@@ -206,62 +196,6 @@ class StudioMenuController {
           );
     }
     return message;
-  }
-
-  /// Regenerate one tracker's `promptShard` from its source preset blocks via
-  /// [StudioDecompositionService.regenerateAgentInstruction]. Uses the same
-  /// build API config as [buildStudio]. Single-agent regen reuses the
-  /// deterministic keyword bucketing (no LLM router call); the build-time LLM
-  /// map only matters for a full decompose.
-  ///
-  /// Returns the toast message to surface. No-ops if the agent is already
-  /// regenerating or the config is missing.
-  Future<String> regenerateAgentInstruction(StudioAgent agent) async {
-    final current = _config;
-    if (current == null || _regeneratingAgentIds.contains(agent.id)) {
-      return '';
-    }
-    _regeneratingAgentIds.add(agent.id);
-    try {
-      final preset = effectivePreset;
-      if (preset == null) {
-        return 'No preset available. Cannot regenerate instruction.';
-      }
-      final apiConfig = resolveBuildApiConfig();
-      if (apiConfig == null) {
-        return 'No API configured. Set one up in API settings first.';
-      }
-
-      final decompositionService = _ref.read(studioDecompositionServiceProvider);
-      final updatedAgent = await decompositionService.regenerateAgentInstruction(
-        preset: preset,
-        agent: agent,
-        apiConfig: apiConfig,
-        builderPromptTemplate: current.builderPromptTemplate,
-        routingMode: current.routingMode.isNotEmpty
-            ? current.routingMode
-            : 'verbatim',
-      );
-      if (_config == null) return '';
-      final agents = current.agents.map((a) {
-        return a.id == agent.id ? updatedAgent.copyWith(order: a.order) : a;
-      }).toList();
-      final updatedConfig = current.copyWith(
-        agents: agents,
-        sourcePresetHash: StudioDecompositionService.computePresetHash(
-          preset.blocks.where((b) => b.enabled).toList(),
-        ),
-        buildApiConfigId: apiConfig.id,
-        updatedAt: currentTimestampSeconds(),
-      );
-      await _ref.read(studioConfigRepoProvider).upsert(updatedConfig);
-      _config = updatedConfig;
-      return 'Instruction regenerated for "${agent.name.isEmpty ? agent.id : agent.name}".';
-    } catch (e) {
-      return 'Regenerate failed: $e';
-    } finally {
-      _regeneratingAgentIds.remove(agent.id);
-    }
   }
 
   /// Find the current [Tracker.value] for [name], truncated for display.

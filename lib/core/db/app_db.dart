@@ -818,7 +818,7 @@ class AppDatabase extends _$AppDatabase {
           'SELECT COUNT(*) AS cnt FROM studio_preset_rows',
         ).getSingle();
         if (existing.read<int>('cnt') == 0) {
-          final seedBlocks = _studioPresetSeedBlocks;
+          final seedBlocks = _studioPresetSeedBlocks();
           await customStatement(
             'INSERT INTO studio_preset_rows '
             '(preset_id, name, blocks_json, updated_at) VALUES '

@@ -265,19 +265,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
     if (message.isNotEmpty) GlazeToast.show(context, message);
   }
 
-  /// Regenerate one tracker's `promptShard` from its source preset blocks via
-  /// [StudioDecompositionService.regenerateAgentInstruction]. Uses the same
-  /// build API config as [_buildStudio]. Single-agent regen reuses the
-  /// deterministic keyword bucketing (no LLM router call); the build-time LLM
-  /// map only matters for a full decompose.
-  Future<void> _regenerateAgentInstruction(StudioAgent agent) async {
-    setState(() {}); // show regenerating chip immediately
-    final message = await _ctrl.regenerateAgentInstruction(agent);
-    if (!mounted) return;
-    setState(() {});
-    if (message.isNotEmpty) GlazeToast.show(context, message);
-  }
-
   Future<void> _openAdvanced() async {
     Navigator.of(context).pop();
     await showDialog<void>(
@@ -385,8 +372,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                           trackerValueFor: _ctrl.trackerValueFor,
                           onToggle: _toggleAgent,
                           onEditShard: _editAgentShard,
-                          onRegenerate: _regenerateAgentInstruction,
-                          regeneratingAgentIds: _ctrl.regeneratingAgentIds,
                           onEditSharedModel: _editTrackerModel,
                         ),
                         const SizedBox(height: 12),
@@ -402,8 +387,6 @@ class _StudioMenuDialogState extends ConsumerState<StudioMenuDialog> {
                           onToggle: _toggleAgent,
                           onEditModel: _editAgentModel,
                           onEditShard: _editAgentShard,
-                          onRegenerate: _regenerateAgentInstruction,
-                          regeneratingAgentIds: _ctrl.regeneratingAgentIds,
                         ),
                       ],
                       const SizedBox(height: 12),
@@ -472,8 +455,6 @@ class _TrackerRow extends StatelessWidget {
   final ValueChanged<bool> onToggle;
   final void Function(StudioAgent)? onEditModel;
   final VoidCallback onEditShard;
-  final VoidCallback onRegenerate;
-  final bool regenerating;
 
   const _TrackerRow({
     required this.agent,
@@ -481,8 +462,6 @@ class _TrackerRow extends StatelessWidget {
     required this.onToggle,
     this.onEditModel,
     required this.onEditShard,
-    required this.onRegenerate,
-    required this.regenerating,
   });
 
   @override
@@ -563,21 +542,7 @@ class _TrackerRow extends StatelessWidget {
                   ),
               ],
             ),
-          ),
-          // Regenerate this tracker's instruction from its source preset
-          // blocks (Phase B). Spinner while the LLM build call is in flight.
-          IconButton(
-            onPressed: regenerating ? null : onRegenerate,
-            icon: regenerating
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(Icons.refresh, size: 18, color: cs.onSurfaceVariant),
-            tooltip: 'Regenerate instruction from preset',
-            visualDensity: VisualDensity.compact,
-          ),
+           ),
         ],
       ),
     );
@@ -1083,8 +1048,6 @@ class _TrackersSection extends ConsumerWidget {
   final String? Function(String) trackerValueFor;
   final Future<void> Function(StudioAgent, bool) onToggle;
   final Future<void> Function(StudioAgent) onEditShard;
-  final Future<void> Function(StudioAgent) onRegenerate;
-  final Set<String> regeneratingAgentIds;
   final VoidCallback onEditSharedModel;
 
   const _TrackersSection({
@@ -1093,8 +1056,6 @@ class _TrackersSection extends ConsumerWidget {
     required this.trackerValueFor,
     required this.onToggle,
     required this.onEditShard,
-    required this.onRegenerate,
-    required this.regeneratingAgentIds,
     required this.onEditSharedModel,
   });
 
@@ -1188,8 +1149,6 @@ class _TrackersSection extends ConsumerWidget {
               value: trackerValueFor(a.name),
               onToggle: (v) => onToggle(a, v),
               onEditShard: () => onEditShard(a),
-              onRegenerate: () => onRegenerate(a),
-              regenerating: regeneratingAgentIds.contains(a.id),
             ),
           ),
         if (disabledAgents.isNotEmpty) ...[
@@ -1204,8 +1163,6 @@ class _TrackersSection extends ConsumerWidget {
               value: trackerValueFor(a.name),
               onToggle: (v) => onToggle(a, v),
               onEditShard: () => onEditShard(a),
-              onRegenerate: () => onRegenerate(a),
-              regenerating: regeneratingAgentIds.contains(a.id),
             ),
           ),
         ],
@@ -1234,8 +1191,6 @@ class _FinalizerSection extends StatelessWidget {
   final Future<void> Function(StudioAgent, bool) onToggle;
   final Future<void> Function(StudioAgent) onEditModel;
   final Future<void> Function(StudioAgent) onEditShard;
-  final Future<void> Function(StudioAgent) onRegenerate;
-  final Set<String> regeneratingAgentIds;
 
   const _FinalizerSection({
     required this.activeFinalAgents,
@@ -1244,8 +1199,6 @@ class _FinalizerSection extends StatelessWidget {
     required this.onToggle,
     required this.onEditModel,
     required this.onEditShard,
-    required this.onRegenerate,
-    required this.regeneratingAgentIds,
   });
 
   @override
@@ -1270,8 +1223,6 @@ class _FinalizerSection extends StatelessWidget {
             onToggle: (v) => onToggle(a, v),
             onEditModel: (_) => onEditModel(a),
             onEditShard: () => onEditShard(a),
-            onRegenerate: () => onRegenerate(a),
-            regenerating: regeneratingAgentIds.contains(a.id),
           ),
         ),
         ...disabledFinalAgents.map(
@@ -1281,8 +1232,6 @@ class _FinalizerSection extends StatelessWidget {
             onToggle: (v) => onToggle(a, v),
             onEditModel: (_) => onEditModel(a),
             onEditShard: () => onEditShard(a),
-            onRegenerate: () => onRegenerate(a),
-            regenerating: regeneratingAgentIds.contains(a.id),
           ),
         ),
         const SizedBox(height: 8),
