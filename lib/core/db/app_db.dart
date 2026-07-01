@@ -834,14 +834,10 @@ class AppDatabase extends _$AppDatabase {
         final cols = await customSelect(
           "PRAGMA table_info('studio_config_rows')",
         ).get();
-        final colNames =
-            cols.map((r) => r.read<String>('name')).toSet();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
 
         if (!colNames.contains('studio_preset_id')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.studioPresetId,
-          );
+          await m.addColumn(studioConfigRows, studioConfigRows.studioPresetId);
         }
         if (!colNames.contains('expensive_api_config_id')) {
           await m.addColumn(
@@ -916,7 +912,7 @@ LazyDatabase _openConnection() {
 /// fallbacks are removed in the cleanup PR. The resolver tries DB first, then
 /// falls back to the constant.
 List<Map<String, dynamic>> studioPresetSeedBlocks() {
-  return <Map<String, dynamic>>[
+  return _applyStudioLengthContract(<Map<String, dynamic>>[
     // ─── pregen section (agent layout + tracker instructions + slots) ───
     {
       'id': 'pregen_agent_instruction',
@@ -1254,11 +1250,87 @@ List<Map<String, dynamic>> studioPresetSeedBlocks() {
     },
     {
       'id': 'cleaner_rules',
-      'name': 'Cleaner rules (user-defined)',
+      'name': 'Cleaner rules (NoriMyn prose guard)',
       'kind': 'instruction',
       'role': 'system',
-      'content':
-          'BANNED WORDS (never use these, even if the original has them):\n{{bannedWords}}\n\nAVOID (specific patterns to steer away from):\n{{avoidInstructions}}\n\nPREFER (style direction to lean into):\n{{styleInstructions}}',
+      'content': '''BANNED WORDS / PHRASES / CONCEPTS
+Never use these unless the source context makes them literal and unavoidable:
+
+Russian ban rules:
+- озон
+- мускус
+- сандал
+- якорь as emotional metaphor
+- хищник / хищника / хищнику / хищники / хищный / хищно as romantic or erotic metaphor
+- звериный / зверь / животный as romantic or erotic metaphor
+- одержимость / одержимый / собственник / собственничество / собственнически unless the character card explicitly supports it
+- металлический привкус unless literal blood or metal is directly present
+- медное послевкусие
+- прижался лбом к ее лбу
+- рычать / рык / мурлыкать / мурчать as animalized character sound unless a non-human card explicitly supports it
+- повисла тишина
+- напряжение повисло в воздухе
+- слова повисли в воздухе
+- воздух был густым / тяжелым / неподвижным
+- время остановилось / замерло
+- дыхание перехватило
+- сердце пропустило удар
+- мурашки пробежали
+- холодок пробежал по спине
+- волна жара разлилась
+- искры между ними
+- это был не конец, а начало
+- он ожидал X, но получил Y
+- звук выстрела в тишине
+- собираются тучи
+- X-D шахматы
+
+English / general AI-isms:
+- ozone / smell of ozone
+- anchor / like an anchor / anchored as an emotional metaphor
+- words tasted like ash / taste of ash unless literal fire is present
+- electricity between them / spark between them
+- time stopped / time froze
+- shiver ran down / sent shivers / a shiver ran through
+- a dance of, symphony of, tapestry of
+- could not help but
+- palpable tension
+- a mix of emotions
+- I aim to, I should note, it is important to, I appreciate, I understand your request but
+
+AVOID
+- Do not copy, quote, paraphrase, or mirror {{user}}'s last message.
+- Do not mirror {{user}}'s sentence structure, beat order, or dialogue rhythm.
+- Do not reference "your words", "what you just said", "when you said", "as you asked", or similar meta-echoes.
+- Do not reuse any 4+ consecutive words from {{user}}'s latest message, except a single proper noun.
+- Do not open with the same move, action verb, metaphor, emotional shortcut, or sentence rhythm as recent replies.
+- Do not stall in mood-only prose. Every reply must introduce concrete change: action, consequence, information, relationship pressure, obstacle, physical movement, decision, or changed tactic.
+- Do not use abstract tension instead of concrete action.
+- Do not let atmosphere do emotional work without visible cause.
+- Do not use generic body reactions when character-specific behavior is possible.
+- Do not use predatory, cosmic, primal, sacred, abyssal, ancient, narcotic, or monument-style metaphors unless the card explicitly supports them.
+- Do not write trailer-voiceover sentences.
+- Do not write villain-monologue interiority for characters who are not theatrical villains.
+- Do not restate hair, eye, skin, outfit, body, environment, sensation, or atmosphere already established unless it changed or matters this moment.
+- Do not pad with repeated emotional statements, purple adjectives, empty atmosphere, or extended inner monologue unless the scene requires it.
+- Do not flatten distinct beats into a summary. Preserve the event sequence and character voices.
+- Do not remove vivid original imagery merely because it is figurative. Remove only stale AI-isms, cliches, echoing, and redundant repetition.
+
+PREFER
+- Replace generic dramatic phrasing with specific gesture, physical consequence, object interaction, changed distance, imperfect speech, grounded thought, or scene-relevant environmental detail.
+- If a sentence could fit any dark romance scene, rewrite it until it belongs only to this character, place, and moment.
+- Keep paragraphs anchored in action, exchange, perception, or consequence.
+- Preserve Russian-only output, third-person literary narration, double-quoted dialogue, and single-quoted thoughts when those constraints are present.
+- Keep the same meaning, events, POV, tense, output language, and formatting.
+- Preserve inline HTML/formatting tags verbatim, including <font>, <i>, <b>, <em>, <strong>, <mark>, <sub>, and <sup>. Rewrite prose inside tags if needed; never remove or alter the tags.
+- Preserve OOC blocks verbatim. Clean only the in-roleplay prose around them.
+- Use selective sensory detail: visual 0-2, sound 0-1, touch/body 1-2, smell optional only when scene-relevant, taste rare and naturally triggered.
+- Distribute sensory cues across the reply; do not stack them all in one sentence.
+- Tie at least one sensory cue to emotion, tension, action, or consequence.
+- Rotate sensory emphasis: if recent prose was visual-heavy, lean sound/body; if dialogue-heavy, add environment/body cues; if action-heavy, add internal body sensation.
+- In fast or conversational beats, use micro-sensory details such as breath, dry mouth, fabric pull, fingertip pressure instead of long description.
+- Keep dialogue sharp, purposeful, and character-driven. End on an action, dialogue hook, or sharp environmental detail when suitable.
+- Keep the approximate length. Do not shorten by deleting useful imagery; shorten only by removing filler.''',
       'enabled': true,
       'order': 4,
       'section': 'cleaner',
@@ -1344,7 +1416,66 @@ List<Map<String, dynamic>> studioPresetSeedBlocks() {
       'order': 0,
       'section': 'brief_parser',
     },
-  ];
+  ]);
+}
+
+List<Map<String, dynamic>> _applyStudioLengthContract(
+  List<Map<String, dynamic>> blocks,
+) {
+  const mainLength = '''FIXED LENGTH:
+- Main narrative after </think> must be 600-1200 Russian words.
+- Use 4-12 paragraphs overall.
+- Dynamic, action, or combat scenes must use exactly 4 paragraphs.
+- Every paragraph must contain at least 4 sentences.
+- Use the Studio Narrative Controller brief for beat type, pacing, emphasis, and stopping point, but do not let it reduce these length requirements.
+- Develop multiple connected beats while staying in the current scene.
+- Include layered consequence, dialogue development, sensory continuity, and character-specific thought.
+- Let tension evolve through concrete action, not summary.
+- Do not summarize or skip over active tension.
+- Do not pad with decorative atmosphere.''';
+
+  const languageLength = '''<length>
+Follow the fixed length contract from the main response structure. OOC/meta notes, Lumia commentary, and hidden state markers do not count toward the minimum.
+</length>''';
+
+  const oldMainLength = '''DYNAMIC LENGTH:
+- Read the Studio agent brief: Narrative / Pacing / Style Controller brief above and obey its paragraph budget exactly.
+- Conversational or back-and-forth beats: 3-4 short paragraphs, dialogue-heavy.
+- Dynamic or action beats: 3-5 paragraphs, action-heavy with sparse clipped speech.
+- Atmospheric or introspective beats: 4-6 paragraphs, sensory-heavy.
+- Never pad. Never exceed the budget the controllers set.''';
+
+  const oldLanguageLength = '''<length>
+DYNAMIC LENGTH — OBEY THE STUDIO CONTROLLER BRIEFS:
+- Minimum main in-character narrative length: 400 Russian words.
+- Minimum structure: at least 3 paragraphs, and each paragraph must contain at least 3 sentences.
+- OOC/meta notes, Lumia commentary, and hidden state markers do not count toward the minimum.
+- Conversational or back-and-forth beats: 3-5 short paragraphs.
+- Dynamic, action, or combat beats: 4-6 paragraphs.
+- Atmospheric or introspective beats: 5-7 paragraphs.
+- Do NOT pad with repeated emotional statements, purple adjectives, or empty atmosphere.
+- Do NOT re-describe environments or sensations already established in prior turns unless they changed.
+</length>''';
+
+  const oldDialogueLength =
+      'Each reply contains at least 3-5 dialogue exchanges. Paragraphs: 2-4 sentences, 2-4 total. One brief gesture or micro-reaction per paragraph max (breath, posture, a glance). No appearance cataloguing.';
+  const newDialogueLength =
+      'Each reply contains at least 3-5 dialogue exchanges. Keep the final length contract: 4-12 paragraphs overall, exactly 4 paragraphs for dynamic/action/combat scenes, and at least 4 sentences per paragraph. One brief gesture or micro-reaction per paragraph max (breath, posture, a glance). No appearance cataloguing.';
+
+  return blocks.map((block) {
+    final id = block['id'];
+    var content = block['content'];
+    if (content is! String) return block;
+    if (id == 'final_main_prompt') {
+      content = content.replaceFirst(oldMainLength, mainLength);
+    } else if (id == 'final_language_pov') {
+      content = content.replaceFirst(oldLanguageLength, languageLength);
+    } else if (id == 'final_prose_style') {
+      content = content.replaceFirst(oldDialogueLength, newDialogueLength);
+    }
+    if (identical(content, block['content'])) return block;
+    return {...block, 'content': content};
+  }).toList(growable: false);
 }
 
 /// Slot blocks shared by the pregen and final sections. Each slot is a
@@ -1360,12 +1491,12 @@ List<Map<String, dynamic>> _studioPresetSlotBlocks(
     'char_card': '{{description}}',
     'scenario': '{{scenario}}',
     'char_personality': '{{personality}}',
-    'example_dialogue': '{{mesExample}}',
+    'example_dialogue': '{{mesExamples}}',
     'authors_note': '{{guidance}}',
-    'static_context': '{{persona}}\n{{description}}\n{{scenario}}\n{{personality}}',
-    'memory': '{{memory}}\n{{arc}}\n{{entity}}\n{{lorebooks}}',
+    'memory': '{{memory}}',
     'chat_history': '',
-    'dynamic_context': '{{memory}}\n{{arc}}\n{{entity}}\n{{lorebooks}}',
+    'dynamic_context':
+        '{{memory}}\n{{summary}}\n{{arc}}\n{{entities}}\n{{lorebooks}}\n{{studio_state}}',
   };
   final order = <String>[
     'user_persona',
@@ -1374,7 +1505,6 @@ List<Map<String, dynamic>> _studioPresetSlotBlocks(
     'char_personality',
     'example_dialogue',
     'authors_note',
-    'static_context',
     'memory',
     'chat_history',
     'dynamic_context',

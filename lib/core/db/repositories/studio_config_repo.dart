@@ -229,6 +229,19 @@ class StudioConfigRepo implements SyncStudioConfigStore {
   /// normalization in memory, so existing configs benefit immediately without
   /// a rebuild.
   StudioConfig _normalizeLoadedConfig(StudioConfig config) {
+    if (config.enabled && config.agents.isEmpty) {
+      final now = config.updatedAt != 0
+          ? config.updatedAt
+          : currentTimestampSeconds();
+      return config.copyWith(
+        agents: StudioControllerOntology.buildDefaultAgents(
+          sessionId: config.sessionId,
+          now: now,
+        ),
+        createdAt: config.createdAt == 0 ? now : config.createdAt,
+        updatedAt: config.updatedAt == 0 ? now : config.updatedAt,
+      );
+    }
     if (config.agents.isEmpty) return config;
     final migrated = <StudioAgent>[];
     var changed = false;

@@ -197,6 +197,37 @@ class StudioControllerOntology {
     ),
   ];
 
+  /// Build the default fixed Studio controller agents for a session.
+  ///
+  /// Kept here so Studio creation, rebuild, and legacy empty-config recovery
+  /// all use the same agent set.
+  static List<StudioAgent> buildDefaultAgents({
+    required String sessionId,
+    required int now,
+  }) {
+    final agents = <StudioAgent>[];
+    for (var i = 0; i < specs.length; i++) {
+      final spec = specs[i];
+      agents.add(
+        StudioAgent(
+          id: 'agent_${sessionId}_${spec.id}_$now',
+          name: spec.name,
+          role: 'system',
+          order: i,
+          enabled: spec.id != 'meta',
+          temperature: spec.temperature,
+          maxTokens: spec.maxTokens,
+          timeoutMs: spec.timeoutMs,
+          refreshPolicy: spec.refreshPolicy,
+          invalidationSignals: spec.invalidationSignals,
+          phase: spec.phase,
+          contextSize: spec.contextSize > 0 ? spec.contextSize : 5,
+        ),
+      );
+    }
+    return agents;
+  }
+
   /// Map an existing agent back to its controller spec — by id/name match,
   /// falling back to pipeline-order position. Used by single-agent regen.
   static StudioControllerSpec specForAgent(StudioAgent agent) {

@@ -99,7 +99,10 @@ class StudioBuildNotifier extends Notifier<Map<String, StudioBuildStatus>> {
     final existing = await repo.getBySessionId(sessionId);
 
     final now = currentTimestampSeconds();
-    final agents = _buildAgentsFromOntology(sessionId: sessionId, now: now);
+    final agents = StudioControllerOntology.buildDefaultAgents(
+      sessionId: sessionId,
+      now: now,
+    );
 
     final newConfig = (existing ?? StudioConfig(sessionId: sessionId)).copyWith(
       agents: agents,
@@ -113,33 +116,4 @@ class StudioBuildNotifier extends Notifier<Map<String, StudioBuildStatus>> {
     return 'Studio built: ${agents.length} agents';
   }
 
-  /// Build the fixed set of Studio controller agents from
-  /// [StudioControllerOntology.specs]. Prompt shards are resolved at chat time
-  /// from the DB Studio preset — not stored on the agent.
-  List<StudioAgent> _buildAgentsFromOntology({
-    required String sessionId,
-    required int now,
-  }) {
-    final agents = <StudioAgent>[];
-    for (var i = 0; i < StudioControllerOntology.specs.length; i++) {
-      final spec = StudioControllerOntology.specs[i];
-      agents.add(
-        StudioAgent(
-          id: 'agent_${sessionId}_${spec.id}_$now',
-          name: spec.name,
-          role: 'system',
-          order: i,
-          enabled: spec.id != 'meta',
-          temperature: spec.temperature,
-          maxTokens: spec.maxTokens,
-          timeoutMs: spec.timeoutMs,
-          refreshPolicy: spec.refreshPolicy,
-          invalidationSignals: spec.invalidationSignals,
-          phase: spec.phase,
-          contextSize: spec.contextSize > 0 ? spec.contextSize : 5,
-        ),
-      );
-    }
-    return agents;
-  }
 }

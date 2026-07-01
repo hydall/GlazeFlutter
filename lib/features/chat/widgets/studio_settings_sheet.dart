@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/sse_client.dart';
+import '../../../core/llm/studio_controller_ontology.dart';
 import '../../../core/models/pipeline_settings.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/utils/time_helpers.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../settings/api_list_provider.dart';
@@ -114,7 +116,17 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   }
 
   Future<void> _createDefaultConfig() async {
-    final config = StudioConfig(sessionId: widget.sessionId, enabled: true);
+    final now = currentTimestampSeconds();
+    final config = StudioConfig(
+      sessionId: widget.sessionId,
+      enabled: true,
+      agents: StudioControllerOntology.buildDefaultAgents(
+        sessionId: widget.sessionId,
+        now: now,
+      ),
+      createdAt: now,
+      updatedAt: now,
+    );
     await _save(config);
   }
 
