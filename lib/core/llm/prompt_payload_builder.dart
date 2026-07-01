@@ -119,6 +119,7 @@ class PromptPayloadBuilder {
     var memoryInjectionTarget = 'hard_block';
     // NEW (patch #3): raw-message recall content for <recalled_messages>.
     String? recalledMessagesContent;
+    List<RecalledMessageChunk> recalledMessageChunks = const [];
     final g = _ref.read(memoryGlobalSettingsProvider);
     var memorySettings = MemoryBookSettings(
       memoryExcerptingEnabled: g.memoryExcerptingEnabled,
@@ -231,6 +232,14 @@ class PromptPayloadBuilder {
         }
         block.writeln('</recalled_messages>');
         recalledMessagesContent = block.toString();
+        recalledMessageChunks = recallResult.matches
+            .map(
+              (m) => RecalledMessageChunk(
+                text: m.text,
+                messageIds: m.messageIds,
+              ),
+            )
+            .toList(growable: false);
       }
       throwIfAborted();
       memoryCoverage = {
@@ -373,6 +382,7 @@ class PromptPayloadBuilder {
       entitiesContent: entitiesContent,
       studioSessionStateContent: studioSessionStateContent,
       recalledMessagesContent: recalledMessagesContent,
+      recalledMessageChunks: recalledMessageChunks,
     );
   }
 
@@ -493,6 +503,7 @@ class PromptPayloadBuilder {
       entitiesContent: entitiesContent,
       studioSessionStateContent: studioSessionStateContent,
       recalledMessagesContent: recalledMessagesContent,
+      recalledMessageChunks: const [],
     );
   }
 
