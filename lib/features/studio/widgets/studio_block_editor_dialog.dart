@@ -44,6 +44,23 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
     'custom_text',
     'slot',
     'instruction',
+    'agent_instruction',
+    'tracker_instruction',
+    'previous_agents',
+    'user_persona',
+    'char_card',
+    'scenario',
+    'char_personality',
+    'example_dialogue',
+    'authors_note',
+    'static_context',
+    'chat_history',
+    'worldInfoBefore',
+    'worldInfoAfter',
+    'memory',
+    'summary',
+    'guided_generation',
+    'dynamic_context',
   ];
 
   @override
