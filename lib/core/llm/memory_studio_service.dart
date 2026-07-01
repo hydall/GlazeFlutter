@@ -95,6 +95,24 @@ class MemoryStudioService {
       return const StudioPipelineResult(status: 'aborted', response: '');
     }
 
+    // Resolve the DB Studio preset for this config.
+    final presetRepo = _ref.read(studioPresetRepoProvider);
+    final presetById = await presetRepo.getById(config.studioPresetId);
+    final StudioPreset studioPreset;
+    if (presetById != null) {
+      studioPreset = presetById;
+    } else {
+      final presetDefault = await presetRepo.getDefault();
+      if (presetDefault == null) {
+        return const StudioPipelineResult(
+          status: 'error',
+          response: '',
+          error: 'No Studio preset found in DB. Rebuild Studio.',
+        );
+      }
+      studioPreset = presetDefault;
+    }
+
     try {
       final agents = config.agents.where((a) => a.enabled).toList()
         ..sort((a, b) => a.order.compareTo(b.order));
@@ -190,6 +208,7 @@ class MemoryStudioService {
         runBatch: (group) => _batchCoordinator.runBatchGroup(
           group: group,
           config: config,
+          studioPreset: studioPreset,
           promptResult: promptResult,
           promptPayload: promptPayload,
           apiConfig: apiConfig,
@@ -204,6 +223,7 @@ class MemoryStudioService {
               ? agent.copyWith(contextSize: trackerContextOverride)
               : agent,
           config: config,
+          studioPreset: studioPreset,
           promptResult: promptResult,
           promptPayload: promptPayload,
           apiConfig: apiConfig,
@@ -291,6 +311,7 @@ class MemoryStudioService {
         promptPayload: promptPayload,
         apiConfig: apiConfig,
         config: config,
+        studioPreset: studioPreset,
         priorBriefs: briefs,
         sessionId: sessionId,
         cancelToken: token,
@@ -341,6 +362,7 @@ class MemoryStudioService {
           promptPayload: promptPayload,
           apiConfig: apiConfig,
           config: config,
+          studioPreset: studioPreset,
           sessionId: sessionId,
           cancelToken: token,
         );
@@ -419,6 +441,24 @@ class MemoryStudioService {
       return const StudioPipelineResult(status: 'aborted', response: '');
     }
 
+    // Resolve the DB Studio preset for this config.
+    final presetRepo = _ref.read(studioPresetRepoProvider);
+    final presetById = await presetRepo.getById(config.studioPresetId);
+    final StudioPreset studioPreset;
+    if (presetById != null) {
+      studioPreset = presetById;
+    } else {
+      final presetDefault = await presetRepo.getDefault();
+      if (presetDefault == null) {
+        return const StudioPipelineResult(
+          status: 'error',
+          response: '',
+          error: 'No Studio preset found in DB. Rebuild Studio.',
+        );
+      }
+      studioPreset = presetDefault;
+    }
+
     try {
       final agents = config.agents.where((a) => a.enabled).toList()
         ..sort((a, b) => a.order.compareTo(b.order));
@@ -490,6 +530,7 @@ class MemoryStudioService {
         runBatch: (group) => _batchCoordinator.runBatchGroup(
           group: group,
           config: config,
+          studioPreset: studioPreset,
           promptResult: promptResult,
           promptPayload: promptPayload,
           apiConfig: apiConfig,
@@ -504,6 +545,7 @@ class MemoryStudioService {
               ? agent.copyWith(contextSize: trackerContextOverride)
               : agent,
           config: config,
+          studioPreset: studioPreset,
           promptResult: promptResult,
           promptPayload: promptPayload,
           apiConfig: apiConfig,

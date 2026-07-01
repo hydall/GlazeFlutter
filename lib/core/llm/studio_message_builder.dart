@@ -6,7 +6,6 @@ import 'prompt_builder.dart';
 import 'studio_brief_deduper.dart';
 import 'studio_context_bucketizer.dart';
 import 'studio_prompt_text.dart';
-import 'studio_request_preset.dart';
 import 'studio_stage_brief.dart';
 
 /// Builds the per-agent, batch, and final-generator message lists for the
@@ -37,16 +36,12 @@ class StudioMessageBuilder {
     required PromptResult promptResult,
     required PromptPayload promptPayload,
     required StudioConfig config,
+    required StudioPreset studioPreset,
     required List<StudioStageBrief> priorBriefs,
     required bool isFinalResponse,
     String mainResponse = '',
     int finalContextOverride = 0,
   }) {
-    final studioPreset = studioRequestPresetById(
-      isFinalResponse ? config.finalStudioPresetId : config.agentStudioPresetId,
-      finalPreset: isFinalResponse,
-      overrides: config.studioPresetOverrides,
-    );
     final context = _bucketizer.bucketize(
       promptResult,
       promptPayload: promptPayload,
@@ -59,24 +54,6 @@ class StudioMessageBuilder {
     for (final block in blocks) {
       switch (block.kind) {
         case 'agent_instruction':
-          // Each PromptShardBlock becomes its own API message (cache-friendly,
-          // structured — see docs/plans/PLAN_STUDIO_SHARD_BLOCKS.md). Macro
-          // expansion is applied per-block so `{{char}}`/`{{user}}` resolve.
-          for (final shard in agent.promptShard) {
-            final expanded = _expandStudioBlockContent(
-              shard.content,
-              promptPayload: promptPayload,
-              promptResult: promptResult,
-              context: context,
-            ).trim();
-            if (expanded.isEmpty) continue;
-            messages.add({
-              'role': _normalizeInstructionRole(
-                shard.role.isNotEmpty ? shard.role : agent.role,
-              ),
-              'content': expanded,
-            });
-          }
           // Preset's agent_instruction block content + runtime envelope +
           // final-responder contract follow as the final control message.
           final control = StringBuffer();
@@ -240,36 +217,17 @@ class StudioMessageBuilder {
   String buildPerAgentTaskText({
     required StudioAgent agent,
     required StudioConfig config,
+    required StudioPreset studioPreset,
     required PromptResult promptResult,
     required PromptPayload promptPayload,
     required StudioContextBuckets context,
   }) {
-    final studioPreset = studioRequestPresetById(
-      config.agentStudioPresetId,
-      finalPreset: false,
-      overrides: config.studioPresetOverrides,
-    );
     final blocks =
         studioPreset.blocks
             .where((b) => b.enabled && b.kind == 'agent_instruction')
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order));
     final buf = StringBuffer();
-    final shardParts = <String>[];
-    for (final shard in agent.promptShard) {
-      final expanded = _expandStudioBlockContent(
-        shard.content,
-        promptPayload: promptPayload,
-        promptResult: promptResult,
-        context: context,
-      ).trim();
-      if (expanded.isNotEmpty) shardParts.add(expanded);
-    }
-    final promptShard = shardParts.join('\n\n');
-    if (promptShard.isNotEmpty) {
-      buf.writeln(promptShard);
-      buf.writeln();
-    }
     for (final block in blocks) {
       final content = _expandStudioBlockContent(
         block.content,
@@ -292,15 +250,11 @@ class StudioMessageBuilder {
   /// `<agent_task>`.
   String batchRoleText(
     StudioConfig config,
+    StudioPreset studioPreset,
     StudioContextBuckets context,
     PromptPayload promptPayload,
     PromptResult promptResult,
   ) {
-    final studioPreset = studioRequestPresetById(
-      config.agentStudioPresetId,
-      finalPreset: false,
-      overrides: config.studioPresetOverrides,
-    );
     final blocks =
         studioPreset.blocks
             .where((b) => b.enabled && b.kind != 'agent_instruction')

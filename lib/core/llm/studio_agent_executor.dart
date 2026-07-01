@@ -44,6 +44,7 @@ class StudioAgentExecutor {
     required PromptPayload promptPayload,
     required ApiConfig apiConfig,
     required StudioConfig config,
+    required StudioPreset studioPreset,
     required String sessionId,
     required CancelToken cancelToken,
     void Function(String text)? onIntermediateUpdate,
@@ -61,6 +62,7 @@ class StudioAgentExecutor {
         promptResult: promptResult,
         promptPayload: promptPayload,
         config: config,
+        studioPreset: studioPreset,
         priorBriefs: const [],
         isFinalResponse: false,
       );
@@ -114,6 +116,7 @@ class StudioAgentExecutor {
     required PromptPayload promptPayload,
     required ApiConfig apiConfig,
     required StudioConfig config,
+    required StudioPreset studioPreset,
     required String sessionId,
     required CancelToken cancelToken,
   }) async {
@@ -134,6 +137,7 @@ class StudioAgentExecutor {
           promptResult: promptResult,
           promptPayload: promptPayload,
           config: config,
+          studioPreset: studioPreset,
           priorBriefs: const [],
           isFinalResponse: false,
           mainResponse: mainResponse,
@@ -178,6 +182,7 @@ class StudioAgentExecutor {
   Future<TrackerBatchResult> runIndividualTracker({
     required StudioAgent agent,
     required StudioConfig config,
+    required StudioPreset studioPreset,
     required PromptResult promptResult,
     required PromptPayload promptPayload,
     required ApiConfig apiConfig,
@@ -200,6 +205,7 @@ class StudioAgentExecutor {
           promptPayload: promptPayload,
           apiConfig: apiConfig,
           config: config,
+          studioPreset: studioPreset,
           sessionId: sessionId,
           cancelToken: cancelToken,
           onIntermediateUpdate: null,
@@ -231,6 +237,7 @@ class StudioAgentExecutor {
     required PromptPayload promptPayload,
     required ApiConfig apiConfig,
     required StudioConfig config,
+    required StudioPreset studioPreset,
     required List<StudioStageBrief> priorBriefs,
     required String sessionId,
     required CancelToken cancelToken,
@@ -241,6 +248,7 @@ class StudioAgentExecutor {
       promptResult: promptResult,
       promptPayload: promptPayload,
       config: config,
+      studioPreset: studioPreset,
       priorBriefs: priorBriefs,
       isFinalResponse: true,
       finalContextOverride: _ref

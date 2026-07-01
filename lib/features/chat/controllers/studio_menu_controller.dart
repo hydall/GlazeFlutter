@@ -6,9 +6,7 @@ import '../../../core/models/api_config.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/models/tracker.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/studio_build_provider.dart';
-import '../../../core/utils/time_helpers.dart';
 import '../../settings/api_list_provider.dart';
 
 /// Controller for the Studio tracker dialog, separating business logic from
@@ -63,28 +61,12 @@ class StudioMenuController {
 
   /// Resolve the [ApiConfig] a tracker runs against, mirroring
   /// [AgentRunner]'s resolution: the Studio's `runApiConfigId` if set,
-  /// otherwise the chat's active API config. Trackers reuse this config's
-  /// provider/endpoint/key — only the model id is overridden per agent — so
-  /// the model list must come from this exact provider.
+  /// otherwise the chat's active API config.
   ApiConfig? resolveTrackerApiConfig() {
     return StudioApiConfigResolver(
       apiConfigs: _ref.read(apiListProvider).value ?? const <ApiConfig>[],
       activeConfig: _ref.read(activeApiConfigProvider),
     ).resolveRunConfig(_config?.runApiConfigId ?? '');
-  }
-
-  /// Resolve the [ApiConfig] used for the one-shot build-time decomposition
-  /// LLM call. The Studio's `buildApiConfigId` if set, otherwise the chat's
-  /// active API config. The Studio's `buildModelOverride` is applied on top
-  /// when set so the user can run the builder on a different model than chat.
-  ApiConfig? resolveBuildApiConfig() {
-    return StudioApiConfigResolver(
-      apiConfigs: _ref.read(apiListProvider).value ?? const <ApiConfig>[],
-      activeConfig: _ref.read(activeApiConfigProvider),
-    ).resolveBuildConfig(
-      _config?.buildApiConfigId ?? '',
-      _config?.buildModelOverride ?? '',
-    );
   }
 
   Future<void> toggleEnabled(bool enabled) async {
@@ -105,41 +87,6 @@ class StudioMenuController {
       return a;
     }).toList();
     final updated = current.copyWith(agents: agents);
-    await repo.upsert(updated);
-    _config = updated;
-  }
-
-  Future<void> setAgentModelOverride(
-    StudioAgent agent,
-    String modelOverride,
-  ) async {
-    final repo = _ref.read(studioConfigRepoProvider);
-    final current = _config;
-    if (current == null) return;
-    final agents = current.agents.map((a) {
-      if (a.id == agent.id) return a.copyWith(modelOverride: modelOverride);
-      return a;
-    }).toList();
-    final updated = current.copyWith(agents: agents);
-    await repo.upsert(updated);
-    _config = updated;
-  }
-
-  Future<void> setAgentPromptShard(
-    StudioAgent agent,
-    List<PromptShardBlock> shard,
-  ) async {
-    final repo = _ref.read(studioConfigRepoProvider);
-    final current = _config;
-    if (current == null) return;
-    final agents = current.agents.map((a) {
-      if (a.id == agent.id) return a.copyWith(promptShard: shard);
-      return a;
-    }).toList();
-    final updated = current.copyWith(
-      agents: agents,
-      updatedAt: currentTimestampSeconds(),
-    );
     await repo.upsert(updated);
     _config = updated;
   }

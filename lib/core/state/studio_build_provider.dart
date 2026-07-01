@@ -1,13 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../llm/studio_api_config_resolver.dart';
 import '../llm/studio_controller_ontology.dart';
-import '../models/api_config.dart';
 import '../models/studio_config.dart';
 import '../utils/time_helpers.dart';
 import 'db_provider.dart';
-import 'preset_resolution.dart';
-import '../../features/settings/api_list_provider.dart';
 
 /// Outcome of a finished Studio build, surfaced to whichever dialog is open
 /// (or the next one to open) so the user always sees the result toast.
@@ -102,11 +98,6 @@ class StudioBuildNotifier extends Notifier<Map<String, StudioBuildStatus>> {
     final repo = ref.read(studioConfigRepoProvider);
     final existing = await repo.getBySessionId(sessionId);
 
-    final apiConfig = _resolveBuildApiConfig(existing);
-    if (apiConfig == null) {
-      return 'No API configured. Set one up in API settings first.';
-    }
-
     final now = currentTimestampSeconds();
     final agents = _buildAgentsFromOntology(sessionId: sessionId, now: now);
 
@@ -123,9 +114,8 @@ class StudioBuildNotifier extends Notifier<Map<String, StudioBuildStatus>> {
   }
 
   /// Build the fixed set of Studio controller agents from
-  /// [StudioControllerOntology.specs]. Each agent gets the spec's fallback
-  /// prompt as its initial shard (the DB preset blocks are resolved at chat
-  /// time, not stored on the agent).
+  /// [StudioControllerOntology.specs]. Prompt shards are resolved at chat time
+  /// from the DB Studio preset — not stored on the agent.
   List<StudioAgent> _buildAgentsFromOntology({
     required String sessionId,
     required int now,
@@ -138,7 +128,6 @@ class StudioBuildNotifier extends Notifier<Map<String, StudioBuildStatus>> {
           id: 'agent_${sessionId}_${spec.id}_$now',
           name: spec.name,
           role: 'system',
-          promptShard: [PromptShardBlock(content: spec.fallbackPrompt)],
           order: i,
           enabled: spec.id != 'meta',
           temperature: spec.temperature,
@@ -152,15 +141,5 @@ class StudioBuildNotifier extends Notifier<Map<String, StudioBuildStatus>> {
       );
     }
     return agents;
-  }
-
-  ApiConfig? _resolveBuildApiConfig(StudioConfig? existing) {
-    return StudioApiConfigResolver(
-      apiConfigs: ref.read(apiListProvider).value ?? const <ApiConfig>[],
-      activeConfig: ref.read(activeApiConfigProvider),
-    ).resolveBuildConfig(
-      existing?.buildApiConfigId ?? '',
-      existing?.buildModelOverride ?? '',
-    );
   }
 }

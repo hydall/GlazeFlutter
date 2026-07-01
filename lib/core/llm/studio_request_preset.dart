@@ -266,106 +266,14 @@ const defaultFinalStudioPresetId = 'norimyn_studio_final';
 StudioRequestPreset studioRequestPresetById(
   String id, {
   required bool finalPreset,
-  List<StudioPresetOverride> overrides = const [],
 }) {
   final fallbackId = finalPreset
       ? defaultFinalStudioPresetId
       : defaultAgentStudioPresetId;
   final resolvedId = id.isNotEmpty ? id : fallbackId;
-  final base = studioRequestPresets.firstWhere(
+  return studioRequestPresets.firstWhere(
     (preset) => preset.id == resolvedId,
     orElse: () => studioRequestPresets.firstWhere((p) => p.id == fallbackId),
-  );
-  final override = overrides.where((p) => p.id == base.id).firstOrNull;
-  if (override == null) return base;
-  final blocks = override.blocks.isNotEmpty
-      ? _migrateLegacyStudioBlocks(base, override.blocks)
-      : _legacyOverrideBlocks(base, override);
-  return base.copyWith(
-    name: override.name.trim().isNotEmpty ? override.name.trim() : base.name,
-    blocks: blocks,
-  );
-}
-
-List<StudioPresetBlock> _migrateLegacyStudioBlocks(
-  StudioRequestPreset base,
-  List<StudioPresetBlock> blocks,
-) {
-  final kinds = blocks.map((block) => block.kind).toSet();
-  final hasSplitContext =
-      kinds.contains('user_persona') ||
-      kinds.contains('char_card') ||
-      kinds.contains('scenario') ||
-      kinds.contains('char_personality');
-  if (hasSplitContext) return blocks;
-
-  final byKind = {for (final block in blocks) block.kind: block};
-  final migrated = <StudioPresetBlock>[];
-  for (final baseBlock in base.blocks) {
-    final existing = byKind[baseBlock.kind];
-    if (existing == null) {
-      migrated.add(baseBlock);
-      continue;
-    }
-    migrated.add(
-      baseBlock.copyWith(
-        title: existing.title.trim().isNotEmpty
-            ? existing.title
-            : baseBlock.title,
-        role: existing.role,
-        content: existing.content,
-        enabled: existing.enabled,
-      ),
-    );
-  }
-  migrated.addAll(
-    blocks.where(
-      (block) =>
-          block.kind == 'custom_text' &&
-          !migrated.any((existing) => existing.id == block.id),
-    ),
-  );
-  return [
-    for (var i = 0; i < migrated.length; i++) migrated[i].copyWith(order: i),
-  ];
-}
-
-List<StudioPresetBlock> _legacyOverrideBlocks(
-  StudioRequestPreset base,
-  StudioPresetOverride override,
-) {
-  final instruction = base.id == defaultFinalStudioPresetId
-      ? override.finalInstruction
-      : override.intermediateInstruction;
-  if (instruction.trim().isEmpty) return base.blocks;
-  return base.blocks
-      .map(
-        (block) => block.kind == 'agent_instruction'
-            ? block.copyWith(content: instruction)
-            : block,
-      )
-      .toList(growable: false);
-}
-
-List<StudioRequestPreset> resolvedStudioRequestPresets(
-  List<StudioPresetOverride> overrides,
-) {
-  return studioRequestPresets
-      .map(
-        (preset) => studioRequestPresetById(
-          preset.id,
-          finalPreset: preset.id == defaultFinalStudioPresetId,
-          overrides: overrides,
-        ),
-      )
-      .toList(growable: false);
-}
-
-StudioPresetOverride studioRequestPresetToOverride(StudioRequestPreset preset) {
-  return StudioPresetOverride(
-    id: preset.id,
-    name: preset.name,
-    blocks: preset.blocks,
   );
 }
 

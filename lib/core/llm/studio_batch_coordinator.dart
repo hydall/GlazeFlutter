@@ -44,6 +44,7 @@ class StudioBatchCoordinator {
   Future<List<TrackerBatchResult>> runBatchGroup({
     required TrackerBatchGroup group,
     required StudioConfig config,
+    required StudioPreset studioPreset,
     required PromptResult promptResult,
     required PromptPayload promptPayload,
     required ApiConfig apiConfig,
@@ -68,6 +69,7 @@ class StudioBatchCoordinator {
       perAgentTask[agent.id] = _messageBuilder.buildPerAgentTaskText(
         agent: agent,
         config: config,
+        studioPreset: studioPreset,
         promptResult: promptResult,
         promptPayload: promptPayload,
         context: context,
@@ -75,6 +77,7 @@ class StudioBatchCoordinator {
     }
     final roleText = _messageBuilder.batchRoleText(
       config,
+      studioPreset,
       context,
       promptPayload,
       promptResult,
@@ -179,6 +182,7 @@ class StudioBatchCoordinator {
   Future<List<TrackerBatchResult>> retryFailedIndividually({
     required List<StudioAgent> agents,
     required StudioConfig config,
+    required StudioPreset studioPreset,
     required PromptResult promptResult,
     required PromptPayload promptPayload,
     required ApiConfig apiConfig,
@@ -198,6 +202,7 @@ class StudioBatchCoordinator {
             promptPayload: promptPayload,
             apiConfig: apiConfig,
             config: config,
+            studioPreset: studioPreset,
             sessionId: sessionId,
             cancelToken: cancelToken,
             onIntermediateUpdate: null,

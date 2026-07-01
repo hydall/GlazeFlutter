@@ -11,9 +11,10 @@ void main() {
       expect(settings.postCleanerEnabled, isFalse);
     });
 
-    test('StudioConfig: routingMode defaults to verbatim', () {
+    test('StudioConfig: defaults are correct', () {
       const config = StudioConfig(sessionId: 's1');
-      expect(config.routingMode, 'verbatim');
+      expect(config.enabled, isFalse);
+      expect(config.studioPresetId, 'default');
     });
 
     test('MemoryBookSettings: can enable all agentic features', () {
@@ -23,14 +24,6 @@ void main() {
       );
       expect(settings.agenticWriteEnabled, isTrue);
       expect(settings.postCleanerEnabled, isTrue);
-    });
-
-    test('StudioConfig: can switch to compiled routing', () {
-      const config = StudioConfig(
-        sessionId: 's1',
-        routingMode: 'compiled',
-      );
-      expect(config.routingMode, 'compiled');
     });
   });
 
@@ -56,27 +49,22 @@ void main() {
       expect(bothOn.agenticWriteEnabled && bothOn.postCleanerEnabled, isTrue);
     });
 
-    test('routingMode is independent from MemoryBook features', () {
+    test('studioPresetId is independent from MemoryBook features', () {
       const config = StudioConfig(
         sessionId: 's1',
-        routingMode: 'compiled',
+        studioPresetId: 'custom',
       );
       const settings = PipelineSettings(
         agenticWriteEnabled: true,
         postCleanerEnabled: true,
       );
-      // routingMode lives on StudioConfig, not PipelineSettings
-      expect(config.routingMode, 'compiled');
+      expect(config.studioPresetId, 'custom');
       expect(settings.agenticWriteEnabled, isTrue);
       expect(settings.postCleanerEnabled, isTrue);
     });
   });
 
   group('Stage 5 — Default UX (invisible by default)', () {
-    // The design principle: everything is OFF by default. The user must
-    // explicitly enable each feature. This is the "invisible by default +
-    // power-user toggle" UX from docs/PLAN_AGENTIC_STUDIO.md §7.
-
     test('no agentic feature is on without explicit opt-in', () {
       const settings = PipelineSettings();
       const config = StudioConfig(sessionId: 's1');
@@ -84,8 +72,6 @@ void main() {
       expect(settings.agenticWriteEnabled, isFalse);
       expect(settings.postCleanerEnabled, isFalse);
       expect(config.enabled, isFalse);
-      // routingMode='verbatim' is the default but it's not an "agentic"
-      // feature — it's just how decomposition works. It's always on.
     });
 
     test('copyWith preserves existing toggles when updating one', () {

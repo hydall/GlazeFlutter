@@ -141,8 +141,7 @@ Notes:
   String finalHardStyleContract(StudioConfig config) {
     final sources = config.agents
         .map(
-          (agent) =>
-              '${agent.name}\n${agent.sourceBlockNames}\n${agent.promptShard.map((s) => s.content).join('\n\n')}',
+          (agent) => '${agent.name}\n${agent.sourceBlockNames}',
         )
         .join('\n\n');
     final rules = <String>[];

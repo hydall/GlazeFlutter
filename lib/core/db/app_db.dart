@@ -43,7 +43,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 54;
+  int get schemaVersion => 55;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -420,9 +420,8 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('build_api_config_id')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.buildApiConfigId,
+          await customStatement(
+            'ALTER TABLE studio_config_rows ADD COLUMN build_api_config_id TEXT NOT NULL DEFAULT ""',
           );
         }
         if (!colNames.contains('run_api_config_id')) {
@@ -435,15 +434,13 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('selected_block_ids_json')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.selectedBlockIdsJson,
+          await customStatement(
+            'ALTER TABLE studio_config_rows ADD COLUMN selected_block_ids_json TEXT NOT NULL DEFAULT "[]"',
           );
         }
         if (!colNames.contains('selected_block_ids_initialized')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.selectedBlockIdsInitialized,
+          await customStatement(
+            'ALTER TABLE studio_config_rows ADD COLUMN selected_block_ids_initialized INTEGER NOT NULL DEFAULT 0',
           );
         }
       }
@@ -462,15 +459,13 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('agent_studio_preset_id')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.agentStudioPresetId,
+          await customStatement(
+            'ALTER TABLE studio_config_rows ADD COLUMN agent_studio_preset_id TEXT NOT NULL DEFAULT ""',
           );
         }
         if (!colNames.contains('final_studio_preset_id')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.finalStudioPresetId,
+          await customStatement(
+            'ALTER TABLE studio_config_rows ADD COLUMN final_studio_preset_id TEXT NOT NULL DEFAULT ""',
           );
         }
       }
@@ -480,9 +475,8 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('studio_preset_overrides_json')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.studioPresetOverridesJson,
+          await customStatement(
+            'ALTER TABLE studio_config_rows ADD COLUMN studio_preset_overrides_json TEXT NOT NULL DEFAULT "[]"',
           );
         }
       }
@@ -503,8 +497,8 @@ class AppDatabase extends _$AppDatabase {
         );
         await customStatement(
           "UPDATE studio_config_rows SET profile_name = "
-          "CASE WHEN source_preset_id IS NULL OR source_preset_id = '' "
-          "THEN 'Studio Profile' ELSE 'Studio: ' || source_preset_id END "
+          "CASE WHEN profile_id IS NULL OR profile_id = '' "
+          "THEN 'Studio Profile' ELSE 'Studio: ' || profile_id END "
           "WHERE profile_name IS NULL OR profile_name = ''",
         );
       }
@@ -514,9 +508,8 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('builder_prompt_template')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.builderPromptTemplate,
+          await customStatement(
+            'ALTER TABLE studio_config_rows ADD COLUMN builder_prompt_template TEXT NOT NULL DEFAULT ""',
           );
         }
       }
@@ -553,7 +546,9 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('routing_mode')) {
-          await m.addColumn(studioConfigRows, studioConfigRows.routingMode);
+          await customStatement(
+            'ALTER TABLE studio_config_rows ADD COLUMN routing_mode TEXT NOT NULL DEFAULT "verbatim"',
+          );
         }
       }
       if (from < 47) {
@@ -693,9 +688,8 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
         if (!colNames.contains('build_model_override')) {
-          await m.addColumn(
-            studioConfigRows,
-            studioConfigRows.buildModelOverride,
+          await customStatement(
+            'ALTER TABLE studio_config_rows ADD COLUMN build_model_override TEXT NOT NULL DEFAULT ""',
           );
         }
         if (!colNames.contains('run_model_override')) {
@@ -825,6 +819,69 @@ class AppDatabase extends _$AppDatabase {
             "(?, ?, ?, CAST(strftime('%s','now') AS INTEGER))",
             ['default', 'Default Studio Preset', jsonEncode(seedBlocks)],
           );
+        }
+      }
+      if (from < 55) {
+        // Studio config overhaul: unbind from user presets, switch to 3 API
+        // Config slots (expensive/cheap/cleaner) + studioPresetId.
+        // ADD: studio_preset_id, expensive_api_config_id, cheap_api_config_id,
+        //      cleaner_api_config_id
+        // DROP: source_preset_id, source_preset_hash, routing_mode,
+        //       agent_studio_preset_id, final_studio_preset_id,
+        //       studio_preset_overrides_json, builder_prompt_template,
+        //       selected_block_ids_json, selected_block_ids_initialized,
+        //       build_api_config_id, build_model_override
+        final cols = await customSelect(
+          "PRAGMA table_info('studio_config_rows')",
+        ).get();
+        final colNames =
+            cols.map((r) => r.read<String>('name')).toSet();
+
+        if (!colNames.contains('studio_preset_id')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.studioPresetId,
+          );
+        }
+        if (!colNames.contains('expensive_api_config_id')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.expensiveApiConfigId,
+          );
+        }
+        if (!colNames.contains('cheap_api_config_id')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.cheapApiConfigId,
+          );
+        }
+        if (!colNames.contains('cleaner_api_config_id')) {
+          await m.addColumn(
+            studioConfigRows,
+            studioConfigRows.cleanerApiConfigId,
+          );
+        }
+
+        // Drop old columns (SQLite 3.35+ supports ALTER TABLE DROP COLUMN).
+        final toDrop = [
+          'source_preset_id',
+          'source_preset_hash',
+          'routing_mode',
+          'agent_studio_preset_id',
+          'final_studio_preset_id',
+          'studio_preset_overrides_json',
+          'builder_prompt_template',
+          'selected_block_ids_json',
+          'selected_block_ids_initialized',
+          'build_api_config_id',
+          'build_model_override',
+        ];
+        for (final col in toDrop) {
+          if (colNames.contains(col)) {
+            await customStatement(
+              'ALTER TABLE studio_config_rows DROP COLUMN $col',
+            );
+          }
         }
       }
     },

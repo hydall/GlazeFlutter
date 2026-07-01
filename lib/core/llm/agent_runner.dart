@@ -198,13 +198,13 @@ class AgentRunner {
           .studioTrackerModelOverride;
       if (trackerModel.isNotEmpty) {
         return resolver.resolveAgentConfig(
-          agent.copyWith(modelOverride: trackerModel, modelSource: 'current'),
           current,
           runApiConfigId,
+          trackerModel,
         );
       }
     }
-    return resolver.resolveAgentConfig(agent, current, runApiConfigId);
+    return resolver.resolveAgentConfig(current, runApiConfigId, '');
   }
 
   Future<String> _readRunApiConfigId(String sessionId) async {

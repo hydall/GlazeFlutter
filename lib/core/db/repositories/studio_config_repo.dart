@@ -126,28 +126,15 @@ class StudioConfigRepo implements SyncStudioConfigStore {
             agentsJson: Value(
               jsonEncode(config.agents.map((a) => a.toJson()).toList()),
             ),
-            sourcePresetId: Value(config.sourcePresetId),
             finalPresetId: Value(config.finalPresetId),
-            agentStudioPresetId: Value(config.agentStudioPresetId),
-            finalStudioPresetId: Value(config.finalStudioPresetId),
-            studioPresetOverridesJson: Value(
-              jsonEncode(
-                config.studioPresetOverrides.map((p) => p.toJson()).toList(),
-              ),
-            ),
-            sourcePresetHash: Value(config.sourcePresetHash),
-            buildApiConfigId: Value(config.buildApiConfigId),
+            studioPresetId: Value(config.studioPresetId),
             runApiConfigId: Value(config.runApiConfigId),
-            buildModelOverride: Value(config.buildModelOverride),
+            expensiveApiConfigId: Value(config.expensiveApiConfigId),
+            cheapApiConfigId: Value(config.cheapApiConfigId),
+            cleanerApiConfigId: Value(config.cleanerApiConfigId),
             runModelOverride: Value(config.runModelOverride),
-            builderPromptTemplate: Value(config.builderPromptTemplate),
             maxFinalHistoryMessages: Value(config.maxFinalHistoryMessages),
-            routingMode: Value(config.routingMode),
             broadcastBlocksJson: Value(jsonEncode(config.broadcastBlocks)),
-            selectedBlockIdsJson: Value(jsonEncode(config.selectedBlockIds)),
-            selectedBlockIdsInitialized: Value(
-              config.selectedBlockIdsInitialized,
-            ),
             createdAt: Value(config.createdAt),
             updatedAt: Value(currentTimestampSeconds()),
           ),
@@ -188,14 +175,6 @@ class StudioConfigRepo implements SyncStudioConfigStore {
     } catch (_) {
       agents = [];
     }
-    List<String> selectedBlockIds;
-    try {
-      selectedBlockIds = (jsonDecode(row.selectedBlockIdsJson) as List<dynamic>)
-          .whereType<String>()
-          .toList(growable: false);
-    } catch (_) {
-      selectedBlockIds = const [];
-    }
     List<String> broadcastBlocks;
     try {
       broadcastBlocks = (jsonDecode(row.broadcastBlocksJson) as List<dynamic>)
@@ -203,15 +182,6 @@ class StudioConfigRepo implements SyncStudioConfigStore {
           .toList(growable: false);
     } catch (_) {
       broadcastBlocks = const [];
-    }
-    List<StudioPresetOverride> studioPresetOverrides;
-    try {
-      final list = jsonDecode(row.studioPresetOverridesJson) as List<dynamic>;
-      studioPresetOverrides = list
-          .map((e) => StudioPresetOverride.fromJson(e as Map<String, dynamic>))
-          .toList(growable: false);
-    } catch (_) {
-      studioPresetOverrides = const [];
     }
 
     return _normalizeLoadedConfig(
@@ -221,22 +191,15 @@ class StudioConfigRepo implements SyncStudioConfigStore {
         profileName: row.profileName,
         enabled: row.enabled,
         agents: agents,
-        sourcePresetId: row.sourcePresetId,
         finalPresetId: row.finalPresetId,
-        agentStudioPresetId: row.agentStudioPresetId,
-        finalStudioPresetId: row.finalStudioPresetId,
-        studioPresetOverrides: studioPresetOverrides,
-        sourcePresetHash: row.sourcePresetHash,
-        buildApiConfigId: row.buildApiConfigId,
+        studioPresetId: row.studioPresetId,
         runApiConfigId: row.runApiConfigId,
-        buildModelOverride: row.buildModelOverride,
+        expensiveApiConfigId: row.expensiveApiConfigId,
+        cheapApiConfigId: row.cheapApiConfigId,
+        cleanerApiConfigId: row.cleanerApiConfigId,
         runModelOverride: row.runModelOverride,
-        builderPromptTemplate: row.builderPromptTemplate,
         maxFinalHistoryMessages: row.maxFinalHistoryMessages,
-        routingMode: row.routingMode,
         broadcastBlocks: broadcastBlocks,
-        selectedBlockIds: selectedBlockIds,
-        selectedBlockIdsInitialized: row.selectedBlockIdsInitialized,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       ),
@@ -301,10 +264,8 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       id: 'agent_${config.sessionId}_beauty_migrated',
       name: spec.name,
       role: 'system',
-      promptShard: [PromptShardBlock(content: spec.fallbackPrompt)],
       order: insertAt,
       enabled: true,
-      modelSource: 'current',
       temperature: spec.temperature,
       maxTokens: spec.maxTokens,
       timeoutMs: spec.timeoutMs,

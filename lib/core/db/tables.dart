@@ -350,31 +350,17 @@ class StudioConfigRows extends Table {
   TextColumn get profileName => text().withDefault(const Constant(''))();
   BoolColumn get enabled => boolean().withDefault(const Constant(false))();
   TextColumn get agentsJson => text().withDefault(const Constant('[]'))();
-  TextColumn get sourcePresetId => text().withDefault(const Constant(''))();
   TextColumn get finalPresetId => text().withDefault(const Constant(''))();
-  TextColumn get agentStudioPresetId =>
-      text().withDefault(const Constant(''))();
-  TextColumn get finalStudioPresetId =>
-      text().withDefault(const Constant(''))();
-  TextColumn get studioPresetOverridesJson =>
-      text().withDefault(const Constant('[]'))();
-  TextColumn get sourcePresetHash => text().withDefault(const Constant(''))();
-  TextColumn get buildApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get studioPresetId => text().withDefault(const Constant('default'))();
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
-  TextColumn get buildModelOverride => text().withDefault(const Constant(''))();
+  TextColumn get expensiveApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get cheapApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get cleanerApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get runModelOverride => text().withDefault(const Constant(''))();
-  TextColumn get builderPromptTemplate =>
-      text().withDefault(const Constant(''))();
   IntColumn get maxFinalHistoryMessages =>
       integer().withDefault(const Constant(15))();
-  TextColumn get routingMode =>
-      text().withDefault(const Constant('verbatim'))();
   TextColumn get broadcastBlocksJson =>
       text().withDefault(const Constant('[]'))();
-  TextColumn get selectedBlockIdsJson =>
-      text().withDefault(const Constant('[]'))();
-  BoolColumn get selectedBlockIdsInitialized =>
-      boolean().withDefault(const Constant(false))();
   IntColumn get createdAt => integer().withDefault(const Constant(0))();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();
 
