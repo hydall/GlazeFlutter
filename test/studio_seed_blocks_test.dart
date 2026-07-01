@@ -104,10 +104,10 @@ void main() {
       }
     });
 
-    test('meta_task is disabled by default', () {
+    test('meta_task is enabled by default', () {
       final blocks = studioPresetSeedBlocks();
       final metaTask = blocks.firstWhere((b) => b['id'] == 'meta_task');
-      expect(metaTask['enabled'], false);
+      expect(metaTask['enabled'], true);
     });
   });
 }

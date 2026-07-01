@@ -62,10 +62,7 @@ class _StudioPresetEditorSheetState
 
   List<StudioPresetBlock> get _sectionBlocks {
     final blocks = _preset?.blocks ?? const <StudioPresetBlock>[];
-    return blocks
-        .where((b) => b.section == _activeSection)
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    return blocks.where((b) => b.section == _activeSection).toList();
   }
 
   @override
@@ -91,11 +88,56 @@ class _StudioPresetEditorSheetState
           fit: FlexFit.loose,
           child: _sectionBlocks.isEmpty
               ? const Center(child: Text('No blocks in this section'))
-              : ListView.builder(
+              : ReorderableListView.builder(
                   shrinkWrap: true,
+                  buildDefaultDragHandles: false,
                   itemCount: _sectionBlocks.length,
-                  itemBuilder: (context, index) =>
-                      _buildBlockTile(_sectionBlocks[index]),
+                  onReorder: _onReorder,
+                  itemBuilder: (context, index) {
+                    final block = _sectionBlocks[index];
+                    return Dismissible(
+                      key: ValueKey(block.id),
+                      direction: DismissDirection.horizontal,
+                      background: Container(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Icon(Icons.delete,
+                            color: Theme.of(context).colorScheme.onError),
+                      ),
+                      secondaryBackground: Container(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 16),
+                        child: Icon(Icons.delete,
+                            color: Theme.of(context).colorScheme.onError),
+                      ),
+                      confirmDismiss: (_) async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('Delete Block'),
+                            content: Text(
+                              'Delete "${block.title.isNotEmpty ? block.title : block.id}"?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.of(context).pop(true),
+                                child: const Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        );
+                        return ok == true;
+                      },
+                      onDismissed: (_) => _deleteBlock(block),
+                      child: _buildBlockTile(block, index),
+                    );
+                  },
                 ),
         ),
         const SizedBox(height: 8),
@@ -145,8 +187,25 @@ class _StudioPresetEditorSheetState
     );
   }
 
-  Widget _buildBlockTile(StudioPresetBlock block) {
+  Future<void> _onReorder(int oldIndex, int newIndex) async {
+    if (_preset == null) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    final sectionBlocks = _sectionBlocks;
+    final moved = sectionBlocks.removeAt(oldIndex);
+    sectionBlocks.insert(newIndex, moved);
+    final otherBlocks = _preset!.blocks
+        .where((b) => b.section != _activeSection)
+        .toList();
+    final rebuilt = [...otherBlocks, ...sectionBlocks];
+    await _save(_preset!.copyWith(
+      blocks: rebuilt,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    ));
+  }
+
+  Widget _buildBlockTile(StudioPresetBlock block, int index) {
     return ListTile(
+      key: ValueKey('tile_${block.id}'),
       title: Text(
         block.title.isNotEmpty ? block.title : block.id,
         style: block.enabled
@@ -154,15 +213,26 @@ class _StudioPresetEditorSheetState
             : const TextStyle(decoration: TextDecoration.lineThrough),
       ),
       subtitle: Text(
-        '${block.kind} · ${block.role} · order=${block.order}',
+        '${block.kind} · ${block.role} · #$index',
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: Switch(
-        value: block.enabled,
-        onChanged: (v) => _toggleBlock(block, v),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Switch(
+            value: block.enabled,
+            onChanged: (v) => _toggleBlock(block, v),
+          ),
+          ReorderableDragStartListener(
+            index: index,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.drag_indicator, size: 24),
+            ),
+          ),
+        ],
       ),
       onTap: () => _editBlock(block),
-      onLongPress: () => _deleteBlock(block),
     );
   }
 

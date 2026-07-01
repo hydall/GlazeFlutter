@@ -24,7 +24,6 @@ class StudioBlockEditorDialog extends StatefulWidget {
 class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _contentCtrl;
-  late final TextEditingController _orderCtrl;
   late String _role;
   late String _section;
   late String _kind;
@@ -36,9 +35,6 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
     'final',
     'cleaner',
     'ledger',
-    'writeloop',
-    'build',
-    'brief_parser',
   ];
   static const _kinds = [
     'custom_text',
@@ -55,11 +51,7 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
     'authors_note',
     'static_context',
     'chat_history',
-    'worldInfoBefore',
-    'worldInfoAfter',
     'memory',
-    'summary',
-    'guided_generation',
     'dynamic_context',
   ];
 
@@ -68,7 +60,6 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
     super.initState();
     _titleCtrl = TextEditingController(text: widget.block.title);
     _contentCtrl = TextEditingController(text: widget.block.content);
-    _orderCtrl = TextEditingController(text: widget.block.order.toString());
     _role = widget.block.role;
     _section = widget.block.section;
     _kind = widget.block.kind;
@@ -79,7 +70,6 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
   void dispose() {
     _titleCtrl.dispose();
     _contentCtrl.dispose();
-    _orderCtrl.dispose();
     super.dispose();
   }
 
@@ -106,6 +96,7 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _section,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Section',
                         border: OutlineInputBorder(),
@@ -125,6 +116,7 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _kind,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Kind',
                         border: OutlineInputBorder(),
@@ -148,6 +140,7 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _role,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Role',
                         border: OutlineInputBorder(),
@@ -164,23 +157,16 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  SizedBox(
-                    width: 80,
-                    child: TextField(
-                      controller: _orderCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Order',
-                        border: OutlineInputBorder(),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Switch(
+                        value: _enabled,
+                        onChanged: (v) => setState(() => _enabled = v),
                       ),
-                    ),
+                      const Text('Enabled'),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Switch(
-                    value: _enabled,
-                    onChanged: (v) => setState(() => _enabled = v),
-                  ),
-                  const Text('Enabled'),
                 ],
               ),
               const SizedBox(height: 12),
@@ -212,7 +198,6 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
   }
 
   void _save() {
-    final order = int.tryParse(_orderCtrl.text) ?? 0;
     final updated = widget.block.copyWith(
       title: _titleCtrl.text,
       content: _contentCtrl.text,
@@ -220,7 +205,6 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
       section: _section,
       kind: _kind,
       enabled: _enabled,
-      order: order,
     );
     Navigator.of(context).pop(updated);
   }
