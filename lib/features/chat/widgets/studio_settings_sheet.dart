@@ -172,12 +172,10 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
               final presetId = config.studioPresetId;
-              await showModalBottomSheet<void>(
-                context: context,
-                useRootNavigator: true,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => StudioPresetEditorSheet(presetId: presetId),
+              await GlazeBottomSheet.show<void>(
+                context,
+                title: 'Preset Blocks',
+                child: StudioPresetEditorSheet(presetId: presetId),
               );
             },
           ),
