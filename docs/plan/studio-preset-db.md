@@ -32,7 +32,7 @@
   - Registered in `@DriftDatabase` in `app_db.dart`; `schemaVersion` bumped 53→54
   - v54 migration: CREATE table + INSERT default preset with ~50 seed blocks across 7 sections
   - `_studioPresetSeedBlocks()` function in `app_db.dart` — all hardcoded prompts migrated to seed JSON
-  - `_studioPresetSlotBlocks(section, startOrder)` generates slot blocks (user_persona, char_card, scenario, etc.) for pregen + final sections
+  - `_studioPresetSlotBlocks(section, startOrder)` generates slot blocks (_card, scenario, etc.) for pregen + final sections
   - `StudioPreset` + `StudioPresetBlock` freezed models in `studio_config.dart` — `StudioPresetBlock` gained `section` field
   - `StudioPresetRepo` in `lib/core/db/repositories/studio_preset_repo.dart` (getById/getDefault/getAll/upsert/deleteById)
   - `studioPresetRepoProvider` + `studioPresetProvider` in `db_provider.dart`
@@ -50,9 +50,39 @@
   - Fixed v54 migration bug: `_studioPresetSeedBlocks` tear-off stored instead of called (`jsonEncode` failed on Closure)
   - Fixed pre-existing test regressions: db_migration_test schema version 53→54; agent_operations_log_test label 'Studio agent'→'Studio tracker'
   - `flutter analyze`: clean. `flutter test`: 1451 passed, 0 failed.
-
-### In Progress
-- **Drift v55 migration** — `studio_config_rows` schema changes (NEXT)
+- **v55 migration commit** (`3907877d`): Drift v55 migration — 3 API Config slots replace per-agent model overrides
+  - `studio_config_rows` schema: ADD `studioPresetId`, `expensiveApiConfigId`, `cheapApiConfigId`, `cleanerApiConfigId`; DROP 11 old columns
+  - `StudioConfig` model: new 3 slot fields, removed old fields
+  - `StudioAgent` model: removed `promptShard`, `modelSource`, `model`, `modelOverride`
+  - `StudioPresetOverride` class DELETED
+  - `studio_message_builder.dart`: accepts `StudioPreset` param
+  - `studio_agent_executor + batch_coordinator`: pass `StudioPreset` through
+  - `memory_studio_service`: resolves `StudioPreset` from DB
+  - `studio_api_config_resolver`: simplified
+  - `studio_brief_cache`: cache key v2
+  - v42 migration fix: `source_preset_id` → `profile_id` (deleted column reference)
+  - Tests: db_migration_test v54→v55, stage5_agentic_toggle, tracker_batcher_test
+  - `flutter analyze`: clean. `flutter test`: 1450 passed.
+- **3-config model resolution commit** (`d7a2f5ad`): trackers→cheap, final→expensive, cleaner→cleaner
+  - `AgentRunner.resolveAgentConfig` accepts optional `apiConfigId` parameter
+  - `TrackerBatcher.groupAgents` accepts `apiConfigId`, forwards to `resolveAgentConfig`
+  - `StudioAgentExecutor`: all 4 methods accept and forward `apiConfigId`
+  - `StudioBatchCoordinator.runBatchGroup + retryFailedIndividually`: same
+  - `memory_studio_service`: passes appropriate slot config id to each call site
+  - Test: `_FakeAgentRunner.resolveAgentConfig` updated
+  - `flutter analyze`: clean. `flutter test`: 1450 passed.
+- **New UI screens commit** (`7beb6dc8`): studio_settings + preset editor + block editor
+  - `studio_settings_screen.dart`: enable toggle, 3 API Config dropdowns, build button, tracker list
+  - `studio_preset_editor_screen.dart`: section-tabbed block editor with add/edit/delete/toggle
+  - `studio_block_editor_dialog.dart`: single block editor (title, role, content, kind, section, order, enabled)
+  - Routes: `/studio/:charId/:sessionId` + `/studio/preset/:presetId`
+  - `studioPresetSeedBlocks()` made public
+  - `flutter analyze`: clean. `flutter test`: 1450 passed.
+- **Navigation wiring commit** (`3edeedcb`): replace StudioMenuDialog with screen
+  - `magic_drawer.dart`: `_showStudioMenu` navigates to `/studio/:charId/:sessionId`
+  - Removed unused `studio_menu_dialog` import from magic_drawer
+  - `studio_seed_blocks.dart`: public re-export wrapper for seed blocks function
+  - `flutter analyze`: clean. `flutter test`: 1450 passed.
 
 ## Key Decisions
 - Studio preset structure: flat merged list per section (layout slots + instructions combined), NOT separate request_preset + content blocks
@@ -68,12 +98,12 @@
 - `studio_build_provider.dart` rewritten to use `StudioControllerOntology.specs` directly — agents created from fixed controller list, prompt shards = spec fallback prompts
 
 ## Next Steps
-1. Drift v55 migration: `studio_config_rows` ADD `studioPresetId`, `cheapApiConfigId`, `expensiveApiConfigId`, `cleanerApiConfigId`; DROP `sourcePresetId`, `sourcePresetHash`, `routingMode`, `agentStudioPresetId`, `finalStudioPresetId`, `studioPresetOverridesJson`, `builderPromptTemplate`, `selectedBlockIdsJson`, `selectedBlockIdsInitialized`, `buildApiConfigId`, `buildModelOverride`
-2. `StudioAgent` → remove `promptShard` (from preset now), `modelSource`/`model`/`modelOverride` (via 3 API Config)
-3. `tracker_batcher.dart` → group by API Config id
-4. `stream_generation_service.dart` → 3-config model resolution
-5. New UI: `studio_settings_screen.dart` + `studio_preset_editor_screen.dart` + `studio_block_editor_dialog.dart`
-6. Replace old dialogs with new screen + delete old dialogs
+1. ~~Drift v55 migration~~ ✅ DONE
+2. ~~StudioAgent → remove promptShard/modelSource/model/modelOverride~~ ✅ DONE
+3. ~~tracker_batcher.dart → group by API Config id~~ ✅ DONE
+4. ~~stream_generation_service.dart → 3-config model resolution~~ ✅ DONE
+5. ~~New UI: studio_settings_screen + studio_preset_editor_screen + studio_block_editor_dialog~~ ✅ DONE
+6. ~~Replace old dialogs with new screen + wire up navigation~~ ✅ DONE
 7. Remove fallback constants from all prompt classes (DB-only via resolver)
 8. Unit + widget tests
 9. `flutter analyze` + `flutter test` clean
@@ -84,8 +114,9 @@
 
 ## Critical Context
 - Branch: `feat/studio-preset-db` (created from master `74e64d2f`)
-- Drift schema: v54 (was v53, bumped for StudioPresetRows)
-- Current commit: `4b4ad0e5` on `feat/studio-preset-db`
+- Drift schema: v55
+- Current commit: `3edeedcb` on `feat/studio-preset-db` (navigation wiring)
+- Commits on branch: `0dce8d6a` → `4b4ad0e5` → `3907877d` → `d7a2f5ad` → `7beb6dc8` → `3edeedcb`
 - `studio_request_preset.dart` has `defaultAgentStudioPresetId` / `defaultFinalStudioPresetId` constants — referenced by resolver fallback
 - `studio_controller_ontology.dart` STILL EXISTS — 9 controller specs with `fallbackPrompt` per tracker; now used by rewritten `studio_build_provider.dart` to create agents directly
 - `studio_block_expander.dart` — still exists, was referenced by decomposition (deleted); check if anything else uses it
