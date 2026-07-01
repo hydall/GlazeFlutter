@@ -51,6 +51,7 @@ class StudioBatchCoordinator {
     required String sessionId,
     required CancelToken cancelToken,
     required int batchContextSize,
+    String? apiConfigId,
   }) async {
     final context = _bucketizer.bucketize(
       promptResult,
@@ -188,6 +189,7 @@ class StudioBatchCoordinator {
     required ApiConfig apiConfig,
     required String sessionId,
     required CancelToken cancelToken,
+    String? apiConfigId,
   }) async {
     if (agents.isEmpty) return const [];
     final batcher = _ref.read(trackerBatcherProvider);
@@ -205,6 +207,7 @@ class StudioBatchCoordinator {
             studioPreset: studioPreset,
             sessionId: sessionId,
             cancelToken: cancelToken,
+            apiConfigId: apiConfigId,
             onIntermediateUpdate: null,
           );
           return TrackerBatchResult(

@@ -47,6 +47,7 @@ class StudioAgentExecutor {
     required StudioPreset studioPreset,
     required String sessionId,
     required CancelToken cancelToken,
+    String? apiConfigId,
     void Function(String text)? onIntermediateUpdate,
   }) async {
     if (_briefParser.isMetaPolicyAgent(agent)) {
@@ -74,6 +75,7 @@ class StudioAgentExecutor {
         sessionId: sessionId,
         isFinalResponse: false,
         cancelToken: cancelToken,
+        apiConfigId: apiConfigId,
         onIntermediateUpdate: onIntermediateUpdate,
       );
       final sanitized = _briefParser.sanitizeIntermediateAgentOutput(
@@ -119,6 +121,7 @@ class StudioAgentExecutor {
     required StudioPreset studioPreset,
     required String sessionId,
     required CancelToken cancelToken,
+    String? apiConfigId,
   }) async {
     String? lastError;
     for (var attempt = 1; attempt <= 3; attempt++) {
@@ -150,6 +153,7 @@ class StudioAgentExecutor {
           sessionId: sessionId,
           isFinalResponse: false,
           cancelToken: cancelToken,
+          apiConfigId: apiConfigId,
           onIntermediateUpdate: null,
         );
         // Post-gen trackers produce prose (a rewrite), NOT a brief — skip the
@@ -188,6 +192,7 @@ class StudioAgentExecutor {
     required ApiConfig apiConfig,
     required String sessionId,
     required CancelToken cancelToken,
+    String? apiConfigId,
   }) async {
     String? lastError;
     for (var attempt = 1; attempt <= 3; attempt++) {
@@ -208,6 +213,7 @@ class StudioAgentExecutor {
           studioPreset: studioPreset,
           sessionId: sessionId,
           cancelToken: cancelToken,
+          apiConfigId: apiConfigId,
           onIntermediateUpdate: null,
         );
         if (brief.status == 'ok' && brief.brief.trim().isNotEmpty) {
@@ -241,6 +247,7 @@ class StudioAgentExecutor {
     required List<StudioStageBrief> priorBriefs,
     required String sessionId,
     required CancelToken cancelToken,
+    String? apiConfigId,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
   }) async {
     final messages = _messageBuilder.buildAgentMessages(
@@ -263,6 +270,7 @@ class StudioAgentExecutor {
       sessionId: sessionId,
       isFinalResponse: true,
       cancelToken: cancelToken,
+      apiConfigId: apiConfigId,
       onFinalResponseUpdate: onFinalResponseUpdate,
     );
     return StudioFinalRunResult(

@@ -198,6 +198,7 @@ class MemoryStudioService {
         agents: fetchTrackers,
         apiConfig: apiConfig,
         sessionId: sessionId,
+        apiConfigId: config.cheapApiConfigId,
       );
       final trackerContextOverride = _ref
           .read(pipelineSettingsProvider)
@@ -214,6 +215,7 @@ class MemoryStudioService {
           apiConfig: apiConfig,
           sessionId: sessionId,
           cancelToken: token,
+          apiConfigId: config.cheapApiConfigId,
           batchContextSize: trackerContextOverride > 0
               ? trackerContextOverride
               : group.batchContextSize,
@@ -229,6 +231,7 @@ class MemoryStudioService {
           apiConfig: apiConfig,
           sessionId: sessionId,
           cancelToken: token,
+          apiConfigId: config.cheapApiConfigId,
         ),
       );
       if (token.isCancelled) {
@@ -315,6 +318,7 @@ class MemoryStudioService {
         priorBriefs: briefs,
         sessionId: sessionId,
         cancelToken: token,
+        apiConfigId: config.expensiveApiConfigId,
         onFinalResponseUpdate: onFinalResponseUpdate,
       );
       if (token.isCancelled) {
@@ -365,6 +369,7 @@ class MemoryStudioService {
           studioPreset: studioPreset,
           sessionId: sessionId,
           cancelToken: token,
+          apiConfigId: config.cleanerApiConfigId,
         );
         postBriefs.add(result);
         if (token.isCancelled) {
@@ -519,6 +524,7 @@ class MemoryStudioService {
         agents: fetchTrackers,
         apiConfig: apiConfig,
         sessionId: sessionId,
+        apiConfigId: config.cheapApiConfigId,
       );
 
       final trackerContextOverride = _ref
@@ -536,6 +542,7 @@ class MemoryStudioService {
           apiConfig: apiConfig,
           sessionId: sessionId,
           cancelToken: token,
+          apiConfigId: config.cheapApiConfigId,
           batchContextSize: trackerContextOverride > 0
               ? trackerContextOverride
               : group.batchContextSize,
@@ -551,6 +558,7 @@ class MemoryStudioService {
           apiConfig: apiConfig,
           sessionId: sessionId,
           cancelToken: token,
+          apiConfigId: config.cheapApiConfigId,
         ),
       );
       if (token.isCancelled) {
