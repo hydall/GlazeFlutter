@@ -41,7 +41,7 @@ import '../services/magic_drawer_layout_service.dart';
 import '../services/magic_drawer_stats_service.dart';
 import 'magic_drawer_widgets.dart';
 import 'memory_books_sheet.dart';
-import 'post_building_menu_dialog.dart';
+import 'studio_settings_sheet.dart';
 import 'prompt_preview_screen.dart';
 import 'summary_sheet.dart';
 import '../state/token_breakdown_cache.dart';
@@ -153,11 +153,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       id: 'studio',
       label: 'menu_studio'.tr(),
       icon: Icons.movie_filter_outlined,
-    ),
-    MagicDrawerItemDef(
-      id: 'post-building',
-      label: 'menu_post_building'.tr(),
-      icon: Icons.cleaning_services_outlined,
     ),
     MagicDrawerItemDef(
       id: 'agent-ops',
@@ -547,10 +542,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         widget.onClose?.call();
         if (mounted) await _showStudioMenu();
         return;
-      case 'post-building':
-        widget.onClose?.call();
-        if (mounted) await _showPostBuildingMenu();
-        return;
       case 'agent-ops':
         widget.onClose?.call();
         if (mounted) await _showAgentOpsLog();
@@ -561,17 +552,10 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   Future<void> _showStudioMenu() async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
     if (session == null) return;
-    context.go('/studio/${widget.charId}/${session.id}');
-  }
-
-  Future<void> _showPostBuildingMenu() async {
-    final session = ref.read(chatProvider(widget.charId)).value?.session;
-    if (session == null) return;
-    await showDialog<void>(
-      context: context,
-      useRootNavigator: true,
-      builder: (_) =>
-          PostBuildingMenuDialog(charId: widget.charId, sessionId: session.id),
+    await StudioSettingsSheet.show(
+      context,
+      charId: widget.charId,
+      sessionId: session.id,
     );
   }
 

@@ -56,9 +56,9 @@ class PostCleanerService {
     CancelToken? cancelToken,
     void Function(String accumulatedText)? onCleanedChunk,
   }) async {
-    if (!settings.postCleanerEnabled) {
-      return PostCleanerResult(status: 'disabled', cleanedText: assistantText);
-    }
+    // Post-cleaner is always-on (hardcoded in backend). The postCleanerEnabled
+    // toggle was removed from the UI — the cleaner always runs when Studio is
+    // enabled. The old early-return on !settings.postCleanerEnabled is gone.
 
     // Strip any hidden reasoning (`<think>…</think>` / `<thinking>…`) that the
     // generator left inside the saved message content. If it reaches the

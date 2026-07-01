@@ -962,7 +962,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       child: MemoryGenerationSettingsSheet(
         settings: currentSettings,
         sessionId: widget.sessionId,
-        charId: widget.charId,
       ),
     );
     if (newResult != null && mounted) {

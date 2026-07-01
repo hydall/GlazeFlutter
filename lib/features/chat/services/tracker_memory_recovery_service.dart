@@ -173,7 +173,7 @@ class TrackerMemoryRecoveryService {
       if (token.isCancelled) break;
 
       // B. Memory agentic write-loop re-run.
-      if (recoverMemory && pipeline.agenticWriteEnabled) {
+      if (recoverMemory) {
         try {
           final recentHistory = extractRecentHistoryText(
             session.messages.sublist(0, msgIdx + 1),

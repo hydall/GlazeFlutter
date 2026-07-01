@@ -112,9 +112,10 @@ class StudioLedgerService {
     bool Function()? isStillCurrent,
     CancelToken? cancelToken,
   }) async {
-    if (!settings.studioLedgerEnabled && !forceEnabled) {
-      return LedgerRunResult.disabled;
-    }
+    // Studio Ledger is always-on when Studio is enabled. The studioLedgerEnabled
+    // toggle was removed from the UI — the ledger always runs. The old
+    // early-return on !settings.studioLedgerEnabled is gone. forceEnabled is
+    // still respected for manual triggers.
 
     if (finalAssistantText.trim().isEmpty) {
       debugPrint('[StudioLedger] skipping — empty assistant text');

@@ -247,33 +247,9 @@ class GenerationPipeline {
             ),
           );
 
-          // Stage 5: Studio Ledger — same as normal path: launched from
-          // _executeAndApplyCleaner when cleaner is enabled, or fired here
-          // directly on raw text when cleaner is disabled.
-          if (!ref.read(pipelineSettingsProvider).postCleanerEnabled) {
-            ChatMessage? lastAssistant;
-            for (var i = result.session!.messages.length - 1; i >= 0; i--) {
-              final m = result.session!.messages[i];
-              if (m.role == 'assistant' &&
-                  !m.isError &&
-                  !m.isTyping &&
-                  m.content.trim().isNotEmpty) {
-                lastAssistant = m;
-                break;
-              }
-            }
-            if (lastAssistant != null) {
-              unawaited(
-                _runStudioLedger(
-                  sessionId: result.session!.id,
-                  messages: result.session!.messages,
-                  genId: genId,
-                  finalAssistantText: lastAssistant.content,
-                  targetMessage: lastAssistant,
-                ),
-              );
-            }
-          }
+          // Stage 5: Studio Ledger — always launched from
+          // _executeAndApplyCleaner (cleaner is always-on now).
+          // No need for the raw-text fallback path.
         }
         return regenOutcome;
       }
@@ -372,34 +348,9 @@ class GenerationPipeline {
           ),
         );
 
-        // Stage 5: Studio Ledger — launched from _executeAndApplyCleaner
-        // when the cleaner is enabled (so it uses cleaned text). When the
-        // cleaner is disabled, fire here on the raw assistant text.
+        // Stage 5: Studio Ledger — always launched from
+        // _executeAndApplyCleaner (cleaner is always-on now).
         // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Pipeline Placement.
-        if (!ref.read(pipelineSettingsProvider).postCleanerEnabled) {
-          ChatMessage? lastAssistant;
-          for (var i = result.session!.messages.length - 1; i >= 0; i--) {
-            final m = result.session!.messages[i];
-            if (m.role == 'assistant' &&
-                !m.isError &&
-                !m.isTyping &&
-                m.content.trim().isNotEmpty) {
-              lastAssistant = m;
-              break;
-            }
-          }
-          if (lastAssistant != null) {
-            unawaited(
-              _runStudioLedger(
-                sessionId: result.session!.id,
-                messages: result.session!.messages,
-                genId: genId,
-                finalAssistantText: lastAssistant.content,
-                targetMessage: lastAssistant,
-              ),
-            );
-          }
-        }
       }
 
       return GenerationOutcome(
@@ -558,11 +509,11 @@ class GenerationPipeline {
       // cleaner is disabled (or skipped/failed), _runPostCleaner's else
       // branch launches extensions with agentSwipeId=-1 (legacy binding
       // to the top-level swipe, identical to the pre-patch behavior).
-      final pipeline = ref.read(pipelineSettingsProvider);
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(result.session!.id);
-      final cleanerEnabled = pipeline.postCleanerEnabled && book != null;
-      if (!cleanerEnabled) {
+      // Cleaner is always-on. Extensions are deferred to the cleaner pipeline
+      // when a memory book exists; otherwise they run immediately.
+      if (book == null) {
         await service.processExtensions(
           charId: charId,
           session: result.session!,
@@ -723,8 +674,7 @@ class GenerationPipeline {
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      if (book == null || !pipeline.agenticWriteEnabled) return;
+      if (book == null) return;
 
       // Cadence (plan §Model Cadence). The run mode controls when the
       // write-loop runs: 'every_turn' (legacy), 'conditional', 'every_n'
@@ -917,35 +867,20 @@ class GenerationPipeline {
   }
 
   /// Returns a non-null skip reason when the cadence should suppress the
-  /// agentic write-loop, or null when the run should proceed. Applies the
-  /// per-component run mode (plan §Model Cadence).
+  /// agentic write-loop, or null when the run should proceed.
+  ///
+  /// Cadence is hardcoded: the write-loop runs every 5 assistant turns
+  /// (batch mode — the LLM analyzes 5 U-A turns at once). The old
+  /// agenticWriteRunMode / runAgenticEveryN settings are no longer consulted.
   String? _resolveAgenticWriteCadence(
     PipelineSettings pipeline,
     int assistantTurnCount,
   ) {
-    switch (pipeline.agenticWriteRunMode) {
-      case 'disabled':
-        return 'skipping write-loop — runMode=disabled';
-      case 'manual':
-        return 'skipping write-loop — runMode=manual';
-      case 'every_n':
-        final n = pipeline.runAgenticEveryN < 1 ? 1 : pipeline.runAgenticEveryN;
-        if (n > 1 && assistantTurnCount % n != 0) {
-          return 'skipping write-loop — runMode=every_n interval=$n turn=$assistantTurnCount (not a multiple)';
-        }
-        return null;
-      case 'conditional':
-        // Conditional flags are best-effort; the write-loop always runs
-        // when the user has enabled it, so the only condition here is
-        // the MemoryBook candidates check.
-        if (pipeline.agenticWriteRunWhenMemoryBookCandidatesExist) {
-          return 'skipping write-loop — runMode=conditional, no candidates check';
-        }
-        return null;
-      case 'every_turn':
-      default:
-        return null;
+    const n = 5;
+    if (n > 1 && assistantTurnCount % n != 0) {
+      return 'skipping write-loop — hardcoded every $n turns, turn=$assistantTurnCount (not a multiple)';
     }
+    return null;
   }
 
   /// Stage 3.5: embed raw chat-message chunks (fire-and-forget, best-effort
@@ -1013,7 +948,7 @@ class GenerationPipeline {
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       final pipeline = ref.read(pipelineSettingsProvider);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
-      if (book == null || !pipeline.postCleanerEnabled) return;
+      if (book == null) return;
 
       // The cleaner must only rewrite the just-generated assistant message.
       // If the trailing message is an error (e.g. Studio returned an empty
@@ -1724,29 +1659,17 @@ class GenerationPipeline {
     try {
       final pipeline = ref.read(pipelineSettingsProvider);
 
-      // Ledger is mandatory while Studio is enabled (plan §Product Decisions:
-      // "Studio Ledger is mandatory while Studio is enabled").
-      // studioLedgerEnabled can still be used as an explicit on-switch when
-      // Studio is disabled (standalone mode, future use).
+      // Ledger is always-on when Studio is enabled. The studioLedgerEnabled
+      // toggle was removed from the UI. We still check StudioConfig.enabled
+      // to decide whether the ledger should run.
       var studioConfigEnabled = false;
-      bool studioLedgerActive = pipeline.studioLedgerEnabled;
-      if (!studioLedgerActive) {
-        try {
-          final studioConfig = await ref
-              .read(studioConfigRepoProvider)
-              .getBySessionId(sessionId);
-          studioConfigEnabled = studioConfig?.enabled == true;
-          studioLedgerActive = studioConfigEnabled;
-        } catch (_) {}
-      } else {
-        try {
-          final studioConfig = await ref
-              .read(studioConfigRepoProvider)
-              .getBySessionId(sessionId);
-          studioConfigEnabled = studioConfig?.enabled == true;
-        } catch (_) {}
-      }
-      if (!studioLedgerActive) {
+      try {
+        final studioConfig = await ref
+            .read(studioConfigRepoProvider)
+            .getBySessionId(sessionId);
+        studioConfigEnabled = studioConfig?.enabled == true;
+      } catch (_) {}
+      if (!studioConfigEnabled) {
         await _recordLedgerDiag(
           sessionId: sessionId,
           targetMessage: targetMessage,
@@ -2045,10 +1968,7 @@ class GenerationPipeline {
     }
 
     final pipeline = ref.read(pipelineSettingsProvider);
-    if (!pipeline.postCleanerEnabled) {
-      debugPrint('[PostCleaner] rerun skipped: postCleaner disabled');
-      return;
-    }
+    // Cleaner is always-on — no postCleanerEnabled check.
 
     final session = await ref.read(chatRepoProvider).getById(sessionId);
     if (session == null) return;
