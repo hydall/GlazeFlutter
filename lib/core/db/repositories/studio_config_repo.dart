@@ -255,8 +255,16 @@ class StudioConfigRepo implements SyncStudioConfigStore {
         current = current.copyWith(refreshPolicy: 'turn');
         changed = true;
       }
-      if (current.phase == 'post_processing' && current.contextSize != 1) {
-        current = current.copyWith(contextSize: 1);
+      // Migrate pre-gen trackers to the new default context size (20).
+      // Post-processing trackers get 1 (they only need the generator's
+      // response, not full chat history).
+      if (current.phase == 'post_processing') {
+        if (current.contextSize != 1) {
+          current = current.copyWith(contextSize: 1);
+          changed = true;
+        }
+      } else if (!_isFinalResponder(current) && current.contextSize < 20) {
+        current = current.copyWith(contextSize: 20);
         changed = true;
       }
       migrated.add(current);
@@ -291,7 +299,7 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       refreshPolicy: spec.refreshPolicy,
       invalidationSignals: spec.invalidationSignals,
       phase: spec.phase,
-      contextSize: spec.contextSize > 0 ? spec.contextSize : 10,
+      contextSize: spec.contextSize > 0 ? spec.contextSize : 20,
     );
     final updated = <StudioAgent>[
       ...agents.take(insertAt),

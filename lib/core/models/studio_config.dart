@@ -124,11 +124,11 @@ abstract class StudioAgent with _$StudioAgent {
     @Default([]) List<String> invalidationSignals,
 
     /// Number of trailing chat messages forwarded to this tracker (intermediate
-    /// agent). Default 10 (Marinara DEFAULT_AGENT_CONTEXT_SIZE). Hard-capped at
+    /// agent). Default 20 (Marinara DEFAULT_AGENT_CONTEXT_SIZE). Hard-capped at
     /// 200 (MAX_AGENT_CONTEXT_MESSAGES) on normalization. The final agent
     /// (generator) ignores this and uses [StudioConfig.maxFinalHistoryMessages]
     /// instead. 0 = no limit (not recommended for trackers).
-    @Default(10) int contextSize,
+    @Default(20) int contextSize,
 
     /// How often this tracker runs, in assistant turns. 1 = every turn
     /// (default), 3 = every 3rd turn, etc. Useful for "director"-style
