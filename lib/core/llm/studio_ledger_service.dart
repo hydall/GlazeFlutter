@@ -230,6 +230,15 @@ class StudioLedgerService {
           visibleLedger: parseResult.visibleLedger,
           trackerRepo: trackerRepo,
         );
+        if (_isNoWriteLedgerOutput(parseResult)) {
+          return LedgerRunResult(
+            status: 'ok',
+            visibleLedger: parseResult.visibleLedger,
+            elapsedMs: sw.elapsedMilliseconds,
+            attempts: outcome.attempts,
+            model: config.model,
+          );
+        }
         return LedgerRunResult(
           status: 'error',
           visibleLedger: parseResult.visibleLedger,
@@ -353,6 +362,13 @@ class StudioLedgerService {
         elapsedMs: sw.elapsedMilliseconds,
       );
     }
+  }
+
+  bool _isNoWriteLedgerOutput(LedgerParseResult parseResult) {
+    final reason = parseResult.rejectionReason ?? '';
+    if (reason == 'empty export (no ops, no durable facts)') return true;
+    if (reason == 'no <glaze_memory_export> block found') return true;
+    return false;
   }
 
   // ── Op application ──────────────────────────────────────────────────────────
