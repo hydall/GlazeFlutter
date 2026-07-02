@@ -750,7 +750,7 @@ class GenerationPipeline {
 
       debugPrint(
         '[AgenticWrite] starting write-loop session=$sessionId '
-        'model=${pipeline.auxModel.isEmpty ? "<chat>" : pipeline.auxModel} '
+        'model=${pipeline.generationModel.isEmpty ? "<chat>" : pipeline.generationModel} '
         'timeoutMs=${pipeline.auxTimeoutMs} '
         'existingTrackers=${trackers.length} '
         'historyChars=${recentHistory.length}',
@@ -826,7 +826,9 @@ class GenerationPipeline {
                 messageId: messages.isNotEmpty ? messages.last.id : null,
                 attempts: result.attempts,
                 totalElapsedMs: result.totalElapsedMs,
-                model: pipeline.auxModel.isEmpty ? null : pipeline.auxModel,
+                model: pipeline.generationModel.isEmpty
+                    ? null
+                    : pipeline.generationModel,
                 summary: status == AgentOperationStatus.ok
                     ? (totalWritten > 0
                           ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
@@ -1121,7 +1123,7 @@ class GenerationPipeline {
 
     debugPrint(
       '[PostCleaner] starting session=$sessionId '
-      'model=${useStudioCleanerSlot ? "<studio-cleaner-slot>" : (pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : (pipeline.auxModel.isEmpty ? "<chat>" : pipeline.auxModel))} '
+      'model=${useStudioCleanerSlot ? (pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : "<studio-cleaner-slot>") : (pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : (pipeline.auxModel.isEmpty ? "<chat>" : pipeline.auxModel))} '
       'timeoutMs=${pipeline.postCleanerTimeoutMs > 0 ? pipeline.postCleanerTimeoutMs : pipeline.auxTimeoutMs} '
       'textChars=${assistantText.length} '
       'broadcastBlocks=${broadcastBlocks.length} '
@@ -1851,6 +1853,7 @@ class GenerationPipeline {
     PipelineSettings pipeline,
     String studioCleanerApiConfigId,
   ) {
+    if (pipeline.postCleanerModel.isNotEmpty) return pipeline.postCleanerModel;
     if (studioCleanerApiConfigId.isNotEmpty) {
       final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
       final selected = apiConfigs
@@ -1858,12 +1861,7 @@ class GenerationPipeline {
           .firstOrNull;
       return selected?.model ?? ref.read(activeApiConfigProvider)?.model;
     }
-    if (pipeline.postCleanerAuditModel.isNotEmpty) {
-      return pipeline.postCleanerAuditModel;
-    }
-    if (pipeline.postCleanerModel.isNotEmpty) return pipeline.postCleanerModel;
-    if (pipeline.auxModel.isNotEmpty) return pipeline.auxModel;
-    return null;
+    return ref.read(activeApiConfigProvider)?.model;
   }
 
   void _recordStudioLedgerOperation({

@@ -58,7 +58,7 @@ class MemoryAgenticWriteService {
     }
 
     try {
-      final config = await _llm.resolveConfig(
+      final config = await _llm.resolveConfigForMemoryGeneration(
         settings,
         errorLabel: 'agentic write-loop',
       );

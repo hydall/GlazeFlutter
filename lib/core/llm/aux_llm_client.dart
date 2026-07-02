@@ -100,6 +100,56 @@ class AuxLlmClient {
     );
   }
 
+  /// Resolves the MemoryBook generation model. Used by manual MemoryBook draft
+  /// generation and the agentic write-loop so both memory-writing paths share
+  /// one visible model setting.
+  Future<AuxApiConfig> resolveConfigForMemoryGeneration(
+    PipelineSettings settings, {
+    String errorLabel = 'memory generation',
+  }) async {
+    final isCustom = settings.generationSource == 'custom';
+    if (isCustom) {
+      if (settings.generationEndpoint.isEmpty ||
+          settings.generationModel.isEmpty) {
+        debugPrint(
+          '[Aux] memory custom config incomplete — endpoint='
+          "'${settings.generationEndpoint}' model='${settings.generationModel}'",
+        );
+        throw Exception('Memory generation config incomplete for $errorLabel');
+      }
+      debugPrint(
+        '[Aux] resolved memory custom for $errorLabel '
+        'model=${settings.generationModel}',
+      );
+      return AuxApiConfig(
+        endpoint: settings.generationEndpoint,
+        apiKey: settings.generationApiKey,
+        model: settings.generationModel,
+        protocol: LlmProtocol.openai,
+      );
+    }
+
+    await _ref.read(apiListProvider.future);
+    final chatConfig = _ref.read(activeApiConfigProvider);
+    if (chatConfig == null) {
+      debugPrint('[Aux] no active chat API config for $errorLabel');
+      throw Exception('No chat API config available for $errorLabel');
+    }
+    final model = settings.generationModel.isNotEmpty
+        ? settings.generationModel
+        : chatConfig.model;
+    debugPrint(
+      '[Aux] resolved memory chat-fallback for $errorLabel '
+      'model=$model endpoint=${chatConfig.endpoint}',
+    );
+    return AuxApiConfig(
+      endpoint: chatConfig.endpoint,
+      apiKey: chatConfig.apiKey,
+      model: model,
+      protocol: chatConfig.protocol,
+    );
+  }
+
   /// Resolves the API config for the POST-cleaner, preferring
   /// `postCleaner*` fields and falling back to `aux*` when the
   /// cleaner-specific fields are empty/zero.
