@@ -2,10 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/llm/history_assembler.dart';
 import 'package:glaze_flutter/core/llm/prompt_builder.dart';
+import 'package:glaze_flutter/core/llm/studio_brief_deduper.dart';
+import 'package:glaze_flutter/core/llm/studio_brief_parser.dart';
 import 'package:glaze_flutter/core/llm/studio_context_bucketizer.dart';
 import 'package:glaze_flutter/core/llm/post_cleaner_service.dart';
 import 'package:glaze_flutter/core/llm/studio_controller_ontology.dart';
 import 'package:glaze_flutter/core/llm/context_calculator.dart';
+import 'package:glaze_flutter/core/llm/studio_message_builder.dart';
+import 'package:glaze_flutter/core/llm/studio_prompt_text.dart';
+import 'package:glaze_flutter/core/llm/studio_stage_brief.dart';
 import 'package:glaze_flutter/core/models/api_config.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
@@ -41,28 +46,209 @@ PromptMessage _msg({
 }
 
 PromptResult _result(List<PromptMessage> messages) => PromptResult(
-      messages: messages,
-      breakdown: TokenBreakdown(
-        sourceTokens: const {},
-        staticTotal: 0,
-        historyBudget: 0,
-        historyTokens: 0,
-        totalTokens: 0,
-        cutoffIndex: 0,
-        trimmedHistory: const [],
-      ),
-      sessionVars: const {},
-      globalVars: const {},
-    );
+  messages: messages,
+  breakdown: TokenBreakdown(
+    sourceTokens: const {},
+    staticTotal: 0,
+    historyBudget: 0,
+    historyTokens: 0,
+    totalTokens: 0,
+    cutoffIndex: 0,
+    trimmedHistory: const [],
+  ),
+  sessionVars: const {},
+  globalVars: const {},
+);
 
 PromptPayload _payload({Preset? preset}) => PromptPayload(
-      character: const Character(id: 'c1', name: 'TestChar'),
-      history: const [],
-      apiConfig: const ApiConfig(id: 'a1'),
-      preset: preset,
-    );
+  character: const Character(id: 'c1', name: 'TestChar'),
+  history: const [],
+  apiConfig: const ApiConfig(id: 'a1'),
+  preset: preset,
+);
 
 void main() {
+  group('StudioMessageBuilder preset block routing', () {
+    final builder = StudioMessageBuilder(
+      const StudioContextBucketizer(),
+      const StudioPromptText(),
+      StudioBriefDeduper(StudioBriefParser((_) {})),
+    );
+    const config = StudioConfig(sessionId: 's1');
+    final promptResult = _result([
+      const PromptMessage(role: 'user', content: 'hello', isHistory: true),
+    ]);
+    final promptPayload = _payload();
+    const preset = StudioPreset(
+      id: 'studio',
+      blocks: [
+        StudioPresetBlock(
+          id: 'final_agent_instruction',
+          kind: 'agent_instruction',
+          content: 'FINAL ONLY',
+          section: 'final',
+        ),
+        StudioPresetBlock(
+          id: 'cleaner_system',
+          kind: 'agent_instruction',
+          content: 'CLEANER ONLY',
+          section: 'cleaner',
+        ),
+        StudioPresetBlock(
+          id: 'continuity_task',
+          title: 'Continuity Tracker',
+          kind: 'tracker_instruction',
+          content: 'CONTINUITY ONLY',
+          section: 'pregen',
+        ),
+        StudioPresetBlock(
+          id: 'dialogue_task',
+          title: 'Dialogue Tracker',
+          kind: 'tracker_instruction',
+          content: 'DIALOGUE ONLY',
+          section: 'pregen',
+        ),
+        StudioPresetBlock(
+          id: 'runtime_envelope',
+          kind: 'runtime_envelope',
+          content: 'SEEDED RUNTIME ENVELOPE',
+          section: 'pregen',
+        ),
+      ],
+    );
+
+    String joinedMessages(List<Map<String, dynamic>> messages) =>
+        messages.map((m) => m['content']).whereType<String>().join('\n');
+
+    test('final run receives only final-section Studio blocks', () {
+      final text = joinedMessages(
+        builder.buildAgentMessages(
+          agent: const StudioAgent(id: 'final', name: 'Main Responder'),
+          promptResult: promptResult,
+          promptPayload: promptPayload,
+          config: config,
+          studioPreset: preset,
+          priorBriefs: const [],
+          isFinalResponse: true,
+        ),
+      );
+
+      expect(text, contains('FINAL ONLY'));
+      expect(text, isNot(contains('CLEANER ONLY')));
+      expect(text, isNot(contains('CONTINUITY ONLY')));
+      expect(text, isNot(contains('DIALOGUE ONLY')));
+      expect(text, isNot(contains('SEEDED RUNTIME ENVELOPE')));
+    });
+
+    test('cleaner run receives only cleaner-section Studio blocks', () {
+      final text = joinedMessages(
+        builder.buildAgentMessages(
+          agent: const StudioAgent(
+            id: 'cleaner',
+            name: 'Cleaner',
+            phase: 'post_processing',
+          ),
+          promptResult: promptResult,
+          promptPayload: promptPayload,
+          config: config,
+          studioPreset: preset,
+          priorBriefs: const [],
+          isFinalResponse: false,
+        ),
+      );
+
+      expect(text, contains('CLEANER ONLY'));
+      expect(text, isNot(contains('FINAL ONLY')));
+      expect(text, isNot(contains('CONTINUITY ONLY')));
+      expect(text, isNot(contains('DIALOGUE ONLY')));
+    });
+
+    test('per-agent task receives only matching tracker_instruction', () {
+      final context = const StudioContextBucketizer().bucketize(
+        promptResult,
+        promptPayload: promptPayload,
+        studioConfig: config,
+      );
+      final text = builder.buildPerAgentTaskText(
+        agent: const StudioAgent(id: 'continuity', name: 'Continuity Tracker'),
+        config: config,
+        studioPreset: preset,
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        context: context,
+      );
+
+      expect(text, contains('CONTINUITY ONLY'));
+      expect(text, isNot(contains('DIALOGUE ONLY')));
+      expect(text, isNot(contains('FINAL ONLY')));
+      expect(text, isNot(contains('CLEANER ONLY')));
+      expect(text, isNot(contains('SEEDED RUNTIME ENVELOPE')));
+    });
+
+    test('final brief macros expand and suppress previous_agents block', () {
+      const macroConfig = StudioConfig(
+        sessionId: 's1',
+        agents: [
+          StudioAgent(
+            id: 'agent_s_continuity_1',
+            name: 'Continuity Controller',
+          ),
+          StudioAgent(id: 'agent_s_dialogue_1', name: 'Dialogue Controller'),
+        ],
+      );
+      const macroPreset = StudioPreset(
+        id: 'studio',
+        blocks: [
+          StudioPresetBlock(
+            id: 'previous_agents',
+            kind: 'previous_agents',
+            content: '',
+            section: 'final',
+            order: 0,
+          ),
+          StudioPresetBlock(
+            id: 'brief_macros',
+            kind: 'custom_text',
+            content:
+                '<continuity>{{studio_continuity_brief}}</continuity>\n'
+                '<dialogue>{{studio_dialogue_brief}}</dialogue>',
+            section: 'final',
+            order: 1,
+          ),
+        ],
+      );
+      final messages = builder.buildAgentMessages(
+        agent: const StudioAgent(id: 'final', name: 'Main Responder'),
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        config: macroConfig,
+        studioPreset: macroPreset,
+        priorBriefs: const [
+          StudioStageBrief(
+            agentId: 'agent_s_continuity_1',
+            agentName: 'Continuity Controller',
+            brief:
+                'Focus:\n- Keep the chip location consistent with the current scene.',
+          ),
+          StudioStageBrief(
+            agentId: 'agent_s_dialogue_1',
+            agentName: 'Dialogue Controller',
+            brief:
+                'Focus:\n- Let Claire speak only if she can plausibly hear the exchange.',
+          ),
+        ],
+        isFinalResponse: true,
+      );
+
+      final text = joinedMessages(messages);
+      expect(text, contains('<continuity>'));
+      expect(text, contains('Keep the chip location consistent'));
+      expect(text, contains('<dialogue>'));
+      expect(text, contains('Let Claire speak only if she can plausibly hear'));
+      expect('Studio agent brief'.allMatches(text).length, 2);
+    });
+  });
+
   group('StudioContextBucketizer staticContext filter', () {
     final bucketizer = const StudioContextBucketizer();
 
@@ -73,12 +259,20 @@ void main() {
         id: 'p1',
         name: 'P1',
         blocks: [
-          _block(id: 'narrative_engine', name: 'Narrative Engine', content: 'ne'),
+          _block(
+            id: 'narrative_engine',
+            name: 'Narrative Engine',
+            content: 'ne',
+          ),
           _block(id: 'char_card', name: 'Character Card', content: 'cc'),
         ],
       );
       final result = _result([
-        _msg(blockId: 'narrative_engine', blockName: 'Narrative Engine', content: 'ne'),
+        _msg(
+          blockId: 'narrative_engine',
+          blockName: 'Narrative Engine',
+          content: 'ne',
+        ),
         _msg(blockId: 'char_card', blockName: 'Character Card', content: 'cc'),
       ]);
       final buckets = bucketizer.bucketize(
@@ -105,7 +299,11 @@ void main() {
         agents: [StudioAgent(id: 'a1', sourceBlockNames: '')],
       );
       final result = _result([
-        _msg(blockId: 'cot_gemini', blockName: 'CoT Gemini', content: 'think template'),
+        _msg(
+          blockId: 'cot_gemini',
+          blockName: 'CoT Gemini',
+          content: 'think template',
+        ),
       ]);
       final buckets = bucketizer.bucketize(
         result,
@@ -126,15 +324,14 @@ void main() {
       );
       final config = const StudioConfig(
         sessionId: 's1',
-        agents: [
-          StudioAgent(
-            id: 'a1',
-            sourceBlockNames: 'Narrative Engine',
-          ),
-        ],
+        agents: [StudioAgent(id: 'a1', sourceBlockNames: 'Narrative Engine')],
       );
       final result = _result([
-        _msg(blockId: 'narrative_engine', blockName: 'Narrative Engine', content: 'ne'),
+        _msg(
+          blockId: 'narrative_engine',
+          blockName: 'Narrative Engine',
+          content: 'ne',
+        ),
         _msg(blockId: 'other_block', blockName: 'Other Block', content: 'ob'),
       ]);
       final buckets = bucketizer.bucketize(
@@ -147,63 +344,76 @@ void main() {
       expect(names, isNot(contains('Narrative Engine')));
     });
 
-    test('Studio run: char_card kept in byKind (not affected by staticContext filter)', () {
-      final preset = Preset(
-        id: 'p1',
-        name: 'P1',
-        blocks: [
-          _block(id: 'char_card', name: 'Character Card', content: 'cc'),
-        ],
-      );
-      final config = const StudioConfig(
-        sessionId: 's1',
-        agents: [StudioAgent(id: 'a1')],
-      );
-      final result = _result([
-        _msg(blockId: 'char_card', blockName: 'Character Card', content: 'cc'),
-      ]);
-      final buckets = bucketizer.bucketize(
-        result,
-        promptPayload: _payload(preset: preset),
-        studioConfig: config,
-      );
-      // char_card is a static-id → goes to byKind, never touched by the
-      // staticContext filter.
-      expect(buckets.messagesForKind('char_card').length, 1);
-      expect(buckets.staticContext, isEmpty);
-    });
-
-    test('Studio run: broadcast block in Main Responder shard is filtered from staticContext', () {
-      final preset = Preset(
-        id: 'p1',
-        name: 'P1',
-        blocks: [
-          _block(id: 'lang', name: 'Language Russian', content: 'use russian'),
-          _block(id: 'other_block', name: 'Other Block', content: 'ob'),
-        ],
-      );
-      final config = const StudioConfig(
-        sessionId: 's1',
-        agents: [
-          StudioAgent(
-            id: 'a1',
-            sourceBlockNames: 'Language Russian',
+    test(
+      'Studio run: char_card kept in byKind (not affected by staticContext filter)',
+      () {
+        final preset = Preset(
+          id: 'p1',
+          name: 'P1',
+          blocks: [
+            _block(id: 'char_card', name: 'Character Card', content: 'cc'),
+          ],
+        );
+        final config = const StudioConfig(
+          sessionId: 's1',
+          agents: [StudioAgent(id: 'a1')],
+        );
+        final result = _result([
+          _msg(
+            blockId: 'char_card',
+            blockName: 'Character Card',
+            content: 'cc',
           ),
-        ],
-      );
-      final result = _result([
-        _msg(blockId: 'lang', blockName: 'Language Russian', content: 'use russian'),
-        _msg(blockId: 'other_block', blockName: 'Other Block', content: 'ob'),
-      ]);
-      final buckets = bucketizer.bucketize(
-        result,
-        promptPayload: _payload(preset: preset),
-        studioConfig: config,
-      );
-      final names = buckets.staticContext.map((m) => m.blockName).toList();
-      expect(names, contains('Other Block'));
-      expect(names, isNot(contains('Language Russian')));
-    });
+        ]);
+        final buckets = bucketizer.bucketize(
+          result,
+          promptPayload: _payload(preset: preset),
+          studioConfig: config,
+        );
+        // char_card is a static-id → goes to byKind, never touched by the
+        // staticContext filter.
+        expect(buckets.messagesForKind('char_card').length, 1);
+        expect(buckets.staticContext, isEmpty);
+      },
+    );
+
+    test(
+      'Studio run: broadcast block in Main Responder shard is filtered from staticContext',
+      () {
+        final preset = Preset(
+          id: 'p1',
+          name: 'P1',
+          blocks: [
+            _block(
+              id: 'lang',
+              name: 'Language Russian',
+              content: 'use russian',
+            ),
+            _block(id: 'other_block', name: 'Other Block', content: 'ob'),
+          ],
+        );
+        final config = const StudioConfig(
+          sessionId: 's1',
+          agents: [StudioAgent(id: 'a1', sourceBlockNames: 'Language Russian')],
+        );
+        final result = _result([
+          _msg(
+            blockId: 'lang',
+            blockName: 'Language Russian',
+            content: 'use russian',
+          ),
+          _msg(blockId: 'other_block', blockName: 'Other Block', content: 'ob'),
+        ]);
+        final buckets = bucketizer.bucketize(
+          result,
+          promptPayload: _payload(preset: preset),
+          studioConfig: config,
+        );
+        final names = buckets.staticContext.map((m) => m.blockName).toList();
+        expect(names, contains('Other Block'));
+        expect(names, isNot(contains('Language Russian')));
+      },
+    );
   });
 
   group('StudioControllerOntology Meta-Weaver spec', () {
@@ -221,12 +431,15 @@ void main() {
       expect(meta.contextSize, 0);
     });
 
-    test('Main Responder spec contextSize defaults to 0 (inherits agent default)', () {
-      final fin = StudioControllerOntology.specs.firstWhere(
-        (s) => s.id == 'final',
-      );
-      expect(fin.contextSize, 0);
-    });
+    test(
+      'Main Responder spec contextSize defaults to 0 (inherits agent default)',
+      () {
+        final fin = StudioControllerOntology.specs.firstWhere(
+          (s) => s.id == 'final',
+        );
+        expect(fin.contextSize, 0);
+      },
+    );
 
     test('Meta-Weaver purpose mentions counting', () {
       final meta = StudioControllerOntology.specs.firstWhere(
@@ -237,27 +450,46 @@ void main() {
   });
 
   group('PostCleanerService lumiaooc preservation', () {
-    test('lumiaooc dropped (and all tags dropped) is caught by protected-markup guard', () {
-      const original = '<lumiaooc><font color="#9370DB">Lumia note</font></lumiaooc>\nProse here.';
-      const edited = 'Prose here.';
-      // All HTML tags stripped → textRewriteDropsProtectedMarkup catches it.
-      expect(PostCleanerService.textRewriteDropsProtectedMarkup(original, edited), isTrue);
-    });
+    test(
+      'lumiaooc dropped (and all tags dropped) is caught by protected-markup guard',
+      () {
+        const original =
+            '<lumiaooc><font color="#9370DB">Lumia note</font></lumiaooc>\nProse here.';
+        const edited = 'Prose here.';
+        // All HTML tags stripped → textRewriteDropsProtectedMarkup catches it.
+        expect(
+          PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+          isTrue,
+        );
+      },
+    );
 
-    test('lumiaooc dropped but other tags preserved is caught by lumiaooc guard', () {
-      const original = '<lumiaooc><font color="#9370DB">Lumia note</font></lumiaooc>\n<b>Prose</b> here.';
-      const edited = '<b>Cleaned prose</b> here.';
-      // textRewriteDropsProtectedMarkup returns false (edited still has <b>),
-      // but the lumiaooc guard catches the dropped <lumiaooc>. This is the
-      // case the dedicated lumiaoocDropped check exists for.
-      expect(PostCleanerService.textRewriteDropsProtectedMarkup(original, edited), isFalse);
-      expect(PostCleanerService.lumiaoocDropped(original, edited), isTrue);
-    });
+    test(
+      'lumiaooc dropped but other tags preserved is caught by lumiaooc guard',
+      () {
+        const original =
+            '<lumiaooc><font color="#9370DB">Lumia note</font></lumiaooc>\n<b>Prose</b> here.';
+        const edited = '<b>Cleaned prose</b> here.';
+        // textRewriteDropsProtectedMarkup returns false (edited still has <b>),
+        // but the lumiaooc guard catches the dropped <lumiaooc>. This is the
+        // case the dedicated lumiaoocDropped check exists for.
+        expect(
+          PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+          isFalse,
+        );
+        expect(PostCleanerService.lumiaoocDropped(original, edited), isTrue);
+      },
+    );
 
     test('lumiaooc preserved in cleaned text is not flagged', () {
-      const original = '<lumiaooc><font color="#9370DB">Lumia note</font></lumiaooc>\nProse here.';
-      const edited = '<lumiaooc><font color="#9370DB">Lumia note</font></lumiaooc>\nCleaned prose here.';
-      expect(PostCleanerService.textRewriteDropsProtectedMarkup(original, edited), isFalse);
+      const original =
+          '<lumiaooc><font color="#9370DB">Lumia note</font></lumiaooc>\nProse here.';
+      const edited =
+          '<lumiaooc><font color="#9370DB">Lumia note</font></lumiaooc>\nCleaned prose here.';
+      expect(
+        PostCleanerService.textRewriteDropsProtectedMarkup(original, edited),
+        isFalse,
+      );
     });
 
     test('buildCleanerPrompt mentions lumiaooc verbatim rule', () {
@@ -290,18 +522,21 @@ void main() {
       expect(migrated.contextSize, 5);
     });
 
-    test('new Meta-Weaver with turn policy + custom contextSize is unchanged', () {
-      final newAgent = StudioAgent.fromJson(const {
-        'id': 'agent_s1_meta_123',
-        'name': 'Meta-Weaver / Lumia Policy',
-        'refreshPolicy': 'turn',
-        'contextSize': 8,
-        'order': 6,
-      });
-      final migrated = _migrateForTest(newAgent);
-      expect(migrated.refreshPolicy, 'turn');
-      expect(migrated.contextSize, 8);
-    });
+    test(
+      'new Meta-Weaver with turn policy + custom contextSize is unchanged',
+      () {
+        final newAgent = StudioAgent.fromJson(const {
+          'id': 'agent_s1_meta_123',
+          'name': 'Meta-Weaver / Lumia Policy',
+          'refreshPolicy': 'turn',
+          'contextSize': 8,
+          'order': 6,
+        });
+        final migrated = _migrateForTest(newAgent);
+        expect(migrated.refreshPolicy, 'turn');
+        expect(migrated.contextSize, 8);
+      },
+    );
 
     test('non-Meta-Weaver agent is unchanged by migration', () {
       final guard = StudioAgent.fromJson(const {
@@ -353,7 +588,8 @@ void main() {
 StudioAgent _migrateForTest(StudioAgent agent) {
   final id = agent.id.toLowerCase();
   final name = agent.name.toLowerCase();
-  final isMeta = id.contains('_meta_') ||
+  final isMeta =
+      id.contains('_meta_') ||
       id == 'meta' ||
       name.contains('meta-weaver') ||
       name.contains('meta weaver') ||

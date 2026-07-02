@@ -101,6 +101,7 @@ class MemorySelectionInput {
   final int currentMessageIndex;
   final double keywordWeight;
   final double vectorWeight;
+
   /// When true, entry-level token budget is deferred to
   /// [MemoryExcerptSelector] chunk packing (chunk_first mode).
   final bool chunkBudgeting;
@@ -252,7 +253,8 @@ class MemorySelector {
           ? math.min(0.5, entityOverlap * 0.15)
           : 0.0;
 
-      final score = keyword +
+      final score =
+          keyword +
           vector +
           catalog +
           recency +
@@ -472,13 +474,56 @@ class MemorySelector {
   ) {
     if (alreadyPicked.isEmpty || penalty <= 0) return 0;
     final candTokens = _entryTokens(candidate);
-    if (candTokens.isEmpty) return 0;
     var overlap = 0;
     for (final t in candTokens) {
       if (seenTokens.contains(t)) overlap++;
     }
-    final ratio = overlap / candTokens.length;
-    return penalty * ratio;
+    final tokenPenalty = candTokens.isEmpty
+        ? 0.0
+        : penalty * (overlap / candTokens.length);
+    final temporalPenalty = _temporalDiversityPenaltyFor(
+      candidate,
+      alreadyPicked,
+      penalty,
+    );
+    return (tokenPenalty + temporalPenalty).clamp(0.0, penalty * 2);
+  }
+
+  static double _temporalDiversityPenaltyFor(
+    MemoryEntry candidate,
+    List<MemoryCandidateScore> alreadyPicked,
+    double penalty,
+  ) {
+    if (candidate.temporallyBlind) return 0;
+    final candidateRange = candidate.messageRange;
+    final candidateBucket = _temporalBucket(candidateRange);
+    if (candidateRange == null || candidateBucket == null) return 0;
+
+    var temporalPenalty = 0.0;
+    for (final picked in alreadyPicked) {
+      final pickedEntry = picked.entry;
+      if (pickedEntry.temporallyBlind) continue;
+      final pickedRange = pickedEntry.messageRange;
+      final pickedBucket = _temporalBucket(pickedRange);
+      if (pickedRange == null || pickedBucket == null) continue;
+      if (candidateBucket == pickedBucket) {
+        temporalPenalty = math.max(temporalPenalty, penalty);
+      } else if (_rangesOverlap(candidateRange, pickedRange)) {
+        temporalPenalty = math.max(temporalPenalty, penalty * 0.5);
+      }
+    }
+    return temporalPenalty;
+  }
+
+  static int? _temporalBucket(MessageRange? range) {
+    final end = range?.end;
+    if (end == null || end <= 0) return null;
+    const bucketSize = 10;
+    return (end - 1) ~/ bucketSize;
+  }
+
+  static bool _rangesOverlap(MessageRange a, MessageRange b) {
+    return a.start <= b.end && b.start <= a.end;
   }
 
   static Set<String> _entryTokens(MemoryEntry e) {

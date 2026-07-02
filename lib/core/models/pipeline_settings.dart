@@ -90,6 +90,10 @@ abstract class PipelineSettings with _$PipelineSettings {
     // (e.g. Gemini) that spend most of the budget on thinking and leave too
     // little for the actual reply. 0 = use the agent's own maxTokens.
     @Default(0) int studioFinalMaxTokens,
+    @Default(0.9) double studioFinalTopP,
+    @Default(0) int studioFinalTopK,
+    @Default(0.0) double studioFinalFrequencyPenalty,
+    @Default(0.0) double studioFinalPresencePenalty,
     // Chat history messages override for the Studio final generator (Main
     // Responder). When > 0, overrides StudioConfig.maxFinalHistoryMessages.
     // 0 = use per-session StudioConfig default (15).
@@ -99,6 +103,9 @@ abstract class PipelineSettings with _$PipelineSettings {
     // for trackers). Negative = use the agent's own temperature.
     @Default(1.0) double studioFinalTemperature,
     @Default(false) bool studioFinalRequestReasoning,
+    @Default('auto') String studioFinalReasoningEffort,
+    @Default(false) bool studioFinalOmitTemperature,
+    @Default(false) bool studioFinalOmitTopP,
     @Default(true) bool studioFinalOmitReasoning,
     @Default(true) bool studioFinalOmitReasoningEffort,
     // When true, the final generator's request forces requestReasoning=false
@@ -124,10 +131,17 @@ abstract class PipelineSettings with _$PipelineSettings {
     // Max tokens for ALL non-final Studio agents. When > 0, overrides the
     // per-agent default (1600). 0 = use the agent's own maxTokens.
     @Default(0) int studioTrackerMaxTokens,
+    @Default(0.9) double studioTrackerTopP,
+    @Default(0) int studioTrackerTopK,
+    @Default(0.0) double studioTrackerFrequencyPenalty,
+    @Default(0.0) double studioTrackerPresencePenalty,
     // Temperature for ALL non-final Studio agents. When >= 0, overrides the
     // per-agent default (0.3). Negative = use the agent's own temperature.
     @Default(0.5) double studioTrackerTemperature,
     @Default(false) bool studioTrackerRequestReasoning,
+    @Default('auto') String studioTrackerReasoningEffort,
+    @Default(false) bool studioTrackerOmitTemperature,
+    @Default(false) bool studioTrackerOmitTopP,
     @Default(true) bool studioTrackerOmitReasoning,
     @Default(true) bool studioTrackerOmitReasoningEffort,
     // When true, all non-final Studio agent requests force
@@ -151,6 +165,10 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default(false) bool postCleanerEnabled,
     @Default(0.7) double postCleanerTemperature,
     @Default(0) int postCleanerMaxTokens,
+    @Default(0.9) double postCleanerTopP,
+    @Default(0) int postCleanerTopK,
+    @Default(0.0) double postCleanerFrequencyPenalty,
+    @Default(0.0) double postCleanerPresencePenalty,
     @Default('inherit') String postCleanerSource,
     @Default('') String postCleanerModel,
     @Default('') String postCleanerEndpoint,
@@ -181,6 +199,9 @@ abstract class PipelineSettings with _$PipelineSettings {
     // think-block. Only affects the cleaner LLM call, not the audit.
     @Default(false) bool postCleanerDisableReasoning,
     @Default(false) bool postCleanerRequestReasoning,
+    @Default('auto') String postCleanerReasoningEffort,
+    @Default(false) bool postCleanerOmitTemperature,
+    @Default(false) bool postCleanerOmitTopP,
     @Default(true) bool postCleanerOmitReasoning,
     @Default(true) bool postCleanerOmitReasoningEffort,
 

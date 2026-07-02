@@ -64,8 +64,42 @@ void main() {
           .toList();
       final ids = finalSection.map((b) => b['id'] as String).toList();
       expect(ids, contains('final_agent_instruction'));
-      expect(ids, contains('brief_usage_note'));
-      expect(ids, contains('hard_style_contract'));
+      expect(ids, isNot(contains('brief_usage_note')));
+      expect(ids, isNot(contains('hard_style_contract')));
+      expect(ids, isNot(contains('beauty_shard_contract')));
+    });
+
+    test(
+      'final section uses Studio brief macros instead of aggregate block',
+      () {
+        final blocks = studioPresetSeedBlocks();
+        final previousAgents = blocks.firstWhere(
+          (b) => b['id'] == 'previous_agents',
+        );
+        final macroBlock = blocks.firstWhere(
+          (b) => b['id'] == 'final_studio_brief_macros',
+        );
+
+        expect(previousAgents['enabled'], false);
+        expect(macroBlock['enabled'], true);
+        final content = macroBlock['content'] as String;
+        expect(content, contains('{{studio_continuity_brief}}'));
+        expect(content, contains('{{studio_agency_brief}}'));
+        expect(content, contains('{{studio_narrative_brief}}'));
+        expect(content, contains('{{studio_dialogue_brief}}'));
+        expect(content, contains('{{studio_guard_brief}}'));
+        expect(content, contains('{{studio_world_brief}}'));
+        expect(content, contains('{{studio_meta_brief}}'));
+        expect(content, contains('{{studio_beauty_brief}}'));
+      },
+    );
+
+    test('runtime-computed blocks are not seeded as editable duplicates', () {
+      final ids = studioPresetSeedBlocks().map((b) => b['id'] as String);
+      expect(ids, isNot(contains('runtime_envelope')));
+      expect(ids, isNot(contains('brief_usage_note')));
+      expect(ids, isNot(contains('hard_style_contract')));
+      expect(ids, isNot(contains('beauty_shard_contract')));
     });
 
     test('cleaner section has cleaner_system and cleaner_rules', () {

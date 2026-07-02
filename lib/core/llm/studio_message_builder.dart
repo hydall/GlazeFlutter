@@ -47,8 +47,16 @@ class StudioMessageBuilder {
       promptPayload: promptPayload,
       studioConfig: config,
     );
-    final blocks = studioPreset.blocks.where((b) => b.enabled).toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final section = _sectionForRun(agent, isFinalResponse);
+    final blocks =
+        studioPreset.blocks
+            .where((b) => b.enabled && b.section == section)
+            .where((b) => !_isRuntimeComputedBlock(b))
+            .where((b) => _blockAppliesToAgent(b, agent, isFinalResponse))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+    final hasExplicitBriefMacros =
+        isFinalResponse && blocks.any((b) => _hasStudioBriefMacro(b.content));
     final messages = <Map<String, dynamic>>[];
 
     for (final block in blocks) {
@@ -63,6 +71,8 @@ class StudioMessageBuilder {
               promptPayload: promptPayload,
               promptResult: promptResult,
               context: context,
+              priorBriefs: priorBriefs,
+              config: config,
             ).trim(),
           );
           if (!isFinalResponse) {
@@ -111,6 +121,7 @@ class StudioMessageBuilder {
           break;
         case 'previous_agents':
           if (!isFinalResponse) break;
+          if (hasExplicitBriefMacros) break;
           final sanitized = priorBriefs
               .where((b) => b.brief.trim().isNotEmpty)
               .map((b) => _briefDeduper.sanitizePriorBriefForFinal(b, config))
@@ -132,8 +143,11 @@ class StudioMessageBuilder {
           break;
         case 'chat_history':
           final history = isFinalResponse
-              ? limitFinalHistory(context.history, config,
-                  pipelineOverride: finalContextOverride)
+              ? limitFinalHistory(
+                  context.history,
+                  config,
+                  pipelineOverride: finalContextOverride,
+                )
               : limitTrackerHistory(context.history, agent.contextSize);
           messages.addAll(history.map((m) => m.toApiMap()));
           break;
@@ -151,6 +165,8 @@ class StudioMessageBuilder {
             promptPayload: promptPayload,
             promptResult: promptResult,
             context: context,
+            priorBriefs: priorBriefs,
+            config: config,
           ).trim();
           if (content.isNotEmpty) {
             messages.add({
@@ -224,7 +240,14 @@ class StudioMessageBuilder {
   }) {
     final blocks =
         studioPreset.blocks
-            .where((b) => b.enabled && b.kind == 'agent_instruction')
+            .where((b) => b.enabled && b.section == 'pregen')
+            .where(
+              (b) =>
+                  b.kind == 'agent_instruction' ||
+                  (b.kind == 'tracker_instruction' &&
+                      _trackerInstructionAppliesToAgent(b, agent)),
+            )
+            .where((b) => !_isRuntimeComputedBlock(b))
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order));
     final buf = StringBuffer();
@@ -257,7 +280,10 @@ class StudioMessageBuilder {
   ) {
     final blocks =
         studioPreset.blocks
-            .where((b) => b.enabled && b.kind != 'agent_instruction')
+            .where((b) => b.enabled && b.section == 'pregen')
+            .where((b) => b.kind != 'agent_instruction')
+            .where((b) => b.kind != 'tracker_instruction')
+            .where((b) => !_isRuntimeComputedBlock(b))
             .where((b) => b.kind != 'static_context')
             .where((b) => b.kind != 'chat_history')
             .where((b) => b.kind != 'dynamic_context')
@@ -352,6 +378,54 @@ class StudioMessageBuilder {
   static const _trimMarker =
       '\n\n[Trimmed to keep this agent request compact]\n\n';
 
+  String _sectionForRun(StudioAgent agent, bool isFinalResponse) {
+    if (isFinalResponse) return 'final';
+    if (agent.phase == 'post_processing') return 'cleaner';
+    return 'pregen';
+  }
+
+  bool _isRuntimeComputedBlock(StudioPresetBlock block) {
+    return const {
+      'runtime_envelope',
+      'brief_usage_note',
+      'hard_style_contract',
+      'beauty_shard_contract',
+    }.contains(block.id);
+  }
+
+  bool _blockAppliesToAgent(
+    StudioPresetBlock block,
+    StudioAgent agent,
+    bool isFinalResponse,
+  ) {
+    if (block.kind != 'tracker_instruction') return true;
+    if (isFinalResponse || agent.phase == 'post_processing') return false;
+    return _trackerInstructionAppliesToAgent(block, agent);
+  }
+
+  bool _trackerInstructionAppliesToAgent(
+    StudioPresetBlock block,
+    StudioAgent agent,
+  ) {
+    final agentText = '${agent.id}\n${agent.name}'.toLowerCase();
+    final blockText = '${block.id}\n${block.title}'.toLowerCase();
+    const aliases = <String, List<String>>{
+      'continuity': ['continuity'],
+      'agency': ['agency', 'character'],
+      'narrative': ['narrative', 'pacing', 'style'],
+      'dialogue': ['dialogue'],
+      'guard': ['guard', 'loop', 'prose'],
+      'world': ['world', 'npc'],
+      'meta': ['meta', 'ooc', 'lumia'],
+      'beauty': ['beauty'],
+    };
+    for (final entry in aliases.entries) {
+      if (!entry.value.any(agentText.contains)) continue;
+      return entry.value.any(blockText.contains);
+    }
+    return false;
+  }
+
   String truncateAgentText(String text, int maxChars) {
     if (text.length <= maxChars) return text;
     final runes = text.runes.toList();
@@ -380,8 +454,15 @@ class StudioMessageBuilder {
     required PromptPayload promptPayload,
     required PromptResult promptResult,
     required StudioContextBuckets context,
+    List<StudioStageBrief> priorBriefs = const [],
+    StudioConfig? config,
   }) {
     if (!content.contains('{')) return content;
+    final studioExpanded = _replaceStudioBriefMacros(
+      content,
+      priorBriefs: priorBriefs,
+      config: config,
+    );
     final macroCtx = MacroContext(
       charName: promptPayload.character.name,
       charDescription: promptPayload.character.description,
@@ -417,7 +498,103 @@ class StudioMessageBuilder {
       arcContent: promptPayload.arcContent,
       entitiesContent: promptPayload.entitiesContent,
     );
-    return replaceMacros(content, macroCtx).text;
+    return replaceMacros(studioExpanded, macroCtx).text;
+  }
+
+  static final _studioBriefMacroRegex = RegExp(
+    r'\{\{studio_(?:agent|tracker|continuity|agency|narrative|dialogue|guard|world|meta|beauty)_briefs?\}\}',
+    caseSensitive: false,
+  );
+
+  bool _hasStudioBriefMacro(String content) {
+    return _studioBriefMacroRegex.hasMatch(content);
+  }
+
+  String _replaceStudioBriefMacros(
+    String content, {
+    required List<StudioStageBrief> priorBriefs,
+    StudioConfig? config,
+  }) {
+    if (!_hasStudioBriefMacro(content)) return content;
+    final briefs = _finalBriefsForMacros(priorBriefs, config);
+    final replacements = <String, String>{
+      '{{studio_agent_briefs}}': _renderBriefs(briefs),
+      '{{studio_tracker_briefs}}': _renderBriefs(briefs),
+      '{{studio_continuity_brief}}': _renderBriefs(
+        _briefsForController(briefs, 'continuity'),
+      ),
+      '{{studio_agency_brief}}': _renderBriefs(
+        _briefsForController(briefs, 'agency'),
+      ),
+      '{{studio_narrative_brief}}': _renderBriefs(
+        _briefsForController(briefs, 'narrative'),
+      ),
+      '{{studio_dialogue_brief}}': _renderBriefs(
+        _briefsForController(briefs, 'dialogue'),
+      ),
+      '{{studio_guard_brief}}': _renderBriefs(
+        _briefsForController(briefs, 'guard'),
+      ),
+      '{{studio_world_brief}}': _renderBriefs(
+        _briefsForController(briefs, 'world'),
+      ),
+      '{{studio_meta_brief}}': _renderBriefs(
+        _briefsForController(briefs, 'meta'),
+      ),
+      '{{studio_beauty_brief}}': _renderBriefs(
+        _briefsForController(briefs, 'beauty'),
+      ),
+    };
+    var expanded = content;
+    for (final entry in replacements.entries) {
+      expanded = expanded.replaceAll(entry.key, entry.value);
+    }
+    return expanded;
+  }
+
+  List<StudioStageBrief> _finalBriefsForMacros(
+    List<StudioStageBrief> priorBriefs,
+    StudioConfig? config,
+  ) {
+    final nonEmpty = priorBriefs
+        .where((b) => b.brief.trim().isNotEmpty)
+        .map(
+          (b) => config == null
+              ? b
+              : _briefDeduper.sanitizePriorBriefForFinal(b, config),
+        )
+        .toList();
+    return _briefDeduper
+        .dedupePriorBriefs(nonEmpty)
+        .where((b) => b.brief.trim().isNotEmpty)
+        .toList();
+  }
+
+  List<StudioStageBrief> _briefsForController(
+    List<StudioStageBrief> briefs,
+    String controller,
+  ) {
+    final aliases = const <String, List<String>>{
+      'continuity': ['continuity'],
+      'agency': ['agency', 'character'],
+      'narrative': ['narrative', 'pacing', 'style'],
+      'dialogue': ['dialogue'],
+      'guard': ['guard', 'loop', 'prose'],
+      'world': ['world', 'npc'],
+      'meta': ['meta', 'ooc', 'lumia'],
+      'beauty': ['beauty'],
+    };
+    final keys = aliases[controller] ?? const <String>[];
+    return briefs.where((brief) {
+      final text = '${brief.agentId}\n${brief.agentName}'.toLowerCase();
+      return keys.any(text.contains);
+    }).toList();
+  }
+
+  String _renderBriefs(List<StudioStageBrief> briefs) {
+    return briefs
+        .map((b) => 'Studio agent brief: ${b.agentName}\n${b.brief.trim()}')
+        .join('\n\n');
   }
 
   /// Normalize the role of a preset/shard INSTRUCTION block (not a chat

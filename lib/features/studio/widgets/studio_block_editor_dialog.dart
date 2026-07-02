@@ -30,12 +30,7 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
   late bool _enabled;
 
   static const _roles = ['system', 'user', 'assistant'];
-  static const _sections = [
-    'pregen',
-    'final',
-    'cleaner',
-    'ledger',
-  ];
+  static const _sections = ['pregen', 'final', 'cleaner', 'ledger'];
   static const _kinds = [
     'custom_text',
     'slot',
@@ -103,13 +98,11 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
                       ),
                       items: _sections
                           .map(
-                            (s) => DropdownMenuItem(
-                              value: s,
-                              child: Text(s),
-                            ),
+                            (s) => DropdownMenuItem(value: s, child: Text(s)),
                           )
                           .toList(),
-                      onChanged: (v) => setState(() => _section = v ?? _section),
+                      onChanged: (v) =>
+                          setState(() => _section = v ?? _section),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -123,10 +116,7 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
                       ),
                       items: _kinds
                           .map(
-                            (k) => DropdownMenuItem(
-                              value: k,
-                              child: Text(k),
-                            ),
+                            (k) => DropdownMenuItem(value: k, child: Text(k)),
                           )
                           .toList(),
                       onChanged: (v) => setState(() => _kind = v ?? _kind),
@@ -147,10 +137,7 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
                       ),
                       items: _roles
                           .map(
-                            (r) => DropdownMenuItem(
-                              value: r,
-                              child: Text(r),
-                            ),
+                            (r) => DropdownMenuItem(value: r, child: Text(r)),
                           )
                           .toList(),
                       onChanged: (v) => setState(() => _role = v ?? _role),
@@ -180,6 +167,22 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
                   border: OutlineInputBorder(),
                 ),
               ),
+              const SizedBox(height: 8),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Studio final-agent briefs: either enable the '
+                  '"Previous Studio agents" block, or place these macros in '
+                  'custom final blocks: {{studio_agent_briefs}}, '
+                  '{{studio_continuity_brief}}, {{studio_agency_brief}}, '
+                  '{{studio_narrative_brief}}, {{studio_dialogue_brief}}, '
+                  '{{studio_guard_brief}}, {{studio_world_brief}}, '
+                  '{{studio_meta_brief}}, {{studio_beauty_brief}}. If any '
+                  'Studio brief macro is present, the Previous Studio agents '
+                  'block is skipped to avoid duplicates.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
             ],
           ),
         ),
@@ -189,10 +192,7 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _save,
-          child: const Text('Save'),
-        ),
+        FilledButton(onPressed: _save, child: const Text('Save')),
       ],
     );
   }

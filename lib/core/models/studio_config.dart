@@ -32,7 +32,7 @@ abstract class StudioConfig with _$StudioConfig {
     /// trimmed per their own [StudioAgent.contextSize]. The final writer leans
     /// on the tracker briefs instead of re-reading the whole transcript.
     /// 0 = no limit.
-    @Default(10) int maxFinalHistoryMessages,
+    @Default(15) int maxFinalHistoryMessages,
 
     /// Verbatim content of "broadcast" preset blocks — cross-cutting rules
     /// (output language + prose-quality guards: anti-loop/echo/cliché/slop,
@@ -124,11 +124,10 @@ abstract class StudioAgent with _$StudioAgent {
     @Default([]) List<String> invalidationSignals,
 
     /// Number of trailing chat messages forwarded to this tracker (intermediate
-    /// agent). Default 20 (Marinara DEFAULT_AGENT_CONTEXT_SIZE). Hard-capped at
-    /// 200 (MAX_AGENT_CONTEXT_MESSAGES) on normalization. The final agent
-    /// (generator) ignores this and uses [StudioConfig.maxFinalHistoryMessages]
+    /// agent). Default 5 to keep trackers focused on local turn state; the
+    /// final agent ignores this and uses [StudioConfig.maxFinalHistoryMessages]
     /// instead. 0 = no limit (not recommended for trackers).
-    @Default(20) int contextSize,
+    @Default(5) int contextSize,
 
     /// How often this tracker runs, in assistant turns. 1 = every turn
     /// (default), 3 = every 3rd turn, etc. Useful for "director"-style
@@ -156,6 +155,7 @@ abstract class StudioAgent with _$StudioAgent {
     /// (the default), the tracker always activates (subject to
     /// [runInterval] and [enabled]).
     @Default([]) List<String> activationKeywords,
+
     /// Number of trailing chat messages scanned for [activationKeywords].
     /// Default 5 (matches `DEFAULT_AGENT_CONTEXT_SIZE`). 0 = scan the
     /// entire available history (not recommended — expensive and stale).

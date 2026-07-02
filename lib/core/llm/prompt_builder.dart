@@ -57,15 +57,9 @@ class RecalledMessageChunk {
   final String text;
   final List<String> messageIds;
 
-  const RecalledMessageChunk({
-    required this.text,
-    this.messageIds = const [],
-  });
+  const RecalledMessageChunk({required this.text, this.messageIds = const []});
 
-  Map<String, dynamic> toJson() => {
-    'text': text,
-    'messageIds': messageIds,
-  };
+  Map<String, dynamic> toJson() => {'text': text, 'messageIds': messageIds};
 
   factory RecalledMessageChunk.fromJson(Map<String, dynamic> json) =>
       RecalledMessageChunk(
@@ -1002,19 +996,6 @@ PromptResult _assembleMessages({
     );
   }
 
-  // NEW (patch #3): inject <recalled_messages> BEFORE the memory block so
-  // the LLM sees the raw original chunks first, then the compressed
-  // MemoryBook facts on top. Recall is the lossless backstop; MemoryBook
-  // is the lossy compression. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
-  final recalledMessagesContent = effectiveRecalledMessagesContent(payload);
-  if (recalledMessagesContent != null && recalledMessagesContent.isNotEmpty) {
-    _injectRecalledMessagesBlock(
-      messages,
-      attributionBlocks,
-      recalledMessagesContent,
-    );
-  }
-
   final lorebookReserve = _calculateLorebookReserve(payload);
 
   // Count vector-only tokens so the tokenizer can show "Vector Lorebook" as
@@ -1045,6 +1026,34 @@ PromptResult _assembleMessages({
     macroTokens: macroTokens,
     vectorLoreTokens: vectorLoreTokens,
   );
+
+  // Inject <recalled_messages> after the first cutoff calculation so raw
+  // message recall can exclude chunks whose source messages are already
+  // visible in the active history window. Studio supplies an explicit source
+  // window; non-Studio uses the calculated token cutoff window.
+  final recallVisibleMessageIds =
+      payload.sourceWindowVisibleMessageIds.isNotEmpty
+      ? payload.sourceWindowVisibleMessageIds
+      : breakdown.visibleMessageIds;
+  final recalledMessagesContent = effectiveRecalledMessagesContent(
+    payload,
+    visibleMessageIds: recallVisibleMessageIds,
+  );
+  if (recalledMessagesContent != null && recalledMessagesContent.isNotEmpty) {
+    _injectRecalledMessagesBlock(
+      messages,
+      attributionBlocks,
+      recalledMessagesContent,
+    );
+    historyOnly = messages.where((m) => m.isHistory).toList();
+    breakdown = calculator.calculate(
+      staticBlocks: attributionBlocks,
+      historyMessages: historyOnly,
+      lorebookReserveTokens: lorebookReserve,
+      macroTokens: macroTokens,
+      vectorLoreTokens: vectorLoreTokens,
+    );
+  }
   var finalMemorySelection = payload.memorySelection;
   MemoryExcerptSelection? finalExcerptSelection;
   var memoryMacroMissing = false;
@@ -1359,11 +1368,14 @@ void _injectStudioSessionStateBlock(
 /// When empty, the base token-cutoff window is assumed to have already
 /// filtered, so all chunks pass through.
 @visibleForTesting
-String? effectiveRecalledMessagesContent(PromptPayload payload) {
+String? effectiveRecalledMessagesContent(
+  PromptPayload payload, {
+  Set<String>? visibleMessageIds,
+}) {
   if (payload.recalledMessageChunks.isEmpty) {
     return payload.recalledMessagesContent;
   }
-  final visible = payload.sourceWindowVisibleMessageIds;
+  final visible = visibleMessageIds ?? payload.sourceWindowVisibleMessageIds;
   final chunks = payload.disableSourceWindowExclusion || visible.isEmpty
       ? payload.recalledMessageChunks
       : payload.recalledMessageChunks
