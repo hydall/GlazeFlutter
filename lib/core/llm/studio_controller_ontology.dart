@@ -38,7 +38,7 @@ class StudioControllerSpec {
     // ignore: unused_element_parameter
     this.phase = 'pre_generation',
     // Default tracker context size (trailing chat messages forwarded to this
-    // agent). 0 = inherit the StudioAgent freezed default of 5.
+    // agent). 0 = inherit the StudioAgent freezed default of 10.
     this.contextSize = 0,
   });
 }
@@ -221,7 +221,7 @@ class StudioControllerOntology {
           refreshPolicy: spec.refreshPolicy,
           invalidationSignals: spec.invalidationSignals,
           phase: spec.phase,
-          contextSize: spec.contextSize > 0 ? spec.contextSize : 5,
+          contextSize: spec.contextSize > 0 ? spec.contextSize : 10,
         ),
       );
     }

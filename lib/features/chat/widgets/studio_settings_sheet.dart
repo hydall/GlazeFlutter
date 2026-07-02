@@ -461,7 +461,7 @@ class StudioSlotSettings {
   final bool requestReasoning;
   final bool omitReasoning;
   final bool omitReasoningEffort;
-  final int contextSize;
+  final int maxTokens;
   final int timeoutMs;
 
   const StudioSlotSettings({
@@ -469,7 +469,7 @@ class StudioSlotSettings {
     required this.requestReasoning,
     required this.omitReasoning,
     required this.omitReasoningEffort,
-    required this.contextSize,
+    required this.maxTokens,
     required this.timeoutMs,
   });
 
@@ -484,7 +484,7 @@ class StudioSlotSettings {
           studioFinalRequestReasoning: requestReasoning,
           studioFinalOmitReasoning: omitReasoning,
           studioFinalOmitReasoningEffort: omitReasoningEffort,
-          studioFinalContextSize: contextSize,
+          studioFinalMaxTokens: maxTokens,
           studioFinalTimeoutMs: timeoutMs,
         );
       case StudioSlot.tracker:
@@ -493,7 +493,7 @@ class StudioSlotSettings {
           studioTrackerRequestReasoning: requestReasoning,
           studioTrackerOmitReasoning: omitReasoning,
           studioTrackerOmitReasoningEffort: omitReasoningEffort,
-          studioTrackerContextSize: contextSize,
+          studioTrackerMaxTokens: maxTokens,
           studioTrackerTimeoutMs: timeoutMs,
         );
       case StudioSlot.cleaner:
@@ -502,7 +502,7 @@ class StudioSlotSettings {
           postCleanerRequestReasoning: requestReasoning,
           postCleanerOmitReasoning: omitReasoning,
           postCleanerOmitReasoningEffort: omitReasoningEffort,
-          postCleanerHistoryMessages: contextSize,
+          postCleanerMaxTokens: maxTokens,
           postCleanerTimeoutMs: timeoutMs,
         );
     }
@@ -528,7 +528,7 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
   late bool _requestReasoning;
   late bool _omitReasoning;
   late bool _omitReasoningEffort;
-  late TextEditingController _contextCtrl;
+  late TextEditingController _maxTokensCtrl;
   late TextEditingController _timeoutCtrl;
 
   @override
@@ -541,8 +541,8 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
         _requestReasoning = p.studioFinalRequestReasoning;
         _omitReasoning = p.studioFinalOmitReasoning;
         _omitReasoningEffort = p.studioFinalOmitReasoningEffort;
-        _contextCtrl = TextEditingController(
-          text: p.studioFinalContextSize > 0 ? '${p.studioFinalContextSize}' : '',
+        _maxTokensCtrl = TextEditingController(
+          text: p.studioFinalMaxTokens > 0 ? '${p.studioFinalMaxTokens}' : '',
         );
         _timeoutCtrl = TextEditingController(
           text: p.studioFinalTimeoutMs > 0
@@ -554,9 +554,9 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
         _requestReasoning = p.studioTrackerRequestReasoning;
         _omitReasoning = p.studioTrackerOmitReasoning;
         _omitReasoningEffort = p.studioTrackerOmitReasoningEffort;
-        _contextCtrl = TextEditingController(
-          text: p.studioTrackerContextSize > 0
-              ? '${p.studioTrackerContextSize}'
+        _maxTokensCtrl = TextEditingController(
+          text: p.studioTrackerMaxTokens > 0
+              ? '${p.studioTrackerMaxTokens}'
               : '',
         );
         _timeoutCtrl = TextEditingController(
@@ -569,10 +569,8 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
         _requestReasoning = p.postCleanerRequestReasoning;
         _omitReasoning = p.postCleanerOmitReasoning;
         _omitReasoningEffort = p.postCleanerOmitReasoningEffort;
-        _contextCtrl = TextEditingController(
-          text: p.postCleanerHistoryMessages > 0
-              ? '${p.postCleanerHistoryMessages}'
-              : '',
+        _maxTokensCtrl = TextEditingController(
+          text: p.postCleanerMaxTokens > 0 ? '${p.postCleanerMaxTokens}' : '',
         );
         _timeoutCtrl = TextEditingController(
           text: p.postCleanerTimeoutMs > 0
@@ -584,7 +582,7 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
 
   @override
   void dispose() {
-    _contextCtrl.dispose();
+    _maxTokensCtrl.dispose();
     _timeoutCtrl.dispose();
     super.dispose();
   }
@@ -600,23 +598,25 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
     }
   }
 
-  String get _contextLabel {
+  String get _maxTokensLabel {
     switch (widget.slot) {
+      case StudioSlot.finalGenerator:
+        return 'Max response length (0 = default)';
+      case StudioSlot.tracker:
+        return 'Max response length (0 = default)';
       case StudioSlot.cleaner:
-        return 'History messages (0 = default)';
-      default:
-        return 'Context limit (0 = default)';
+        return 'Max response length (0 = default)';
     }
   }
 
-  String get _contextHint {
+  String get _maxTokensHint {
     switch (widget.slot) {
       case StudioSlot.finalGenerator:
-        return '15';
+        return '8000';
       case StudioSlot.tracker:
-        return '5';
+        return '1600';
       case StudioSlot.cleaner:
-        return '12';
+        return '0';
     }
   }
 
@@ -677,11 +677,11 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
               ),
               const SizedBox(height: 4),
               TextField(
-                controller: _contextCtrl,
+                controller: _maxTokensCtrl,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: _contextLabel,
-                  hintText: _contextHint,
+                  labelText: _maxTokensLabel,
+                  hintText: _maxTokensHint,
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -708,7 +708,7 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
         ),
         FilledButton(
           onPressed: () {
-            final ctx = int.tryParse(_contextCtrl.text.trim()) ?? 0;
+            final maxTokens = int.tryParse(_maxTokensCtrl.text.trim()) ?? 0;
             final seconds = int.tryParse(_timeoutCtrl.text.trim()) ?? 0;
             final timeoutMs = seconds > 0 ? seconds * 1000 : 0;
             Navigator.of(context).pop(
@@ -717,7 +717,7 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
                 requestReasoning: _requestReasoning,
                 omitReasoning: _omitReasoning,
                 omitReasoningEffort: _omitReasoningEffort,
-                contextSize: ctx,
+                maxTokens: maxTokens,
                 timeoutMs: timeoutMs,
               ),
             );

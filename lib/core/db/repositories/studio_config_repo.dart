@@ -255,6 +255,10 @@ class StudioConfigRepo implements SyncStudioConfigStore {
         current = current.copyWith(refreshPolicy: 'turn');
         changed = true;
       }
+      if (current.phase == 'post_processing' && current.contextSize != 1) {
+        current = current.copyWith(contextSize: 1);
+        changed = true;
+      }
       migrated.add(current);
     }
     final withBeauty = _ensureBeautyShardAgent(config, migrated);
@@ -287,7 +291,7 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       refreshPolicy: spec.refreshPolicy,
       invalidationSignals: spec.invalidationSignals,
       phase: spec.phase,
-      contextSize: spec.contextSize > 0 ? spec.contextSize : 5,
+      contextSize: spec.contextSize > 0 ? spec.contextSize : 10,
     );
     final updated = <StudioAgent>[
       ...agents.take(insertAt),
