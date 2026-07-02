@@ -307,7 +307,13 @@ class PostCleanerService {
         timeoutMs: _llm.resolveCleanerTimeout(settings),
         cancelToken: cancelToken,
         onChunk: onCleanedChunk,
-        omitReasoning: settings.postCleanerDisableReasoning,
+        requestReasoning: settings.postCleanerDisableReasoning
+            ? false
+            : settings.postCleanerRequestReasoning,
+        omitReasoning: settings.postCleanerDisableReasoning
+            ? true
+            : settings.postCleanerOmitReasoning,
+        omitReasoningEffort: settings.postCleanerOmitReasoningEffort,
       );
     }
 
@@ -318,7 +324,13 @@ class PostCleanerService {
       temperature: settings.postCleanerTemperature,
       timeoutMs: _llm.resolveCleanerTimeout(settings),
       cancelToken: cancelToken,
-      omitReasoning: settings.postCleanerDisableReasoning,
+      requestReasoning: settings.postCleanerDisableReasoning
+          ? false
+          : settings.postCleanerRequestReasoning,
+      omitReasoning: settings.postCleanerDisableReasoning
+          ? true
+          : settings.postCleanerOmitReasoning,
+      omitReasoningEffort: settings.postCleanerOmitReasoningEffort,
     );
   }
 

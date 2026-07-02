@@ -83,6 +83,8 @@ abstract class PipelineSettings with _$PipelineSettings {
     // cancelled entirely so a long generation is never cut off. 0 = use the
     // per-agent fallback (final generator: 90s, trackers: 60s).
     @Default(0) int studioTimeoutMs,
+    // Final-generator idle timeout (ms). 0 = use agent/global fallback.
+    @Default(0) int studioFinalTimeoutMs,
     // Max tokens for the Studio final generator (Main Responder). When > 0,
     // overrides the per-agent default (8000). Useful for reasoning models
     // (e.g. Gemini) that spend most of the budget on thinking and leave too
@@ -95,7 +97,10 @@ abstract class PipelineSettings with _$PipelineSettings {
     // Temperature for the Studio final generator (Main Responder). When
     // >= 0, overrides the per-agent default (0.8 for the final agent, 0.3
     // for trackers). Negative = use the agent's own temperature.
-    @Default(-1.0) double studioFinalTemperature,
+    @Default(1.0) double studioFinalTemperature,
+    @Default(false) bool studioFinalRequestReasoning,
+    @Default(true) bool studioFinalOmitReasoning,
+    @Default(true) bool studioFinalOmitReasoningEffort,
     // When true, the final generator's request forces requestReasoning=false
     // and omitReasoning=true regardless of the ApiConfig. Targeted at Gemini
     // Flash thinking models that spend most of the token budget on a
@@ -114,12 +119,17 @@ abstract class PipelineSettings with _$PipelineSettings {
     // Model id override applied to ALL non-final Studio agents when non-empty.
     // Empty = use each agent's own `modelOverride` or the chat's run model.
     @Default('') String studioTrackerModelOverride,
+    // Tracker idle timeout (ms). 0 = use agent/global fallback.
+    @Default(0) int studioTrackerTimeoutMs,
     // Max tokens for ALL non-final Studio agents. When > 0, overrides the
     // per-agent default (1600). 0 = use the agent's own maxTokens.
     @Default(0) int studioTrackerMaxTokens,
     // Temperature for ALL non-final Studio agents. When >= 0, overrides the
     // per-agent default (0.3). Negative = use the agent's own temperature.
-    @Default(-1.0) double studioTrackerTemperature,
+    @Default(0.5) double studioTrackerTemperature,
+    @Default(false) bool studioTrackerRequestReasoning,
+    @Default(true) bool studioTrackerOmitReasoning,
+    @Default(true) bool studioTrackerOmitReasoningEffort,
     // When true, all non-final Studio agent requests force
     // requestReasoning=false and omitReasoning=true. Trackers emit compact
     // JSON briefs, so a hidden think-block wastes tokens without improving the
@@ -132,9 +142,14 @@ abstract class PipelineSettings with _$PipelineSettings {
     // 5 per agent, batch = max across group).
     @Default(0) int studioTrackerContextSize,
 
+    // ── Post-processing trackers ─────────────────────────────────────────
+    // Number of trailing chat messages forwarded to post-processing
+    // (post-gen) trackers. Default 1 (only the response to edit).
+    @Default(1) int studioPostTrackerContextSize,
+
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,
-    @Default(0.3) double postCleanerTemperature,
+    @Default(0.7) double postCleanerTemperature,
     @Default(0) int postCleanerMaxTokens,
     @Default('inherit') String postCleanerSource,
     @Default('') String postCleanerModel,
@@ -165,6 +180,9 @@ abstract class PipelineSettings with _$PipelineSettings {
     // Gemini Flash thinking models cannot spend the rewrite budget on a
     // think-block. Only affects the cleaner LLM call, not the audit.
     @Default(false) bool postCleanerDisableReasoning,
+    @Default(false) bool postCleanerRequestReasoning,
+    @Default(true) bool postCleanerOmitReasoning,
+    @Default(true) bool postCleanerOmitReasoningEffort,
 
     // ── Studio Ledger ─────────────────────────────────────────────────────
     // Mandatory internal continuity ledger that runs after every final

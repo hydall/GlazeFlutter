@@ -132,6 +132,7 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
 
   Widget _buildBody() {
     final config = _config!;
+    final pipeline = ref.watch(pipelineSettingsProvider);
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -147,33 +148,42 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
           const Divider(),
           Text('Models', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          _buildModelSelector(
+          _buildModelSlot(
             label: 'Final Generator',
+            description: 'Expensive — high-quality prose generation',
             emptyLabel: 'Use active chat model',
-            value: ref.watch(pipelineSettingsProvider).generationModel,
+            value: pipeline.generationModel,
             onChanged: (model) => _savePipelineModel(
-              (pipeline) => pipeline.copyWith(generationModel: model),
+              (p) => p.copyWith(generationModel: model),
+            ),
+            onSettings: () => _openSlotSettings(
+              slot: StudioSlot.finalGenerator,
             ),
           ),
-          const SizedBox(height: 8),
-          _buildModelSelector(
+          const SizedBox(height: 12),
+          _buildModelSlot(
             label: 'Trackers',
+            description: 'Cheap — compact JSON briefs, fast',
             emptyLabel: 'Use active chat model',
-            value: ref
-                .watch(pipelineSettingsProvider)
-                .studioTrackerModelOverride,
+            value: pipeline.studioTrackerModelOverride,
             onChanged: (model) => _savePipelineModel(
-              (pipeline) =>
-                  pipeline.copyWith(studioTrackerModelOverride: model),
+              (p) => p.copyWith(studioTrackerModelOverride: model),
+            ),
+            onSettings: () => _openSlotSettings(
+              slot: StudioSlot.tracker,
             ),
           ),
-          const SizedBox(height: 8),
-          _buildModelSelector(
+          const SizedBox(height: 12),
+          _buildModelSlot(
             label: 'Cleaner (Post-Processing)',
+            description: 'Semi-expensive — prose rewrite + continuity audit',
             emptyLabel: 'Use tracker/chat model',
-            value: ref.watch(pipelineSettingsProvider).postCleanerModel,
+            value: pipeline.postCleanerModel,
             onChanged: (model) => _savePipelineModel(
-              (pipeline) => pipeline.copyWith(postCleanerModel: model),
+              (p) => p.copyWith(postCleanerModel: model),
+            ),
+            onSettings: () => _openSlotSettings(
+              slot: StudioSlot.cleaner,
             ),
           ),
           const Divider(),
@@ -192,6 +202,8 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             },
           ),
           const Divider(),
+          _buildPostTrackerContextSetting(pipeline),
+          const Divider(),
           _buildRecoverySection(),
         ],
       ),
@@ -205,45 +217,108 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     await ref.read(pipelineSettingsProvider.notifier).save(mutate(pipeline));
   }
 
-  Widget _buildModelSelector({
+  Widget _buildPostTrackerContextSetting(PipelineSettings pipeline) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Post-Processing', style: tt.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          'How many chat messages post-processing trackers receive '
+          '(last turn + the response to edit).',
+          style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (final value in const [1, 2, 3, 5])
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text('$value'),
+                  selected: pipeline.studioPostTrackerContextSize == value,
+                  onSelected: (_) => _savePipelineModel(
+                    (p) => p.copyWith(studioPostTrackerContextSize: value),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModelSlot({
     required String label,
+    required String description,
     required String value,
     required String emptyLabel,
     required ValueChanged<String> onChanged,
+    required VoidCallback onSettings,
   }) {
     final models = <String>{
       ..._fetchedModels,
       if (value.isNotEmpty) value,
     }.toList()..sort();
 
-    return DropdownButtonFormField<String>(
-      initialValue: models.contains(value) || value.isEmpty ? value : null,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        helperText: _fetchingModels
-            ? 'Loading models...'
-            : _fetchedModels.isEmpty
-            ? 'Open this field to load models from the active API config'
-            : '${_fetchedModels.length} models available',
-        helperMaxLines: 2,
-        border: const OutlineInputBorder(),
-        isDense: true,
-      ),
-      items: [
-        DropdownMenuItem<String>(
-          value: '',
-          child: Text(emptyLabel, overflow: TextOverflow.ellipsis),
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(label, style: tt.titleSmall),
+            ),
+            IconButton(
+              icon: const Icon(Icons.tune, size: 18),
+              tooltip: 'Settings',
+              onPressed: onSettings,
+              style: IconButton.styleFrom(
+                padding: const EdgeInsets.all(4),
+                minimumSize: const Size(28, 28),
+              ),
+            ),
+          ],
         ),
-        ...models.map(
-          (model) => DropdownMenuItem<String>(
-            value: model,
-            child: Text(model, overflow: TextOverflow.ellipsis),
+        Text(
+          description,
+          style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 4),
+        DropdownButtonFormField<String>(
+          initialValue: models.contains(value) || value.isEmpty ? value : null,
+          isExpanded: true,
+          decoration: InputDecoration(
+            helperText: _fetchingModels
+                ? 'Loading models...'
+                : _fetchedModels.isEmpty
+                ? 'Open this field to load models from the active API config'
+                : '${_fetchedModels.length} models available',
+            helperMaxLines: 2,
+            border: const OutlineInputBorder(),
+            isDense: true,
           ),
+          items: [
+            DropdownMenuItem<String>(
+              value: '',
+              child: Text(emptyLabel, overflow: TextOverflow.ellipsis),
+            ),
+            ...models.map(
+              (model) => DropdownMenuItem<String>(
+                value: model,
+                child: Text(model, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ],
+          onTap: _fetchingModels ? null : () => unawaited(_fetchModels()),
+          onChanged: (model) => onChanged(model ?? ''),
         ),
       ],
-      onTap: _fetchingModels ? null : () => unawaited(_fetchModels()),
-      onChanged: (model) => onChanged(model ?? ''),
     );
   }
 
@@ -367,6 +442,21 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     );
   }
 
+  Future<void> _openSlotSettings({required StudioSlot slot}) async {
+    final updated = await showDialog<StudioSlotSettings>(
+      context: context,
+      builder: (c) => _StudioSlotSettingsDialog(
+        slot: slot,
+        pipeline: ref.read(pipelineSettingsProvider),
+      ),
+    );
+    if (!mounted || updated == null) return;
+    final pipeline = ref.read(pipelineSettingsProvider);
+    await ref
+        .read(pipelineSettingsProvider.notifier)
+        .save(updated.applyTo(pipeline, slot));
+  }
+
   Future<void> _startRecovery() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -393,6 +483,283 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
       ref
           .read(trackerMemoryRecoveryServiceProvider)
           .recover(sessionId: widget.sessionId, charId: widget.charId),
+    );
+  }
+}
+
+/// Which Studio model slot is being configured.
+enum StudioSlot { finalGenerator, tracker, cleaner }
+
+/// Snapshot of per-slot settings captured in the dialog.
+class StudioSlotSettings {
+  final double temperature;
+  final bool requestReasoning;
+  final bool omitReasoning;
+  final bool omitReasoningEffort;
+  final int maxTokens;
+  final int timeoutMs;
+
+  const StudioSlotSettings({
+    required this.temperature,
+    required this.requestReasoning,
+    required this.omitReasoning,
+    required this.omitReasoningEffort,
+    required this.maxTokens,
+    required this.timeoutMs,
+  });
+
+  PipelineSettings applyTo(
+    PipelineSettings pipeline,
+    StudioSlot slot,
+  ) {
+    switch (slot) {
+      case StudioSlot.finalGenerator:
+        return pipeline.copyWith(
+          studioFinalTemperature: temperature,
+          studioFinalRequestReasoning: requestReasoning,
+          studioFinalOmitReasoning: omitReasoning,
+          studioFinalOmitReasoningEffort: omitReasoningEffort,
+          studioFinalMaxTokens: maxTokens,
+          studioFinalTimeoutMs: timeoutMs,
+        );
+      case StudioSlot.tracker:
+        return pipeline.copyWith(
+          studioTrackerTemperature: temperature,
+          studioTrackerRequestReasoning: requestReasoning,
+          studioTrackerOmitReasoning: omitReasoning,
+          studioTrackerOmitReasoningEffort: omitReasoningEffort,
+          studioTrackerMaxTokens: maxTokens,
+          studioTrackerTimeoutMs: timeoutMs,
+        );
+      case StudioSlot.cleaner:
+        return pipeline.copyWith(
+          postCleanerTemperature: temperature,
+          postCleanerRequestReasoning: requestReasoning,
+          postCleanerOmitReasoning: omitReasoning,
+          postCleanerOmitReasoningEffort: omitReasoningEffort,
+          postCleanerMaxTokens: maxTokens,
+          postCleanerTimeoutMs: timeoutMs,
+        );
+    }
+  }
+}
+
+class _StudioSlotSettingsDialog extends StatefulWidget {
+  final StudioSlot slot;
+  final PipelineSettings pipeline;
+
+  const _StudioSlotSettingsDialog({
+    required this.slot,
+    required this.pipeline,
+  });
+
+  @override
+  State<_StudioSlotSettingsDialog> createState() =>
+      _StudioSlotSettingsDialogState();
+}
+
+class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
+  late double _temperature;
+  late bool _requestReasoning;
+  late bool _omitReasoning;
+  late bool _omitReasoningEffort;
+  late TextEditingController _maxTokensCtrl;
+  late TextEditingController _timeoutCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.pipeline;
+    switch (widget.slot) {
+      case StudioSlot.finalGenerator:
+        _temperature = p.studioFinalTemperature;
+        _requestReasoning = p.studioFinalRequestReasoning;
+        _omitReasoning = p.studioFinalOmitReasoning;
+        _omitReasoningEffort = p.studioFinalOmitReasoningEffort;
+        _maxTokensCtrl = TextEditingController(
+          text: p.studioFinalMaxTokens > 0 ? '${p.studioFinalMaxTokens}' : '',
+        );
+        _timeoutCtrl = TextEditingController(
+          text: p.studioFinalTimeoutMs > 0
+              ? '${p.studioFinalTimeoutMs ~/ 1000}'
+              : '',
+        );
+      case StudioSlot.tracker:
+        _temperature = p.studioTrackerTemperature;
+        _requestReasoning = p.studioTrackerRequestReasoning;
+        _omitReasoning = p.studioTrackerOmitReasoning;
+        _omitReasoningEffort = p.studioTrackerOmitReasoningEffort;
+        _maxTokensCtrl = TextEditingController(
+          text: p.studioTrackerMaxTokens > 0
+              ? '${p.studioTrackerMaxTokens}'
+              : '',
+        );
+        _timeoutCtrl = TextEditingController(
+          text: p.studioTrackerTimeoutMs > 0
+              ? '${p.studioTrackerTimeoutMs ~/ 1000}'
+              : '',
+        );
+      case StudioSlot.cleaner:
+        _temperature = p.postCleanerTemperature;
+        _requestReasoning = p.postCleanerRequestReasoning;
+        _omitReasoning = p.postCleanerOmitReasoning;
+        _omitReasoningEffort = p.postCleanerOmitReasoningEffort;
+        _maxTokensCtrl = TextEditingController(
+          text: p.postCleanerMaxTokens > 0 ? '${p.postCleanerMaxTokens}' : '',
+        );
+        _timeoutCtrl = TextEditingController(
+          text: p.postCleanerTimeoutMs > 0
+              ? '${p.postCleanerTimeoutMs ~/ 1000}'
+              : '',
+        );
+    }
+  }
+
+  @override
+  void dispose() {
+    _maxTokensCtrl.dispose();
+    _timeoutCtrl.dispose();
+    super.dispose();
+  }
+
+  String get _slotTitle {
+    switch (widget.slot) {
+      case StudioSlot.finalGenerator:
+        return 'Final Generator';
+      case StudioSlot.tracker:
+        return 'Trackers';
+      case StudioSlot.cleaner:
+        return 'Cleaner';
+    }
+  }
+
+  String get _maxTokensLabel {
+    switch (widget.slot) {
+      case StudioSlot.finalGenerator:
+        return 'Max response length (0 = default)';
+      case StudioSlot.tracker:
+        return 'Max response length (0 = default)';
+      case StudioSlot.cleaner:
+        return 'Max response length (0 = default)';
+    }
+  }
+
+  String get _maxTokensHint {
+    switch (widget.slot) {
+      case StudioSlot.finalGenerator:
+        return '8000';
+      case StudioSlot.tracker:
+        return '1600';
+      case StudioSlot.cleaner:
+        return '0';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: Text('$_slotTitle Settings'),
+      content: SizedBox(
+        width: 360,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Temperature', style: tt.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  )),
+              Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: _temperature,
+                      min: 0,
+                      max: 2,
+                      divisions: 200,
+                      label: _temperature.toStringAsFixed(1),
+                      onChanged: (v) => setState(() => _temperature = v),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 44,
+                    child: Text(
+                      _temperature.toStringAsFixed(1),
+                      style: tt.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('Request Reasoning', style: tt.bodySmall),
+                value: _requestReasoning,
+                onChanged: (v) => setState(() => _requestReasoning = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('Omit Reasoning', style: tt.bodySmall),
+                value: _omitReasoning,
+                onChanged: (v) => setState(() => _omitReasoning = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('Omit Reasoning Effort', style: tt.bodySmall),
+                value: _omitReasoningEffort,
+                onChanged: (v) => setState(() => _omitReasoningEffort = v),
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                controller: _maxTokensCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: _maxTokensLabel,
+                  hintText: _maxTokensHint,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _timeoutCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Timeout (seconds, 0 = default)',
+                  hintText: '0',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final maxTokens = int.tryParse(_maxTokensCtrl.text.trim()) ?? 0;
+            final seconds = int.tryParse(_timeoutCtrl.text.trim()) ?? 0;
+            final timeoutMs = seconds > 0 ? seconds * 1000 : 0;
+            Navigator.of(context).pop(
+              StudioSlotSettings(
+                temperature: _temperature,
+                requestReasoning: _requestReasoning,
+                omitReasoning: _omitReasoning,
+                omitReasoningEffort: _omitReasoningEffort,
+                maxTokens: maxTokens,
+                timeoutMs: timeoutMs,
+              ),
+            );
+          },
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

@@ -331,6 +331,8 @@ class AuxLlmClient {
     required int timeoutMs,
     CancelToken? cancelToken,
     bool omitReasoning = false,
+    bool omitReasoningEffort = true,
+    bool requestReasoning = false,
   }) async {
     if (config.endpoint.isEmpty || config.model.isEmpty) {
       throw Exception('Aux API not configured');
@@ -346,6 +348,8 @@ class AuxLlmClient {
         timeoutMs: timeoutMs,
         cancelToken: cancelToken,
         omitReasoning: omitReasoning,
+        omitReasoningEffort: omitReasoningEffort,
+        requestReasoning: requestReasoning,
       ),
     );
   }
@@ -374,6 +378,8 @@ class AuxLlmClient {
     CancelToken? cancelToken,
     void Function(String accumulatedText)? onChunk,
     bool omitReasoning = false,
+    bool omitReasoningEffort = true,
+    bool requestReasoning = false,
   }) async {
     if (config.endpoint.isEmpty || config.model.isEmpty) {
       throw Exception('Aux API not configured');
@@ -390,6 +396,8 @@ class AuxLlmClient {
         cancelToken: cancelToken,
         onChunk: onChunk,
         omitReasoning: omitReasoning,
+        omitReasoningEffort: omitReasoningEffort,
+        requestReasoning: requestReasoning,
       ),
     );
   }
@@ -425,6 +433,8 @@ class AuxLlmClient {
     required int timeoutMs,
     CancelToken? cancelToken,
     bool omitReasoning = false,
+    bool omitReasoningEffort = true,
+    bool requestReasoning = false,
   }) async {
     final completer = Completer<String>();
     final transport = pickChatTransport(config.protocol);
@@ -442,7 +452,9 @@ class AuxLlmClient {
           temperature: temperature,
           topP: 1.0,
           stream: false,
+          requestReasoning: requestReasoning,
           omitReasoning: omitReasoning,
+          omitReasoningEffort: omitReasoningEffort,
         ),
         cancelToken: cancelToken,
         onComplete: (text, _, {rawResponseJson}) {
@@ -469,6 +481,8 @@ class AuxLlmClient {
     CancelToken? cancelToken,
     void Function(String accumulatedText)? onChunk,
     bool omitReasoning = false,
+    bool omitReasoningEffort = true,
+    bool requestReasoning = false,
   }) async {
     final completer = Completer<String>();
     final transport = pickChatTransport(config.protocol);
@@ -487,7 +501,9 @@ class AuxLlmClient {
           temperature: temperature,
           topP: 1.0,
           stream: true,
+          requestReasoning: requestReasoning,
           omitReasoning: omitReasoning,
+          omitReasoningEffort: omitReasoningEffort,
         ),
         cancelToken: cancelToken,
         onUpdate: (delta, _) {

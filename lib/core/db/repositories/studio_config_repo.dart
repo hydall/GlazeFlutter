@@ -255,6 +255,17 @@ class StudioConfigRepo implements SyncStudioConfigStore {
         current = current.copyWith(refreshPolicy: 'turn');
         changed = true;
       }
+      // Migrate pre-gen trackers to the new default context size (20).
+      // Post-processing trackers get 2 (last turn + the response to edit).
+      if (current.phase == 'post_processing') {
+        if (current.contextSize != 2) {
+          current = current.copyWith(contextSize: 2);
+          changed = true;
+        }
+      } else if (!_isFinalResponder(current) && current.contextSize < 20) {
+        current = current.copyWith(contextSize: 20);
+        changed = true;
+      }
       migrated.add(current);
     }
     final withBeauty = _ensureBeautyShardAgent(config, migrated);
@@ -287,7 +298,7 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       refreshPolicy: spec.refreshPolicy,
       invalidationSignals: spec.invalidationSignals,
       phase: spec.phase,
-      contextSize: spec.contextSize > 0 ? spec.contextSize : 5,
+      contextSize: spec.contextSize > 0 ? spec.contextSize : 20,
     );
     final updated = <StudioAgent>[
       ...agents.take(insertAt),
