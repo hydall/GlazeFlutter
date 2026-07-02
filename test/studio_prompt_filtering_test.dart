@@ -10,6 +10,7 @@ import 'package:glaze_flutter/core/llm/studio_controller_ontology.dart';
 import 'package:glaze_flutter/core/llm/context_calculator.dart';
 import 'package:glaze_flutter/core/llm/studio_message_builder.dart';
 import 'package:glaze_flutter/core/llm/studio_prompt_text.dart';
+import 'package:glaze_flutter/core/llm/studio_stage_brief.dart';
 import 'package:glaze_flutter/core/models/api_config.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
@@ -182,6 +183,69 @@ void main() {
       expect(text, isNot(contains('FINAL ONLY')));
       expect(text, isNot(contains('CLEANER ONLY')));
       expect(text, isNot(contains('SEEDED RUNTIME ENVELOPE')));
+    });
+
+    test('final brief macros expand and suppress previous_agents block', () {
+      const macroConfig = StudioConfig(
+        sessionId: 's1',
+        agents: [
+          StudioAgent(
+            id: 'agent_s_continuity_1',
+            name: 'Continuity Controller',
+          ),
+          StudioAgent(id: 'agent_s_dialogue_1', name: 'Dialogue Controller'),
+        ],
+      );
+      const macroPreset = StudioPreset(
+        id: 'studio',
+        blocks: [
+          StudioPresetBlock(
+            id: 'previous_agents',
+            kind: 'previous_agents',
+            content: '',
+            section: 'final',
+            order: 0,
+          ),
+          StudioPresetBlock(
+            id: 'brief_macros',
+            kind: 'custom_text',
+            content:
+                '<continuity>{{studio_continuity_brief}}</continuity>\n'
+                '<dialogue>{{studio_dialogue_brief}}</dialogue>',
+            section: 'final',
+            order: 1,
+          ),
+        ],
+      );
+      final messages = builder.buildAgentMessages(
+        agent: const StudioAgent(id: 'final', name: 'Main Responder'),
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        config: macroConfig,
+        studioPreset: macroPreset,
+        priorBriefs: const [
+          StudioStageBrief(
+            agentId: 'agent_s_continuity_1',
+            agentName: 'Continuity Controller',
+            brief:
+                'Focus:\n- Keep the chip location consistent with the current scene.',
+          ),
+          StudioStageBrief(
+            agentId: 'agent_s_dialogue_1',
+            agentName: 'Dialogue Controller',
+            brief:
+                'Focus:\n- Let Claire speak only if she can plausibly hear the exchange.',
+          ),
+        ],
+        isFinalResponse: true,
+      );
+
+      final text = joinedMessages(messages);
+      expect(text, contains('<continuity>'));
+      expect(text, contains('Keep the chip location consistent'));
+      expect(text, contains('<dialogue>'));
+      expect(text, contains('Let Claire speak only if she can plausibly hear'));
+      expect('Studio agent brief'.allMatches(text).length, 2);
     });
   });
 
