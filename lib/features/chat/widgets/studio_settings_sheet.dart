@@ -202,6 +202,8 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             },
           ),
           const Divider(),
+          _buildPostTrackerContextSetting(pipeline),
+          const Divider(),
           _buildRecoverySection(),
         ],
       ),
@@ -213,6 +215,39 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   ) async {
     final pipeline = ref.read(pipelineSettingsProvider);
     await ref.read(pipelineSettingsProvider.notifier).save(mutate(pipeline));
+  }
+
+  Widget _buildPostTrackerContextSetting(PipelineSettings pipeline) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Post-Processing', style: tt.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          'How many chat messages post-processing trackers receive '
+          '(last turn + the response to edit).',
+          style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (final value in const [1, 2, 3, 5])
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text('$value'),
+                  selected: pipeline.studioPostTrackerContextSize == value,
+                  onSelected: (_) => _savePipelineModel(
+                    (p) => p.copyWith(studioPostTrackerContextSize: value),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _buildModelSlot({

@@ -135,8 +135,14 @@ class StudioAgentExecutor {
         );
       }
       try {
+        final override = _ref
+            .read(pipelineSettingsProvider)
+            .studioPostTrackerContextSize;
+        final effectiveAgent = override > 0
+            ? agent.copyWith(contextSize: override)
+            : agent;
         final messages = _messageBuilder.buildAgentMessages(
-          agent: agent,
+          agent: effectiveAgent,
           promptResult: promptResult,
           promptPayload: promptPayload,
           config: config,

@@ -142,6 +142,11 @@ abstract class PipelineSettings with _$PipelineSettings {
     // 5 per agent, batch = max across group).
     @Default(0) int studioTrackerContextSize,
 
+    // ── Post-processing trackers ─────────────────────────────────────────
+    // Number of trailing chat messages forwarded to post-processing
+    // (post-gen) trackers. Default 1 (only the response to edit).
+    @Default(1) int studioPostTrackerContextSize,
+
     // ── POST-cleaner ──────────────────────────────────────────────────────
     @Default(false) bool postCleanerEnabled,
     @Default(0.7) double postCleanerTemperature,
