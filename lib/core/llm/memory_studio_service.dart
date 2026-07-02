@@ -85,6 +85,8 @@ class MemoryStudioService {
     required StudioConfig config,
     required PromptResult promptResult,
     required PromptPayload promptPayload,
+    PromptResult? finalPromptResult,
+    PromptPayload? finalPromptPayload,
     required ApiConfig apiConfig,
     required String sessionId,
     CancelToken? cancelToken,
@@ -308,10 +310,12 @@ class MemoryStudioService {
         return const StudioPipelineResult(status: 'aborted', response: '');
       }
 
+      final generatorPromptResult = finalPromptResult ?? promptResult;
+      final generatorPromptPayload = finalPromptPayload ?? promptPayload;
       final agentResult = await _executor.runFinalGenerator(
         agent: finalAgent,
-        promptResult: promptResult,
-        promptPayload: promptPayload,
+        promptResult: generatorPromptResult,
+        promptPayload: generatorPromptPayload,
         apiConfig: apiConfig,
         config: config,
         studioPreset: studioPreset,
@@ -362,8 +366,8 @@ class MemoryStudioService {
         final result = await _executor.runPostProcessingTracker(
           agent: agent,
           mainResponse: mainResponse,
-          promptResult: promptResult,
-          promptPayload: promptPayload,
+          promptResult: generatorPromptResult,
+          promptPayload: generatorPromptPayload,
           apiConfig: apiConfig,
           config: config,
           studioPreset: studioPreset,

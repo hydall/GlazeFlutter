@@ -19,6 +19,7 @@ import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/agent_operation_record.dart';
 import '../../../core/models/api_config.dart';
+import '../../../core/models/studio_config.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/pipeline_settings_provider.dart';
@@ -100,10 +101,11 @@ class StreamGenerationService {
       }
       final apiConfig = payload.apiConfig;
 
+      final pipelineSettings = _ref.read(pipelineSettingsProvider);
       final studioFinalContextSize = studioConfig == null
           ? 0
-          : _ref.read(pipelineSettingsProvider).studioFinalContextSize > 0
-          ? _ref.read(pipelineSettingsProvider).studioFinalContextSize
+          : pipelineSettings.studioFinalContextSize > 0
+          ? pipelineSettings.studioFinalContextSize
           : studioConfig.maxFinalHistoryMessages;
       final studioFinalVisibleMessageIds = studioConfig == null
           ? const <String>{}
@@ -111,53 +113,11 @@ class StreamGenerationService {
               payload.history,
               studioFinalContextSize,
             );
-      final effectivePayload = studioConfig != null
-          ? PromptPayload(
-              character: payload.character,
-              persona: payload.persona,
-              preset: payload.preset,
-              history: payload.history,
-              sessionId: payload.sessionId,
-              apiConfig: payload.apiConfig,
-              sessionVars: payload.sessionVars,
-              globalVars: payload.globalVars,
-              summaryContent: payload.summaryContent,
-              summaryPrefix: payload.summaryPrefix,
-              memoryContent: payload.memoryContent,
-              memoryMacroContent: payload.memoryMacroContent,
-              memoryInjectionTarget: payload.memoryInjectionTarget,
-              guidanceText: payload.guidanceText,
-              lorebooks: payload.lorebooks,
-              lorebookSettings: payload.lorebookSettings,
-              lorebookActivations: payload.lorebookActivations,
-              vectorEntries: payload.vectorEntries,
-              authorsNote: payload.authorsNote,
-              characterDepthPrompt: payload.characterDepthPrompt,
-              characterDepthPromptDepth: payload.characterDepthPromptDepth,
-              characterDepthPromptRole: payload.characterDepthPromptRole,
-              memoryCoverage: payload.memoryCoverage,
-              globalRegexes: payload.globalRegexes,
-              preScannedEntries: payload.preScannedEntries,
-              triggeredMemories: payload.triggeredMemories,
-              runtimePromptBlocks: payload.runtimePromptBlocks,
-              memorySelection: payload.memorySelection,
-              memoryExcerptingEnabled: payload.memoryExcerptingEnabled,
-              memoryPackingMode: payload.memoryPackingMode,
-              memoryExcerptTokensPerChunk: payload.memoryExcerptTokensPerChunk,
-              memoryExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
-              chunkFirstTopEntries: payload.chunkFirstTopEntries,
-              chunkFirstTopChunks: payload.chunkFirstTopChunks,
-              arcContent: payload.arcContent,
-              entitiesContent: payload.entitiesContent,
-              studioSessionStateContent: payload.studioSessionStateContent,
-              recalledMessagesContent: payload.recalledMessagesContent,
-              recalledMessageChunks: payload.recalledMessageChunks,
-              sourceWindowVisibleMessageIds: studioFinalVisibleMessageIds,
-              memoryInjectionFingerprint: payload.memoryInjectionFingerprint,
-            )
+      final finalPayload = studioConfig != null
+          ? _payloadWithSourceWindow(payload, studioFinalVisibleMessageIds)
           : payload;
 
-      final promptResult = await buildPromptInIsolate(effectivePayload);
+      final promptResult = await buildPromptInIsolate(finalPayload);
       if (_isAborted()) {
         return ChatState(
           session: saveSession ?? session,
@@ -224,6 +184,28 @@ class StreamGenerationService {
       final triggeredMemories = promptResult.triggeredMemories;
 
       if (studioConfig != null) {
+        final trackerContextSize = pipelineSettings.studioTrackerContextSize > 0
+            ? pipelineSettings.studioTrackerContextSize
+            : _maxStudioTrackerContextSize(studioConfig);
+        final trackerVisibleMessageIds = computeStudioFinalVisibleMessageIds(
+          payload.history,
+          trackerContextSize,
+        );
+        final trackerPayload = _payloadWithSourceWindow(
+          payload,
+          trackerVisibleMessageIds,
+        );
+        final trackerPromptResult =
+            setEquals(trackerVisibleMessageIds, studioFinalVisibleMessageIds)
+            ? promptResult
+            : await buildPromptInIsolate(trackerPayload);
+        if (_isAborted()) {
+          return ChatState(
+            session: saveSession ?? session,
+            isGenerating: false,
+            visibleStartIndex: vsi,
+          );
+        }
         _log(
           'studio intercept char=$_charId session=${session.id} '
           'agents=${studioConfig.agents.length}',
@@ -256,8 +238,10 @@ class StreamGenerationService {
 
         final studioResult = await studioService.runTrackerCycle(
           config: studioConfig,
-          promptResult: promptResult,
-          promptPayload: payload,
+          promptResult: trackerPromptResult,
+          promptPayload: trackerPayload,
+          finalPromptResult: promptResult,
+          finalPromptPayload: finalPayload,
           apiConfig: apiConfig,
           sessionId: session.id,
           cancelToken: cancelToken,
@@ -364,7 +348,7 @@ class StreamGenerationService {
               visibleStartIndex: vsi,
               studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
             )
-            .copyWith(promptPayload: payload);
+            .copyWith(promptPayload: finalPayload);
         final messageId = _lastAssistantId(finalState.session!, regenTargetId);
         _recordStudioTrackerOperation(
           sessionId: session.id,
@@ -648,10 +632,71 @@ class StreamGenerationService {
     final start = nonHidden.length > finalContextSize
         ? nonHidden.length - finalContextSize
         : 0;
-    return nonHidden
-        .skip(start)
-        .map((m) => m.id)
-        .toSet();
+    return nonHidden.skip(start).map((m) => m.id).toSet();
+  }
+
+  static int _maxStudioTrackerContextSize(StudioConfig config) {
+    final preGen =
+        config.agents
+            .where((a) => a.enabled && a.phase == 'pre_generation')
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+    if (preGen.length <= 1) return 5;
+    preGen.removeLast();
+    if (preGen.isEmpty) return 5;
+    return preGen
+        .map((a) => a.contextSize)
+        .fold<int>(1, (max, size) => size > max ? size : max);
+  }
+
+  static PromptPayload _payloadWithSourceWindow(
+    PromptPayload payload,
+    Set<String> sourceWindowVisibleMessageIds,
+  ) {
+    return PromptPayload(
+      character: payload.character,
+      persona: payload.persona,
+      preset: payload.preset,
+      history: payload.history,
+      sessionId: payload.sessionId,
+      apiConfig: payload.apiConfig,
+      sessionVars: payload.sessionVars,
+      globalVars: payload.globalVars,
+      summaryContent: payload.summaryContent,
+      summaryPrefix: payload.summaryPrefix,
+      memoryContent: payload.memoryContent,
+      memoryMacroContent: payload.memoryMacroContent,
+      memoryInjectionTarget: payload.memoryInjectionTarget,
+      guidanceText: payload.guidanceText,
+      lorebooks: payload.lorebooks,
+      lorebookSettings: payload.lorebookSettings,
+      lorebookActivations: payload.lorebookActivations,
+      vectorEntries: payload.vectorEntries,
+      authorsNote: payload.authorsNote,
+      characterDepthPrompt: payload.characterDepthPrompt,
+      characterDepthPromptDepth: payload.characterDepthPromptDepth,
+      characterDepthPromptRole: payload.characterDepthPromptRole,
+      memoryCoverage: payload.memoryCoverage,
+      globalRegexes: payload.globalRegexes,
+      preScannedEntries: payload.preScannedEntries,
+      triggeredMemories: payload.triggeredMemories,
+      runtimePromptBlocks: payload.runtimePromptBlocks,
+      memorySelection: payload.memorySelection,
+      memoryExcerptingEnabled: payload.memoryExcerptingEnabled,
+      memoryPackingMode: payload.memoryPackingMode,
+      memoryExcerptTokensPerChunk: payload.memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: payload.chunkFirstTopEntries,
+      chunkFirstTopChunks: payload.chunkFirstTopChunks,
+      arcContent: payload.arcContent,
+      entitiesContent: payload.entitiesContent,
+      studioSessionStateContent: payload.studioSessionStateContent,
+      recalledMessagesContent: payload.recalledMessagesContent,
+      recalledMessageChunks: payload.recalledMessageChunks,
+      disableSourceWindowExclusion: payload.disableSourceWindowExclusion,
+      sourceWindowVisibleMessageIds: sourceWindowVisibleMessageIds,
+      memoryInjectionFingerprint: payload.memoryInjectionFingerprint,
+    );
   }
 
   static String? _lastAssistantId(ChatSession session, String? regenTargetId) {
