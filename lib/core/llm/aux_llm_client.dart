@@ -258,6 +258,7 @@ class AuxLlmClient {
   Future<AuxApiConfig> resolveStudioSlotConfig(
     String apiConfigId, {
     String errorLabel = 'studio-slot',
+    String modelOverride = '',
   }) async {
     await _ref.read(apiListProvider.future);
     final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
@@ -270,14 +271,15 @@ class AuxLlmClient {
       debugPrint('[Aux] no Studio API config available for $errorLabel');
       throw Exception('No Studio API config available for $errorLabel');
     }
+    final model = modelOverride.isNotEmpty ? modelOverride : config.model;
     debugPrint(
       '[Aux] resolved Studio slot for $errorLabel '
-      'model=${config.model} endpoint=${config.endpoint}',
+      'model=$model endpoint=${config.endpoint}',
     );
     return AuxApiConfig(
       endpoint: config.endpoint,
       apiKey: config.apiKey,
-      model: config.model,
+      model: model,
       protocol: config.protocol,
     );
   }
