@@ -47,8 +47,14 @@ class StudioMessageBuilder {
       promptPayload: promptPayload,
       studioConfig: config,
     );
-    final blocks = studioPreset.blocks.where((b) => b.enabled).toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final section = _sectionForRun(agent, isFinalResponse);
+    final blocks =
+        studioPreset.blocks
+            .where((b) => b.enabled && b.section == section)
+            .where((b) => !_isRuntimeComputedBlock(b))
+            .where((b) => _blockAppliesToAgent(b, agent, isFinalResponse))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
     final messages = <Map<String, dynamic>>[];
 
     for (final block in blocks) {
@@ -132,8 +138,11 @@ class StudioMessageBuilder {
           break;
         case 'chat_history':
           final history = isFinalResponse
-              ? limitFinalHistory(context.history, config,
-                  pipelineOverride: finalContextOverride)
+              ? limitFinalHistory(
+                  context.history,
+                  config,
+                  pipelineOverride: finalContextOverride,
+                )
               : limitTrackerHistory(context.history, agent.contextSize);
           messages.addAll(history.map((m) => m.toApiMap()));
           break;
@@ -224,7 +233,14 @@ class StudioMessageBuilder {
   }) {
     final blocks =
         studioPreset.blocks
-            .where((b) => b.enabled && b.kind == 'agent_instruction')
+            .where((b) => b.enabled && b.section == 'pregen')
+            .where(
+              (b) =>
+                  b.kind == 'agent_instruction' ||
+                  (b.kind == 'tracker_instruction' &&
+                      _trackerInstructionAppliesToAgent(b, agent)),
+            )
+            .where((b) => !_isRuntimeComputedBlock(b))
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order));
     final buf = StringBuffer();
@@ -257,7 +273,10 @@ class StudioMessageBuilder {
   ) {
     final blocks =
         studioPreset.blocks
-            .where((b) => b.enabled && b.kind != 'agent_instruction')
+            .where((b) => b.enabled && b.section == 'pregen')
+            .where((b) => b.kind != 'agent_instruction')
+            .where((b) => b.kind != 'tracker_instruction')
+            .where((b) => !_isRuntimeComputedBlock(b))
             .where((b) => b.kind != 'static_context')
             .where((b) => b.kind != 'chat_history')
             .where((b) => b.kind != 'dynamic_context')
@@ -351,6 +370,54 @@ class StudioMessageBuilder {
   /// counting uses `String.runes` for Unicode/emoji safety.
   static const _trimMarker =
       '\n\n[Trimmed to keep this agent request compact]\n\n';
+
+  String _sectionForRun(StudioAgent agent, bool isFinalResponse) {
+    if (isFinalResponse) return 'final';
+    if (agent.phase == 'post_processing') return 'cleaner';
+    return 'pregen';
+  }
+
+  bool _isRuntimeComputedBlock(StudioPresetBlock block) {
+    return const {
+      'runtime_envelope',
+      'brief_usage_note',
+      'hard_style_contract',
+      'beauty_shard_contract',
+    }.contains(block.id);
+  }
+
+  bool _blockAppliesToAgent(
+    StudioPresetBlock block,
+    StudioAgent agent,
+    bool isFinalResponse,
+  ) {
+    if (block.kind != 'tracker_instruction') return true;
+    if (isFinalResponse || agent.phase == 'post_processing') return false;
+    return _trackerInstructionAppliesToAgent(block, agent);
+  }
+
+  bool _trackerInstructionAppliesToAgent(
+    StudioPresetBlock block,
+    StudioAgent agent,
+  ) {
+    final agentText = '${agent.id}\n${agent.name}'.toLowerCase();
+    final blockText = '${block.id}\n${block.title}'.toLowerCase();
+    const aliases = <String, List<String>>{
+      'continuity': ['continuity'],
+      'agency': ['agency', 'character'],
+      'narrative': ['narrative', 'pacing', 'style'],
+      'dialogue': ['dialogue'],
+      'guard': ['guard', 'loop', 'prose'],
+      'world': ['world', 'npc'],
+      'meta': ['meta', 'ooc', 'lumia'],
+      'beauty': ['beauty'],
+    };
+    for (final entry in aliases.entries) {
+      if (!entry.value.any(agentText.contains)) continue;
+      return entry.value.any(blockText.contains);
+    }
+    return false;
+  }
 
   String truncateAgentText(String text, int maxChars) {
     if (text.length <= maxChars) return text;

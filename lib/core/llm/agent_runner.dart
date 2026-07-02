@@ -152,6 +152,7 @@ class AgentRunner {
                 ? true
                 : pipeline.studioFinalOmitReasoning,
             omitReasoningEffort: pipeline.studioFinalOmitReasoningEffort,
+            reasoningEffort: pipeline.studioFinalReasoningEffort,
           )
         : agent.phase == 'post_processing'
         ? resolved.copyWithReasoning(
@@ -162,6 +163,7 @@ class AgentRunner {
                 ? true
                 : pipeline.postCleanerOmitReasoning,
             omitReasoningEffort: pipeline.postCleanerOmitReasoningEffort,
+            reasoningEffort: pipeline.postCleanerReasoningEffort,
           )
         : resolved.copyWithReasoning(
             requestReasoning: pipeline.studioTrackerDisableReasoning
@@ -171,6 +173,7 @@ class AgentRunner {
                 ? true
                 : pipeline.studioTrackerOmitReasoning,
             omitReasoningEffort: pipeline.studioTrackerOmitReasoningEffort,
+            reasoningEffort: pipeline.studioTrackerReasoningEffort,
           );
     return _streamRunner.run(
       agent: agent,
@@ -216,28 +219,84 @@ class AgentRunner {
     final pipeline = _ref.read(pipelineSettingsProvider);
     if (isFinalResponse) {
       if (pipeline.generationModel.isNotEmpty) {
-        return resolver.resolveAgentConfig(
-          current,
-          runApiConfigId,
-          pipeline.generationModel,
-        );
+        return resolver
+            .resolveAgentConfig(
+              current,
+              runApiConfigId,
+              pipeline.generationModel,
+            )
+            .copyWithSampling(
+              topP: pipeline.studioFinalTopP,
+              topK: pipeline.studioFinalTopK,
+              frequencyPenalty: pipeline.studioFinalFrequencyPenalty,
+              presencePenalty: pipeline.studioFinalPresencePenalty,
+              omitTemperature: pipeline.studioFinalOmitTemperature,
+              omitTopP: pipeline.studioFinalOmitTopP,
+            );
       }
+      return resolver
+          .resolveAgentConfig(current, runApiConfigId, '')
+          .copyWithSampling(
+            topP: pipeline.studioFinalTopP,
+            topK: pipeline.studioFinalTopK,
+            frequencyPenalty: pipeline.studioFinalFrequencyPenalty,
+            presencePenalty: pipeline.studioFinalPresencePenalty,
+            omitTemperature: pipeline.studioFinalOmitTemperature,
+            omitTopP: pipeline.studioFinalOmitTopP,
+          );
     } else if (agent.phase == 'post_processing') {
       if (pipeline.postCleanerModel.isNotEmpty) {
-        return resolver.resolveAgentConfig(
-          current,
-          runApiConfigId,
-          pipeline.postCleanerModel,
-        );
+        return resolver
+            .resolveAgentConfig(
+              current,
+              runApiConfigId,
+              pipeline.postCleanerModel,
+            )
+            .copyWithSampling(
+              topP: pipeline.postCleanerTopP,
+              topK: pipeline.postCleanerTopK,
+              frequencyPenalty: pipeline.postCleanerFrequencyPenalty,
+              presencePenalty: pipeline.postCleanerPresencePenalty,
+              omitTemperature: pipeline.postCleanerOmitTemperature,
+              omitTopP: pipeline.postCleanerOmitTopP,
+            );
       }
+      return resolver
+          .resolveAgentConfig(current, runApiConfigId, '')
+          .copyWithSampling(
+            topP: pipeline.postCleanerTopP,
+            topK: pipeline.postCleanerTopK,
+            frequencyPenalty: pipeline.postCleanerFrequencyPenalty,
+            presencePenalty: pipeline.postCleanerPresencePenalty,
+            omitTemperature: pipeline.postCleanerOmitTemperature,
+            omitTopP: pipeline.postCleanerOmitTopP,
+          );
     } else if (pipeline.studioTrackerModelOverride.isNotEmpty) {
-      return resolver.resolveAgentConfig(
-        current,
-        runApiConfigId,
-        pipeline.studioTrackerModelOverride,
-      );
+      return resolver
+          .resolveAgentConfig(
+            current,
+            runApiConfigId,
+            pipeline.studioTrackerModelOverride,
+          )
+          .copyWithSampling(
+            topP: pipeline.studioTrackerTopP,
+            topK: pipeline.studioTrackerTopK,
+            frequencyPenalty: pipeline.studioTrackerFrequencyPenalty,
+            presencePenalty: pipeline.studioTrackerPresencePenalty,
+            omitTemperature: pipeline.studioTrackerOmitTemperature,
+            omitTopP: pipeline.studioTrackerOmitTopP,
+          );
     }
-    return resolver.resolveAgentConfig(current, runApiConfigId, '');
+    return resolver
+        .resolveAgentConfig(current, runApiConfigId, '')
+        .copyWithSampling(
+          topP: pipeline.studioTrackerTopP,
+          topK: pipeline.studioTrackerTopK,
+          frequencyPenalty: pipeline.studioTrackerFrequencyPenalty,
+          presencePenalty: pipeline.studioTrackerPresencePenalty,
+          omitTemperature: pipeline.studioTrackerOmitTemperature,
+          omitTopP: pipeline.studioTrackerOmitTopP,
+        );
   }
 
   Future<String> _readRunApiConfigId(String sessionId) async {
@@ -295,7 +354,9 @@ class AgentRunner {
       return null;
     }
     if (agent.phase == 'post_processing') {
-      final cleanerGlobal = _ref.read(pipelineSettingsProvider).postCleanerMaxTokens;
+      final cleanerGlobal = _ref
+          .read(pipelineSettingsProvider)
+          .postCleanerMaxTokens;
       if (cleanerGlobal > 0) return cleanerGlobal;
       return null;
     }
@@ -472,6 +533,37 @@ class ResolvedAgentConfig {
       reasoningEffort: reasoningEffort ?? this.reasoningEffort,
       omitReasoning: omitReasoning ?? this.omitReasoning,
       omitReasoningEffort: omitReasoningEffort ?? this.omitReasoningEffort,
+      stream: stream,
+      cacheControlTtl: cacheControlTtl,
+      cacheBreakpointMode: cacheBreakpointMode,
+      sessionIdMode: sessionIdMode,
+      contextSize: contextSize,
+    );
+  }
+
+  ResolvedAgentConfig copyWithSampling({
+    double? topP,
+    int? topK,
+    double? frequencyPenalty,
+    double? presencePenalty,
+    bool? omitTemperature,
+    bool? omitTopP,
+  }) {
+    return ResolvedAgentConfig(
+      endpoint: endpoint,
+      apiKey: apiKey,
+      model: model,
+      protocol: protocol,
+      topP: topP ?? this.topP,
+      topK: topK ?? this.topK,
+      frequencyPenalty: frequencyPenalty ?? this.frequencyPenalty,
+      presencePenalty: presencePenalty ?? this.presencePenalty,
+      omitTemperature: omitTemperature ?? this.omitTemperature,
+      omitTopP: omitTopP ?? this.omitTopP,
+      requestReasoning: requestReasoning,
+      reasoningEffort: reasoningEffort,
+      omitReasoning: omitReasoning,
+      omitReasoningEffort: omitReasoningEffort,
       stream: stream,
       cacheControlTtl: cacheControlTtl,
       cacheBreakpointMode: cacheBreakpointMode,

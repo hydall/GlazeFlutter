@@ -11,6 +11,13 @@ class StudioPresetRepo implements SyncStudioPresetStore {
 
   const StudioPresetRepo(this.db);
 
+  static const _runtimeComputedBlockIds = {
+    'runtime_envelope',
+    'brief_usage_note',
+    'hard_style_contract',
+    'beauty_shard_contract',
+  };
+
   @override
   Future<StudioPreset?> getById(String id) async {
     final row = await (db.select(
@@ -32,14 +39,19 @@ class StudioPresetRepo implements SyncStudioPresetStore {
   Future<void> put(StudioPreset preset) => upsert(preset);
 
   Future<void> upsert(StudioPreset preset) async {
-    await db.into(db.studioPresetRows).insertOnConflictUpdate(
-      StudioPresetRowsCompanion.insert(
-        presetId: preset.id,
-        name: preset.name,
-        blocksJson: Value(jsonEncode(preset.blocks.map((b) => b.toJson()).toList())),
-        updatedAt: Value(preset.updatedAt),
-      ),
-    );
+    final normalized = _normalizePreset(preset);
+    await db
+        .into(db.studioPresetRows)
+        .insertOnConflictUpdate(
+          StudioPresetRowsCompanion.insert(
+            presetId: normalized.id,
+            name: normalized.name,
+            blocksJson: Value(
+              jsonEncode(normalized.blocks.map((b) => b.toJson()).toList()),
+            ),
+            updatedAt: Value(normalized.updatedAt),
+          ),
+        );
   }
 
   @override
@@ -61,11 +73,21 @@ class StudioPresetRepo implements SyncStudioPresetStore {
     } catch (_) {
       blocks = [];
     }
-    return StudioPreset(
-      id: row.presetId,
-      name: row.name,
-      blocks: blocks,
-      updatedAt: row.updatedAt,
+    return _normalizePreset(
+      StudioPreset(
+        id: row.presetId,
+        name: row.name,
+        blocks: blocks,
+        updatedAt: row.updatedAt,
+      ),
     );
+  }
+
+  StudioPreset _normalizePreset(StudioPreset preset) {
+    final blocks = preset.blocks
+        .where((block) => !_runtimeComputedBlockIds.contains(block.id))
+        .toList();
+    if (blocks.length == preset.blocks.length) return preset;
+    return preset.copyWith(blocks: blocks);
   }
 }

@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/api_config.dart';
 import '../../../core/llm/sse_client.dart';
 import '../../../core/llm/studio_controller_ontology.dart';
 import '../../../core/models/pipeline_settings.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/utils/time_helpers.dart';
+import '../../../shared/widgets/menu_group.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../settings/api_list_provider.dart';
@@ -57,8 +59,9 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   StudioConfig? _config;
   bool _loading = true;
 
-  List<String> _fetchedModels = const [];
-  bool _fetchingModels = false;
+  final Map<String, List<String>> _fetchedModelsBySlot = {};
+  final Set<String> _fetchingModelSlots = {};
+  List<StudioPreset> _studioPresets = const [];
 
   @override
   void initState() {
@@ -69,10 +72,13 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   Future<void> _load() async {
     await ref.read(apiListProvider.future);
     final repo = ref.read(studioConfigRepoProvider);
+    final presetRepo = ref.read(studioPresetRepoProvider);
     final config = await repo.getBySessionId(widget.sessionId);
+    final presets = await presetRepo.getAll();
     if (!mounted) return;
     setState(() {
       _config = config;
+      _studioPresets = presets..sort((a, b) => a.name.compareTo(b.name));
       _loading = false;
     });
   }
@@ -146,45 +152,52 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             onChanged: (v) => _save(config.copyWith(enabled: v)),
           ),
           const Divider(),
+          _buildPresetSelector(config),
+          const Divider(),
           Text('Models', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           _buildModelSlot(
+            slot: StudioSlot.finalGenerator,
             label: 'Final Generator',
             description: 'Expensive — high-quality prose generation',
             emptyLabel: 'Use active chat model',
             value: pipeline.generationModel,
-            onChanged: (model) => _savePipelineModel(
-              (p) => p.copyWith(generationModel: model),
-            ),
-            onSettings: () => _openSlotSettings(
-              slot: StudioSlot.finalGenerator,
-            ),
+            apiConfigId: config.expensiveApiConfigId,
+            onChanged: (model) =>
+                _savePipelineModel((p) => p.copyWith(generationModel: model)),
+            onApiConfigChanged: (apiConfigId) =>
+                _save(config.copyWith(expensiveApiConfigId: apiConfigId)),
+            onSettings: () =>
+                _openSlotSettings(slot: StudioSlot.finalGenerator),
           ),
           const SizedBox(height: 12),
           _buildModelSlot(
+            slot: StudioSlot.tracker,
             label: 'Trackers',
             description: 'Cheap — compact JSON briefs, fast',
             emptyLabel: 'Use active chat model',
             value: pipeline.studioTrackerModelOverride,
+            apiConfigId: config.cheapApiConfigId,
             onChanged: (model) => _savePipelineModel(
               (p) => p.copyWith(studioTrackerModelOverride: model),
             ),
-            onSettings: () => _openSlotSettings(
-              slot: StudioSlot.tracker,
-            ),
+            onApiConfigChanged: (apiConfigId) =>
+                _save(config.copyWith(cheapApiConfigId: apiConfigId)),
+            onSettings: () => _openSlotSettings(slot: StudioSlot.tracker),
           ),
           const SizedBox(height: 12),
           _buildModelSlot(
+            slot: StudioSlot.cleaner,
             label: 'Cleaner (Post-Processing)',
             description: 'Semi-expensive — prose rewrite + continuity audit',
             emptyLabel: 'Use tracker/chat model',
             value: pipeline.postCleanerModel,
-            onChanged: (model) => _savePipelineModel(
-              (p) => p.copyWith(postCleanerModel: model),
-            ),
-            onSettings: () => _openSlotSettings(
-              slot: StudioSlot.cleaner,
-            ),
+            apiConfigId: config.cleanerApiConfigId,
+            onChanged: (model) =>
+                _savePipelineModel((p) => p.copyWith(postCleanerModel: model)),
+            onApiConfigChanged: (apiConfigId) =>
+                _save(config.copyWith(cleanerApiConfigId: apiConfigId)),
+            onSettings: () => _openSlotSettings(slot: StudioSlot.cleaner),
           ),
           const Divider(),
           ListTile(
@@ -215,6 +228,125 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   ) async {
     final pipeline = ref.read(pipelineSettingsProvider);
     await ref.read(pipelineSettingsProvider.notifier).save(mutate(pipeline));
+  }
+
+  Widget _buildPresetSelector(StudioConfig config) {
+    final current = _studioPresets
+        .where((p) => p.id == config.studioPresetId)
+        .firstOrNull;
+    final label = current?.name.isNotEmpty == true
+        ? current!.name
+        : config.studioPresetId;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.view_module_outlined),
+      title: const Text('Studio Preset'),
+      subtitle: Text(
+        label.isEmpty ? 'Default' : label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: const Icon(Icons.arrow_drop_down),
+      onTap: () => _openStudioPresetSelector(config),
+    );
+  }
+
+  Future<void> _openStudioPresetSelector(StudioConfig config) async {
+    final items = <BottomSheetItem>[
+      BottomSheetItem(
+        label: 'Create new preset',
+        hint: 'Copy the current full block set',
+        icon: Icons.add,
+        iconColor: Theme.of(context).colorScheme.primary,
+        onTap: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          unawaited(_createStudioPreset(config));
+        },
+      ),
+      ..._studioPresets.map((preset) {
+        final active = preset.id == config.studioPresetId;
+        final name = preset.name.isNotEmpty ? preset.name : preset.id;
+        final sections =
+            preset.blocks
+                .where((b) => b.enabled)
+                .map((b) => b.section)
+                .toSet()
+                .toList()
+              ..sort();
+        return BottomSheetItem(
+          label: name,
+          hint: sections.isEmpty ? preset.id : sections.join(', '),
+          icon: active ? Icons.check : null,
+          iconColor: Theme.of(context).colorScheme.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _save(config.copyWith(studioPresetId: preset.id));
+          },
+        );
+      }),
+    ];
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'Studio Presets',
+      items: items,
+    );
+  }
+
+  Future<void> _createStudioPreset(StudioConfig config) async {
+    final nameCtrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('New Studio Preset'),
+        content: TextField(
+          controller: nameCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Preset name',
+            hintText: 'My Studio Preset',
+          ),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(nameCtrl.text),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    nameCtrl.dispose();
+    final trimmedName = name?.trim() ?? '';
+    if (!mounted || trimmedName.isEmpty) return;
+
+    final source =
+        _studioPresets
+            .where((preset) => preset.id == config.studioPresetId)
+            .firstOrNull ??
+        _studioPresets.firstOrNull;
+    if (source == null) {
+      GlazeToast.show(context, 'No Studio preset to copy.');
+      return;
+    }
+
+    final now = currentTimestampSeconds();
+    final preset = StudioPreset(
+      id: 'studio_$now',
+      name: trimmedName,
+      blocks: source.blocks,
+      updatedAt: now,
+    );
+    await ref.read(studioPresetRepoProvider).upsert(preset);
+    if (!mounted) return;
+    final nextPresets = await ref.read(studioPresetRepoProvider).getAll();
+    nextPresets.sort((a, b) => a.name.compareTo(b.name));
+    setState(() => _studioPresets = nextPresets);
+    await _save(config.copyWith(studioPresetId: preset.id));
   }
 
   Widget _buildPostTrackerContextSetting(PipelineSettings pipeline) {
@@ -251,29 +383,38 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   }
 
   Widget _buildModelSlot({
+    required StudioSlot slot,
     required String label,
     required String description,
     required String value,
+    required String apiConfigId,
     required String emptyLabel,
     required ValueChanged<String> onChanged,
+    required ValueChanged<String> onApiConfigChanged,
     required VoidCallback onSettings,
   }) {
+    final apiConfigs = ref.watch(apiListProvider).value ?? const <ApiConfig>[];
+    final apiConfig = _slotApiConfig(apiConfigId, apiConfigs);
+    final modelCacheKey = _modelCacheKey(slot, apiConfigId, apiConfigs);
+    final fetchedModels =
+        _fetchedModelsBySlot[modelCacheKey] ?? const <String>[];
+    final fetchingModels = _fetchingModelSlots.contains(modelCacheKey);
     final models = <String>{
-      ..._fetchedModels,
+      ...fetchedModels,
       if (value.isNotEmpty) value,
+      if (apiConfig?.model.isNotEmpty == true) apiConfig!.model,
     }.toList()..sort();
 
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
+    final usesOtherApi = apiConfigId.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            Expanded(
-              child: Text(label, style: tt.titleSmall),
-            ),
+            Expanded(child: Text(label, style: tt.titleSmall)),
             IconButton(
               icon: const Icon(Icons.tune, size: 18),
               tooltip: 'Settings',
@@ -290,15 +431,53 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
           style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
         ),
         const SizedBox(height: 4),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: const Text('Другой API'),
+          subtitle: Text(
+            usesOtherApi
+                ? _apiConfigLabel(apiConfigId, apiConfigs)
+                : 'Use active chat API',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          value: usesOtherApi,
+          onChanged: (checked) {
+            if (checked == true) {
+              _openApiConfigSelector(
+                currentId: apiConfigId,
+                onSelected: onApiConfigChanged,
+              );
+            } else {
+              onApiConfigChanged('');
+              setState(() => _clearSlotModelCache(slot));
+            }
+          },
+        ),
+        if (usesOtherApi)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _openApiConfigSelector(
+                currentId: apiConfigId,
+                onSelected: onApiConfigChanged,
+              ),
+              icon: const Icon(Icons.api, size: 16),
+              label: const Text('Select API preset'),
+            ),
+          ),
+        const SizedBox(height: 4),
         DropdownButtonFormField<String>(
           initialValue: models.contains(value) || value.isEmpty ? value : null,
           isExpanded: true,
           decoration: InputDecoration(
-            helperText: _fetchingModels
+            helperText: fetchingModels
                 ? 'Loading models...'
-                : _fetchedModels.isEmpty
-                ? 'Open this field to load models from the active API config'
-                : '${_fetchedModels.length} models available',
+                : fetchedModels.isEmpty
+                ? 'Open this field to load models from ${usesOtherApi ? 'the selected API config' : 'the active API config'}'
+                : '${fetchedModels.length} models available',
             helperMaxLines: 2,
             border: const OutlineInputBorder(),
             isDense: true,
@@ -315,21 +494,92 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
               ),
             ),
           ],
-          onTap: _fetchingModels ? null : () => unawaited(_fetchModels()),
+          onTap: fetchingModels
+              ? null
+              : () => unawaited(_fetchModels(slot, apiConfigId)),
           onChanged: (model) => onChanged(model ?? ''),
         ),
       ],
     );
   }
 
-  Future<void> _fetchModels() async {
-    if (_fetchingModels) return;
-    final config = ref.read(activeApiConfigProvider);
+  ApiConfig? _slotApiConfig(String apiConfigId, List<ApiConfig> apiConfigs) {
+    if (apiConfigId.isNotEmpty) {
+      final selected = apiConfigs.where((c) => c.id == apiConfigId).firstOrNull;
+      if (selected != null) return selected;
+    }
+    return ref.read(activeApiConfigProvider);
+  }
+
+  String _modelCacheKey(
+    StudioSlot slot,
+    String apiConfigId,
+    List<ApiConfig> apiConfigs,
+  ) {
+    final config = _slotApiConfig(apiConfigId, apiConfigs);
+    final apiKey = config == null
+        ? apiConfigId
+        : '${config.id}|${config.endpoint}|${config.model}';
+    return '${slot.name}:$apiKey';
+  }
+
+  void _clearSlotModelCache(StudioSlot slot) {
+    final prefix = '${slot.name}:';
+    _fetchedModelsBySlot.removeWhere((key, _) => key.startsWith(prefix));
+    _fetchingModelSlots.removeWhere((key) => key.startsWith(prefix));
+  }
+
+  String _apiConfigLabel(String apiConfigId, List<ApiConfig> apiConfigs) {
+    final config = apiConfigs.where((c) => c.id == apiConfigId).firstOrNull;
+    if (config == null) return 'Missing API preset';
+    if (config.name.isNotEmpty) return config.name;
+    if (config.model.isNotEmpty) return config.model;
+    return config.endpoint.isNotEmpty ? config.endpoint : config.id;
+  }
+
+  Future<void> _openApiConfigSelector({
+    required String currentId,
+    required ValueChanged<String> onSelected,
+  }) async {
+    final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    if (apiConfigs.isEmpty) {
+      GlazeToast.show(context, 'No API configs found.');
+      return;
+    }
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'API Preset',
+      items: apiConfigs.map((config) {
+        final active = config.id == currentId;
+        final label = config.name.isNotEmpty
+            ? config.name
+            : config.model.isNotEmpty
+            ? config.model
+            : config.id;
+        return BottomSheetItem(
+          label: label,
+          hint: config.endpoint,
+          icon: active ? Icons.check : null,
+          iconColor: Theme.of(context).colorScheme.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            onSelected(config.id);
+          },
+        );
+      }).toList(),
+    );
+  }
+
+  Future<void> _fetchModels(StudioSlot slot, String apiConfigId) async {
+    final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    final modelCacheKey = _modelCacheKey(slot, apiConfigId, apiConfigs);
+    if (_fetchingModelSlots.contains(modelCacheKey)) return;
+    final config = _slotApiConfig(apiConfigId, apiConfigs);
     if (config == null) {
       GlazeToast.show(context, 'No API configs found.');
       return;
     }
-    setState(() => _fetchingModels = true);
+    setState(() => _fetchingModelSlots.add(modelCacheKey));
     try {
       final models = await SseClient().fetchModels(
         endpoint: config.endpoint,
@@ -347,13 +597,15 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
         ids.insert(0, config.model);
       }
       if (!mounted) return;
-      setState(() => _fetchedModels = ids);
+      setState(() => _fetchedModelsBySlot[modelCacheKey] = ids);
     } catch (e) {
       if (mounted) {
         GlazeToast.show(context, 'Failed to fetch models: $e');
       }
     } finally {
-      if (mounted) setState(() => _fetchingModels = false);
+      if (mounted) {
+        setState(() => _fetchingModelSlots.remove(modelCacheKey));
+      }
     }
   }
 
@@ -493,7 +745,14 @@ enum StudioSlot { finalGenerator, tracker, cleaner }
 /// Snapshot of per-slot settings captured in the dialog.
 class StudioSlotSettings {
   final double temperature;
+  final double topP;
+  final int topK;
+  final double frequencyPenalty;
+  final double presencePenalty;
   final bool requestReasoning;
+  final String reasoningEffort;
+  final bool omitTemperature;
+  final bool omitTopP;
   final bool omitReasoning;
   final bool omitReasoningEffort;
   final int maxTokens;
@@ -501,22 +760,33 @@ class StudioSlotSettings {
 
   const StudioSlotSettings({
     required this.temperature,
+    required this.topP,
+    required this.topK,
+    required this.frequencyPenalty,
+    required this.presencePenalty,
     required this.requestReasoning,
+    required this.reasoningEffort,
+    required this.omitTemperature,
+    required this.omitTopP,
     required this.omitReasoning,
     required this.omitReasoningEffort,
     required this.maxTokens,
     required this.timeoutMs,
   });
 
-  PipelineSettings applyTo(
-    PipelineSettings pipeline,
-    StudioSlot slot,
-  ) {
+  PipelineSettings applyTo(PipelineSettings pipeline, StudioSlot slot) {
     switch (slot) {
       case StudioSlot.finalGenerator:
         return pipeline.copyWith(
           studioFinalTemperature: temperature,
+          studioFinalTopP: topP,
+          studioFinalTopK: topK,
+          studioFinalFrequencyPenalty: frequencyPenalty,
+          studioFinalPresencePenalty: presencePenalty,
           studioFinalRequestReasoning: requestReasoning,
+          studioFinalReasoningEffort: reasoningEffort,
+          studioFinalOmitTemperature: omitTemperature,
+          studioFinalOmitTopP: omitTopP,
           studioFinalOmitReasoning: omitReasoning,
           studioFinalOmitReasoningEffort: omitReasoningEffort,
           studioFinalMaxTokens: maxTokens,
@@ -525,7 +795,14 @@ class StudioSlotSettings {
       case StudioSlot.tracker:
         return pipeline.copyWith(
           studioTrackerTemperature: temperature,
+          studioTrackerTopP: topP,
+          studioTrackerTopK: topK,
+          studioTrackerFrequencyPenalty: frequencyPenalty,
+          studioTrackerPresencePenalty: presencePenalty,
           studioTrackerRequestReasoning: requestReasoning,
+          studioTrackerReasoningEffort: reasoningEffort,
+          studioTrackerOmitTemperature: omitTemperature,
+          studioTrackerOmitTopP: omitTopP,
           studioTrackerOmitReasoning: omitReasoning,
           studioTrackerOmitReasoningEffort: omitReasoningEffort,
           studioTrackerMaxTokens: maxTokens,
@@ -534,7 +811,14 @@ class StudioSlotSettings {
       case StudioSlot.cleaner:
         return pipeline.copyWith(
           postCleanerTemperature: temperature,
+          postCleanerTopP: topP,
+          postCleanerTopK: topK,
+          postCleanerFrequencyPenalty: frequencyPenalty,
+          postCleanerPresencePenalty: presencePenalty,
           postCleanerRequestReasoning: requestReasoning,
+          postCleanerReasoningEffort: reasoningEffort,
+          postCleanerOmitTemperature: omitTemperature,
+          postCleanerOmitTopP: omitTopP,
           postCleanerOmitReasoning: omitReasoning,
           postCleanerOmitReasoningEffort: omitReasoningEffort,
           postCleanerMaxTokens: maxTokens,
@@ -548,10 +832,7 @@ class _StudioSlotSettingsDialog extends StatefulWidget {
   final StudioSlot slot;
   final PipelineSettings pipeline;
 
-  const _StudioSlotSettingsDialog({
-    required this.slot,
-    required this.pipeline,
-  });
+  const _StudioSlotSettingsDialog({required this.slot, required this.pipeline});
 
   @override
   State<_StudioSlotSettingsDialog> createState() =>
@@ -560,7 +841,14 @@ class _StudioSlotSettingsDialog extends StatefulWidget {
 
 class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
   late double _temperature;
+  late double _topP;
+  late int _topK;
+  late double _frequencyPenalty;
+  late double _presencePenalty;
   late bool _requestReasoning;
+  late String _reasoningEffort;
+  late bool _omitTemperature;
+  late bool _omitTopP;
   late bool _omitReasoning;
   late bool _omitReasoningEffort;
   late TextEditingController _maxTokensCtrl;
@@ -573,7 +861,14 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
     switch (widget.slot) {
       case StudioSlot.finalGenerator:
         _temperature = p.studioFinalTemperature;
+        _topP = p.studioFinalTopP;
+        _topK = p.studioFinalTopK;
+        _frequencyPenalty = p.studioFinalFrequencyPenalty;
+        _presencePenalty = p.studioFinalPresencePenalty;
         _requestReasoning = p.studioFinalRequestReasoning;
+        _reasoningEffort = p.studioFinalReasoningEffort;
+        _omitTemperature = p.studioFinalOmitTemperature;
+        _omitTopP = p.studioFinalOmitTopP;
         _omitReasoning = p.studioFinalOmitReasoning;
         _omitReasoningEffort = p.studioFinalOmitReasoningEffort;
         _maxTokensCtrl = TextEditingController(
@@ -586,7 +881,14 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
         );
       case StudioSlot.tracker:
         _temperature = p.studioTrackerTemperature;
+        _topP = p.studioTrackerTopP;
+        _topK = p.studioTrackerTopK;
+        _frequencyPenalty = p.studioTrackerFrequencyPenalty;
+        _presencePenalty = p.studioTrackerPresencePenalty;
         _requestReasoning = p.studioTrackerRequestReasoning;
+        _reasoningEffort = p.studioTrackerReasoningEffort;
+        _omitTemperature = p.studioTrackerOmitTemperature;
+        _omitTopP = p.studioTrackerOmitTopP;
         _omitReasoning = p.studioTrackerOmitReasoning;
         _omitReasoningEffort = p.studioTrackerOmitReasoningEffort;
         _maxTokensCtrl = TextEditingController(
@@ -601,7 +903,14 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
         );
       case StudioSlot.cleaner:
         _temperature = p.postCleanerTemperature;
+        _topP = p.postCleanerTopP;
+        _topK = p.postCleanerTopK;
+        _frequencyPenalty = p.postCleanerFrequencyPenalty;
+        _presencePenalty = p.postCleanerPresencePenalty;
         _requestReasoning = p.postCleanerRequestReasoning;
+        _reasoningEffort = p.postCleanerReasoningEffort;
+        _omitTemperature = p.postCleanerOmitTemperature;
+        _omitTopP = p.postCleanerOmitTopP;
         _omitReasoning = p.postCleanerOmitReasoning;
         _omitReasoningEffort = p.postCleanerOmitReasoningEffort;
         _maxTokensCtrl = TextEditingController(
@@ -655,82 +964,154 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
     }
   }
 
+  String _reasoningEffortLabel(String effort) {
+    return switch (effort) {
+      'auto' => 'Auto',
+      'min' => 'Min',
+      'low' => 'Low',
+      'medium' => 'Medium',
+      'high' => 'High',
+      'max' => 'Max',
+      _ => effort,
+    };
+  }
+
+  Future<void> _openReasoningEffortSelector() async {
+    const options = ['auto', 'min', 'low', 'medium', 'high', 'max'];
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'Reasoning Effort',
+      items: options.map((option) {
+        final active = option == _reasoningEffort;
+        return BottomSheetItem(
+          label: _reasoningEffortLabel(option),
+          icon: active ? Icons.check : null,
+          iconColor: Theme.of(context).colorScheme.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            setState(() => _reasoningEffort = option);
+          },
+        );
+      }).toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tt = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
     return AlertDialog(
       title: Text('$_slotTitle Settings'),
       content: SizedBox(
-        width: 360,
+        width: 520,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Temperature', style: tt.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  )),
-              Row(
-                children: [
-                  Expanded(
-                    child: Slider(
-                      value: _temperature,
-                      min: 0,
-                      max: 2,
-                      divisions: 200,
-                      label: _temperature.toStringAsFixed(1),
-                      onChanged: (v) => setState(() => _temperature = v),
-                    ),
+              MenuGroup(
+                compact: true,
+                header: 'Параметры генерации',
+                items: [
+                  MenuRangeItem(
+                    label: 'Temperature',
+                    value: _temperature,
+                    min: 0,
+                    max: 2,
+                    divisions: 200,
+                    onChanged: (v) => setState(() => _temperature = v),
                   ),
-                  SizedBox(
-                    width: 44,
-                    child: Text(
-                      _temperature.toStringAsFixed(1),
-                      style: tt.bodySmall,
-                    ),
+                  MenuRangeItem(
+                    label: 'Top P',
+                    value: _topP,
+                    min: 0,
+                    max: 1,
+                    divisions: 100,
+                    onChanged: (v) => setState(() => _topP = v),
+                  ),
+                  MenuRangeItem(
+                    label: 'Top K',
+                    value: _topK.toDouble(),
+                    min: 0,
+                    max: 200,
+                    divisions: 200,
+                    onChanged: (v) => setState(() => _topK = v.round()),
+                  ),
+                  MenuRangeItem(
+                    label: 'Частотный штраф',
+                    value: _frequencyPenalty,
+                    min: -2,
+                    max: 2,
+                    divisions: 80,
+                    onChanged: (v) => setState(() => _frequencyPenalty = v),
+                  ),
+                  MenuRangeItem(
+                    label: 'Штраф присутствия',
+                    value: _presencePenalty,
+                    min: -2,
+                    max: 2,
+                    divisions: 80,
+                    onChanged: (v) => setState(() => _presencePenalty = v),
+                  ),
+                  MenuFieldItem(
+                    label: _maxTokensLabel,
+                    controller: _maxTokensCtrl,
+                    placeholder: _maxTokensHint,
+                    keyboardType: TextInputType.number,
+                  ),
+                  MenuFieldItem(
+                    label: 'Timeout seconds (0 = default)',
+                    controller: _timeoutCtrl,
+                    placeholder: '0',
+                    keyboardType: TextInputType.number,
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('Request Reasoning', style: tt.bodySmall),
-                value: _requestReasoning,
-                onChanged: (v) => setState(() => _requestReasoning = v),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('Omit Reasoning', style: tt.bodySmall),
-                value: _omitReasoning,
-                onChanged: (v) => setState(() => _omitReasoning = v),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('Omit Reasoning Effort', style: tt.bodySmall),
-                value: _omitReasoningEffort,
-                onChanged: (v) => setState(() => _omitReasoningEffort = v),
-              ),
-              const SizedBox(height: 4),
-              TextField(
-                controller: _maxTokensCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: _maxTokensLabel,
-                  hintText: _maxTokensHint,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
+              MenuGroup(
+                compact: true,
+                header: 'Мышление',
+                items: [
+                  MenuSwitchItem(
+                    label: 'Запросить нативное мышление',
+                    description: 'Показывает блок нативного мышления модели',
+                    value: _requestReasoning,
+                    onChanged: (v) => setState(() => _requestReasoning = v),
+                  ),
+                  MenuSelectorItem(
+                    label: 'Уровень мышления',
+                    currentValue: _reasoningEffortLabel(_reasoningEffort),
+                    onTap: _openReasoningEffortSelector,
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
-              TextField(
-                controller: _timeoutCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Timeout (seconds, 0 = default)',
-                  hintText: '0',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
+              MenuGroup(
+                compact: true,
+                header: 'Пропуск параметров',
+                items: [
+                  MenuSwitchItem(
+                    label: 'Пропустить Temperature',
+                    description: 'Не отправлять temperature в API',
+                    value: _omitTemperature,
+                    onChanged: (v) => setState(() => _omitTemperature = v),
+                  ),
+                  MenuSwitchItem(
+                    label: 'Пропустить Top P',
+                    description: 'Не отправлять top_p в API',
+                    value: _omitTopP,
+                    onChanged: (v) => setState(() => _omitTopP = v),
+                  ),
+                  MenuSwitchItem(
+                    label: 'Пропустить Reasoning',
+                    description: 'Не отправлять параметры reasoning в API',
+                    value: _omitReasoning,
+                    onChanged: (v) => setState(() => _omitReasoning = v),
+                  ),
+                  MenuSwitchItem(
+                    label: 'Пропустить Reasoning Effort',
+                    description: 'Не отправлять reasoning_effort в API',
+                    value: _omitReasoningEffort,
+                    onChanged: (v) => setState(() => _omitReasoningEffort = v),
+                  ),
+                ],
               ),
             ],
           ),
@@ -749,7 +1130,14 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
             Navigator.of(context).pop(
               StudioSlotSettings(
                 temperature: _temperature,
+                topP: _topP,
+                topK: _topK,
+                frequencyPenalty: _frequencyPenalty,
+                presencePenalty: _presencePenalty,
                 requestReasoning: _requestReasoning,
+                reasoningEffort: _reasoningEffort,
+                omitTemperature: _omitTemperature,
+                omitTopP: _omitTopP,
                 omitReasoning: _omitReasoning,
                 omitReasoningEffort: _omitReasoningEffort,
                 maxTokens: maxTokens,
