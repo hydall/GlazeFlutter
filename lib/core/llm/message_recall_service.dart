@@ -55,6 +55,7 @@ class MessageRecallService {
     double threshold = defaultSimilarityThreshold,
     int topK = defaultTopK,
     int maxChars = defaultMaxChars,
+    Set<String> visibleMessageIds = const {},
     CancelToken? cancelToken,
     bool Function()? shouldAbort,
   }) async {
@@ -67,8 +68,7 @@ class MessageRecallService {
       if (shouldAbort?.call() == true) return const MessageRecallResult();
       // Keep only rows for this session (the embeddings table is shared
       // across sessions under one sourceType).
-      final sessionRows =
-          rows.where((r) => r.sourceId == sessionId).toList();
+      final sessionRows = rows.where((r) => r.sourceId == sessionId).toList();
       if (sessionRows.isEmpty) return const MessageRecallResult();
 
       final candidates = <VectorCandidate>[];
@@ -158,8 +158,7 @@ class MessageRecallService {
 
       final matched = <MessageRecallMatch>[];
       var totalChars = 0;
-      for (final result
-          in results.where((r) => r.score >= threshold).take(topK)) {
+      for (final result in results.where((r) => r.score >= threshold)) {
         final chunkTexts = result.metadata['chunkTexts'];
         if (chunkTexts is! List) continue;
         if (result.bestCandidateChunk == null) continue;
@@ -167,24 +166,30 @@ class MessageRecallService {
         if (bestIndex < 0 || bestIndex >= chunkTexts.length) continue;
         final text = chunkTexts[bestIndex];
         if (text is! String || text.trim().isEmpty) continue;
+        final rawIds = result.metadata['messageIds'];
+        final messageIds = rawIds is List
+            ? rawIds.whereType<String>().toList(growable: false)
+            : const <String>[];
+        if (visibleMessageIds.isNotEmpty &&
+            messageIds.any(visibleMessageIds.contains)) {
+          continue;
+        }
 
         if (totalChars + text.length > maxChars) {
           // Soft cap: stop adding once we exceed the budget. Caller can
           // further trim if needed.
           break;
         }
-        final rawIds = result.metadata['messageIds'];
         matched.add(
           MessageRecallMatch(
             entryId: result.id,
             text: text,
             score: result.score,
-            messageIds: rawIds is List
-                ? rawIds.whereType<String>().toList(growable: false)
-                : const [],
+            messageIds: messageIds,
           ),
         );
         totalChars += text.length;
+        if (matched.length >= topK) break;
       }
       return MessageRecallResult(matches: matched);
     } catch (e) {

@@ -202,6 +202,87 @@ void main() {
       );
       expect(result.entries.length, 3);
     });
+
+    test('penalises entries from the same temporal bucket', () {
+      final entries = [
+        _entry(
+          id: 'same_newer',
+          content: 'word ' * 4,
+          createdAt: 3,
+          messageRange: const MessageRange(start: 15, end: 19),
+        ),
+        _entry(
+          id: 'same_older',
+          content: 'word ' * 4,
+          createdAt: 2,
+          messageRange: const MessageRange(start: 11, end: 12),
+        ),
+        _entry(
+          id: 'different_bucket',
+          content: 'word ' * 4,
+          createdAt: 1,
+          messageRange: const MessageRange(start: 31, end: 35),
+        ),
+      ];
+
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          maxInjectedEntries: 3,
+          maxInjectionTokens: 100,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: true,
+          diversityPenalty: 0.4,
+        ),
+      );
+
+      final sameOlder = result.allScores.firstWhere(
+        (s) => s.entry.id == 'same_older',
+      );
+      final differentBucket = result.allScores.firstWhere(
+        (s) => s.entry.id == 'different_bucket',
+      );
+      expect(sameOlder.diversityPenalty, 0.4);
+      expect(differentBucket.diversityPenalty, 0.0);
+    });
+
+    test('temporallyBlind entries skip temporal diversity penalty', () {
+      final entries = [
+        _entry(
+          id: 'first',
+          content: 'word ' * 4,
+          createdAt: 2,
+          messageRange: const MessageRange(start: 15, end: 19),
+        ),
+        _entry(
+          id: 'blind',
+          content: 'word ' * 4,
+          createdAt: 1,
+          messageRange: const MessageRange(start: 11, end: 12),
+          temporallyBlind: true,
+        ),
+      ];
+
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          maxInjectedEntries: 2,
+          maxInjectionTokens: 100,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: true,
+          diversityPenalty: 0.4,
+        ),
+      );
+
+      final blind = result.allScores.firstWhere((s) => s.entry.id == 'blind');
+      expect(blind.diversityPenalty, 0.0);
+    });
   });
 
   group('MemorySelector: determinism + recency tiebreak', () {

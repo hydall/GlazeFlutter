@@ -6,28 +6,23 @@ import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/features/chat/services/stream_generation_service.dart';
 
-ChatMessage _msg(String id, {bool isHidden = false}) => ChatMessage(
-      id: id,
-      role: 'user',
-      content: 'text $id',
-      isHidden: isHidden,
-    );
+ChatMessage _msg(String id, {bool isHidden = false}) =>
+    ChatMessage(id: id, role: 'user', content: 'text $id', isHidden: isHidden);
 
 PromptPayload _payloadWith({
   List<RecalledMessageChunk>? chunks,
   Set<String>? sourceWindowVisibleMessageIds,
   String? recalledMessagesContent,
   bool disableSourceWindowExclusion = false,
-}) =>
-    PromptPayload(
-      character: const Character(id: 'c1', name: 'Test'),
-      history: const [],
-      apiConfig: const ApiConfig(id: 'a1'),
-      recalledMessageChunks: chunks ?? const [],
-      sourceWindowVisibleMessageIds: sourceWindowVisibleMessageIds ?? const {},
-      recalledMessagesContent: recalledMessagesContent,
-      disableSourceWindowExclusion: disableSourceWindowExclusion,
-    );
+}) => PromptPayload(
+  character: const Character(id: 'c1', name: 'Test'),
+  history: const [],
+  apiConfig: const ApiConfig(id: 'a1'),
+  recalledMessageChunks: chunks ?? const [],
+  sourceWindowVisibleMessageIds: sourceWindowVisibleMessageIds ?? const {},
+  recalledMessagesContent: recalledMessagesContent,
+  disableSourceWindowExclusion: disableSourceWindowExclusion,
+);
 
 void main() {
   group('effectiveRecalledMessagesContent', () {
@@ -71,6 +66,21 @@ void main() {
       expect(result, contains('hidden chunk'));
     });
 
+    test('uses explicit visibleMessageIds override when provided', () {
+      final payload = _payloadWith(
+        chunks: [
+          const RecalledMessageChunk(text: 'visible chunk', messageIds: ['m1']),
+          const RecalledMessageChunk(text: 'hidden chunk', messageIds: ['m2']),
+        ],
+      );
+      final result = effectiveRecalledMessagesContent(
+        payload,
+        visibleMessageIds: {'m1'},
+      )!;
+      expect(result, isNot(contains('visible chunk')));
+      expect(result, contains('hidden chunk'));
+    });
+
     test('keeps chunks with empty messageIds when window is set', () {
       final payload = _payloadWith(
         chunks: [
@@ -109,18 +119,17 @@ void main() {
 
   group('studioFinalVisibleMessageIds', () {
     test('returns empty set when finalContextSize is 0', () {
-      final ids = StreamGenerationService.computeStudioFinalVisibleMessageIds(
-        [_msg('m1'), _msg('m2')],
-        0,
-      );
+      final ids = StreamGenerationService.computeStudioFinalVisibleMessageIds([
+        _msg('m1'),
+        _msg('m2'),
+      ], 0);
       expect(ids, isEmpty);
     });
 
     test('returns empty set when finalContextSize is negative', () {
-      final ids = StreamGenerationService.computeStudioFinalVisibleMessageIds(
-        [_msg('m1')],
-        -5,
-      );
+      final ids = StreamGenerationService.computeStudioFinalVisibleMessageIds([
+        _msg('m1'),
+      ], -5);
       expect(ids, isEmpty);
     });
 
@@ -164,10 +173,7 @@ void main() {
     });
 
     test('all hidden messages returns empty set', () {
-      final history = [
-        _msg('h1', isHidden: true),
-        _msg('h2', isHidden: true),
-      ];
+      final history = [_msg('h1', isHidden: true), _msg('h2', isHidden: true)];
       final ids = StreamGenerationService.computeStudioFinalVisibleMessageIds(
         history,
         5,
@@ -176,10 +182,9 @@ void main() {
     });
 
     test('single message with contextSize 1', () {
-      final ids = StreamGenerationService.computeStudioFinalVisibleMessageIds(
-        [_msg('only')],
-        1,
-      );
+      final ids = StreamGenerationService.computeStudioFinalVisibleMessageIds([
+        _msg('only'),
+      ], 1);
       expect(ids, {'only'});
     });
   });
