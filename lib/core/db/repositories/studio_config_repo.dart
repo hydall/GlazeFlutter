@@ -256,11 +256,10 @@ class StudioConfigRepo implements SyncStudioConfigStore {
         changed = true;
       }
       // Migrate pre-gen trackers to the new default context size (20).
-      // Post-processing trackers get 1 (they only need the generator's
-      // response, not full chat history).
+      // Post-processing trackers get 2 (last turn + the response to edit).
       if (current.phase == 'post_processing') {
-        if (current.contextSize != 1) {
-          current = current.copyWith(contextSize: 1);
+        if (current.contextSize != 2) {
+          current = current.copyWith(contextSize: 2);
           changed = true;
         }
       } else if (!_isFinalResponder(current) && current.contextSize < 20) {
