@@ -81,104 +81,110 @@ class _StudioPresetEditorSheetState
         child: Center(child: Text('Preset not found')),
       );
     }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildSectionTabs(),
-        const Divider(),
-        Flexible(
-          fit: FlexFit.loose,
-          child: _sectionBlocks.isEmpty
-              ? const Center(child: Text('No blocks in this section'))
-              : ReorderableListView.builder(
-                  shrinkWrap: true,
-                  buildDefaultDragHandles: false,
-                  itemCount: _sectionBlocks.length,
-                  onReorder: _onReorder,
-                  itemBuilder: (context, index) {
-                    final block = _sectionBlocks[index];
-                    return Dismissible(
-                      key: ValueKey(block.id),
-                      direction: DismissDirection.horizontal,
-                      background: Container(
-                        color: Theme.of(context).colorScheme.errorContainer,
-                        alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.only(left: 16),
-                        child: Icon(
-                          Icons.delete,
-                          color: Theme.of(context).colorScheme.onError,
-                        ),
-                      ),
-                      secondaryBackground: Container(
-                        color: Theme.of(context).colorScheme.errorContainer,
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 16),
-                        child: Icon(
-                          Icons.delete,
-                          color: Theme.of(context).colorScheme.onError,
-                        ),
-                      ),
-                      confirmDismiss: (_) async {
-                        final ok = await showDialog<bool>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text('Delete Block'),
-                            content: Text(
-                              'Delete "${block.title.isNotEmpty ? block.title : block.id}"?',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.of(context).pop(false),
-                                child: const Text('Cancel'),
-                              ),
-                              FilledButton(
-                                onPressed: () =>
-                                    Navigator.of(context).pop(true),
-                                child: const Text('Delete'),
-                              ),
-                            ],
+    final sheetHeight = MediaQuery.sizeOf(context).height * 0.72;
+    return SizedBox(
+      height: sheetHeight,
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSectionTabs(),
+          const Divider(),
+          Expanded(
+            child: _sectionBlocks.isEmpty
+                ? const Center(child: Text('No blocks in this section'))
+                : ReorderableListView.builder(
+                    primary: false,
+                    buildDefaultDragHandles: false,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    itemCount: _sectionBlocks.length,
+                    onReorderItem: _onReorder,
+                    itemBuilder: (context, index) {
+                      final block = _sectionBlocks[index];
+                      return Dismissible(
+                        key: ValueKey(block.id),
+                        direction: DismissDirection.horizontal,
+                        background: Container(
+                          color: Theme.of(context).colorScheme.errorContainer,
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.only(left: 16),
+                          child: Icon(
+                            Icons.delete,
+                            color: Theme.of(context).colorScheme.onError,
                           ),
-                        );
-                        return ok == true;
-                      },
-                      onDismissed: (_) => _deleteBlock(block),
-                      child: _buildBlockTile(block, index),
-                    );
-                  },
-                ),
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Wrap(
-            spacing: 8,
-            children: [
-              FilledButton.tonalIcon(
-                onPressed: _addBlock,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Block'),
-              ),
-              TextButton.icon(
-                onPressed: _resetToDefaults,
-                icon: const Icon(Icons.restore, size: 18),
-                label: const Text('Reset'),
-              ),
-              TextButton.icon(
-                onPressed: _importPreset,
-                icon: const Icon(Icons.file_upload_outlined, size: 18),
-                label: const Text('Import'),
-              ),
-              TextButton.icon(
-                onPressed: _exportPreset,
-                icon: const Icon(Icons.file_download_outlined, size: 18),
-                label: const Text('Export'),
-              ),
-            ],
+                        ),
+                        secondaryBackground: Container(
+                          color: Theme.of(context).colorScheme.errorContainer,
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 16),
+                          child: Icon(
+                            Icons.delete,
+                            color: Theme.of(context).colorScheme.onError,
+                          ),
+                        ),
+                        confirmDismiss: (_) async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Delete Block'),
+                              content: Text(
+                                'Delete "${block.title.isNotEmpty ? block.title : block.id}"?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(true),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                          );
+                          return ok == true;
+                        },
+                        onDismissed: (_) => _deleteBlock(block),
+                        child: _buildBlockTile(block, index),
+                      );
+                    },
+                  ),
           ),
-        ),
-        const SizedBox(height: 16),
-      ],
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: _addBlock,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Block'),
+                ),
+                TextButton.icon(
+                  onPressed: _resetToDefaults,
+                  icon: const Icon(Icons.restore, size: 18),
+                  label: const Text('Reset'),
+                ),
+                TextButton.icon(
+                  onPressed: _importPreset,
+                  icon: const Icon(Icons.file_upload_outlined, size: 18),
+                  label: const Text('Import'),
+                ),
+                TextButton.icon(
+                  onPressed: _exportPreset,
+                  icon: const Icon(Icons.file_download_outlined, size: 18),
+                  label: const Text('Export'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
     );
   }
 
@@ -207,7 +213,6 @@ class _StudioPresetEditorSheetState
 
   Future<void> _onReorder(int oldIndex, int newIndex) async {
     if (_preset == null) return;
-    if (newIndex > oldIndex) newIndex -= 1;
     final sectionBlocks = _sectionBlocks;
     final moved = sectionBlocks.removeAt(oldIndex);
     sectionBlocks.insert(newIndex, moved);
