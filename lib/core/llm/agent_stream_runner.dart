@@ -61,14 +61,12 @@ class AgentStreamRunner {
       frequencyPenalty: resolved.frequencyPenalty,
       presencePenalty: resolved.presencePenalty,
       stream: shouldStream,
-      requestReasoning: isFinalResponse ? resolved.requestReasoning : false,
-      reasoningEffort: isFinalResponse ? resolved.reasoningEffort : null,
+      requestReasoning: resolved.requestReasoning,
+      reasoningEffort: resolved.requestReasoning ? resolved.reasoningEffort : null,
       omitTemperature: resolved.omitTemperature,
       omitTopP: resolved.omitTopP,
-      omitReasoning: isFinalResponse ? resolved.omitReasoning : true,
-      omitReasoningEffort: isFinalResponse
-          ? resolved.omitReasoningEffort
-          : true,
+      omitReasoning: resolved.omitReasoning,
+      omitReasoningEffort: resolved.omitReasoningEffort,
       sessionId: sessionId,
       cacheControlTtl: resolved.cacheControlTtl,
       cacheBreakpointMode: resolved.cacheBreakpointMode,

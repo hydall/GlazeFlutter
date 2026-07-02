@@ -142,20 +142,36 @@ class AgentRunner {
     final temperatureOverride = preResolvedConfig != null && !isFinalResponse
         ? null
         : effectiveTemperature(agent, isFinalResponse);
-    final effectiveResolved =
-        (isFinalResponse &&
-            _ref.read(pipelineSettingsProvider).studioFinalDisableReasoning)
+    final pipeline = _ref.read(pipelineSettingsProvider);
+    final effectiveResolved = isFinalResponse
         ? resolved.copyWithReasoning(
-            requestReasoning: false,
-            omitReasoning: true,
+            requestReasoning: pipeline.studioFinalDisableReasoning
+                ? false
+                : pipeline.studioFinalRequestReasoning,
+            omitReasoning: pipeline.studioFinalDisableReasoning
+                ? true
+                : pipeline.studioFinalOmitReasoning,
+            omitReasoningEffort: pipeline.studioFinalOmitReasoningEffort,
           )
-        : (!isFinalResponse &&
-              _ref.read(pipelineSettingsProvider).studioTrackerDisableReasoning)
+        : agent.phase == 'post_processing'
         ? resolved.copyWithReasoning(
-            requestReasoning: false,
-            omitReasoning: true,
+            requestReasoning: pipeline.postCleanerDisableReasoning
+                ? false
+                : pipeline.postCleanerRequestReasoning,
+            omitReasoning: pipeline.postCleanerDisableReasoning
+                ? true
+                : pipeline.postCleanerOmitReasoning,
+            omitReasoningEffort: pipeline.postCleanerOmitReasoningEffort,
           )
-        : resolved;
+        : resolved.copyWithReasoning(
+            requestReasoning: pipeline.studioTrackerDisableReasoning
+                ? false
+                : pipeline.studioTrackerRequestReasoning,
+            omitReasoning: pipeline.studioTrackerDisableReasoning
+                ? true
+                : pipeline.studioTrackerOmitReasoning,
+            omitReasoningEffort: pipeline.studioTrackerOmitReasoningEffort,
+          );
     return _streamRunner.run(
       agent: agent,
       messages: messages,
@@ -245,10 +261,19 @@ class AgentRunner {
   /// 3. hardcoded fallback: final generator 90s, trackers 60s.
   int effectiveTimeoutMs(StudioAgent agent, bool isFinalResponse) {
     final fallback = isFinalResponse ? 90000 : 60000;
+    final pipeline = _ref.read(pipelineSettingsProvider);
+    final slot = isFinalResponse
+        ? pipeline.studioFinalTimeoutMs
+        : agent.phase == 'post_processing'
+        ? pipeline.postCleanerTimeoutMs
+        : pipeline.studioTrackerTimeoutMs;
+    if (slot > 0) {
+      return slot.clamp(1000, 120000);
+    }
     if (agent.timeoutMs > 4000) {
       return agent.timeoutMs.clamp(1000, 120000);
     }
-    final global = _ref.read(pipelineSettingsProvider).studioTimeoutMs;
+    final global = pipeline.studioTimeoutMs;
     if (global > 0) {
       return global.clamp(1000, 120000);
     }
@@ -267,6 +292,11 @@ class AgentRunner {
     if (isFinalResponse) {
       final global = _ref.read(pipelineSettingsProvider).studioFinalMaxTokens;
       if (global > 0) return global;
+      return null;
+    }
+    if (agent.phase == 'post_processing') {
+      final cleanerGlobal = _ref.read(pipelineSettingsProvider).postCleanerMaxTokens;
+      if (cleanerGlobal > 0) return cleanerGlobal;
       return null;
     }
     final trackerGlobal = _ref
@@ -289,6 +319,9 @@ class AgentRunner {
       final global = _ref.read(pipelineSettingsProvider).studioFinalTemperature;
       if (global >= 0) return global;
       return null;
+    }
+    if (agent.phase == 'post_processing') {
+      return _ref.read(pipelineSettingsProvider).postCleanerTemperature;
     }
     final trackerGlobal = _ref
         .read(pipelineSettingsProvider)
