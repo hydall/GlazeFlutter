@@ -17,8 +17,8 @@ import '../state/recovery_state_provider.dart';
 /// Post-Building menu dialog. Session-bound.
 ///
 /// Hosts generation-pipeline LLM settings (separated from MemoryBooks):
-/// POST-cleaner, agentic write-loop + aux defaults, memory generation LLM,
-/// and consolidation LLM. Reads/writes [PipelineSettings] via
+/// POST-cleaner, memory/agentic write-loop generation LLM, and consolidation
+/// LLM. Reads/writes [PipelineSettings] via
 /// [pipelineSettingsProvider].
 class PostBuildingMenuDialog extends ConsumerStatefulWidget {
   final String charId;
@@ -106,23 +106,11 @@ class _PostBuildingMenuDialogState
                 onFetchModels: _fetchProviderModels,
               ),
               const SizedBox(height: 8),
-              _LedgerSection(
-                pipeline: _pipeline,
-                onSaved: _savePipeline,
-                modelsByApiConfigId: _modelsByApiConfigId,
-                fetchingModelConfigIds: _fetchingModelConfigIds,
-                onFetchModels: _fetchProviderModels,
-              ),
+              _LedgerSection(pipeline: _pipeline, onSaved: _savePipeline),
               const SizedBox(height: 8),
               _CadenceSection(pipeline: _pipeline, onSaved: _savePipeline),
               const SizedBox(height: 8),
-              _WriteLoopSection(
-                pipeline: _pipeline,
-                onSaved: _savePipeline,
-                modelsByApiConfigId: _modelsByApiConfigId,
-                fetchingModelConfigIds: _fetchingModelConfigIds,
-                onFetchModels: _fetchProviderModels,
-              ),
+              _WriteLoopSection(pipeline: _pipeline, onSaved: _savePipeline),
               const SizedBox(height: 8),
               _PipelineLlmSection(
                 titleKey: 'post_building_generation_llm',
@@ -271,19 +259,10 @@ class _CleanerSection extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'post_building_cleaner_audit_model_desc'.tr(),
+                'Studio fact-checker uses the Cleaner model selected in Studio Settings.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-          ),
-        if (pipeline.postCleanerCharacterCheckEnabled)
-          _AuditModelRow(
-            pipeline: pipeline,
-            modelsByApiConfigId: modelsByApiConfigId,
-            fetchingModelConfigIds: fetchingModelConfigIds,
-            onFetchModels: onFetchModels,
-            onModelChanged: (v) =>
-                onSaved((p) => p.copyWith(postCleanerAuditModel: v)),
           ),
         _SourceSegment(
           source: pipeline.postCleanerSource,
@@ -471,17 +450,8 @@ class _CleanerSection extends StatelessWidget {
 class _LedgerSection extends StatelessWidget {
   final PipelineSettings pipeline;
   final PipelineSaver onSaved;
-  final Map<String, List<String>> modelsByApiConfigId;
-  final Set<String> fetchingModelConfigIds;
-  final FetchModels onFetchModels;
 
-  const _LedgerSection({
-    required this.pipeline,
-    required this.onSaved,
-    required this.modelsByApiConfigId,
-    required this.fetchingModelConfigIds,
-    required this.onFetchModels,
-  });
+  const _LedgerSection({required this.pipeline, required this.onSaved});
 
   @override
   Widget build(BuildContext context) {
@@ -498,28 +468,11 @@ class _LedgerSection extends StatelessWidget {
           onChanged: (v) => onSaved((p) => p.copyWith(studioLedgerEnabled: v)),
         ),
         const SizedBox(height: 4),
-        _HelperText('post_building_studio_ledger_model_hint'.tr()),
         const SizedBox(height: 4),
-        _HelperText('post_building_studio_ledger_defaults_hint'.tr()),
+        _HelperText(
+          'Studio Ledger uses the Trackers model selected in Studio Settings.',
+        ),
         const SizedBox(height: 8),
-        _LedgerModelRow(
-          pipeline: pipeline,
-          modelsByApiConfigId: modelsByApiConfigId,
-          fetchingModelConfigIds: fetchingModelConfigIds,
-          onFetchModels: onFetchModels,
-          onModelChanged: (v) =>
-              onSaved((p) => p.copyWith(studioLedgerModel: v.trim())),
-        ),
-        _PipelineEndpointField(
-          endpoint: pipeline.studioLedgerEndpoint,
-          onEndpointChanged: (v) =>
-              onSaved((p) => p.copyWith(studioLedgerEndpoint: v.trim())),
-        ),
-        _PipelineApiKeyField(
-          apiKey: pipeline.studioLedgerApiKey,
-          onApiKeyChanged: (v) =>
-              onSaved((p) => p.copyWith(studioLedgerApiKey: v.trim())),
-        ),
         _NumberTile(
           label: 'post_building_studio_ledger_timeout'.tr(),
           valueText: pipeline.studioLedgerTimeoutMs <= 0
@@ -782,108 +735,53 @@ class _HelperText extends StatelessWidget {
   }
 }
 
-/// Agentic write-loop + auxiliary model selector + agent timeout.
+/// Agentic write-loop settings. The LLM inherits the Memory generation model
+/// configured in the MemoryBooks settings sheet.
 class _WriteLoopSection extends StatelessWidget {
   final PipelineSettings pipeline;
   final PipelineSaver onSaved;
-  final Map<String, List<String>> modelsByApiConfigId;
-  final Set<String> fetchingModelConfigIds;
-  final FetchModels onFetchModels;
 
-  const _WriteLoopSection({
-    required this.pipeline,
-    required this.onSaved,
-    required this.modelsByApiConfigId,
-    required this.fetchingModelConfigIds,
-    required this.onFetchModels,
-  });
+  const _WriteLoopSection({required this.pipeline, required this.onSaved});
 
   @override
   Widget build(BuildContext context) {
-    final c = Consumer(
-      builder: (ctx, ref, _) {
-        final activeApi = ref.read(activeApiConfigProvider);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Text('post_building_write_loop'.tr()),
-              subtitle: Text('post_building_write_loop_desc'.tr()),
-              value: pipeline.agenticWriteEnabled,
-              onChanged: (v) =>
-                  onSaved((p) => p.copyWith(agenticWriteEnabled: v)),
-            ),
-            _SourceSegment(
-              source: pipeline.auxSource,
-              onSourceChanged: (v) => onSaved((p) => p.copyWith(auxSource: v)),
-            ),
-            if (pipeline.auxSource == 'custom') ...[
-              _PipelineModelSelector(
-                labelKey: 'post_building_agent_model',
-                model: pipeline.auxModel,
-                onModelChanged: (v) => onSaved((p) => p.copyWith(auxModel: v)),
-              ),
-              _PipelineEndpointField(
-                endpoint: pipeline.auxEndpoint,
-                onEndpointChanged: (v) =>
-                    onSaved((p) => p.copyWith(auxEndpoint: v)),
-              ),
-              _PipelineApiKeyField(
-                apiKey: pipeline.auxApiKey,
-                onApiKeyChanged: (v) =>
-                    onSaved((p) => p.copyWith(auxApiKey: v)),
-              ),
-            ] else if (activeApi != null) ...[
-              _CurrentApiModelRow(
-                labelKey: 'post_building_agent_model',
-                apiConfig: activeApi,
-                modelsByApiConfigId: modelsByApiConfigId,
-                fetchingModelConfigIds: fetchingModelConfigIds,
-                onFetchModels: onFetchModels,
-                selectedModel: pipeline.auxModel,
-                fallbackModelLabel: activeApi.model,
-                onModelChanged: (v) => onSaved((p) => p.copyWith(auxModel: v)),
-              ),
-            ] else
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  'post_building_no_chat_api'.tr(),
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-            _NumberTile(
-              label: 'post_building_agent_timeout'.tr(),
-              valueText: 'post_building_seconds_count'.tr(
-                namedArgs: {
-                  'arg0': (pipeline.auxTimeoutMs / 1000).toStringAsFixed(0),
-                },
-              ),
-              subtitleKey: 'post_building_agent_timeout_desc',
-              onTap: (ctx) async {
-                final v = await _editIntSeconds(
-                  ctx: ctx,
-                  title: 'post_building_agent_timeout'.tr(),
-                  valueSeconds: (pipeline.auxTimeoutMs / 1000).round(),
-                  minSeconds: 1,
-                );
-                if (v != null) {
-                  await onSaved((p) => p.copyWith(auxTimeoutMs: v * 1000));
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
     return _SectionCard(
       icon: Icons.psychology_outlined,
       titleKey: 'post_building_agentic_advanced',
       subtitleKey: 'post_building_agentic_advanced_desc',
-      modelHintKey: 'post_building_model_hint_aux',
-      children: [c],
+      children: [
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text('post_building_write_loop'.tr()),
+          subtitle: Text('post_building_write_loop_desc'.tr()),
+          value: pipeline.agenticWriteEnabled,
+          onChanged: (v) => onSaved((p) => p.copyWith(agenticWriteEnabled: v)),
+        ),
+        _HelperText(
+          'Agentic write-loop uses the Memory generation model from MemoryBooks settings.',
+        ),
+        _NumberTile(
+          label: 'post_building_agent_timeout'.tr(),
+          valueText: 'post_building_seconds_count'.tr(
+            namedArgs: {
+              'arg0': (pipeline.auxTimeoutMs / 1000).toStringAsFixed(0),
+            },
+          ),
+          subtitleKey: 'post_building_agent_timeout_desc',
+          onTap: (ctx) async {
+            final v = await _editIntSeconds(
+              ctx: ctx,
+              title: 'post_building_agent_timeout'.tr(),
+              valueSeconds: (pipeline.auxTimeoutMs / 1000).round(),
+              minSeconds: 1,
+            );
+            if (v != null) {
+              await onSaved((p) => p.copyWith(auxTimeoutMs: v * 1000));
+            }
+          },
+        ),
+      ],
     );
   }
 }
@@ -1306,294 +1204,6 @@ class _CurrentApiModelRow extends StatelessWidget {
                 DropdownMenuItem<String>(
                   value: '',
                   child: Text('post_building_use_chat_model'.tr()),
-                ),
-                ...models.map(
-                  (m) => DropdownMenuItem<String>(
-                    value: m,
-                    child: Text(m, overflow: TextOverflow.ellipsis),
-                  ),
-                ),
-              ],
-              onChanged: (m) => onModelChanged(m ?? ''),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: IconButton.filledTonal(
-              tooltip: 'post_building_fetch_models'.tr(),
-              onPressed: isFetching ? null : () => onFetchModels(config),
-              icon: isFetching
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh, size: 18),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Studio Ledger model dropdown. Ledger inherits aux endpoint/key/model when
-/// its override fields are empty, then falls back to the active chat API.
-class _LedgerModelRow extends ConsumerWidget {
-  final PipelineSettings pipeline;
-  final Map<String, List<String>> modelsByApiConfigId;
-  final Set<String> fetchingModelConfigIds;
-  final FetchModels onFetchModels;
-  final Future<void> Function(String) onModelChanged;
-
-  const _LedgerModelRow({
-    required this.pipeline,
-    required this.modelsByApiConfigId,
-    required this.fetchingModelConfigIds,
-    required this.onFetchModels,
-    required this.onModelChanged,
-  });
-
-  ApiConfig? _resolveLedgerConfig(ApiConfig? activeApi) {
-    final endpoint = pipeline.studioLedgerEndpoint.isNotEmpty
-        ? pipeline.studioLedgerEndpoint
-        : pipeline.auxEndpoint;
-    final apiKey = pipeline.studioLedgerApiKey.isNotEmpty
-        ? pipeline.studioLedgerApiKey
-        : pipeline.auxApiKey;
-    final inheritedModel = pipeline.auxModel.isNotEmpty
-        ? pipeline.auxModel
-        : activeApi?.model ?? '';
-
-    if (endpoint.isNotEmpty) {
-      return ApiConfig(
-        id: 'ledger-custom:$endpoint',
-        name: 'Studio Ledger (custom)',
-        endpoint: endpoint,
-        apiKey: apiKey,
-        model: pipeline.studioLedgerModel.isNotEmpty
-            ? pipeline.studioLedgerModel
-            : inheritedModel,
-        protocol: 'openai',
-      );
-    }
-    if (activeApi == null) return null;
-    return ApiConfig(
-      id: 'ledger-current:${activeApi.id}',
-      name: 'Studio Ledger (current)',
-      endpoint: activeApi.endpoint,
-      apiKey: activeApi.apiKey,
-      model: pipeline.studioLedgerModel.isNotEmpty
-          ? pipeline.studioLedgerModel
-          : inheritedModel,
-      protocol: activeApi.protocol,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final activeApi = ref.read(activeApiConfigProvider);
-    final config = _resolveLedgerConfig(activeApi);
-    if (config == null) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(
-          'post_building_no_chat_api'.tr(),
-          style: const TextStyle(fontSize: 12),
-        ),
-      );
-    }
-
-    final fetched = modelsByApiConfigId[config.id] ?? const <String>[];
-    final models = <String>{
-      ...fetched,
-      if (pipeline.studioLedgerModel.isNotEmpty &&
-          !fetched.contains(pipeline.studioLedgerModel))
-        pipeline.studioLedgerModel,
-    }.toList()..sort();
-    final selected = pipeline.studioLedgerModel.isEmpty
-        ? ''
-        : pipeline.studioLedgerModel;
-    final isFetching = fetchingModelConfigIds.contains(config.id);
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              initialValue: models.contains(selected) || selected.isEmpty
-                  ? selected
-                  : null,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'post_building_studio_ledger_model'.tr(),
-                helperText: 'post_building_studio_ledger_model_helper'.tr(
-                  namedArgs: {'arg0': config.model},
-                ),
-                helperMaxLines: 2,
-                border: const OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: [
-                DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('post_building_use_inherited_model'.tr()),
-                ),
-                ...models.map(
-                  (m) => DropdownMenuItem<String>(
-                    value: m,
-                    child: Text(m, overflow: TextOverflow.ellipsis),
-                  ),
-                ),
-              ],
-              onChanged: (m) => onModelChanged(m ?? ''),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: IconButton.filledTonal(
-              tooltip: 'post_building_fetch_models'.tr(),
-              onPressed: isFetching ? null : () => onFetchModels(config),
-              icon: isFetching
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh, size: 18),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Audit model dropdown (Fix 2 — UI part 2). Shows models fetched from the
-/// same API config the cleaner resolves to (current chat API for
-/// source=current/inherit, custom endpoint for source=custom), so the audit
-/// can pick a different model without re-entering endpoint/key. The first
-/// item is "Use cleaner model" (value='' → [resolveConfigForAudit] falls
-/// back to the cleaner-resolved model).
-///
-/// Models are cached in [modelsByApiConfigId] under a synthetic id derived
-/// from the resolved endpoint, so the audit fetch never collides with the
-/// cleaner fetch (and vice versa) even when they share the same endpoint.
-class _AuditModelRow extends ConsumerWidget {
-  final PipelineSettings pipeline;
-  final Map<String, List<String>> modelsByApiConfigId;
-  final Set<String> fetchingModelConfigIds;
-  final FetchModels onFetchModels;
-  final Future<void> Function(String) onModelChanged;
-
-  const _AuditModelRow({
-    required this.pipeline,
-    required this.modelsByApiConfigId,
-    required this.fetchingModelConfigIds,
-    required this.onFetchModels,
-    required this.onModelChanged,
-  });
-
-  /// Builds the synthetic [ApiConfig] the audit resolves to (mirrors
-  /// [AuxLlmClient.resolveConfigForAudit] → [resolveConfigForCleaner]).
-  /// Returns null when the resolved endpoint is empty (cleaner custom config
-  /// incomplete) so the row can show an inline hint instead of an empty
-  /// dropdown.
-  ApiConfig? _resolveAuditConfig(ApiConfig? activeApi) {
-    final source = pipeline.postCleanerSource == 'inherit'
-        ? pipeline.auxSource
-        : pipeline.postCleanerSource;
-    final endpoint = pipeline.postCleanerEndpoint.isNotEmpty
-        ? pipeline.postCleanerEndpoint
-        : pipeline.auxEndpoint;
-    final apiKey = pipeline.postCleanerApiKey.isNotEmpty
-        ? pipeline.postCleanerApiKey
-        : pipeline.auxApiKey;
-    final fallbackModel = pipeline.postCleanerModel.isNotEmpty
-        ? pipeline.postCleanerModel
-        : pipeline.auxModel;
-
-    if (source == 'custom') {
-      if (endpoint.isEmpty) return null;
-      return ApiConfig(
-        id: 'audit-custom:$endpoint',
-        name: 'Audit (custom)',
-        endpoint: endpoint,
-        apiKey: apiKey,
-        model: fallbackModel,
-        protocol: 'openai',
-      );
-    }
-    // source == 'current' (or unknown) — audit uses the active chat API.
-    if (activeApi == null) return null;
-    return ApiConfig(
-      id: 'audit-current:${activeApi.id}',
-      name: 'Audit (current)',
-      endpoint: activeApi.endpoint,
-      apiKey: activeApi.apiKey,
-      model: fallbackModel.isNotEmpty ? fallbackModel : activeApi.model,
-      protocol: activeApi.protocol,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final activeApi = ref.read(activeApiConfigProvider);
-    final config = _resolveAuditConfig(activeApi);
-    if (config == null) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(
-          'post_building_cleaner_audit_model_no_endpoint'.tr(),
-          style: const TextStyle(fontSize: 12),
-        ),
-      );
-    }
-
-    final fetched = modelsByApiConfigId[config.id] ?? const <String>[];
-    final models = <String>{
-      ...fetched,
-      if (pipeline.postCleanerAuditModel.isNotEmpty &&
-          !fetched.contains(pipeline.postCleanerAuditModel))
-        pipeline.postCleanerAuditModel,
-    }.toList()..sort();
-    final selected = pipeline.postCleanerAuditModel.isEmpty
-        ? ''
-        : pipeline.postCleanerAuditModel;
-    final isFetching = fetchingModelConfigIds.contains(config.id);
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              initialValue: models.contains(selected) || selected.isEmpty
-                  ? selected
-                  : null,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'post_building_cleaner_audit_model'.tr(),
-                helperText: selected.isEmpty
-                    ? 'post_building_cleaner_audit_model_helper'.tr(
-                        namedArgs: {'arg0': config.model},
-                      )
-                    : null,
-                helperMaxLines: 2,
-                border: const OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: [
-                DropdownMenuItem<String>(
-                  value: '',
-                  child: Text(
-                    'post_building_cleaner_audit_use_cleaner_model'.tr(),
-                  ),
                 ),
                 ...models.map(
                   (m) => DropdownMenuItem<String>(

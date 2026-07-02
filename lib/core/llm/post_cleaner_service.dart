@@ -84,6 +84,7 @@ class PostCleanerService {
           ? await _llm.resolveStudioSlotConfig(
               studioApiConfigId,
               errorLabel: 'post-cleaner',
+              modelOverride: settings.postCleanerModel,
             )
           : await _llm.resolveConfigForCleaner(
               settings,
@@ -688,6 +689,7 @@ class PostCleanerService {
           ? await _llm.resolveStudioSlotConfig(
               studioApiConfigId,
               errorLabel: 'post-cleaner-audit',
+              modelOverride: settings.postCleanerModel,
             )
           : await _llm.resolveConfigForAudit(
               settings,

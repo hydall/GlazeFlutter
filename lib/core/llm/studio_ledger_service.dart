@@ -133,6 +133,7 @@ class StudioLedgerService {
       final config = await _llm.resolveStudioSlotConfig(
         studioApiConfigId,
         errorLabel: 'studio-ledger',
+        modelOverride: settings.studioTrackerModelOverride,
       );
       if (token.isCancelled || isStillCurrent?.call() == false) {
         return LedgerRunResult.aborted;
