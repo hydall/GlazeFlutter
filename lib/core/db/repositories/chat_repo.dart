@@ -91,6 +91,75 @@ class ChatRepo implements SyncChatStore {
         .insertOnConflictUpdate(_toCompanion(session));
   }
 
+  /// Atomically appends a user message and clears the draft.
+  ///
+  /// This avoids the send path writing a whole stale session blob while the
+  /// input draft debounce is also persisting. The returned session is the
+  /// durable DB state that generation should use for prompt assembly.
+  Future<ChatSession?> appendUserMessageAndClearDraft({
+    required String sessionId,
+    required ChatMessage message,
+    required int updatedAt,
+  }) async {
+    return _db.transaction(() async {
+      final row = await (_db.select(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
+      if (row == null) return null;
+
+      final messages = (jsonDecode(row.messagesJson) as List<dynamic>)
+          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+          .toList()
+        ..add(message);
+
+      await (_db.update(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).write(
+        ChatSessionsCompanion(
+          messagesJson: Value(
+            jsonEncode(messages.map((e) => e.toJson()).toList()),
+          ),
+          draft: const Value(''),
+          updatedAt: Value(updatedAt),
+        ),
+      );
+
+      final updatedRow = row.copyWith(
+        messagesJson: jsonEncode(messages.map((e) => e.toJson()).toList()),
+        draft: const Value(''),
+        updatedAt: updatedAt,
+      );
+      return _toModel(updatedRow);
+    });
+  }
+
+  /// Updates only the draft column, and only if [expectedMessageCount] still
+  /// matches the row. A delayed input debounce from before Send must not write
+  /// an old draft over a session that has since gained the user message.
+  Future<ChatSession?> updateDraftIfMessageCount({
+    required String sessionId,
+    required String draft,
+    required int expectedMessageCount,
+  }) async {
+    return _db.transaction(() async {
+      final row = await (_db.select(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
+      if (row == null) return null;
+
+      final (messageCount, _) = _scanTopLevelObjects(row.messagesJson);
+      if (messageCount != expectedMessageCount) return null;
+
+      await (_db.update(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).write(
+        ChatSessionsCompanion(draft: Value(draft)),
+      );
+
+      return _toModel(row.copyWith(draft: Value(draft)));
+    });
+  }
+
   Future<Map<String, dynamic>> updateSessionVarsJson(
     String sessionId,
     Map<String, dynamic> Function(Map<String, dynamic> vars) update,
