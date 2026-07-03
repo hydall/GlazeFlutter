@@ -1681,13 +1681,13 @@ class GenerationPipeline {
       // toggle was removed from the UI. We still check StudioConfig.enabled
       // to decide whether the ledger should run.
       var studioConfigEnabled = false;
-      var studioCheapApiConfigId = '';
+      var studioCleanerApiConfigId = '';
       try {
         final studioConfig = await ref
             .read(studioConfigRepoProvider)
             .getBySessionId(sessionId);
         studioConfigEnabled = studioConfig?.enabled == true;
-        studioCheapApiConfigId = studioConfig?.cheapApiConfigId ?? '';
+        studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
       } catch (_) {}
       if (!studioConfigEnabled) {
         await _recordLedgerDiag(
@@ -1749,7 +1749,7 @@ class GenerationPipeline {
         agentSwipeId: targetMessage.agentSwipeId,
         forceEnabled: true,
         isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
-        studioApiConfigId: studioCheapApiConfigId,
+        studioCleanerApiConfigId: studioCleanerApiConfigId,
       );
 
       await _recordLedgerDiag(

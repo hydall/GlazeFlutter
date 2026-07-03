@@ -396,8 +396,8 @@ class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
             agentSwipeId: target.agentSwipeId,
             forceEnabled: true,
             isStillCurrent: () => mounted,
-            studioApiConfigId: studioConfig?.enabled == true
-                ? studioConfig?.cheapApiConfigId ?? ''
+            studioCleanerApiConfigId: studioConfig?.enabled == true
+                ? studioConfig?.cleanerApiConfigId ?? ''
                 : '',
           );
       if (!mounted) return;

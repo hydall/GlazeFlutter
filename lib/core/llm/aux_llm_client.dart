@@ -301,10 +301,8 @@ class AuxLlmClient {
 
   /// Resolves one of Studio's saved API-config slots for an auxiliary call.
   ///
-  /// Studio Ledger is part of the Studio sidecar set, so when Studio is enabled
-  /// it should use the cheap slot alongside the pre-gen trackers instead of the
-  /// legacy aux/ledger model fields. Empty or missing slot ids fall back to the
-  /// active chat config, matching Studio agent slot behavior.
+  /// Resolves one selected Studio slot. Empty or missing slot ids fall back to
+  /// the active chat config, matching Studio agent slot behavior.
   Future<AuxApiConfig> resolveStudioSlotConfig(
     String apiConfigId, {
     String errorLabel = 'studio-slot',
