@@ -46,8 +46,16 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
     final diagnostics = widget.activity.diagnostics;
     final selectedCount = diagnostics['selectedCount'] as int? ?? 0;
     final selectedTokens = diagnostics['selectedTokens'] as int? ?? 0;
-    final totalCandidates = diagnostics['totalCandidates'] as int? ?? 0;
-    final skippedCount = diagnostics['skippedCount'] as int? ?? 0;
+    final totalCandidates =
+        diagnostics['eligibleCandidates'] as int? ??
+        diagnostics['totalCandidates'] as int? ??
+        0;
+    final skippedCount =
+        diagnostics['eligibleSkippedCount'] as int? ??
+        diagnostics['skippedCount'] as int? ??
+        0;
+    final sourceVisibleCount =
+        diagnostics['excludedBySourceWindow'] as int? ?? 0;
     final latencyMs = diagnostics['latencyMs'] as int? ?? 0;
     final title = selectedCount == 0
         ? 'Memory: no entries selected'
@@ -138,6 +146,10 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                           runSpacing: 6,
                           children: [
                             _MemoryActivityChip(label: 'skipped $skippedCount'),
+                            if (sourceVisibleCount > 0)
+                              _MemoryActivityChip(
+                                label: 'source visible $sourceVisibleCount',
+                              ),
                             _MemoryActivityChip(
                               label: 'latency ${latencyMs}ms',
                             ),

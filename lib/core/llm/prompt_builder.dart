@@ -1118,6 +1118,11 @@ PromptResult _assembleMessages({
     finalExcerptSelection,
     memoryMacroMissing: memoryMacroMissing,
   );
+  final finalTriggeredMemories = _finalizeTriggeredMemories(
+    payload.triggeredMemories,
+    finalMemorySelection,
+    finalExcerptSelection,
+  );
 
   return PromptResult(
     messages: finalMessagesWithRegex,
@@ -1125,7 +1130,7 @@ PromptResult _assembleMessages({
     sessionVars: currentSessionVars,
     globalVars: currentGlobalVars,
     triggeredLorebooks: triggeredLorebooks,
-    triggeredMemories: triggeredMemories,
+    triggeredMemories: finalTriggeredMemories,
     memoryCoverage: finalMemoryCoverage,
   );
 }
@@ -1582,6 +1587,24 @@ Map<String, dynamic> _finalizeMemoryCoverage(
     'memoryMacroMissing': memoryMacroMissing,
     'diagnostics': diagnostics,
   };
+}
+
+List<TriggeredEntry> _finalizeTriggeredMemories(
+  List<TriggeredEntry> previous,
+  MemorySelection? selection,
+  MemoryExcerptSelection? excerptSelection,
+) {
+  if (selection == null) return previous;
+  final entries = excerptSelection?.entries ?? selection.entries;
+  return entries
+      .map(
+        (e) => TriggeredEntry(
+          id: e.id,
+          name: e.title.isNotEmpty ? e.title : e.id,
+          source: 'memory',
+        ),
+      )
+      .toList(growable: false);
 }
 
 /// Recompute a [TokenBreakdown] after the memory block is finalized so

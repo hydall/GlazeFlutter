@@ -116,6 +116,11 @@ abstract class PipelineSettings with _$PipelineSettings {
     // still reason when the ApiConfig asks them to). Only effective for
     // Gemini-protocol endpoints; other transports ignore the override.
     @Default(false) bool studioFinalDisableReasoning,
+    // Model id override for the Studio final generator. Empty = use the
+    // selected Studio final API config model, or the active chat model when no
+    // final API config is selected. This is intentionally separate from
+    // [generationModel], which belongs to MemoryBook generation.
+    @Default('') String studioFinalModelOverride,
 
     // ── Studio trackers (intermediate agents) ───────────────────────────
     // The 7 pre-gen controllers (continuity / agency / narrative / dialogue /
