@@ -252,14 +252,14 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       imagePath: imageDataUrl,
     );
 
-    final updatedMessages = [...current.messages, userMsg];
-    final updatedSession = current.session!.copyWith(
-      messages: updatedMessages,
-      draft: '',
-      updatedAt: currentTimestampSeconds(),
-    );
-
-    await ref.read(chatRepoProvider).put(updatedSession);
+    final updatedSession = await ref
+        .read(chatRepoProvider)
+        .appendUserMessageAndClearDraft(
+          sessionId: current.session!.id,
+          message: userMsg,
+          updatedAt: currentTimestampSeconds(),
+        );
+    if (updatedSession == null) return;
     // Mark the latest tracker snapshot as committed — the user has moved on
     // from the previous assistant turn by sending a follow-up. This separates
     // accepted state (committed=1, used by getLatestCommitted) from

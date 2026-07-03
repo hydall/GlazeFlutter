@@ -21,15 +21,19 @@ class ChatDraftController {
     if (current == null || current.session == null) return;
     if (current.session!.draft == draftText) return;
 
-    final updatedSession = current.session!.copyWith(draft: draftText);
-    await _ref.read(chatRepoProvider).put(updatedSession);
+    final updatedSession = await _ref
+        .read(chatRepoProvider)
+        .updateDraftIfMessageCount(
+          sessionId: current.session!.id,
+          draft: draftText,
+          expectedMessageCount: current.session!.messages.length,
+        );
     if (!_ref.mounted) return;
+    if (updatedSession == null) return;
     ChatSessionService.updateCache(updatedSession);
-    _setState(AsyncData(ChatState(
-      session: updatedSession,
-      isGenerating: current.isGenerating,
-      generationStartTime: current.generationStartTime,
-      error: current.error,
-    )));
+    final latest = _getState().value ?? current;
+    _setState(
+      AsyncData(latest.copyWith(session: updatedSession)),
+    );
   }
 }
