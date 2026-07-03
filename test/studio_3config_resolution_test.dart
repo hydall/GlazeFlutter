@@ -224,5 +224,69 @@ void main() {
         expect(resolved.model, 'final-slot-model');
       },
     );
+
+    test(
+      'final generator uses Studio final override instead of MemoryBook model',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final db = _testDb();
+        addTearDown(db.close);
+        final container = ProviderContainer(
+          overrides: [appDbProvider.overrideWithValue(db)],
+        );
+        addTearDown(container.dispose);
+
+        final active = ApiConfig(
+          id: 'active',
+          name: 'Active',
+          endpoint: 'https://active',
+          apiKey: 'key',
+          model: 'chat-model',
+          protocol: 'openai',
+        );
+        final expensive = ApiConfig(
+          id: 'expensive',
+          name: 'Expensive',
+          endpoint: 'https://expensive',
+          apiKey: 'key',
+          model: 'final-slot-model',
+          protocol: 'openai',
+        );
+        await container.read(apiConfigRepoProvider).put(active);
+        await container.read(apiConfigRepoProvider).put(expensive);
+        container.read(activeApiPresetIdProvider.notifier).state = active.id;
+        container.invalidate(apiListProvider);
+        await container.read(apiListProvider.future);
+        await container
+            .read(studioConfigRepoProvider)
+            .upsert(
+              StudioConfig(
+                sessionId: 'session-1',
+                enabled: true,
+                expensiveApiConfigId: expensive.id,
+              ),
+            );
+        await container
+            .read(pipelineSettingsProvider.notifier)
+            .save(
+              const PipelineSettings(
+                generationModel: 'memory-book-model',
+                studioFinalModelOverride: 'studio-final-model',
+              ),
+            );
+
+        final resolved = await container
+            .read(agentRunnerProvider)
+            .resolveAgentConfig(
+              const StudioAgent(id: 'final', name: 'Final'),
+              active,
+              'session-1',
+              isFinalResponse: true,
+              apiConfigId: expensive.id,
+            );
+
+        expect(resolved.model, 'studio-final-model');
+      },
+    );
   });
 }

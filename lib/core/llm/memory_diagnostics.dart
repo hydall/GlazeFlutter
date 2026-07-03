@@ -267,28 +267,38 @@ class MemoryDiagnostics {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'selectedEntryIds': selectedEntryIds,
-    'memoryMode': memoryMode,
-    'missingContextSuspected': missingContextSuspected,
-    'missingContextReasons': missingContextReasons,
-    'reliableCandidateFound': reliableCandidateFound,
-    'factualContinuityGuardEnabled': factualContinuityGuardEnabled,
-    'factualContinuityGuardActive': factualContinuityGuardActive,
-    'selectedCount': selectedCount,
-    'skippedCount': skippedCount,
-    'totalCandidates': totalCandidates,
-    'selectedTokens': selectedTokens,
-    'budget': budget.toJson(),
-    'budgetTrimmed': budgetTrimmed,
-    'excludedBySourceWindow': excludedBySourceWindow,
-    'latencyMs': latencyMs,
-    if (agenticStatus != null) 'agenticStatus': agenticStatus,
-    if (agenticLatencyMs != null) 'agenticLatencyMs': agenticLatencyMs,
-    if (agenticAttempts.isNotEmpty)
-      'agenticAttempts': agenticAttempts.map((a) => a.toJson()).toList(),
-    'candidates': candidates.map((c) => c.toJson()).toList(),
-  };
+  Map<String, dynamic> toJson() {
+    final eligibleCandidateCount = candidates
+        .where((c) => c.reason != 'source_visible_in_prompt')
+        .length;
+    return {
+      'selectedEntryIds': selectedEntryIds,
+      'memoryMode': memoryMode,
+      'missingContextSuspected': missingContextSuspected,
+      'missingContextReasons': missingContextReasons,
+      'reliableCandidateFound': reliableCandidateFound,
+      'factualContinuityGuardEnabled': factualContinuityGuardEnabled,
+      'factualContinuityGuardActive': factualContinuityGuardActive,
+      'selectedCount': selectedCount,
+      'skippedCount': skippedCount,
+      'totalCandidates': totalCandidates,
+      'eligibleCandidates': eligibleCandidateCount,
+      'eligibleSkippedCount': (eligibleCandidateCount - selectedCount).clamp(
+        0,
+        eligibleCandidateCount,
+      ),
+      'selectedTokens': selectedTokens,
+      'budget': budget.toJson(),
+      'budgetTrimmed': budgetTrimmed,
+      'excludedBySourceWindow': excludedBySourceWindow,
+      'latencyMs': latencyMs,
+      if (agenticStatus != null) 'agenticStatus': agenticStatus,
+      if (agenticLatencyMs != null) 'agenticLatencyMs': agenticLatencyMs,
+      if (agenticAttempts.isNotEmpty)
+        'agenticAttempts': agenticAttempts.map((a) => a.toJson()).toList(),
+      'candidates': candidates.map((c) => c.toJson()).toList(),
+    };
+  }
 
   String get summary => selectedCount == 0
       ? 'Memory: no entries selected'

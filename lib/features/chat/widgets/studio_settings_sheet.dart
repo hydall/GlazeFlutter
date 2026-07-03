@@ -161,10 +161,11 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             label: 'Final Generator',
             description: 'Expensive — high-quality prose generation',
             emptyLabel: 'Use active chat model',
-            value: pipeline.generationModel,
+            value: pipeline.studioFinalModelOverride,
             apiConfigId: config.expensiveApiConfigId,
-            onChanged: (model) =>
-                _savePipelineModel((p) => p.copyWith(generationModel: model)),
+            onChanged: (model) => _savePipelineModel(
+              (p) => p.copyWith(studioFinalModelOverride: model),
+            ),
             onApiConfigChanged: (apiConfigId) =>
                 _save(config.copyWith(expensiveApiConfigId: apiConfigId)),
             onSettings: () =>

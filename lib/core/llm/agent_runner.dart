@@ -197,10 +197,11 @@ class AgentRunner {
   ///   for post-processing agents. When empty, falls back to `runApiConfigId`
   ///   then to the active chat config.
   /// - Model overrides are global PipelineSettings values configured from the
-  ///   Studio menu: postCleanerModel for post-processing trackers,
-  ///   studioTrackerModelOverride for pre-gen trackers. The final generator
-  ///   intentionally does not read PipelineSettings.generationModel because that
-  ///   field belongs to MemoryBook generation / agentic write-loop routing.
+  ///   Studio menu: studioFinalModelOverride for the final generator,
+  ///   postCleanerModel for post-processing trackers, studioTrackerModelOverride
+  ///   for pre-gen trackers. The final generator intentionally does not read
+  ///   PipelineSettings.generationModel because that field belongs to MemoryBook
+  ///   generation / agentic write-loop routing.
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,
     ApiConfig current,
@@ -220,7 +221,11 @@ class AgentRunner {
     final pipeline = _ref.read(pipelineSettingsProvider);
     if (isFinalResponse) {
       return resolver
-          .resolveAgentConfig(current, runApiConfigId, '')
+          .resolveAgentConfig(
+            current,
+            runApiConfigId,
+            pipeline.studioFinalModelOverride,
+          )
           .copyWithSampling(
             topP: pipeline.studioFinalTopP,
             topK: pipeline.studioFinalTopK,
