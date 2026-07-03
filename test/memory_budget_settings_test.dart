@@ -70,7 +70,7 @@ void main() {
       // Before load(), state is defaults (proves load() is what restores it).
       expect(
         container2.read(pipelineSettingsProvider).postCleanerEnabled,
-        false,
+        true,
       );
 
       await container2.read(pipelineSettingsProvider.notifier).load();
@@ -79,6 +79,102 @@ void main() {
       expect(loaded.postCleanerEnabled, true);
       expect(loaded.postCleanerBannedWords, 'suddenly, palpable');
       expect(loaded.auxModel, 'aux-mini');
+    },
+  );
+
+  test(
+    'pipeline settings v1 migration upgrades old false defaults to true',
+    () async {
+      // Simulate an existing install that persisted the old @Default(false)
+      // values before the Post Building Menu was removed and the defaults
+      // changed to true. The migration should upgrade those fields to true
+      // while leaving user-chosen values and non-migrated fields untouched.
+      SharedPreferences.setMockInitialValues({
+        'pipelineSettings': jsonEncode({
+          'postCleanerEnabled': false,
+          'postCleanerCharacterCheckEnabled': false,
+          'studioLedgerEnabled': false,
+          'agenticWriteEnabled': false,
+          'agenticWriteBlockNextGen': false,
+          'agentWriteApprovalRequired': false,
+          'memoryDedupAutoEnabled': false,
+          'postCleanerDisableReasoning': false,
+          'auxModel': 'aux-mini',
+        }),
+      });
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await container.read(pipelineSettingsProvider.notifier).load();
+
+      final loaded = container.read(pipelineSettingsProvider);
+      expect(loaded.postCleanerEnabled, isTrue);
+      expect(loaded.postCleanerCharacterCheckEnabled, isTrue);
+      expect(loaded.studioLedgerEnabled, isTrue);
+      expect(loaded.agenticWriteEnabled, isTrue);
+      expect(loaded.agenticWriteBlockNextGen, isTrue);
+      expect(loaded.auxModel, 'aux-mini');
+
+      // Not migrated — stay false.
+      expect(loaded.agentWriteApprovalRequired, isFalse);
+      expect(loaded.memoryDedupAutoEnabled, isFalse);
+      expect(loaded.postCleanerDisableReasoning, isFalse);
+    },
+  );
+
+  test(
+    'pipeline settings v1 migration is idempotent — rerun load() keeps true',
+    () async {
+      // After the first load() ran the migration and persisted the upgraded
+      // JSON + schema version, a second load() must not flip anything back.
+      SharedPreferences.setMockInitialValues({
+        'pipelineSettings': jsonEncode({
+          'postCleanerEnabled': true,
+          'studioLedgerEnabled': true,
+          'agenticWriteEnabled': true,
+          'agenticWriteBlockNextGen': true,
+          'postCleanerCharacterCheckEnabled': true,
+        }),
+        'pipelineSettingsSchemaVersion': 1,
+      });
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await container.read(pipelineSettingsProvider.notifier).load();
+
+      final loaded = container.read(pipelineSettingsProvider);
+      expect(loaded.postCleanerEnabled, isTrue);
+      expect(loaded.studioLedgerEnabled, isTrue);
+      expect(loaded.agenticWriteEnabled, isTrue);
+      expect(loaded.agenticWriteBlockNextGen, isTrue);
+      expect(loaded.postCleanerCharacterCheckEnabled, isTrue);
+    },
+  );
+
+  test(
+    'pipeline settings v1 migration preserves user-chosen true values',
+    () async {
+      // If the user had explicitly set a field to true before the migration,
+      // it must remain true (no regression).
+      SharedPreferences.setMockInitialValues({
+        'pipelineSettings': jsonEncode({
+          'postCleanerEnabled': true,
+          'studioLedgerEnabled': true,
+          'agenticWriteBlockNextGen': false,
+        }),
+      });
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await container.read(pipelineSettingsProvider.notifier).load();
+
+      final loaded = container.read(pipelineSettingsProvider);
+      expect(loaded.postCleanerEnabled, isTrue);
+      expect(loaded.studioLedgerEnabled, isTrue);
+      expect(loaded.agenticWriteBlockNextGen, isTrue);
     },
   );
 
