@@ -23,14 +23,32 @@ class PipelineSettingsNotifier extends StateNotifier<PipelineSettings> {
   final Ref _ref;
   PipelineSettingsNotifier(this._ref) : super(const PipelineSettings());
 
+  /// Current schema version for pipeline settings migration. Bump when
+  /// adding a new migration step in [_applyMigrations].
+  static const int kCurrentSchemaVersion = 1;
+
+  /// SharedPreferences key storing the schema version integer.
+  static const String _kVersionKey = 'pipelineSettingsSchemaVersion';
+
   Future<void> load() async {
     final prefs = await _ref.read(sharedPreferencesProvider.future);
     final raw = prefs.getString('pipelineSettings');
     if (raw != null) {
       try {
         final json = jsonDecode(raw) as Map<String, dynamic>;
-        state = PipelineSettings.fromJson(_migrateLegacySidecarJson(json));
+        final migrated = _migrateLegacySidecarJson(json);
+        final version = prefs.getInt(_kVersionKey) ?? 0;
+        if (version < kCurrentSchemaVersion) {
+          _applyMigrations(migrated, fromVersion: version);
+          await prefs.setInt(_kVersionKey, kCurrentSchemaVersion);
+          state = PipelineSettings.fromJson(migrated);
+          await prefs.setString('pipelineSettings', jsonEncode(state.toJson()));
+        } else {
+          state = PipelineSettings.fromJson(migrated);
+        }
       } catch (_) {}
+    } else {
+      await prefs.setInt(_kVersionKey, kCurrentSchemaVersion);
     }
   }
 
@@ -48,5 +66,42 @@ class PipelineSettingsNotifier extends StateNotifier<PipelineSettings> {
     migrated.putIfAbsent('auxApiKey', () => migrated['sidecarApiKey']);
     migrated.putIfAbsent('auxTimeoutMs', () => migrated['sidecarTimeoutMs']);
     return migrated;
+  }
+
+  /// Applies migrations from [fromVersion] up to [kCurrentSchemaVersion].
+  /// Each migration step mutates [json] in place.
+  void _applyMigrations(Map<String, dynamic> json, {required int fromVersion}) {
+    if (fromVersion < 1) {
+      _migrateV1(json);
+    }
+  }
+
+  /// Migration v0 → v1: several PipelineSettings bool fields changed their
+  /// @Default from false to true because the Post Building Menu (the only UI
+  /// that exposed their toggles) was removed. Existing installs that still
+  /// have the old `false` value persisted in SharedPreferences are upgraded
+  /// to `true` so the pipeline runs with the new intended defaults.
+  ///
+  /// Only upgrades fields that are explicitly `false` in the JSON — if the
+  /// user had set them to `true`, they stay `true`. Fields absent from the
+  /// JSON are not touched here; `fromJson` will use the new `@Default(true)`.
+  ///
+  /// Not upgraded (kept at user's choice / old default):
+  /// - agentWriteApprovalRequired (stays false)
+  /// - memoryDedupAutoEnabled (stays false, manual Dedup only)
+  /// - postCleanerDisableReasoning (disable flag, stays false)
+  void _migrateV1(Map<String, dynamic> json) {
+    const fieldsToUpgrade = <String>[
+      'postCleanerEnabled',
+      'postCleanerCharacterCheckEnabled',
+      'studioLedgerEnabled',
+      'agenticWriteEnabled',
+      'agenticWriteBlockNextGen',
+    ];
+    for (final field in fieldsToUpgrade) {
+      if (json[field] == false) {
+        json[field] = true;
+      }
+    }
   }
 }
