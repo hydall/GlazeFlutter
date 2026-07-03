@@ -93,8 +93,8 @@ final characterByIdProvider = Provider.family<Character?, String>((ref, id) {
 
 /// All variations belonging to one variation group (representative first),
 /// reactive to DB changes. Keyed by the group's [Character.variantGroupId].
-final characterVariantsProvider =
-    StreamProvider.autoDispose.family<List<Character>, String>((ref, groupId) {
+final characterVariantsProvider = StreamProvider.autoDispose
+    .family<List<Character>, String>((ref, groupId) {
       ref.watch(avatarVersionProvider);
       return ref.read(characterRepoProvider).watchVariants(groupId);
     });
@@ -167,8 +167,9 @@ class InfiniteCharactersNotifier
     await _itemsSub?.cancel();
     await _countSub?.cancel();
 
-    final initialCount =
-        await repo.watchTotalCount(includeHidden: arg.showHidden).first;
+    final initialCount = await repo
+        .watchTotalCount(includeHidden: arg.showHidden)
+        .first;
     final initialItems = await repo.getPage(
       limit: _loadedLimit,
       offset: 0,
@@ -228,16 +229,18 @@ class InfiniteCharactersNotifier
   void _subscribeCount() {
     final repo = ref.read(characterRepoProvider);
     _countSub?.cancel();
-    _countSub = repo.watchTotalCount(includeHidden: arg.showHidden).listen(
-      (count) {
-        final current = state.value;
-        if (current == null) return;
-        state = AsyncData(current.copyWith(totalCount: count));
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        state = AsyncError<InfiniteCharactersState>(error, stackTrace);
-      },
-    );
+    _countSub = repo
+        .watchTotalCount(includeHidden: arg.showHidden)
+        .listen(
+          (count) {
+            final current = state.value;
+            if (current == null) return;
+            state = AsyncData(current.copyWith(totalCount: count));
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            state = AsyncError<InfiniteCharactersState>(error, stackTrace);
+          },
+        );
   }
 
   Future<void> loadMore() async {
@@ -301,8 +304,9 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
   /// starts with an empty gallery. Returns the created variation.
   Future<Character> addVariant(Character source, String name) async {
     final repo = ref.read(characterRepoProvider);
-    final groupId =
-        source.variantGroupId.isEmpty ? source.id : source.variantGroupId;
+    final groupId = source.variantGroupId.isEmpty
+        ? source.id
+        : source.variantGroupId;
     final newId = generateId();
     final order = await repo.nextVariantOrder(groupId);
 
@@ -376,8 +380,19 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
     await chatRepo.transaction(() async {
       final deletedSessionIds = await chatRepo.deleteByCharacterId(id);
       for (final sid in deletedSessionIds) {
+        final studioConfig = await ref
+            .read(studioConfigRepoProvider)
+            .getBySessionId(sid);
+        await ref.read(studioConfigRepoProvider).deleteBySessionId(sid);
         await SyncDeletionTracker.record('chat', sid);
         await SyncDeletionTracker.record('memory_book', sid);
+        await SyncDeletionTracker.record('tracker_value', sid);
+        await SyncDeletionTracker.record('tracker_snapshot', sid);
+        final studioProfileId = studioConfig?.profileId ?? '';
+        if (studioConfig != null &&
+            (studioProfileId.isEmpty || studioProfileId == sid)) {
+          await SyncDeletionTracker.record('studio_config', sid);
+        }
       }
 
       final lorebooks = await lorebookRepo.getByScopeAndTarget('character', id);
@@ -414,7 +429,8 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
     try {
       if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
         final resolved =
-            resolveGlazeFilePath(character.avatarPath!) ?? character.avatarPath!;
+            resolveGlazeFilePath(character.avatarPath!) ??
+            character.avatarPath!;
         final avatar = File(resolved);
         if (await avatar.exists()) await avatar.delete();
         final name = p.basenameWithoutExtension(resolved);

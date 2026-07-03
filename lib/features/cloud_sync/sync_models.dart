@@ -103,7 +103,8 @@ class SyncManifest {
   ///   7 — added `tracker_value` entries for live `tracker_rows` / Tracker
   ///         Values, separate from rollback snapshots.
   ///   8 — added `studio_preset` entity type (DB-backed StudioPresetRows).
-  static const int currentVersion = 8;
+  ///   9 — added `local_storage` singleton for global PipelineSettings.
+  static const int currentVersion = 9;
 
   final int version;
   final String deviceId;

@@ -738,6 +738,8 @@ class SyncEngine {
         case 'extensions_settings':
           final s = await _extensionsSettingsStore.get();
           return {'__singleton': true, 'settings': s.toJson()};
+        case 'local_storage':
+          return _readLocalStorage();
         case 'info_block':
           // id == sessionId for info_block entries
           final blocks = await _infoBlockStore.getBySessionId(id);
@@ -812,6 +814,9 @@ class SyncEngine {
               ExtensionsSettings.fromJson(settingsJson),
             );
           }
+          break;
+        case 'local_storage':
+          await _applyLocalStorage(data);
           break;
         case 'info_block':
           await _applyCloudInfoBlocks(id, data);
@@ -1120,6 +1125,9 @@ class SyncEngine {
         case 'ui_themes':
           await _themePresetRepo.putAll([]);
           break;
+        case 'local_storage':
+          await _deleteLocalStorage();
+          break;
         case 'extension_preset':
           await _extensionPresetRepo.delete(id);
           break;
@@ -1144,5 +1152,36 @@ class SyncEngine {
         // extensions_settings has no meaningful "delete" — it's always present.
       }
     } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> _readLocalStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pipelineSettings = prefs.getString(
+      SyncSerialization.pipelineSettingsKey,
+    );
+    if (pipelineSettings == null) return null;
+    return SyncSerialization.localStoragePayload(
+      pipelineSettings: pipelineSettings,
+    );
+  }
+
+  Future<void> _applyLocalStorage(Map<String, dynamic> data) async {
+    final prefs = await SharedPreferences.getInstance();
+    final pipelineSettings = data[SyncSerialization.pipelineSettingsKey];
+    if (pipelineSettings is String) {
+      if (pipelineSettings.isEmpty) {
+        await prefs.remove(SyncSerialization.pipelineSettingsKey);
+      } else {
+        await prefs.setString(
+          SyncSerialization.pipelineSettingsKey,
+          pipelineSettings,
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteLocalStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(SyncSerialization.pipelineSettingsKey);
   }
 }

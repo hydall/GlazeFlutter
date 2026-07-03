@@ -850,6 +850,61 @@ void main() {
     },
   );
 
+  test('Push includes pipelineSettings in local_storage singleton', () async {
+    final world = SyncWorld();
+    const settingsJson = '{"studioTrackerModelOverride":"gemini-pro"}';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pipelineSettings', settingsJson);
+
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    final raw = world.cloud.files[cloudPath('local_storage', 'local_storage')];
+    expect(raw, isNotNull);
+    final payload = jsonDecode(raw!) as Map<String, dynamic>;
+    expect(payload['__localStorage'], isTrue);
+    expect(payload['pipelineSettings'], settingsJson);
+
+    final cloudManifest = SyncManifest.fromJson(
+      jsonDecode(world.cloud.files[cloudPath('manifest', 'manifest')]!)
+          as Map<String, dynamic>,
+    );
+    expect(
+      cloudManifest.entries.containsKey('local_storage:local_storage'),
+      isTrue,
+    );
+  });
+
+  test('Pull applies pipelineSettings from local_storage singleton', () async {
+    final world = SyncWorld();
+    const settingsJson = '{"postCleanerModel":"claude-sonnet"}';
+    final payload = {'__localStorage': true, 'pipelineSettings': settingsJson};
+    final entry = SyncManifestEntry(
+      type: 'local_storage',
+      id: 'local_storage',
+      path: cloudPath('local_storage', 'local_storage'),
+      updatedAt: 1000,
+      hash: SyncSerialization.computeSyncHash(payload),
+    );
+    final cloudManifest = SyncManifest(
+      deviceId: 'cloud',
+      createdAt: 1,
+      lastSync: 1000,
+      entries: {entry.key: entry},
+    );
+    world.cloud.files[entry.path] = jsonEncode(payload);
+    world.cloud.files[cloudPath('manifest', 'manifest')] = jsonEncode(
+      cloudManifest.toJson(),
+    );
+
+    await world.engine.pullEntities(onProgress: (_) {}, onConflict: (_) {});
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('pipelineSettings'), settingsJson);
+  });
+
   test(
     'Empty device with no API presets should not conflict with cloud',
     () async {
