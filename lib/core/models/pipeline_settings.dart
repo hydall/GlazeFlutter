@@ -41,7 +41,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default(60000) int auxTimeoutMs,
 
     // ── Agentic write-loop ────────────────────────────────────────────────
-    @Default(false) bool agenticWriteEnabled,
+    @Default(true) bool agenticWriteEnabled,
     // Cadence: run the agentic write-loop every N assistant turns. 5 = every
     // 5th turn (batch mode — the LLM analyzes 5 U-A turns at once and writes
     // a concise short-term memory summary, not per-turn entries).
@@ -52,7 +52,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default('every_n') String agenticWriteRunMode,
     // When true, block the next user-message generation until the write-loop
     // finishes (or times out). Default false = fire-and-forget.
-    @Default(false) bool agenticWriteBlockNextGen,
+    @Default(true) bool agenticWriteBlockNextGen,
     // Conditional triggers (plan §Model Cadence Memory write-loop). Only
     // consulted when runMode == 'conditional'.
     @Default(true) bool agenticWriteRunWhenMentionedEntitiesChanged,
@@ -167,7 +167,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default(1) int studioPostTrackerContextSize,
 
     // ── POST-cleaner ──────────────────────────────────────────────────────
-    @Default(false) bool postCleanerEnabled,
+    @Default(true) bool postCleanerEnabled,
     @Default(0.7) double postCleanerTemperature,
     @Default(0) int postCleanerMaxTokens,
     @Default(0.9) double postCleanerTopP,
@@ -180,7 +180,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default('') String postCleanerApiKey,
     @Default(0) int postCleanerTimeoutMs,
     @Default(true) bool postCleanerContinuityEnabled,
-    @Default(false) bool postCleanerCharacterCheckEnabled,
+    @Default(true) bool postCleanerCharacterCheckEnabled,
     @Default(12) int postCleanerHistoryMessages,
     @Default(3000) int postCleanerMaxCharsPerMessage,
     // Optional model override for the character/world audit pass. When empty,
@@ -215,7 +215,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     // assistant response when Studio is enabled. Writes compact entity/
     // relationship/arc/world state and durable MemoryBook facts.
     // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md.
-    @Default(false) bool studioLedgerEnabled,
+    @Default(true) bool studioLedgerEnabled,
     // Model for the ledger LLM call. When empty, inherits the aux model.
     @Default('') String studioLedgerModel,
     // Endpoint override for the ledger LLM. When empty, inherits aux.
