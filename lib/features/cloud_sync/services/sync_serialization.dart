@@ -10,6 +10,8 @@ import '../cloud_adapter.dart';
 import '../sync_models.dart';
 
 class SyncSerialization {
+  static const pipelineSettingsKey = 'pipelineSettings';
+
   /// Content fingerprint for manifest conflict detection (not full session JSON).
   static String computeChatMetadataHash(SessionMetadata metadata) {
     return computeSyncHash({
@@ -139,6 +141,12 @@ class SyncSerialization {
     final raw = commaIdx >= 0 ? dataUrl.substring(commaIdx + 1) : dataUrl;
     final bytes = base64Decode(raw);
     return computeBinaryHash(bytes);
+  }
+
+  static Map<String, dynamic> localStoragePayload({
+    required String pipelineSettings,
+  }) {
+    return {'__localStorage': true, pipelineSettingsKey: pipelineSettings};
   }
 
   static String guessImageExt(String dataUrl) {

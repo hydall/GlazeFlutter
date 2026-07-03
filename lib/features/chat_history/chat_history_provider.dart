@@ -130,13 +130,24 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
   }
 
   Future<void> deleteSession(String sessionId) async {
+    final studioConfig = await ref
+        .read(studioConfigRepoProvider)
+        .getBySessionId(sessionId);
     await ref.read(chatRepoProvider).delete(sessionId);
     await ref.read(memoryBookRepoProvider).deleteBySessionId(sessionId);
+    await ref.read(trackerRepoProvider).clearForSession(sessionId);
     await ref.read(trackerSnapshotRepoProvider).deleteBySessionId(sessionId);
+    await ref.read(studioConfigRepoProvider).deleteBySessionId(sessionId);
     ChatSessionService.clearCache();
     await SyncDeletionTracker.record('chat', sessionId);
     await SyncDeletionTracker.record('memory_book', sessionId);
+    await SyncDeletionTracker.record('tracker_value', sessionId);
     await SyncDeletionTracker.record('tracker_snapshot', sessionId);
+    final studioProfileId = studioConfig?.profileId ?? '';
+    if (studioConfig != null &&
+        (studioProfileId.isEmpty || studioProfileId == sessionId)) {
+      await SyncDeletionTracker.record('studio_config', sessionId);
+    }
   }
 
   Future<void> clearChat(String sessionId) async {

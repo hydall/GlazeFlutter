@@ -466,6 +466,35 @@ class SyncManifestBuilder implements SyncManifestProvider {
         hash: hash,
       );
     }
+
+    final prefs = await SharedPreferences.getInstance();
+    final pipelineSettings = prefs.getString(
+      SyncSerialization.pipelineSettingsKey,
+    );
+    if (pipelineSettings != null) {
+      const type = 'local_storage';
+      final payload = SyncSerialization.localStoragePayload(
+        pipelineSettings: pipelineSettings,
+      );
+      final hash = SyncSerialization.computeSyncHash(payload);
+      final key = entryKey(type, type);
+      final prevEntry = previous.entries[key];
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+
+      entries[key] = SyncManifestEntry(
+        type: type,
+        id: type,
+        path: cloudPath(type, type),
+        updatedAt: updatedAt,
+        hash: hash,
+      );
+    }
   }
 
   Future<void> _addDeletedEntries(
