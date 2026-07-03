@@ -67,7 +67,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     // `agentWriteApprovalRequired` per-chat flag. Default false = legacy
     // auto-approve behavior.
     // See docs/plans/PLAN_MEMORY_CONTINUITY.md §4 (agentWriteApprovalRequired).
-    @Default(true) bool agentWriteApprovalRequired,
+    @Default(false) bool agentWriteApprovalRequired,
     // Enable raw-message recall (cosine search over chat_message embeddings).
     // Pairs with `ChatMessageEmbeddingService` + `MessageRecallService` as the
     // lossless backstop for the lossy MemoryBook compression. Auto-disables
@@ -253,7 +253,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     // When true, the dedup pass runs automatically after each agentic
     // write-loop cycle (delayed, fire-and-forget). When false, dedup only
     // runs when the user clicks the "Dedup" button in the memory book UI.
-    @Default(true) bool memoryDedupAutoEnabled,
+    @Default(false) bool memoryDedupAutoEnabled,
     // Cosine similarity threshold for candidate pairs (0.0-1.0).
     // Pairs with cosine >= this value are sent to the LLM for merge/drop/keep.
     @Default(0.85) double memoryDedupThreshold,
