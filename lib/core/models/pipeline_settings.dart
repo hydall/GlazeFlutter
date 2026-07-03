@@ -180,7 +180,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default('') String postCleanerApiKey,
     @Default(0) int postCleanerTimeoutMs,
     @Default(true) bool postCleanerContinuityEnabled,
-    @Default(false) bool postCleanerCharacterCheckEnabled,
+    @Default(true) bool postCleanerCharacterCheckEnabled,
     @Default(12) int postCleanerHistoryMessages,
     @Default(3000) int postCleanerMaxCharsPerMessage,
     // Optional model override for the character/world audit pass. When empty,
