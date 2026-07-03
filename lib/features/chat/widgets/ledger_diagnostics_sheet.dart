@@ -227,6 +227,10 @@ class _LedgerDiagnosticsSheetState
       }
 
       final pipeline = ref.read(pipelineSettingsProvider);
+      final studioConfig = await ref
+          .read(studioConfigRepoProvider)
+          .getBySessionId(widget.sessionId);
+      if (!mounted) return;
       final recentHistory = _recentHistoryText(
         messages,
         maxMessages: 10,
@@ -244,6 +248,9 @@ class _LedgerDiagnosticsSheetState
             agentSwipeId: target.agentSwipeId,
             forceEnabled: true,
             isStillCurrent: () => mounted,
+            studioCleanerApiConfigId: studioConfig?.enabled == true
+                ? studioConfig?.cleanerApiConfigId ?? ''
+                : '',
           );
 
       await ref
