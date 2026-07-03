@@ -41,7 +41,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default(60000) int auxTimeoutMs,
 
     // ── Agentic write-loop ────────────────────────────────────────────────
-    @Default(false) bool agenticWriteEnabled,
+    @Default(true) bool agenticWriteEnabled,
     // Cadence: run the agentic write-loop every N assistant turns. 5 = every
     // 5th turn (batch mode — the LLM analyzes 5 U-A turns at once and writes
     // a concise short-term memory summary, not per-turn entries).
@@ -52,7 +52,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default('every_n') String agenticWriteRunMode,
     // When true, block the next user-message generation until the write-loop
     // finishes (or times out). Default false = fire-and-forget.
-    @Default(false) bool agenticWriteBlockNextGen,
+    @Default(true) bool agenticWriteBlockNextGen,
     // Conditional triggers (plan §Model Cadence Memory write-loop). Only
     // consulted when runMode == 'conditional'.
     @Default(true) bool agenticWriteRunWhenMentionedEntitiesChanged,
@@ -67,7 +67,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     // `agentWriteApprovalRequired` per-chat flag. Default false = legacy
     // auto-approve behavior.
     // See docs/plans/PLAN_MEMORY_CONTINUITY.md §4 (agentWriteApprovalRequired).
-    @Default(false) bool agentWriteApprovalRequired,
+    @Default(true) bool agentWriteApprovalRequired,
     // Enable raw-message recall (cosine search over chat_message embeddings).
     // Pairs with `ChatMessageEmbeddingService` + `MessageRecallService` as the
     // lossless backstop for the lossy MemoryBook compression. Auto-disables
@@ -167,7 +167,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     @Default(1) int studioPostTrackerContextSize,
 
     // ── POST-cleaner ──────────────────────────────────────────────────────
-    @Default(false) bool postCleanerEnabled,
+    @Default(true) bool postCleanerEnabled,
     @Default(0.7) double postCleanerTemperature,
     @Default(0) int postCleanerMaxTokens,
     @Default(0.9) double postCleanerTopP,
@@ -215,7 +215,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     // assistant response when Studio is enabled. Writes compact entity/
     // relationship/arc/world state and durable MemoryBook facts.
     // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md.
-    @Default(false) bool studioLedgerEnabled,
+    @Default(true) bool studioLedgerEnabled,
     // Model for the ledger LLM call. When empty, inherits the aux model.
     @Default('') String studioLedgerModel,
     // Endpoint override for the ledger LLM. When empty, inherits aux.
@@ -253,7 +253,7 @@ abstract class PipelineSettings with _$PipelineSettings {
     // When true, the dedup pass runs automatically after each agentic
     // write-loop cycle (delayed, fire-and-forget). When false, dedup only
     // runs when the user clicks the "Dedup" button in the memory book UI.
-    @Default(false) bool memoryDedupAutoEnabled,
+    @Default(true) bool memoryDedupAutoEnabled,
     // Cosine similarity threshold for candidate pairs (0.0-1.0).
     // Pairs with cosine >= this value are sent to the LLM for merge/drop/keep.
     @Default(0.85) double memoryDedupThreshold,
