@@ -1,12 +1,17 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
+import '../../../../core/llm/macro_engine.dart';
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/models/agent_operation_record.dart';
+import '../../../../core/models/api_config.dart';
 import '../../../../core/models/chat_message.dart';
 import '../../../../core/models/pipeline_settings.dart';
+import '../../../../core/models/studio_config.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../../../core/state/memory_agent_providers.dart';
+import '../../../../core/state/character_provider.dart';
+import '../../../settings/api_list_provider.dart';
 import '../../state/agent_operations_log_provider.dart';
 import '../../state/post_gen_status_provider.dart';
 import '../pipeline_utils.dart';
@@ -43,16 +48,29 @@ class WriteLoopStage {
       // Write-loop is Studio-only. Gate by StudioConfig.enabled.
       var studioConfigEnabled = false;
       var studioCleanerApiConfigId = '';
+      StudioPreset? studioPreset;
+      var studioPresetId = 'default';
       try {
         final studioConfig = await ctx.ref
             .read(studioConfigRepoProvider)
             .getBySessionId(sessionId);
         studioConfigEnabled = studioConfig?.enabled == true;
         studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
+        studioPresetId = studioConfig?.studioPresetId ?? 'default';
       } catch (_) {}
       if (!studioConfigEnabled) {
         debugPrint('[AgenticWrite] skipping — Studio not enabled');
         return;
+      }
+      if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
+
+      // Load the Studio preset to get writeloop-section blocks.
+      try {
+        studioPreset = await ctx.ref
+            .read(studioPresetRepoProvider)
+            .getById(studioPresetId);
+      } catch (e) {
+        debugPrint('[AgenticWrite] preset load failed: $e');
       }
       if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
 
@@ -133,8 +151,13 @@ class WriteLoopStage {
       // Resolve the Studio cleaner slot for the write-loop (fail-explicit).
       final AuxApiConfig writeLoopConfig;
       try {
-        writeLoopConfig = await StudioSlotResolver(ctx.ref).resolve(
+        await ctx.ref.read(apiListProvider.future);
+        final apiConfigs =
+            ctx.ref.read(apiListProvider).value ?? const <ApiConfig>[];
+        writeLoopConfig = StudioSlotResolver.resolve(
+          apiConfigs: apiConfigs,
           apiConfigId: studioCleanerApiConfigId,
+          fallback: ctx.ref.read(activeApiConfigProvider),
           errorLabel: 'agentic write-loop',
           modelOverride: pipeline.cleaner.postCleanerModel,
         );
@@ -161,6 +184,21 @@ class WriteLoopStage {
       }
 
       final agenticService = ctx.ref.read(memoryAgenticWriteServiceProvider);
+
+      // Build MacroContext for resolving preset-block macros.
+      final character = ctx.ref.read(characterByIdProvider(ctx.charId));
+      final writeLoopMacroCtx = MacroContext(
+        charName: character?.name ?? '',
+        charDescription: character?.description,
+        charScenario: character?.scenario,
+        charPersonality: character?.personality,
+        charMesExample: character?.mesExample,
+        userName: 'User',
+        macroName: character?.macroName,
+        charId: ctx.charId,
+        sessionId: sessionId,
+      );
+
       final result = await agenticService.runWriteLoop(
         sessionId: sessionId,
         settings: pipeline,
@@ -172,6 +210,8 @@ class WriteLoopStage {
         agentSwipeId: lastAssistant.agentSwipeId,
         isStillCurrent: () =>
             ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId),
+        writeloopBlocks: studioPreset?.blocks ?? const [],
+        macroCtx: writeLoopMacroCtx,
       );
 
       debugPrint(

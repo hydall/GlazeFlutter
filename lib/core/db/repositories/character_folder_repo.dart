@@ -125,6 +125,25 @@ class CharacterFolderRepo {
         .go();
   }
 
+  Future<List<CharacterFolderMemberRow>> getAllMembers() async {
+    return _db.select(_db.characterFolderMembers).get();
+  }
+
+  Future<void> upsertFolderRaw(CharacterFolderRow row) async {
+    await _db.into(_db.characterFolders).insertOnConflictUpdate(row);
+  }
+
+  Future<void> upsertMemberRaw(CharacterFolderMemberRow row) async {
+    await _db.into(_db.characterFolderMembers).insertOnConflictUpdate(row);
+  }
+
+  Future<void> deleteAllFoldersAndMembers() async {
+    await _db.transaction(() async {
+      await _db.delete(_db.characterFolderMembers).go();
+      await _db.delete(_db.characterFolders).go();
+    });
+  }
+
   CharacterFolder _toModel(CharacterFolderRow r) => CharacterFolder(
         id: r.folderId,
         name: r.name,

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/platform_paths.dart';
@@ -43,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 55;
+   int get schemaVersion => 57;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -880,6 +881,92 @@ class AppDatabase extends _$AppDatabase {
           }
         }
       }
+      if (from < 56) {
+        // Migrate existing default preset: add cleaner_beauty block and
+        // update writeloop_system with anti-duplicate rules. Existing user
+        // customizations to other blocks are preserved.
+        try {
+          final row = await customSelect(
+            'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
+            variables: [Variable.withString('default')],
+          ).getSingleOrNull();
+          if (row != null) {
+            final blocksJson = row.read<String>('blocks_json');
+            final blocks = (jsonDecode(blocksJson) as List<dynamic>)
+                .cast<Map<String, dynamic>>();
+            final seedBlocks = studioPresetSeedBlocks();
+            final seedById = {
+              for (final b in seedBlocks) b['id'] as String: b,
+            };
+            var changed = false;
+            // Add missing blocks (cleaner_beauty).
+            final existingIds = blocks
+                .map((b) => b['id'] as String)
+                .toSet();
+            for (final seedBlock in seedBlocks) {
+              final id = seedBlock['id'] as String;
+              if (!existingIds.contains(id)) {
+                blocks.add(seedBlock);
+                changed = true;
+              }
+            }
+            // Update writeloop_system with anti-duplicate rules.
+            for (var i = 0; i < blocks.length; i++) {
+              if (blocks[i]['id'] == 'writeloop_system') {
+                blocks[i] = seedById['writeloop_system']!;
+                changed = true;
+                break;
+              }
+            }
+            if (changed) {
+              await customStatement(
+                'UPDATE studio_preset_rows SET blocks_json = ?, '
+                "updated_at = CAST(strftime('%s','now') AS INTEGER) "
+                'WHERE preset_id = ?',
+                [jsonEncode(blocks), 'default'],
+              );
+            }
+          }
+        } catch (e) {
+          // Best-effort migration — don't block app start on preset update.
+          debugPrint('Migration 56 (preset block update) failed: $e');
+        }
+      }
+      if (from < 57) {
+        // Move cleaner_beauty block to the end of the cleaner section (order 99)
+        // so the LLM sees styling instructions last among preset blocks, closest
+        // to the runtime suffix (recency effect).
+        try {
+          final row = await customSelect(
+            'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
+            variables: [Variable.withString('default')],
+          ).getSingleOrNull();
+          if (row != null) {
+            final blocksJson = row.read<String>('blocks_json');
+            final blocks = (jsonDecode(blocksJson) as List<dynamic>)
+                .cast<Map<String, dynamic>>();
+            var changed = false;
+            for (var i = 0; i < blocks.length; i++) {
+              if (blocks[i]['id'] == 'cleaner_beauty' &&
+                  blocks[i]['section'] == 'cleaner') {
+                blocks[i]['order'] = 99;
+                changed = true;
+                break;
+              }
+            }
+            if (changed) {
+              await customStatement(
+                'UPDATE studio_preset_rows SET blocks_json = ?, '
+                "updated_at = CAST(strftime('%s','now') AS INTEGER) "
+                'WHERE preset_id = ?',
+                [jsonEncode(blocks), 'default'],
+              );
+            }
+          }
+        } catch (e) {
+          debugPrint('Migration 57 (cleaner_beauty reorder) failed: $e');
+        }
+      }
     },
   );
 }
@@ -1311,6 +1398,17 @@ PREFER
       'order': 4,
       'section': 'cleaner',
     },
+    {
+      'id': 'cleaner_beauty',
+      'name': 'Beauty Shard (cleaner-owned styling)',
+      'kind': 'instruction',
+      'role': 'system',
+      'content':
+          'BEAUTY SHARD (visual styling — you own this):\n\nBeauty Shard brief:\n{{beautyBrief}}\n\nCurrent styling state:\n{{getvar::glaze_beauty_state}}\n\nStyling rules:\n- Apply the speaker colors from the styling state to ALL character dialogue using <font color="#HEX">"text"</font> tags.\n- Apply the thought colors to inner thoughts using <font color="#HEX"><i>text</i></font> tags.\n- Reuse existing colors for established speakers. Assign a new color only for a speaker not yet in the state.\n- If the assistant text already has <font> color tags, verify they match the styling state. Fix mismatches; do not remove correct tags.\n- Do NOT color narrative prose — only dialogue (in quotes) and inner thoughts (in italics or marked as thought).\n- If the styling state has a reserved lumia_ooc color, wrap the text inside <lumiaooc>...</lumiaooc> blocks with <font color="#HEX">text</font> using that color. If the text is already wrapped in a <font> tag, leave it unchanged. Do not alter the <lumiaooc> wrapper, the text content, or the block position — only add the color tag if missing.\n- At the very END of your cleaned response, after all narrative and HTML, emit exactly one marker with the updated state:\n\n<glaze_beauty_state>\n{"speakers":{"Name":"#hex"},"thoughts":{"Name":"#hex"},"palette":"dark|light","font":"sans-serif","bg":"#hex","art_style":"...","reserved":{"lumia_ooc":"#9370DB"}}\n</glaze_beauty_state>\n\nThe marker is parsed and stripped automatically — the user never sees it. Do not put it inside an HTML artifact or a code block.',
+      'enabled': true,
+      'order': 99,
+      'section': 'cleaner',
+    },
     // ─── ledger section (1 block) ───
     {
       'id': 'ledger_system',
@@ -1323,14 +1421,14 @@ PREFER
       'order': 0,
       'section': 'ledger',
     },
-    // ─── writeloop section (1 block) ───
+    // ─── writeloop section (2 blocks) ───
     {
       'id': 'writeloop_system',
-      'name': 'Agentic write-loop prompt',
+      'name': 'Agentic write-loop system prompt',
       'kind': 'instruction',
       'role': 'system',
       'content':
-          'You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.\n\nRecent conversation:\n{{recentHistoryText}}\n\nCurrent trackers:\n{{trackersBlock}}\n\nExisting memory entries already in the MemoryBook:\n{{existingBlock}}\n\nDecide what to write. You have two tools:\n\n1. updateTracker — lightweight key-value state that persists across turns (mood, location, relationship status, inventory, ongoing promises).\n2. writeMemory — a pending memory draft for significant events, revelations, promises. These require user approval before becoming active.\n\nRespond with ONLY a JSON object (no markdown, no explanation):\n{\n  "trackers": [\n    {"name": "mood", "value": "happy", "scope": "chat"},\n    {"name": "location", "value": "tavern"}\n  ],\n  "memories": [\n    {"title": "Lucy reveals the chip", "content": "...", "keys": ["Lucy", "chip"]},\n    {"existingEntryId": "mem_abc123", "title": "Lucy\'s plan", "content": "new fact only", "keys": ["Lucy"]}\n  ]\n}\n\nRules:\n- Only write trackers that CHANGED or are NEW. Don\'t repeat unchanged trackers.\n- Only create memory drafts for SIGNIFICANT events (not every turn).\n- If an event merely ADDS detail to an existing memory entry, write a memory request whose `existingEntryId` is the id of the existing entry and whose `content` contains only the NEW facts — do not restate or rewrite the existing entry. The pipeline will append your newFacts to the existing entry verbatim.\n- Do NOT create a new memory entry (no existingEntryId) that duplicates an existing entry\'s title/keys. Instead, write an append-only update with existingEntryId set.\n- If nothing is worth persisting, return: {"trackers": [], "memories": []}\n- Keep tracker values short (1-5 words).\n- Memory content should be 1-3 sentences describing what happened and why it matters.',
+          'You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.\n\nRecent conversation:\n{{recentHistoryText}}\n\nCurrent trackers:\n{{trackersBlock}}\n\nExisting memory entries already in the MemoryBook:\n{{existingBlock}}\n\nDecide what to write. You have two tools:\n\n1. updateTracker — lightweight key-value state that persists across turns (mood, location, relationship status, inventory, ongoing promises).\n2. writeMemory — a pending memory draft for significant events, revelations, promises. These require user approval before becoming active.\n\nRules:\n- Only write trackers that CHANGED or are NEW. Don\'t repeat unchanged trackers.\n- Only create memory drafts for SIGNIFICANT events (not every turn).\n- If an event merely ADDS detail to an existing memory entry, write a memory request whose `existingEntryId` is the id of the existing entry and whose `content` contains only the NEW facts — do not restate or rewrite the existing entry. The pipeline will append your newFacts to the existing entry verbatim.\n- Do NOT create a new memory entry (no existingEntryId) that duplicates an existing entry\'s title/keys. Instead, write an append-only update with existingEntryId set.\n- If nothing is worth persisting, return: {"trackers": [], "memories": []}\n- Keep tracker values short (1-5 words).\n- Memory content should be 1-3 sentences describing what happened and why it matters.\n\nANTI-DUPLICATE RULES (critical):\n- The Studio Ledger already maintains entity/relationship/arc/world/scene state in ledger-scope trackers with structured keys (npc:Name.field, relationship:A:B.field, world:location, scene.present_entities, etc.). Do NOT duplicate that information in chat-scope trackers.\n- Chat-scope trackers are ONLY for transient, per-turn state that the ledger does NOT cover: current mood, transient tension, immediate emotional beat. Do not write location, world, npc, relationship, or arc data as chat-scope trackers — the ledger owns those.\n- Use the SAME character name spelling as the ledger (match the existing tracker keys). Do not transliterate names (e.g. if the ledger uses "Danvi", do not write "Данви_mood" — use "mood:Danvi" or just "mood" with the value mentioning the character).\n- Before writing a tracker, check the Current trackers list above. If a ledger-scope tracker already covers the same information, do NOT write a chat-scope duplicate. Skip it.\n- A mood tracker should be a single "mood" entry with the current emotional state, not per-character mood entries.\n- A tension tracker should capture the immediate scene tension, not duplicate world:active_threats.',
       'enabled': true,
       'order': 0,
       'section': 'writeloop',

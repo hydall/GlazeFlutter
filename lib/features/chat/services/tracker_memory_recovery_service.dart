@@ -2,14 +2,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
-import '../../../core/llm/studio_stage_brief.dart';
+import '../../../core/llm/studio/studio_stream_interceptor.dart';
 import '../../../core/llm/studio_slot_resolver.dart';
+import '../../../core/models/api_config.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
+import '../../../features/settings/api_list_provider.dart';
 import '../state/recovery_state_provider.dart';
 import 'generation_pipeline.dart' show extractRecentHistoryText;
 
@@ -162,7 +163,7 @@ class TrackerMemoryRecoveryService {
             await _setStudioOutputs(
               sessionId,
               target.id,
-              _studioOutputsToJson(result.stageBriefs),
+              StudioStreamInterceptor.studioOutputsToJson(result.stageBriefs),
             );
             trackersWritten++;
           }
@@ -186,11 +187,18 @@ class TrackerMemoryRecoveryService {
               .getLatestCommittedExcludingMessage(sessionId, target.id);
           final trackers = snapshot?.trackers ??
               await _ref.read(trackerRepoProvider).getBySessionId(sessionId);
-          final writeLoopConfig = await StudioSlotResolver(_ref).resolve(
-            apiConfigId: studioConfig.cleanerApiConfigId,
-            errorLabel: 'recovery write-loop',
-            modelOverride: pipeline.cleaner.postCleanerModel,
-          );
+          final writeLoopConfig = await () async {
+            await _ref.read(apiListProvider.future);
+            final apiConfigs =
+                _ref.read(apiListProvider).value ?? const <ApiConfig>[];
+            return StudioSlotResolver.resolve(
+              apiConfigs: apiConfigs,
+              apiConfigId: studioConfig.cleanerApiConfigId,
+              fallback: _ref.read(activeApiConfigProvider),
+              errorLabel: 'recovery write-loop',
+              modelOverride: pipeline.cleaner.postCleanerModel,
+            );
+          }();
           final res = await _ref.read(memoryAgenticWriteServiceProvider).runWriteLoop(
             sessionId: sessionId,
             settings: pipeline,
@@ -259,17 +267,6 @@ class TrackerMemoryRecoveryService {
       memoriesWritten: memoriesWritten,
       failedMessages: failed,
     );
-  }
-
-  /// Convert Studio stage briefs into the compact JSON format stored on
-  /// `ChatMessage.studioOutputs` / `AgentSwipe.studioOutputs` and read by the
-  /// UI (Agentic Ops panel). Format: `{'id','name','content'}` per brief.
-  static List<Map<String, dynamic>> _studioOutputsToJson(
-    List<StudioStageBrief> briefs,
-  ) {
-    return briefs
-        .map((b) => {'id': b.agentId, 'name': b.agentName, 'content': b.brief})
-        .toList(growable: false);
   }
 
   /// Read-modify-write: update `studioOutputs` on an existing assistant

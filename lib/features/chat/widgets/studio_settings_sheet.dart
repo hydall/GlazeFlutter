@@ -1,22 +1,25 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/api_config.dart';
-import '../../../core/llm/sse_client.dart';
+import '../../../core/llm/model_fetcher.dart';
 import '../../../core/llm/studio_controller_ontology.dart';
 import '../../../core/models/pipeline_settings.dart';
 import '../../../core/models/studio_config.dart';
+import '../../../core/services/file_export_service.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/utils/time_helpers.dart';
-import '../../../shared/widgets/menu_group.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../settings/api_list_provider.dart';
 import '../state/recovery_state_provider.dart';
 import '../services/tracker_memory_recovery_service.dart';
 import 'studio_preset_editor_sheet.dart';
+import 'studio_slot_settings_dialog.dart';
 
 /// Studio Settings as a bottom sheet. Single scrollable page.
 ///
@@ -275,6 +278,16 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
           unawaited(_createStudioPreset(config));
         },
       ),
+      BottomSheetItem(
+        label: 'Import preset from file',
+        hint: 'Create a new preset from a JSON file',
+        icon: Icons.file_upload_outlined,
+        iconColor: Theme.of(context).colorScheme.primary,
+        onTap: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          unawaited(_importPreset(config));
+        },
+      ),
       ..._studioPresets.map((preset) {
         final active = preset.id == config.studioPresetId;
         final name = preset.name.isNotEmpty ? preset.name : preset.id;
@@ -294,6 +307,21 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             Navigator.of(context, rootNavigator: true).pop();
             _save(config.copyWith(studioPresetId: preset.id));
           },
+          actions: [
+            BottomSheetAction(
+              icon: Icons.file_download_outlined,
+              onTap: () => _exportPreset(preset),
+            ),
+            if (preset.id != 'default')
+              BottomSheetAction(
+                icon: Icons.delete_outline,
+                color: Theme.of(context).colorScheme.error,
+                onTap: () {
+                  Navigator.of(context, rootNavigator: true).pop();
+                  _deletePreset(preset, config);
+                },
+              ),
+          ],
         );
       }),
     ];
@@ -359,6 +387,127 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     nextPresets.sort((a, b) => a.name.compareTo(b.name));
     setState(() => _studioPresets = nextPresets);
     await _save(config.copyWith(studioPresetId: preset.id));
+  }
+
+  Future<void> _importPreset(StudioConfig config) async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    try {
+      final bytes = result.files.single.bytes;
+      if (bytes == null) {
+        if (mounted) GlazeToast.show(context, 'Could not read preset file.');
+        return;
+      }
+      final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+      final imported = StudioPreset.fromJson(decoded);
+      if (!mounted) return;
+
+      final nameCtrl = TextEditingController(
+        text: imported.name.isNotEmpty ? imported.name : 'Imported Preset',
+      );
+      final name = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Import Studio Preset'),
+          content: TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Preset name',
+              hintText: 'My Imported Preset',
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(nameCtrl.text),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+      nameCtrl.dispose();
+      final trimmedName = name?.trim() ?? '';
+      if (!mounted || trimmedName.isEmpty) return;
+
+      final now = currentTimestampSeconds();
+      final preset = imported.copyWith(
+        id: 'studio_$now',
+        name: trimmedName,
+        updatedAt: now,
+      );
+      await ref.read(studioPresetRepoProvider).upsert(preset);
+      if (!mounted) return;
+      final nextPresets = await ref.read(studioPresetRepoProvider).getAll();
+      nextPresets.sort((a, b) => a.name.compareTo(b.name));
+      setState(() => _studioPresets = nextPresets);
+      await _save(config.copyWith(studioPresetId: preset.id));
+      if (mounted) GlazeToast.show(context, 'Preset "$trimmedName" imported.');
+    } catch (e) {
+      if (mounted) GlazeToast.show(context, 'Failed to import preset: $e');
+    }
+  }
+
+  Future<void> _exportPreset(StudioPreset preset) async {
+    final safeName = (preset.name.isNotEmpty ? preset.name : preset.id)
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+    final data = const JsonEncoder.withIndent('  ').convert(preset.toJson());
+    try {
+      final path = await FileExportService.export(
+        data: data,
+        filename: 'studio_preset_$safeName.json',
+        subfolder: 'studio_presets',
+      );
+      if (mounted) GlazeToast.show(context, 'Preset exported to $path');
+    } catch (e) {
+      if (mounted) GlazeToast.show(context, 'Failed to export preset: $e');
+    }
+  }
+
+  Future<void> _deletePreset(StudioPreset preset, StudioConfig config) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Preset'),
+        content: Text(
+          'Delete "${preset.name.isNotEmpty ? preset.name : preset.id}"? '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await ref.read(studioPresetRepoProvider).delete(preset.id);
+    if (!mounted) return;
+
+    final nextPresets = await ref.read(studioPresetRepoProvider).getAll();
+    nextPresets.sort((a, b) => a.name.compareTo(b.name));
+    setState(() => _studioPresets = nextPresets);
+
+    if (config.studioPresetId == preset.id) {
+      await _save(config.copyWith(studioPresetId: 'default'));
+    }
+    if (mounted) GlazeToast.show(context, 'Preset deleted.');
   }
 
   Widget _buildPostTrackerContextSetting(PipelineSettings pipeline) {
@@ -597,21 +746,11 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     }
     setState(() => _fetchingModelSlots.add(modelCacheKey));
     try {
-      final models = await SseClient().fetchModels(
+      final ids = await ModelFetcher.fetchModelIds(
         endpoint: config.endpoint,
         apiKey: config.apiKey,
+        fallbackModel: config.model,
       );
-      final ids =
-          models
-              .map((m) => m['id'])
-              .whereType<String>()
-              .where((id) => id.trim().isNotEmpty)
-              .toSet()
-              .toList()
-            ..sort();
-      if (config.model.isNotEmpty && !ids.contains(config.model)) {
-        ids.insert(0, config.model);
-      }
       if (!mounted) return;
       setState(() => _fetchedModelsBySlot[modelCacheKey] = ids);
     } catch (e) {
@@ -713,7 +852,7 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   Future<void> _openSlotSettings({required StudioSlot slot}) async {
     final updated = await showDialog<StudioSlotSettings>(
       context: context,
-      builder: (c) => _StudioSlotSettingsDialog(
+      builder: (c) => StudioSlotSettingsDialog(
         slot: slot,
         pipeline: ref.read(pipelineSettingsProvider),
       ),
@@ -755,421 +894,4 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   }
 }
 
-/// Which Studio model slot is being configured.
-enum StudioSlot { finalGenerator, tracker, cleaner }
 
-/// Snapshot of per-slot settings captured in the dialog.
-class StudioSlotSettings {
-  final double temperature;
-  final double topP;
-  final int topK;
-  final double frequencyPenalty;
-  final double presencePenalty;
-  final bool requestReasoning;
-  final String reasoningEffort;
-  final bool omitTemperature;
-  final bool omitTopP;
-  final bool omitReasoning;
-  final bool omitReasoningEffort;
-  final int maxTokens;
-  final int timeoutMs;
-
-  const StudioSlotSettings({
-    required this.temperature,
-    required this.topP,
-    required this.topK,
-    required this.frequencyPenalty,
-    required this.presencePenalty,
-    required this.requestReasoning,
-    required this.reasoningEffort,
-    required this.omitTemperature,
-    required this.omitTopP,
-    required this.omitReasoning,
-    required this.omitReasoningEffort,
-    required this.maxTokens,
-    required this.timeoutMs,
-  });
-
-  PipelineSettings applyTo(PipelineSettings pipeline, StudioSlot slot) {
-    switch (slot) {
-      case StudioSlot.finalGenerator:
-        return pipeline.copyWith(
-          studioAgent: pipeline.studioAgent.copyWith(
-            studioFinalTemperature: temperature,
-            studioFinalTopP: topP,
-            studioFinalTopK: topK,
-            studioFinalFrequencyPenalty: frequencyPenalty,
-            studioFinalPresencePenalty: presencePenalty,
-            studioFinalRequestReasoning: requestReasoning,
-            studioFinalReasoningEffort: reasoningEffort,
-            studioFinalOmitTemperature: omitTemperature,
-            studioFinalOmitTopP: omitTopP,
-            studioFinalOmitReasoning: omitReasoning,
-            studioFinalOmitReasoningEffort: omitReasoningEffort,
-            studioFinalMaxTokens: maxTokens,
-            studioFinalTimeoutMs: timeoutMs,
-          ),
-        );
-      case StudioSlot.tracker:
-        return pipeline.copyWith(
-          studioAgent: pipeline.studioAgent.copyWith(
-            studioTrackerTemperature: temperature,
-            studioTrackerTopP: topP,
-            studioTrackerTopK: topK,
-            studioTrackerFrequencyPenalty: frequencyPenalty,
-            studioTrackerPresencePenalty: presencePenalty,
-            studioTrackerRequestReasoning: requestReasoning,
-            studioTrackerReasoningEffort: reasoningEffort,
-            studioTrackerOmitTemperature: omitTemperature,
-            studioTrackerOmitTopP: omitTopP,
-            studioTrackerOmitReasoning: omitReasoning,
-            studioTrackerOmitReasoningEffort: omitReasoningEffort,
-            studioTrackerMaxTokens: maxTokens,
-            studioTrackerTimeoutMs: timeoutMs,
-          ),
-        );
-      case StudioSlot.cleaner:
-        return pipeline.copyWith(
-          cleaner: pipeline.cleaner.copyWith(
-            postCleanerTemperature: temperature,
-            postCleanerTopP: topP,
-            postCleanerTopK: topK,
-            postCleanerFrequencyPenalty: frequencyPenalty,
-            postCleanerPresencePenalty: presencePenalty,
-            postCleanerRequestReasoning: requestReasoning,
-            postCleanerReasoningEffort: reasoningEffort,
-            postCleanerOmitTemperature: omitTemperature,
-            postCleanerOmitTopP: omitTopP,
-            postCleanerOmitReasoning: omitReasoning,
-            postCleanerOmitReasoningEffort: omitReasoningEffort,
-            postCleanerMaxTokens: maxTokens,
-            postCleanerTimeoutMs: timeoutMs,
-          ),
-        );
-    }
-  }
-}
-
-class _StudioSlotSettingsDialog extends StatefulWidget {
-  final StudioSlot slot;
-  final PipelineSettings pipeline;
-
-  const _StudioSlotSettingsDialog({required this.slot, required this.pipeline});
-
-  @override
-  State<_StudioSlotSettingsDialog> createState() =>
-      _StudioSlotSettingsDialogState();
-}
-
-class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
-  late double _temperature;
-  late double _topP;
-  late int _topK;
-  late double _frequencyPenalty;
-  late double _presencePenalty;
-  late bool _requestReasoning;
-  late String _reasoningEffort;
-  late bool _omitTemperature;
-  late bool _omitTopP;
-  late bool _omitReasoning;
-  late bool _omitReasoningEffort;
-  late TextEditingController _maxTokensCtrl;
-  late TextEditingController _timeoutCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    final p = widget.pipeline;
-    switch (widget.slot) {
-      case StudioSlot.finalGenerator:
-        _temperature = p.studioAgent.studioFinalTemperature;
-        _topP = p.studioAgent.studioFinalTopP;
-        _topK = p.studioAgent.studioFinalTopK;
-        _frequencyPenalty = p.studioAgent.studioFinalFrequencyPenalty;
-        _presencePenalty = p.studioAgent.studioFinalPresencePenalty;
-        _requestReasoning = p.studioAgent.studioFinalRequestReasoning;
-        _reasoningEffort = p.studioAgent.studioFinalReasoningEffort;
-        _omitTemperature = p.studioAgent.studioFinalOmitTemperature;
-        _omitTopP = p.studioAgent.studioFinalOmitTopP;
-        _omitReasoning = p.studioAgent.studioFinalOmitReasoning;
-        _omitReasoningEffort = p.studioAgent.studioFinalOmitReasoningEffort;
-        _maxTokensCtrl = TextEditingController(
-          text: p.studioAgent.studioFinalMaxTokens > 0 ? '${p.studioAgent.studioFinalMaxTokens}' : '',
-        );
-        _timeoutCtrl = TextEditingController(
-          text: p.studioAgent.studioFinalTimeoutMs > 0
-              ? '${p.studioAgent.studioFinalTimeoutMs ~/ 1000}'
-              : '',
-        );
-      case StudioSlot.tracker:
-        _temperature = p.studioAgent.studioTrackerTemperature;
-        _topP = p.studioAgent.studioTrackerTopP;
-        _topK = p.studioAgent.studioTrackerTopK;
-        _frequencyPenalty = p.studioAgent.studioTrackerFrequencyPenalty;
-        _presencePenalty = p.studioAgent.studioTrackerPresencePenalty;
-        _requestReasoning = p.studioAgent.studioTrackerRequestReasoning;
-        _reasoningEffort = p.studioAgent.studioTrackerReasoningEffort;
-        _omitTemperature = p.studioAgent.studioTrackerOmitTemperature;
-        _omitTopP = p.studioAgent.studioTrackerOmitTopP;
-        _omitReasoning = p.studioAgent.studioTrackerOmitReasoning;
-        _omitReasoningEffort = p.studioAgent.studioTrackerOmitReasoningEffort;
-        _maxTokensCtrl = TextEditingController(
-          text: p.studioAgent.studioTrackerMaxTokens > 0
-              ? '${p.studioAgent.studioTrackerMaxTokens}'
-              : '',
-        );
-        _timeoutCtrl = TextEditingController(
-          text: p.studioAgent.studioTrackerTimeoutMs > 0
-              ? '${p.studioAgent.studioTrackerTimeoutMs ~/ 1000}'
-              : '',
-        );
-      case StudioSlot.cleaner:
-        _temperature = p.cleaner.postCleanerTemperature;
-        _topP = p.cleaner.postCleanerTopP;
-        _topK = p.cleaner.postCleanerTopK;
-        _frequencyPenalty = p.cleaner.postCleanerFrequencyPenalty;
-        _presencePenalty = p.cleaner.postCleanerPresencePenalty;
-        _requestReasoning = p.cleaner.postCleanerRequestReasoning;
-        _reasoningEffort = p.cleaner.postCleanerReasoningEffort;
-        _omitTemperature = p.cleaner.postCleanerOmitTemperature;
-        _omitTopP = p.cleaner.postCleanerOmitTopP;
-        _omitReasoning = p.cleaner.postCleanerOmitReasoning;
-        _omitReasoningEffort = p.cleaner.postCleanerOmitReasoningEffort;
-        _maxTokensCtrl = TextEditingController(
-          text: p.cleaner.postCleanerMaxTokens > 0 ? '${p.cleaner.postCleanerMaxTokens}' : '',
-        );
-        _timeoutCtrl = TextEditingController(
-          text: p.cleaner.postCleanerTimeoutMs > 0
-              ? '${p.cleaner.postCleanerTimeoutMs ~/ 1000}'
-              : '',
-        );
-    }
-  }
-
-  @override
-  void dispose() {
-    _maxTokensCtrl.dispose();
-    _timeoutCtrl.dispose();
-    super.dispose();
-  }
-
-  String get _slotTitle {
-    switch (widget.slot) {
-      case StudioSlot.finalGenerator:
-        return 'Final Generator';
-      case StudioSlot.tracker:
-        return 'Trackers';
-      case StudioSlot.cleaner:
-        return 'Cleaner';
-    }
-  }
-
-  String get _maxTokensLabel {
-    switch (widget.slot) {
-      case StudioSlot.finalGenerator:
-        return 'Max response length (0 = default)';
-      case StudioSlot.tracker:
-        return 'Max response length (0 = default)';
-      case StudioSlot.cleaner:
-        return 'Max response length (0 = default)';
-    }
-  }
-
-  String get _maxTokensHint {
-    switch (widget.slot) {
-      case StudioSlot.finalGenerator:
-        return '8000';
-      case StudioSlot.tracker:
-        return '1600';
-      case StudioSlot.cleaner:
-        return '0';
-    }
-  }
-
-  String _reasoningEffortLabel(String effort) {
-    return switch (effort) {
-      'auto' => 'Auto',
-      'min' => 'Min',
-      'low' => 'Low',
-      'medium' => 'Medium',
-      'high' => 'High',
-      'max' => 'Max',
-      _ => effort,
-    };
-  }
-
-  Future<void> _openReasoningEffortSelector() async {
-    const options = ['auto', 'min', 'low', 'medium', 'high', 'max'];
-    await GlazeBottomSheet.show<void>(
-      context,
-      title: 'Reasoning Effort',
-      items: options.map((option) {
-        final active = option == _reasoningEffort;
-        return BottomSheetItem(
-          label: _reasoningEffortLabel(option),
-          icon: active ? Icons.check : null,
-          iconColor: Theme.of(context).colorScheme.primary,
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            setState(() => _reasoningEffort = option);
-          },
-        );
-      }).toList(),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('$_slotTitle Settings'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              MenuGroup(
-                compact: true,
-                header: 'Параметры генерации',
-                items: [
-                  MenuRangeItem(
-                    label: 'Temperature',
-                    value: _temperature,
-                    min: 0,
-                    max: 2,
-                    divisions: 200,
-                    onChanged: (v) => setState(() => _temperature = v),
-                  ),
-                  MenuRangeItem(
-                    label: 'Top P',
-                    value: _topP,
-                    min: 0,
-                    max: 1,
-                    divisions: 100,
-                    onChanged: (v) => setState(() => _topP = v),
-                  ),
-                  MenuRangeItem(
-                    label: 'Top K',
-                    value: _topK.toDouble(),
-                    min: 0,
-                    max: 200,
-                    divisions: 200,
-                    onChanged: (v) => setState(() => _topK = v.round()),
-                  ),
-                  MenuRangeItem(
-                    label: 'Частотный штраф',
-                    value: _frequencyPenalty,
-                    min: -2,
-                    max: 2,
-                    divisions: 80,
-                    onChanged: (v) => setState(() => _frequencyPenalty = v),
-                  ),
-                  MenuRangeItem(
-                    label: 'Штраф присутствия',
-                    value: _presencePenalty,
-                    min: -2,
-                    max: 2,
-                    divisions: 80,
-                    onChanged: (v) => setState(() => _presencePenalty = v),
-                  ),
-                  MenuFieldItem(
-                    label: _maxTokensLabel,
-                    controller: _maxTokensCtrl,
-                    placeholder: _maxTokensHint,
-                    keyboardType: TextInputType.number,
-                  ),
-                  MenuFieldItem(
-                    label: 'Timeout seconds (0 = default)',
-                    controller: _timeoutCtrl,
-                    placeholder: '0',
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              MenuGroup(
-                compact: true,
-                header: 'Мышление',
-                items: [
-                  MenuSwitchItem(
-                    label: 'Запросить нативное мышление',
-                    description: 'Показывает блок нативного мышления модели',
-                    value: _requestReasoning,
-                    onChanged: (v) => setState(() => _requestReasoning = v),
-                  ),
-                  MenuSelectorItem(
-                    label: 'Уровень мышления',
-                    currentValue: _reasoningEffortLabel(_reasoningEffort),
-                    onTap: _openReasoningEffortSelector,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              MenuGroup(
-                compact: true,
-                header: 'Пропуск параметров',
-                items: [
-                  MenuSwitchItem(
-                    label: 'Пропустить Temperature',
-                    description: 'Не отправлять temperature в API',
-                    value: _omitTemperature,
-                    onChanged: (v) => setState(() => _omitTemperature = v),
-                  ),
-                  MenuSwitchItem(
-                    label: 'Пропустить Top P',
-                    description: 'Не отправлять top_p в API',
-                    value: _omitTopP,
-                    onChanged: (v) => setState(() => _omitTopP = v),
-                  ),
-                  MenuSwitchItem(
-                    label: 'Пропустить Reasoning',
-                    description: 'Не отправлять параметры reasoning в API',
-                    value: _omitReasoning,
-                    onChanged: (v) => setState(() => _omitReasoning = v),
-                  ),
-                  MenuSwitchItem(
-                    label: 'Пропустить Reasoning Effort',
-                    description: 'Не отправлять reasoning_effort в API',
-                    value: _omitReasoningEffort,
-                    onChanged: (v) => setState(() => _omitReasoningEffort = v),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final maxTokens = int.tryParse(_maxTokensCtrl.text.trim()) ?? 0;
-            final seconds = int.tryParse(_timeoutCtrl.text.trim()) ?? 0;
-            final timeoutMs = seconds > 0 ? seconds * 1000 : 0;
-            Navigator.of(context).pop(
-              StudioSlotSettings(
-                temperature: _temperature,
-                topP: _topP,
-                topK: _topK,
-                frequencyPenalty: _frequencyPenalty,
-                presencePenalty: _presencePenalty,
-                requestReasoning: _requestReasoning,
-                reasoningEffort: _reasoningEffort,
-                omitTemperature: _omitTemperature,
-                omitTopP: _omitTopP,
-                omitReasoning: _omitReasoning,
-                omitReasoningEffort: _omitReasoningEffort,
-                maxTokens: maxTokens,
-                timeoutMs: timeoutMs,
-              ),
-            );
-          },
-          child: const Text('Save'),
-        ),
-      ],
-    );
-  }
-}

@@ -7,9 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
-import '../../../core/llm/prompt_builder.dart' show PromptPayload;
-import '../../../core/llm/memory_studio_service.dart';
-import '../../../core/llm/studio_stage_brief.dart';
+import '../../../core/llm/studio/studio_stream_interceptor.dart';
 import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/beauty_state_parser.dart';
 import '../../../core/llm/transport/chat_transport_request.dart';
@@ -17,18 +15,16 @@ import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
-import '../../../core/models/agent_operation_record.dart';
 import '../../../core/models/api_config.dart';
-import '../../../core/models/studio_config.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/pipeline_settings_provider.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
-import '../state/agent_operations_log_provider.dart';
 import '../state/cached_token_breakdown.dart';
 import '../state/memory_activity_provider.dart';
 import '../state/studio_cycle_state_provider.dart';
+import 'memory_agent_recorder.dart';
 import 'saved_message_writer.dart';
 
 class StreamGenerationService {
@@ -40,6 +36,7 @@ class StreamGenerationService {
   final int _genId;
   final bool Function() _isAborted;
   final SavedMessageWriter _writer = const SavedMessageWriter();
+  late final MemoryAgentRecorder _recorder = MemoryAgentRecorder(_ref);
 
   StreamGenerationService({
     required this._ref,
@@ -109,12 +106,12 @@ class StreamGenerationService {
           : studioConfig.maxFinalHistoryMessages;
       final studioFinalVisibleMessageIds = studioConfig == null
           ? const <String>{}
-          : computeStudioFinalVisibleMessageIds(
+          : StudioStreamInterceptor.computeStudioFinalVisibleMessageIds(
               payload.history,
               studioFinalContextSize,
             );
       final finalPayload = studioConfig != null
-          ? _payloadWithSourceWindow(payload, studioFinalVisibleMessageIds)
+          ? StudioStreamInterceptor.payloadWithSourceWindow(payload, studioFinalVisibleMessageIds)
           : payload;
 
       final promptResult = await buildPromptInIsolate(finalPayload);
@@ -184,14 +181,13 @@ class StreamGenerationService {
       final triggeredMemories = promptResult.triggeredMemories;
 
       if (studioConfig != null) {
-        final trackerContextSize = pipelineSettings.studioAgent.studioTrackerContextSize > 0
-            ? pipelineSettings.studioAgent.studioTrackerContextSize
-            : _maxStudioTrackerContextSize(studioConfig);
-        final trackerVisibleMessageIds = computeStudioFinalVisibleMessageIds(
+        final trackerContextSize =
+            pipelineSettings.studioAgent.studioTrackerContextSize;
+        final trackerVisibleMessageIds = StudioStreamInterceptor.computeStudioFinalVisibleMessageIds(
           payload.history,
           trackerContextSize,
         );
-        final trackerPayload = _payloadWithSourceWindow(
+        final trackerPayload = StudioStreamInterceptor.payloadWithSourceWindow(
           payload,
           trackerVisibleMessageIds,
         );
@@ -281,7 +277,7 @@ class StreamGenerationService {
             'studio failed char=$_charId session=${session.id} '
             'status=${studioResult.status} error=$message',
           );
-          _recordStudioTrackerOperation(
+          _recorder.recordStudioTrackerOperation(
             sessionId: session.id,
             startGenTime: startGenTime,
             result: studioResult,
@@ -311,12 +307,12 @@ class StreamGenerationService {
           'elapsedMs=$elapsed chars=${studioResult.response.length} '
           'briefs=${studioResult.stageBriefs.length}',
         );
-        _ref.read(studioCycleStateProvider.notifier).state = _studioFinalState(
+        _ref.read(studioCycleStateProvider.notifier).state = StudioStreamInterceptor.studioFinalState(
           session.id,
           studioResult,
           StudioCyclePhase.done,
         );
-        final beautyApplied = _applyBeautyState(
+        final beautyApplied = applyBeautyState(
           studioResult.response,
           pendingSessionVars,
         );
@@ -346,11 +342,11 @@ class StreamGenerationService {
               triggeredMemories: triggeredMemories,
               regenTargetId: regenTargetId,
               visibleStartIndex: vsi,
-              studioOutputs: _studioOutputsToJson(studioResult.stageBriefs),
+              studioOutputs: StudioStreamInterceptor.studioOutputsToJson(studioResult.stageBriefs),
             )
             .copyWith(promptPayload: finalPayload);
         final messageId = _lastAssistantId(finalState.session!, regenTargetId);
-        _recordStudioTrackerOperation(
+        _recorder.recordStudioTrackerOperation(
           sessionId: session.id,
           messageId: messageId,
           startGenTime: startGenTime,
@@ -373,7 +369,7 @@ class StreamGenerationService {
             diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
             updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
           );
-          _recordMemoryAgentOperation(
+          _recorder.recordMemoryAgentOperation(
             finalState.session!.id,
             memoryMessageId,
             memoryDiagnostics,
@@ -477,7 +473,7 @@ class StreamGenerationService {
             );
           }
 
-          final beautyApplied = _applyBeautyState(
+          final beautyApplied = applyBeautyState(
             finalText,
             pendingSessionVars,
           );
@@ -532,7 +528,7 @@ class StreamGenerationService {
               diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
               updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
             );
-            _recordMemoryAgentOperation(
+            _recorder.recordMemoryAgentOperation(
               finalState!.session!.id,
               messageId,
               memoryDiagnostics,
@@ -622,82 +618,17 @@ class StreamGenerationService {
     }
   }
 
+  /// Facade for test compatibility — tests call
+  /// StreamGenerationService.computeStudioFinalVisibleMessageIds.
   @visibleForTesting
   static Set<String> computeStudioFinalVisibleMessageIds(
     List<ChatMessage> history,
     int finalContextSize,
-  ) {
-    if (finalContextSize <= 0) return const <String>{};
-    final nonHidden = history.where((m) => !m.isHidden).toList();
-    final start = nonHidden.length > finalContextSize
-        ? nonHidden.length - finalContextSize
-        : 0;
-    return nonHidden.skip(start).map((m) => m.id).toSet();
-  }
-
-  static int _maxStudioTrackerContextSize(StudioConfig config) {
-    final preGen =
-        config.agents
-            .where((a) => a.enabled && a.phase == 'pre_generation')
-            .toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
-    if (preGen.length <= 1) return 5;
-    preGen.removeLast();
-    if (preGen.isEmpty) return 5;
-    return preGen
-        .map((a) => a.contextSize)
-        .fold<int>(1, (max, size) => size > max ? size : max);
-  }
-
-  static PromptPayload _payloadWithSourceWindow(
-    PromptPayload payload,
-    Set<String> sourceWindowVisibleMessageIds,
-  ) {
-    return PromptPayload(
-      character: payload.character,
-      persona: payload.persona,
-      preset: payload.preset,
-      history: payload.history,
-      sessionId: payload.sessionId,
-      apiConfig: payload.apiConfig,
-      sessionVars: payload.sessionVars,
-      globalVars: payload.globalVars,
-      summaryContent: payload.summaryContent,
-      summaryPrefix: payload.summaryPrefix,
-      memoryContent: payload.memoryContent,
-      memoryMacroContent: payload.memoryMacroContent,
-      memoryInjectionTarget: payload.memoryInjectionTarget,
-      guidanceText: payload.guidanceText,
-      lorebooks: payload.lorebooks,
-      lorebookSettings: payload.lorebookSettings,
-      lorebookActivations: payload.lorebookActivations,
-      vectorEntries: payload.vectorEntries,
-      authorsNote: payload.authorsNote,
-      characterDepthPrompt: payload.characterDepthPrompt,
-      characterDepthPromptDepth: payload.characterDepthPromptDepth,
-      characterDepthPromptRole: payload.characterDepthPromptRole,
-      memoryCoverage: payload.memoryCoverage,
-      globalRegexes: payload.globalRegexes,
-      preScannedEntries: payload.preScannedEntries,
-      triggeredMemories: payload.triggeredMemories,
-      runtimePromptBlocks: payload.runtimePromptBlocks,
-      memorySelection: payload.memorySelection,
-      memoryExcerptingEnabled: payload.memoryExcerptingEnabled,
-      memoryPackingMode: payload.memoryPackingMode,
-      memoryExcerptTokensPerChunk: payload.memoryExcerptTokensPerChunk,
-      memoryExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
-      chunkFirstTopEntries: payload.chunkFirstTopEntries,
-      chunkFirstTopChunks: payload.chunkFirstTopChunks,
-      arcContent: payload.arcContent,
-      entitiesContent: payload.entitiesContent,
-      studioSessionStateContent: payload.studioSessionStateContent,
-      recalledMessagesContent: payload.recalledMessagesContent,
-      recalledMessageChunks: payload.recalledMessageChunks,
-      disableSourceWindowExclusion: payload.disableSourceWindowExclusion,
-      sourceWindowVisibleMessageIds: sourceWindowVisibleMessageIds,
-      memoryInjectionFingerprint: payload.memoryInjectionFingerprint,
-    );
-  }
+  ) =>
+      StudioStreamInterceptor.computeStudioFinalVisibleMessageIds(
+        history,
+        finalContextSize,
+      );
 
   static String? _lastAssistantId(ChatSession session, String? regenTargetId) {
     if (regenTargetId != null &&
@@ -711,216 +642,7 @@ class StreamGenerationService {
   }
 
   static void _log(String message) {
-    debugPrint('[StudioGen] $message');
-  }
-
-  /// Convert Studio stage briefs into the compact JSON format stored on
-  /// `ChatMessage.studioOutputs` / `AgentSwipe.studioOutputs` and read by the
-  /// UI (Agentic Ops panel). Format: `{'id','name','content'}` per brief.
-  static List<Map<String, dynamic>> _studioOutputsToJson(
-    List<StudioStageBrief> briefs,
-  ) {
-    return briefs
-        .map((b) => {'id': b.agentId, 'name': b.agentName, 'content': b.brief})
-        .toList(growable: false);
-  }
-
-  /// Records memory agent operations in the agentic operations log.
-  void _recordMemoryAgentOperation(
-    String sessionId,
-    String? messageId,
-    Map<String, dynamic> diagnostics,
-  ) {
-    // Agentic search (searchMemory tool) operation.
-    final agenticStatus = diagnostics['agenticStatus'] as String?;
-    if (agenticStatus != null &&
-        agenticStatus != 'disabled' &&
-        agenticStatus != 'aborted') {
-      final rawAttempts = diagnostics['agenticAttempts'];
-      if (rawAttempts is List) {
-        final attempts = rawAttempts
-            .whereType<Map<dynamic, dynamic>>()
-            .map(
-              (e) =>
-                  AgentOperationAttempt.fromJson(Map<String, dynamic>.from(e)),
-            )
-            .toList();
-        if (attempts.isNotEmpty) {
-          final status = _memoryAgentStatusToOp(agenticStatus);
-          _appendOperation(
-            AgentOperationRecord(
-              id: 'agentic-search-$sessionId-${DateTime.now().microsecondsSinceEpoch}',
-              kind: AgentOperationKind.agenticSearch,
-              status: status,
-              sessionId: sessionId,
-              messageId: messageId,
-              attempts: attempts,
-              totalElapsedMs: attempts.fold(0, (sum, a) => sum + a.elapsedMs),
-              summary: status == AgentOperationStatus.ok
-                  ? 'agentic search'
-                  : agenticStatus,
-              startedAtMs: attempts.first.startedAtMs,
-              finishedAtMs: attempts.last.startedAtMs + attempts.last.elapsedMs,
-              canRegenerate: status.isFailure,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  void _appendOperation(AgentOperationRecord record) {
-    _ref.read(agentOperationsLogProvider.notifier).state = _ref
-        .read(agentOperationsLogProvider)
-        .append(record);
-  }
-
-  /// Records a Studio tracker-cycle operation in the agentic operations log.
-  ///
-  /// Studio differs from the other agentic ops in that the per-agent LLM
-  /// attempts are not surfaced as a structured `attempts` array on the
-  /// pipeline result — they are summarised as `stageBriefs` (one per tracker
-  /// agent) plus an overall `status`. We synthesise a single aggregate
-  /// `AgentOperationAttempt` covering the whole cycle elapsed time and put
-  /// the per-agent breakdown into the `summary` text.
-  ///
-  /// Call sites:
-  ///   - success path (`status == 'ok'`)
-  ///   - hard failure (`status != 'ok' && status != 'aborted' &&
-  ///     status != 'disabled'`)
-  ///
-  /// Aborted / disabled runs are not logged — they are user-initiated
-  /// cancellations or no-op configurations, not real operations.
-  void _recordStudioTrackerOperation({
-    required String sessionId,
-    String? messageId,
-    required DateTime startGenTime,
-    DateTime? finalStartTime,
-    required StudioPipelineResult result,
-    required String trackerModel,
-    required String finalModel,
-  }) {
-    final status = _studioStatusToOp(result.status);
-    if (status == AgentOperationStatus.aborted ||
-        status == AgentOperationStatus.disabled) {
-      return;
-    }
-    final now = DateTime.now();
-    final elapsedMs = now.difference(startGenTime).inMilliseconds;
-    final startedAtMs = startGenTime.millisecondsSinceEpoch;
-
-    final briefs = result.stageBriefs;
-
-    if (briefs.isEmpty) {
-      _appendOperation(
-        AgentOperationRecord(
-          id: 'studio-tracker-$sessionId-${now.microsecondsSinceEpoch}',
-          kind: AgentOperationKind.studioTracker,
-          status: status,
-          sessionId: sessionId,
-          messageId: messageId,
-          attempts: [
-            AgentOperationAttempt(
-              attempt: 1,
-              statusCode: 0,
-              status: status.label,
-              error: status.isFailure ? (result.error ?? result.status) : null,
-              startedAtMs: startedAtMs,
-              elapsedMs: elapsedMs,
-            ),
-          ],
-          totalElapsedMs: elapsedMs,
-          model: trackerModel,
-          summary: result.error ?? result.status,
-          startedAtMs: startedAtMs,
-          finishedAtMs: now.millisecondsSinceEpoch,
-          canRegenerate: status.isFailure,
-        ),
-      );
-      return;
-    }
-
-    for (var i = 0; i < briefs.length; i++) {
-      final brief = briefs[i];
-      final briefStatus = brief.status == 'ok'
-          ? AgentOperationStatus.ok
-          : AgentOperationStatus.error;
-      final summary = brief.status == 'ok'
-          ? '${brief.agentName} · ${brief.brief.length} chars'
-          : '${brief.agentName} · ${brief.error ?? brief.status}';
-      final idStamp = now.microsecondsSinceEpoch + i;
-      final opStartedAt = startedAtMs + i;
-      _appendOperation(
-        AgentOperationRecord(
-          id: 'studio-tracker-${brief.agentId}-$sessionId-$idStamp',
-          kind: AgentOperationKind.studioTracker,
-          status: briefStatus,
-          sessionId: sessionId,
-          messageId: messageId,
-          attempts: [
-            AgentOperationAttempt(
-              attempt: 1,
-              statusCode: 0,
-              status: briefStatus.label,
-              error: briefStatus.isFailure
-                  ? (brief.error ?? brief.status)
-                  : null,
-              startedAtMs: opStartedAt,
-              elapsedMs: elapsedMs,
-            ),
-          ],
-          totalElapsedMs: elapsedMs,
-          model: trackerModel,
-          summary: summary,
-          startedAtMs: opStartedAt,
-          finishedAtMs: opStartedAt,
-          canRegenerate: briefStatus.isFailure,
-        ),
-      );
-    }
-
-    final finalStartedAt =
-        finalStartTime?.millisecondsSinceEpoch ?? startedAtMs + briefs.length;
-    final finalElapsedMs = now.millisecondsSinceEpoch - finalStartedAt;
-    _appendOperation(
-      AgentOperationRecord(
-        id: 'studio-final-$sessionId-${now.microsecondsSinceEpoch}',
-        kind: AgentOperationKind.studioFinal,
-        status: status,
-        sessionId: sessionId,
-        messageId: messageId,
-        attempts: [
-          AgentOperationAttempt(
-            attempt: 1,
-            statusCode: 0,
-            status: status.label,
-            error: status.isFailure ? (result.error ?? result.status) : null,
-            startedAtMs: finalStartedAt,
-            elapsedMs: finalElapsedMs < 0 ? elapsedMs : finalElapsedMs,
-          ),
-        ],
-        totalElapsedMs: finalElapsedMs < 0 ? elapsedMs : finalElapsedMs,
-        model: finalModel,
-        summary: status.isOk
-            ? 'final reply · ${result.response.length} chars'
-            : result.error ?? result.status,
-        startedAtMs: finalStartedAt,
-        finishedAtMs: now.millisecondsSinceEpoch,
-        canRegenerate: status.isFailure,
-      ),
-    );
-  }
-
-  static AgentOperationStatus _studioStatusToOp(String status) {
-    return switch (status) {
-      'ok' => AgentOperationStatus.ok,
-      'disabled' => AgentOperationStatus.disabled,
-      'aborted' => AgentOperationStatus.aborted,
-      'timeout' => AgentOperationStatus.timeout,
-      'error' => AgentOperationStatus.error,
-      'agent_errors' => AgentOperationStatus.error,
-      _ => AgentOperationStatus.error,
-    };
+    debugPrint('[StudioGen] ');
   }
 
   String _resolvedTrackerModel(ApiConfig apiConfig) {
@@ -929,81 +651,4 @@ class StreamGenerationService {
         .studioAgent.studioTrackerModelOverride;
     return override.isNotEmpty ? override : apiConfig.model;
   }
-
-  /// Builds the terminal `StudioCycleState` from a `StudioPipelineResult`,
-  /// aggregating the per-agent briefs into completed/failed counts.
-  static StudioCycleState _studioFinalState(
-    String sessionId,
-    StudioPipelineResult result,
-    StudioCyclePhase phase,
-  ) {
-    final briefs = result.stageBriefs;
-    final ok = briefs.where((b) => b.status == 'ok').length;
-    final failed = briefs.length - ok;
-    final failedNames = briefs
-        .where((b) => b.status != 'ok')
-        .map((b) => b.agentName)
-        .toList(growable: false);
-    switch (phase) {
-      case StudioCyclePhase.done:
-        return StudioCycleState.done(
-          sessionId: sessionId,
-          totalAgents: briefs.length,
-          completedAgents: ok,
-          failedAgents: failed,
-          failedAgentNames: failedNames,
-        );
-      case StudioCyclePhase.agentErrors:
-        return StudioCycleState.agentErrors(
-          sessionId: sessionId,
-          totalAgents: briefs.length,
-          completedAgents: ok,
-          failedAgents: failed,
-          failedAgentNames: failedNames,
-        );
-      default:
-        return const StudioCycleState.idle();
-    }
-  }
-
-  static AgentOperationStatus _memoryAgentStatusToOp(String status) {
-    return switch (status) {
-      'ok' => AgentOperationStatus.ok,
-      'disabled' => AgentOperationStatus.disabled,
-      'aborted' => AgentOperationStatus.aborted,
-      'timeout' => AgentOperationStatus.timeout,
-      'http_error' => AgentOperationStatus.httpError,
-      'invalid_output' => AgentOperationStatus.invalidOutput,
-      'error' => AgentOperationStatus.error,
-      _ => AgentOperationStatus.error,
-    };
-  }
-
-  /// Strips any `<glaze_beauty_state>...</glaze_beauty_state>` marker from
-  /// the assistant response and merges the parsed JSON state into the pending
-  /// session vars (success-only persistence — INV-C5 still holds because this
-  /// is only called from the two success-path `writeAssistant` call sites).
-  /// When no marker is found, returns [text] and [vars] unchanged.
-  _BeautyStateResult _applyBeautyState(
-    String text,
-    Map<String, String>? pendingVars,
-  ) {
-    final parsed = parseBeautyState(text);
-    if (!parsed.markerFound) {
-      return _BeautyStateResult(text: text, vars: pendingVars);
-    }
-    final vars = parsed.stateJson == null
-        ? pendingVars
-        : <String, String>{
-            ...?pendingVars,
-            beautyStateVarKey: parsed.stateJson!,
-          };
-    return _BeautyStateResult(text: parsed.cleanedText, vars: vars);
-  }
-}
-
-class _BeautyStateResult {
-  final String text;
-  final Map<String, String>? vars;
-  const _BeautyStateResult({required this.text, required this.vars});
 }

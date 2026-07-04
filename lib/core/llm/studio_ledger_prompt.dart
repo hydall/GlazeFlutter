@@ -54,18 +54,22 @@ $recentHistoryText
 $finalAssistantText
 </final_assistant_response>
 
-Now produce the Studio Ledger output. Return BOTH blocks:
-1. <studio_ledger>…</studio_ledger> — compact visible scene/continuity snapshot.
-2. <glaze_memory_export>…</glaze_memory_export> — machine JSON with ops list.
+Now produce the Studio Ledger output. You MUST return BOTH blocks below.
+The <glaze_memory_export> block is MANDATORY — even when there is nothing
+to write, include it with empty arrays. Do not omit it under any circumstance.
 
-Required response template. Do not omit either block, even when there is no
-state to write:
-<studio_ledger>
-Compact continuity snapshot here.
-</studio_ledger>
+Required response template (follow this exact structure):
 <glaze_memory_export>
 {"ops":[],"durableFacts":[]}
 </glaze_memory_export>
+<studio_ledger>
+Compact continuity snapshot here.
+</studio_ledger>
+
+The <glaze_memory_export> block MUST come first, before <studio_ledger>.
+It must contain a single JSON object with "ops" and "durableFacts" arrays.
+When there are no state changes or durable facts, output empty arrays —
+do NOT skip the block.
 
 Ops format:
 {"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"durableFacts":[{"title":"…","content":"…","keys":["…"],"entities":["…"]}]}

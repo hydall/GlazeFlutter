@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/character_folder_provider.dart'
+    show characterFolderRepoProvider;
 import '../../../core/state/lorebook_provider.dart'
     show saveLorebookActivations;
 import '../../../shared/theme/theme_preset_storage.dart';
@@ -40,6 +42,13 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
     trackerValueStore: TrackerValueSyncStore(ref.watch(trackerRepoProvider)),
     studioConfigStore: ref.watch(studioConfigRepoProvider),
     studioPresetStore: ref.watch(studioPresetRepoProvider),
+    chatSummaryStore: ChatSummarySyncStore(
+      ref.watch(summaryRepoProvider),
+    ),
+    characterFolderStore: CharacterFolderSyncStore(
+      ref.watch(characterFolderRepoProvider),
+    ),
+    memoryGraphStore: MemoryGraphSyncStore(ref.watch(appDbProvider)),
     saveLorebookActivations: saveLorebookActivations,
   );
   await service.init();

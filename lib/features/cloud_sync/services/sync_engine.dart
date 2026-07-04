@@ -51,8 +51,11 @@ class SyncEngine {
   final SyncTrackerValueStore _trackerValueStore;
   final SyncStudioConfigStore _studioConfigStore;
   final SyncStudioPresetStore? _studioPresetStore;
-  final SyncQueue _queue = SyncQueue();
+  final SyncChatSummaryStore? _chatSummaryStore;
+  final SyncCharacterFolderStore? _characterFolderStore;
+  final SyncMemoryGraphStore? _memoryGraphStore;
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
+  final SyncQueue _queue = SyncQueue();
   late final SyncBinaryAssetSyncer _binarySyncer;
   bool _includeApiKeys = false;
 
@@ -76,6 +79,9 @@ class SyncEngine {
     this._trackerValueStore,
     this._studioConfigStore,
     this._studioPresetStore,
+    this._chatSummaryStore,
+    this._characterFolderStore,
+    this._memoryGraphStore,
     this._saveLorebookActivations,
   ) {
     _binarySyncer = SyncBinaryAssetSyncer(
@@ -103,6 +109,8 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/tracker_values');
     await _adapter.ensureFolder('$cloudBase/studio_configs');
     await _adapter.ensureFolder('$cloudBase/studio_presets');
+    await _adapter.ensureFolder('$cloudBase/chat_summaries');
+    await _adapter.ensureFolder('$cloudBase/memory_graphs');
 
     onProgress(const SyncProgress(message: 'Building sync manifest...'));
     final localManifest = await _manifestBuilder.buildLocalManifest();
@@ -760,6 +768,15 @@ class SyncEngine {
           if (_studioPresetStore == null) return null;
           final preset = await _studioPresetStore.getById(id);
           return preset?.toJson();
+        case 'chat_summary':
+          if (_chatSummaryStore == null) return null;
+          return _chatSummaryStore.getBySessionId(id);
+        case 'character_folders':
+          if (_characterFolderStore == null) return null;
+          return _characterFolderStore.getAll();
+        case 'memory_graph':
+          if (_memoryGraphStore == null) return null;
+          return _memoryGraphStore.getBySessionId(id);
         default:
           return null;
       }
@@ -833,6 +850,21 @@ class SyncEngine {
         case 'studio_preset':
           if (_studioPresetStore != null) {
             await _studioPresetStore.put(StudioPreset.fromJson(data));
+          }
+          break;
+        case 'chat_summary':
+          if (_chatSummaryStore != null) {
+            await _chatSummaryStore.putRaw(data);
+          }
+          break;
+        case 'character_folders':
+          if (_characterFolderStore != null) {
+            await _characterFolderStore.applyAll(data);
+          }
+          break;
+        case 'memory_graph':
+          if (_memoryGraphStore != null) {
+            await _memoryGraphStore.applyBySessionId(id, data);
           }
           break;
       }
@@ -1147,6 +1179,16 @@ class SyncEngine {
         case 'studio_preset':
           if (_studioPresetStore != null) {
             await _studioPresetStore.delete(id);
+          }
+          break;
+        case 'chat_summary':
+          if (_chatSummaryStore != null) {
+            await _chatSummaryStore.deleteBySessionId(id);
+          }
+          break;
+        case 'memory_graph':
+          if (_memoryGraphStore != null) {
+            await _memoryGraphStore.deleteBySessionId(id);
           }
           break;
         // extensions_settings has no meaningful "delete" — it's always present.

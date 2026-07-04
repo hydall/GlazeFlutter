@@ -3,13 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:glaze_flutter/core/llm/agent_runner.dart';
 import 'package:glaze_flutter/core/llm/memory_studio_service.dart';
+import 'package:glaze_flutter/core/llm/studio/agent_config_resolver.dart';
 import 'package:glaze_flutter/core/llm/tracker_batcher.dart';
 import 'package:glaze_flutter/core/models/api_config.dart';
+import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 import 'package:glaze_flutter/core/models/studio_config.dart';
-
-/// Side-channel provider so a test can grab the [Ref] a Riverpod container
-/// uses internally, then construct an [AgentRunner] subclass with it.
-final _refCaptureProvider = Provider<Ref>((ref) => ref);
 
 /// A fake [AgentRunner] that overrides [resolveAgentConfig] to return a
 /// fixed [ResolvedAgentConfig] for every agent — without touching the
@@ -18,7 +16,16 @@ final _refCaptureProvider = Provider<Ref>((ref) => ref);
 /// a live API config. All other methods are inherited unchanged and are not
 /// called by these tests.
 class _FakeAgentRunner extends AgentRunner {
-  _FakeAgentRunner(super.ref);
+  _FakeAgentRunner()
+      : super(
+          configResolver: AgentConfigResolver(
+            loadApiConfigs: () async => const [],
+            readActiveApiConfig: () => null,
+            readPipelineSettings: () => const PipelineSettings(),
+            readRunApiConfigId: (_) async => '',
+          ),
+          readPipelineSettings: () => const PipelineSettings(),
+        );
 
   @override
   Future<ResolvedAgentConfig> resolveAgentConfig(
@@ -170,8 +177,7 @@ void main() {
       // NOT be batched together — the post-gen one needs mainResponse in
       // its context, the pre-gen one does not. The `|<phase>` suffix in the
       // grouping key separates them.
-      final ref = container.read(_refCaptureProvider);
-      final runner = _FakeAgentRunner(ref);
+            final runner = _FakeAgentRunner();
       final batcher = TrackerBatcher(runner);
 
       final apiConfig = _stubApiConfig(model: 'same-model');
@@ -218,8 +224,7 @@ void main() {
     test('two pre-gen agents on same model → one group (unchanged behavior)', () async {
       // Backward compat: pre-gen agents on the same model still batch together
       // (the `|pre_generation` suffix is uniform, so it does not split them).
-      final ref = container.read(_refCaptureProvider);
-      final runner = _FakeAgentRunner(ref);
+            final runner = _FakeAgentRunner();
       final batcher = TrackerBatcher(runner);
 
       final apiConfig = _stubApiConfig(model: 'same-model');
@@ -252,8 +257,7 @@ void main() {
     test('two post-gen agents on same model → one group', () async {
       // Two post-gen agents on the same model DO batch together (they both
       // receive mainResponse; uniform phase suffix keeps them in one group).
-      final ref = container.read(_refCaptureProvider);
-      final runner = _FakeAgentRunner(ref);
+            final runner = _FakeAgentRunner();
       final batcher = TrackerBatcher(runner);
 
       final apiConfig = _stubApiConfig(model: 'same-model');

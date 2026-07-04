@@ -3,14 +3,14 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/settings/api_list_provider.dart';
 import '../models/api_config.dart';
+import '../models/pipeline_settings.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
 import '../utils/error_format.dart';
-import '../../features/settings/api_list_provider.dart';
 import 'agent_stream_runner.dart';
-import 'reasoning_stripper.dart';
-import 'studio_api_config_resolver.dart';
+import 'studio/agent_config_resolver.dart';
 import 'transport/transport_factory.dart';
 
 /// Thin LLM orchestrator extracted from `MemoryStudioService` (Phase 5.1,
@@ -26,12 +26,16 @@ import 'transport/transport_factory.dart';
 ///   individual trackers.
 /// - `StudioBatchCoordinator` for batch tracker requests.
 class AgentRunner {
-  final Ref _ref;
+  final AgentConfigResolver _configResolver;
+  final PipelineSettings Function() _readPipelineSettings;
   late final AgentStreamRunner _streamRunner = AgentStreamRunner(
     pickChatTransport,
   );
 
-  AgentRunner(this._ref);
+  AgentRunner({
+    required this._configResolver,
+    required this._readPipelineSettings,
+  });
 
   /// Run a single agent against the LLM. Streaming is driven by
   /// [onFinalResponseUpdate] / [onIntermediateUpdate]; the returned
@@ -142,7 +146,7 @@ class AgentRunner {
     final temperatureOverride = preResolvedConfig != null && !isFinalResponse
         ? null
         : effectiveTemperature(agent, isFinalResponse);
-    final pipeline = _ref.read(pipelineSettingsProvider);
+    final pipeline = _readPipelineSettings();
     final effectiveResolved = isFinalResponse
         ? resolved.copyWithReasoning(
             requestReasoning: pipeline.studioAgent.studioFinalDisableReasoning
@@ -190,110 +194,24 @@ class AgentRunner {
     );
   }
 
-  /// Resolve which API config an agent uses. With the 3-slot model (v55):
-  /// - [apiConfigId] — if non-empty, overrides `runApiConfigId` from the
-  ///   StudioConfig. Callers pass `cheapApiConfigId` for trackers,
-  ///   `expensiveApiConfigId` for the final generator, `cleanerApiConfigId`
-  ///   for post-processing agents. When empty, falls back to `runApiConfigId`
-  ///   then to the active chat config.
-  /// - Model overrides are global PipelineSettings values configured from the
-  ///   Studio menu: studioFinalModelOverride for the final generator,
-  ///   postCleanerModel for post-processing trackers, studioTrackerModelOverride
-  ///   for pre-gen trackers. The final generator intentionally does not read
-  ///   PipelineSettings.memoryBookApi.generationModel because that field belongs to MemoryBook
-  ///   generation / agentic write-loop routing.
+  /// Resolve which API config an agent uses. Delegates to
+  /// [AgentConfigResolver]. Kept as a facade so callers (TrackerBatcher,
+  /// tests) can call `runner.resolveAgentConfig(...)` without importing the
+  /// resolver directly.
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,
     ApiConfig current,
     String sessionId, {
     bool isFinalResponse = false,
     String? apiConfigId,
-  }) async {
-    await _ref.read(apiListProvider.future);
-    final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
-    final runApiConfigId = (apiConfigId != null && apiConfigId.isNotEmpty)
-        ? apiConfigId
-        : await _readRunApiConfigId(sessionId);
-    final resolver = StudioApiConfigResolver(
-      apiConfigs: apiConfigs,
-      activeConfig: _ref.read(activeApiConfigProvider),
+  }) {
+    return _configResolver.resolveAgentConfig(
+      agent,
+      current,
+      sessionId,
+      isFinalResponse: isFinalResponse,
+      apiConfigId: apiConfigId,
     );
-    final pipeline = _ref.read(pipelineSettingsProvider);
-    if (isFinalResponse) {
-      return resolver
-          .resolveAgentConfig(
-            current,
-            runApiConfigId,
-            pipeline.studioAgent.studioFinalModelOverride,
-          )
-          .copyWithSampling(
-            topP: pipeline.studioAgent.studioFinalTopP,
-            topK: pipeline.studioAgent.studioFinalTopK,
-            frequencyPenalty: pipeline.studioAgent.studioFinalFrequencyPenalty,
-            presencePenalty: pipeline.studioAgent.studioFinalPresencePenalty,
-            omitTemperature: pipeline.studioAgent.studioFinalOmitTemperature,
-            omitTopP: pipeline.studioAgent.studioFinalOmitTopP,
-          );
-    } else if (agent.phase == 'post_processing') {
-      if (pipeline.cleaner.postCleanerModel.isNotEmpty) {
-        return resolver
-            .resolveAgentConfig(
-              current,
-              runApiConfigId,
-              pipeline.cleaner.postCleanerModel,
-            )
-            .copyWithSampling(
-              topP: pipeline.cleaner.postCleanerTopP,
-              topK: pipeline.cleaner.postCleanerTopK,
-              frequencyPenalty: pipeline.cleaner.postCleanerFrequencyPenalty,
-              presencePenalty: pipeline.cleaner.postCleanerPresencePenalty,
-              omitTemperature: pipeline.cleaner.postCleanerOmitTemperature,
-              omitTopP: pipeline.cleaner.postCleanerOmitTopP,
-            );
-      }
-      return resolver
-          .resolveAgentConfig(current, runApiConfigId, '')
-          .copyWithSampling(
-            topP: pipeline.cleaner.postCleanerTopP,
-            topK: pipeline.cleaner.postCleanerTopK,
-            frequencyPenalty: pipeline.cleaner.postCleanerFrequencyPenalty,
-            presencePenalty: pipeline.cleaner.postCleanerPresencePenalty,
-            omitTemperature: pipeline.cleaner.postCleanerOmitTemperature,
-            omitTopP: pipeline.cleaner.postCleanerOmitTopP,
-          );
-    } else if (pipeline.studioAgent.studioTrackerModelOverride.isNotEmpty) {
-      return resolver
-          .resolveAgentConfig(
-            current,
-            runApiConfigId,
-            pipeline.studioAgent.studioTrackerModelOverride,
-          )
-          .copyWithSampling(
-            topP: pipeline.studioAgent.studioTrackerTopP,
-            topK: pipeline.studioAgent.studioTrackerTopK,
-            frequencyPenalty: pipeline.studioAgent.studioTrackerFrequencyPenalty,
-            presencePenalty: pipeline.studioAgent.studioTrackerPresencePenalty,
-            omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
-            omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,
-          );
-    }
-    return resolver
-        .resolveAgentConfig(current, runApiConfigId, '')
-        .copyWithSampling(
-          topP: pipeline.studioAgent.studioTrackerTopP,
-          topK: pipeline.studioAgent.studioTrackerTopK,
-          frequencyPenalty: pipeline.studioAgent.studioTrackerFrequencyPenalty,
-          presencePenalty: pipeline.studioAgent.studioTrackerPresencePenalty,
-          omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
-          omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,
-        );
-  }
-
-  Future<String> _readRunApiConfigId(String sessionId) async {
-    final config = await _ref
-        .read(studioConfigRepoProvider)
-        .getBySessionId(sessionId);
-    return config?.runApiConfigId ?? '';
   }
 
   /// Per-agent idle timeout. The idle timer fires only if the model emits
@@ -310,7 +228,7 @@ class AgentRunner {
   /// 3. hardcoded fallback: final generator 90s, trackers 60s.
   int effectiveTimeoutMs(StudioAgent agent, bool isFinalResponse) {
     final fallback = isFinalResponse ? 90000 : 60000;
-    final pipeline = _ref.read(pipelineSettingsProvider);
+    final pipeline = _readPipelineSettings();
     final slot = isFinalResponse
         ? pipeline.studioAgent.studioFinalTimeoutMs
         : agent.phase == 'post_processing'
@@ -339,19 +257,17 @@ class AgentRunner {
   /// use the agent's own value.
   int? effectiveMaxTokens(StudioAgent agent, bool isFinalResponse) {
     if (isFinalResponse) {
-      final global = _ref.read(pipelineSettingsProvider).studioAgent.studioFinalMaxTokens;
+      final global = _readPipelineSettings().studioAgent.studioFinalMaxTokens;
       if (global > 0) return global;
       return null;
     }
     if (agent.phase == 'post_processing') {
-      final cleanerGlobal = _ref
-          .read(pipelineSettingsProvider)
+      final cleanerGlobal = _readPipelineSettings()
           .cleaner.postCleanerMaxTokens;
       if (cleanerGlobal > 0) return cleanerGlobal;
       return null;
     }
-    final trackerGlobal = _ref
-        .read(pipelineSettingsProvider)
+    final trackerGlobal = _readPipelineSettings()
         .studioAgent.studioTrackerMaxTokens;
     if (trackerGlobal > 0) return trackerGlobal;
     return null;
@@ -367,27 +283,18 @@ class AgentRunner {
   /// caller should use the agent's own value.
   double? effectiveTemperature(StudioAgent agent, bool isFinalResponse) {
     if (isFinalResponse) {
-      final global = _ref.read(pipelineSettingsProvider).studioAgent.studioFinalTemperature;
+      final global = _readPipelineSettings().studioAgent.studioFinalTemperature;
       if (global >= 0) return global;
       return null;
     }
     if (agent.phase == 'post_processing') {
-      return _ref.read(pipelineSettingsProvider).cleaner.postCleanerTemperature;
+      return _readPipelineSettings().cleaner.postCleanerTemperature;
     }
-    final trackerGlobal = _ref
-        .read(pipelineSettingsProvider)
+    final trackerGlobal = _readPipelineSettings()
         .studioAgent.studioTrackerTemperature;
     if (trackerGlobal >= 0) return trackerGlobal;
     return null;
   }
-
-  /// Strip `<think>`/Plan-internally directives from a message before sending
-  /// to a model that won't honor them. Delegates to [ReasoningStripper]; kept
-  /// as a static shim because call sites reference
-  /// `AgentRunner.stripPromptLevelReasoning`.
-  static List<Map<String, dynamic>> stripPromptLevelReasoning(
-    List<Map<String, dynamic>> messages,
-  ) => ReasoningStripper.stripMessageReasoning(messages);
 }
 
 /// Successful single-agent run. Mirrors the former `_StudioAgentRunResult`.
@@ -564,7 +471,23 @@ class ResolvedAgentConfig {
 }
 
 /// Riverpod provider for [AgentRunner]. Single shared instance — it is
-/// stateless beyond the injected [Ref].
+/// stateless beyond the injected callbacks.
 final agentRunnerProvider = Provider<AgentRunner>((ref) {
-  return AgentRunner(ref);
+  return AgentRunner(
+    configResolver: AgentConfigResolver(
+      loadApiConfigs: () async {
+        await ref.read(apiListProvider.future);
+        return ref.read(apiListProvider).value ?? const <ApiConfig>[];
+      },
+      readActiveApiConfig: () => ref.read(activeApiConfigProvider),
+      readPipelineSettings: () => ref.read(pipelineSettingsProvider),
+      readRunApiConfigId: (sessionId) async {
+        final config = await ref
+            .read(studioConfigRepoProvider)
+            .getBySessionId(sessionId);
+        return config?.runApiConfigId ?? '';
+      },
+    ),
+    readPipelineSettings: () => ref.read(pipelineSettingsProvider),
+  );
 });

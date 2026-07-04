@@ -71,7 +71,7 @@ lib/
 │   │   ├── persona.dart
 │   │   └── preset.dart
 │   ├── llm/                          # LLM pipeline specialists
-│   │   ├── prompt_builder.dart        # Orchestrator: block ordering, lorebook merge, trimming
+│   │   ├── prompt_builder.dart        # Orchestrator: block ordering, lorebook merge, trimming (re-exports prompt/)
 │   │   ├── prompt_block_resolver.dart # Maps preset block ID → resolved text
 │   │   ├── prompt_regex_applicator.dart # Pure: applies preset+global regex scripts to final messages
 │   │   ├── prompt_inputs.dart         # Freezed value object: inputs for isolate build
@@ -107,7 +107,45 @@ lib/
 │   │   ├── tokenizer.dart            # estimateTokens() with LRU cache, base64 stripping
 │   │   ├── macro_engine.dart         # SillyTavern-compatible macro replacement engine
 │   │   ├── memory_formatting.dart    # Shared formatMemoryItems / formatMemoryRange helpers
-│   │   └── vector_math.dart          # cosineSimilarity, findTopK, findTopKMulti, BLOB helpers
+│   │   ├── vector_math.dart          # cosineSimilarity, findTopK, findTopKMulti, BLOB helpers
+│   │   ├── aux_llm_client.dart       # Shared helper for non-streaming LLM calls (no Ref, const ctor)
+│   │   ├── model_fetcher.dart        # Shared ModelFetcher.fetchModelIds() (dedup fetchModels parsing)
+│   │   ├── prompt/                   # Prompt builder specialists (extracted Phases 1-3)
+│   │   │   ├── runtime_prompt_block.dart    # RuntimePromptBlock data class
+│   │   │   ├── recalled_message_chunk.dart  # RecalledMessageChunk data class
+│   │   │   ├── prompt_payload.dart          # PromptPayload data class
+│   │   │   ├── prompt_result.dart           # PromptResult data class
+│   │   │   ├── resolved_block.dart          # ResolvedDepthBlock / ResolvedRelativeBlock
+│   │   │   ├── lorebook_classifier.dart     # Lorebook injection specialist
+│   │   │   ├── memory_block_injector.dart    # DeferredMemoryResult + memory block injection
+│   │   │   ├── arc_state_builder.dart       # Arc state computation
+│   │   │   ├── ledger_tracker_loader.dart   # Effective ledger tracker loading
+│   │   │   ├── lorebook_vector_searcher.dart # Vector search within prompt building
+│   │   │   └── studio_session_state_compiler.dart # Studio session state → prompt block
+│   │   ├── cleaner/                  # POST-cleaner specialists (extracted Phase 4)
+│   │   │   ├── cleaner_prompt_builder.dart  # Cleaner system prompt builder
+│   │   │   ├── audit_prompt_builder.dart    # Audit prompt builder + JSON parser
+│   │   │   └── cleaner_text_guard.dart      # Text rewrite protection guards
+│   │   ├── studio/                   # Studio pipeline specialists (extracted Phases 5, 7-9)
+│   │   │   ├── studio_tracker_phase_runner.dart # Pre-gen tracker phase runner
+│   │   │   ├── studio_tracker_result_mapper.dart # Tracker result → brief mapper
+│   │   │   ├── studio_history_limiter.dart  # History truncation for agents
+│   │   │   ├── studio_brief_macro_renderer.dart # Studio brief macro rendering
+│   │   │   ├── studio_runtime_block_expander.dart # Runtime block content expansion
+│   │   │   ├── studio_stream_interceptor.dart # Studio stream intercept (pure static)
+│   │   │   └── agent_config_resolver.dart   # Per-agent API config resolution
+│   │   ├── memory/                   # Memory injection specialists (extracted Phase 6)
+│   │   │   ├── memory_vector_searcher.dart  # Vector search for memory injection
+│   │   │   ├── memory_catalog_matcher.dart  # Catalog/keyword matching
+│   │   │   ├── memory_chunker.dart          # Text chunking + sentence splitting
+│   │   │   └── excerpt_scorer.dart          # Excerpt scoring helpers
+│   │   ├── ledger/                   # Studio Ledger specialists (extracted Phase 7)
+│   │   │   ├── ledger_op_applier.dart       # Ledger op application
+│   │   │   ├── durable_fact_writer.dart     # Durable fact writing
+│   │   │   ├── visible_ledger_store.dart    # Visible ledger storage
+│   │   │   └── ledger_provenance.dart       # Ledger provenance builder
+│   │   └── shared/                   # Shared utilities across services
+│   │       └── message_range_formatter.dart # Unified message range formatting
 │   ├── llm/converters/               # Protocol-specific message converters (pure)
 │   │   ├── claude_messages.dart      # Anthropic /v1/messages shape
 │   │   ├── gemini_messages.dart      # Google Gemini shape
@@ -878,7 +916,7 @@ not oversights:
 | `ChatSummaries` | `summary_repo.dart` | v30: `enabled`; one per session |
 | `MemoryBookRows` | `memory_book_repo.dart` | |
 | `MemoryCatalogRows` | `memory_catalog_repo.dart` | v29; rebuildable per-session Memory Catalog state |
-| `MemoryGraph*` | `memory_*_repo.dart` | v35; 4 tables (`memory_entity_rows`, `memory_salience_rows`, `memory_cadence_rows`, `memory_consolidation_rows`) |
+| `MemoryGraph*` | `memory_*_repo.dart` | v35; 4 tables (`memory_entity_rows`, `memory_salience_rows`, `memory_cadence_rows`, `memory_consolidation_rows`). **DISABLED** — heuristic entity extractor produces garbage on non-English text (see §"Disabled features" below). Tables remain for forward compat; no new rows written. |
 | `ExtensionPresets` | `extension_presets_repository.dart` | v20 |
 | `InfoBlocks` | `info_blocks_repository.dart` | v20; v22 adds `status` TEXT (default `'done'`) + `order` INTEGER (default 0); v27 adds `swipe_id` |
 | `StudioConfigRows` | `studio_config_repo.dart` | v36; reusable Studio profiles, v42 adds `profileId`/`profileName` for session-to-profile binding, v43 `builderPromptTemplate`, v44 `maxFinalHistoryMessages`, v46 `routingMode` |
@@ -1180,6 +1218,25 @@ Open issues:
 
 1. **`onboarding_service.dart`** — UI lives in `features/onboarding/onboarding_screen.dart`, but the service still imports `package:flutter/material.dart` for `BuildContext` and pushes via `rootNavigatorKey.currentState.push()`.
 
+2. **Memory Graph (entity extraction + salience) — DISABLED.**
+   `MemoryPostTurnService.runPostTurn` is a no-op: only the cadence counter
+   is incremented; the entity graph + salience rebuild is commented out.
+   The heuristic `MemoryEntityExtractor` relies on `[A-Z][a-z]` proper-noun
+   detection which does not work for Cyrillic (Russian RP) — it produces
+   garbage like "Encryption", "Non", "The" as character entities. The
+   stoplist (~25 words) and preposition guards are insufficient compared
+   to Lumiverse's ~150-word stoplist + adjective-follower filter + sentence
+   -start position index + preposition attachment guard.
+   Studio Ledger (LLM-based, writes `npc:Name.field`, `world:location`,
+   etc. into `tracker_rows`) covers the same use case with much higher
+   quality and is the canonical entity tracker going forward.
+   The 4 graph tables (`memory_entity_rows`, `memory_salience_rows`,
+   `memory_cadence_rows`, `memory_consolidation_rows`) remain in the DB
+   for forward compatibility.
+   **Reference for a future LLM-based rewrite:**
+   [Lumiverse Memory Cortex](https://github.com/prolix-oc/Lumiverse/tree/main/src/services/memory-cortex)
+   — heuristic Tier 1 + LLM sidecar Tier 2 with arbitration & grading.
+
 Resolved (kept for history; details in git / PR notes):
 
 - **magic_drawer_stats_service** — moved to `features/chat/services/`.
@@ -1196,3 +1253,4 @@ Resolved (kept for history; details in git / PR notes):
 - **`memory_injection_service.dart` arch fix** — removed `Ref` dependency; `MemoryGlobalSettings` injected via callback.
 - **`prompt_worker.dart` decomposition** — isolate-boundary JSON codec extracted to `prompt_worker_codec.dart`.
 - **Triplicated memory formatting helpers** — `_formatMemoryItems` / `_formatMemoryRange` deduplicated to `memory_formatting.dart`.
+- **Studio decomposition (Phases 1-11)** — 11-phase decomposition of Studio services: data classes and specialists extracted from `prompt_builder.dart`, `prompt_payload_builder.dart`, `post_cleaner_service.dart`, `memory_studio_service.dart`, `studio_message_builder.dart`, `memory_injection_service.dart`, `memory_excerpt_selector.dart`, `studio_ledger_service.dart`, `agent_runner.dart`, `stream_generation_service.dart` into `prompt/`, `cleaner/`, `studio/`, `memory/`, `ledger/`, `shared/` subdirectories. Constructor injection sweep removed `Ref` from 11 services (only `memory_studio_service.dart` retains `Ref` as root orchestrator; `prompt_inputs_collector.dart` + `prompt_payload_builder.dart` deferred — 15+ provider reads). `AuxLlmClient` promoted to `const` constructor (no `Ref`). `StudioFinalRunResult` merged into `AgentRunResult` (identical 3-field shape). `ModelFetcher.fetchModelIds()` deduplicates `fetchModels` parsing. UI decomposition extracted business logic + distinct sub-screens from `studio_settings_sheet.dart`, `agentic_operations_log_dialog.dart`, `memory_books_sheet.dart` per `CODE_STYLE.md` ("large UI files are acceptable — extract business logic, not private widgets").

@@ -129,6 +129,25 @@ abstract class SyncStudioPresetStore {
   Future<void> delete(String id);
 }
 
+abstract class SyncChatSummaryStore {
+  Future<List<String>> getAllSessionIds();
+  Future<Map<String, dynamic>?> getBySessionId(String sessionId);
+  Future<void> putRaw(Map<String, dynamic> summary);
+  Future<void> deleteBySessionId(String sessionId);
+}
+
+abstract class SyncCharacterFolderStore {
+  Future<Map<String, dynamic>> getAll();
+  Future<void> applyAll(Map<String, dynamic> data);
+}
+
+abstract class SyncMemoryGraphStore {
+  Future<List<String>> getAllSessionIds();
+  Future<Map<String, dynamic>?> getBySessionId(String sessionId);
+  Future<void> applyBySessionId(String sessionId, Map<String, dynamic> data);
+  Future<void> deleteBySessionId(String sessionId);
+}
+
 abstract class SyncManifestProvider {
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest});
   Future<SyncManifest> readLocalManifest();

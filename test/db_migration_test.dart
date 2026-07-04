@@ -76,7 +76,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 55);
+      expect(version, 57);
     });
 
     test(
@@ -113,7 +113,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 55);
+        expect(version.first.read<int>('user_version'), 57);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },

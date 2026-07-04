@@ -1,6 +1,12 @@
 import '../models/memory_book.dart';
+import 'memory/memory_chunker.dart';
+import 'memory/excerpt_scorer.dart';
 import 'memory_selector.dart';
 import 'tokenizer.dart';
+
+export 'memory/memory_chunker.dart' show ExcerptChunk, MemoryChunker;
+export 'memory/excerpt_scorer.dart'
+    show ScoredChunk, GlobalChunkCandidate, ExcerptScorer;
 
 const defaultMemoryExcerptTokensPerEntry = 500;
 const defaultMemoryExcerptChunksPerEntry = 2;
@@ -195,18 +201,18 @@ class MemoryExcerptSelector {
   }) {
     final tokenFn = tokenCounter ?? estimateTokens;
     final budget = selection.budgetTokens;
-    final ranked = <_GlobalChunkCandidate>[];
+    final ranked = <GlobalChunkCandidate>[];
 
     for (final score in selection.allScores) {
       if (score.excludedBySourceWindow) continue;
       final fullText = score.entry.content.trim();
       if (fullText.isEmpty) continue;
 
-      final chunks = _chunk(fullText, maxExcerptTokensPerChunk, tokenFn);
-      final terms = _termsFor(score);
+      final chunks = MemoryChunker.chunk(fullText, maxExcerptTokensPerChunk, tokenFn);
+      final terms = ExcerptScorer.termsFor(score);
       for (final chunk in chunks) {
         ranked.add(
-          _GlobalChunkCandidate(
+          GlobalChunkCandidate(
             entry: score.entry,
             entryScore: score.score,
             recencyScore: score.recencyScore,
@@ -214,7 +220,7 @@ class MemoryExcerptSelector {
             chunkIndex: chunk.index,
             text: chunk.text,
             tokenCost: chunk.tokenCost,
-            relevance: _chunkRelevance(chunk.text, score, terms),
+            relevance: ExcerptScorer.chunkRelevance(chunk.text, score, terms),
           ),
         );
       }
@@ -228,17 +234,17 @@ class MemoryExcerptSelector {
       return a.chunkIndex.compareTo(b.chunkIndex);
     });
 
-    final perEntry = <String, List<_GlobalChunkCandidate>>{};
+    final perEntry = <String, List<GlobalChunkCandidate>>{};
     var usedTokens = 0;
     var trimmed = false;
 
     // Phase 1: top entries by entry score each get up to [topChunks] best chunks
     // so recency / vector-implied relevance is not drowned out by keyword-heavy
     // older arcs.
-    final rankedByEntry = <String, List<_GlobalChunkCandidate>>{};
+    final rankedByEntry = <String, List<GlobalChunkCandidate>>{};
     for (final candidate in ranked) {
       rankedByEntry
-          .putIfAbsent(candidate.entry.id, () => <_GlobalChunkCandidate>[])
+          .putIfAbsent(candidate.entry.id, () => <GlobalChunkCandidate>[])
           .add(candidate);
     }
     final entryFloorCap = topEntries.clamp(0, 64);
@@ -298,7 +304,7 @@ class MemoryExcerptSelector {
       );
       final text = chunks.map((c) => c.text).join('\n\n').trim();
       if (text.isEmpty) continue;
-      final terms = _termsFor(score);
+      final terms = ExcerptScorer.termsFor(score);
       items.add(
         MemoryInjectionItem(
           entry: chunks.first.entry,
@@ -327,9 +333,11 @@ class MemoryExcerptSelector {
     int maxTokensPerChunk, {
     int Function(String text)? tokenCounter,
   }) {
-    final tokenFn = tokenCounter ?? estimateTokens;
-    if (content.trim().isEmpty || maxTokensPerChunk <= 0) return 0;
-    return _chunk(content, maxTokensPerChunk, tokenFn).length;
+    return MemoryChunker.countChunks(
+      content,
+      maxTokensPerChunk,
+      tokenCounter: tokenCounter,
+    );
   }
 
   static String _normalizePackingMode(String raw) {
@@ -362,15 +370,15 @@ class MemoryExcerptSelector {
     required int Function(String text) tokenCounter,
   }) {
     if (maxTokens <= 0 || maxChunks <= 0) return null;
-    final chunks = _chunk(score.entry.content, maxTokens, tokenCounter);
+    final chunks = MemoryChunker.chunk(score.entry.content, maxTokens, tokenCounter);
     if (chunks.isEmpty) return null;
-    final terms = _termsFor(score);
+    final terms = ExcerptScorer.termsFor(score);
     final ranked =
         chunks
             .map(
-              (chunk) => _ScoredChunk(
+              (chunk) => ScoredChunk(
                 chunk,
-                _chunkRelevance(chunk.text, score, terms),
+                ExcerptScorer.chunkRelevance(chunk.text, score, terms),
               ),
             )
             .toList(growable: false)
@@ -380,7 +388,7 @@ class MemoryExcerptSelector {
             return a.chunk.index.compareTo(b.chunk.index);
           });
 
-    final picked = <_ExcerptChunk>[];
+    final picked = <ExcerptChunk>[];
     var used = 0;
     for (final rankedChunk in ranked) {
       if (picked.length >= maxChunks) break;
@@ -408,129 +416,16 @@ class MemoryExcerptSelector {
     );
   }
 
-  static List<_ExcerptChunk> _chunk(
-    String content,
-    int maxTokens,
-    int Function(String text) tokenCounter,
-  ) {
-    final blocks = content
-        .split(RegExp(r'\n\s*\n+'))
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .toList(growable: false);
-    final chunks = <_ExcerptChunk>[];
-    var index = 0;
-    for (final block in blocks) {
-      final tokenCost = tokenCounter(block);
-      if (tokenCost <= maxTokens) {
-        chunks.add(_ExcerptChunk(index++, block, tokenCost));
-        continue;
-      }
-      final sentences = _sentences(block);
-      var window = <String>[];
-      for (final sentence in sentences) {
-        final candidate = [...window, sentence].join(' ').trim();
-        if (candidate.isEmpty) continue;
-        if (tokenCounter(candidate) > maxTokens && window.isNotEmpty) {
-          final text = window.join(' ').trim();
-          chunks.add(_ExcerptChunk(index++, text, tokenCounter(text)));
-          window = [sentence];
-        } else if (tokenCounter(candidate) > maxTokens) {
-          final words = sentence.split(RegExp(r'\s+'));
-          final shortText = words.take(maxTokens * 3).join(' ').trim();
-          if (shortText.isNotEmpty) {
-            chunks.add(
-              _ExcerptChunk(index++, shortText, tokenCounter(shortText)),
-            );
-          }
-          window = [];
-        } else {
-          window.add(sentence);
-        }
-      }
-      if (window.isNotEmpty) {
-        final text = window.join(' ').trim();
-        chunks.add(_ExcerptChunk(index++, text, tokenCounter(text)));
-      }
-    }
-    return chunks;
-  }
-
-  static List<String> _sentences(String text) {
-    final matches = RegExp(r'[^.!?\n]+(?:[.!?]+|$)').allMatches(text);
-    final sentences = matches
-        .map((match) => match.group(0)?.trim() ?? '')
-        .where((part) => part.isNotEmpty)
-        .toList(growable: false);
-    return sentences.isEmpty ? [text.trim()] : sentences;
-  }
-
-  static Set<String> _termsFor(MemoryCandidateScore score) {
-    final raw = <String>[
-      ...score.matchedKeys,
-      ...score.catalogMatchedTerms,
-      ...score.entry.keys,
-      score.entry.title,
-      score.entry.arc,
-    ];
-    final terms = <String>{};
-    for (final value in raw) {
-      for (final token in value.toLowerCase().split(
-        RegExp(r'[^\p{L}\p{N}_]+', unicode: true),
-      )) {
-        if (token.length >= 3) terms.add(token);
-      }
-    }
-    return terms;
-  }
-
-  static double _vectorChunkBoost(String text, List<String> vectorChunks) {
-    if (vectorChunks.isEmpty) return 0;
-    final lower = text.toLowerCase();
-    for (final vectorChunk in vectorChunks) {
-      final chunk = vectorChunk.trim().toLowerCase();
-      if (chunk.isEmpty) continue;
-      if (lower.contains(chunk) || chunk.contains(lower)) return 100.0;
-      final chunkTerms = chunk
-          .split(RegExp(r'[^\p{L}\p{N}_]+', unicode: true))
-          .where((term) => term.length >= 4)
-          .toSet();
-      if (chunkTerms.isEmpty) continue;
-      final overlap = chunkTerms.where(lower.contains).length;
-      if (overlap > 0) return overlap.clamp(0, 12) * 2.0;
-    }
-    return 0;
-  }
-
-  /// Entry-level signals (recency, vector, importance) that can justify
-  /// injection even when the current turn has no direct keyword overlap.
-  static double _entryChunkPrior(MemoryCandidateScore score) {
-    return score.recencyScore * 4.0 +
-        score.vectorScore * 0.6 +
-        score.importanceScore * 2.0 +
-        score.catalogScore * 0.4;
-  }
-
-  static double _chunkRelevance(
-    String text,
-    MemoryCandidateScore score,
-    Set<String> terms,
-  ) {
-    return _scoreChunk(text, terms) +
-        _vectorChunkBoost(text, score.vectorMatchedChunks) +
-        _entryChunkPrior(score);
-  }
-
   static bool _tryAddGlobalChunk(
-    _GlobalChunkCandidate candidate,
-    Map<String, List<_GlobalChunkCandidate>> perEntry, {
+    GlobalChunkCandidate candidate,
+    Map<String, List<GlobalChunkCandidate>> perEntry, {
     required int maxExcerptChunksPerEntry,
     required int? budget,
     required int usedTokens,
   }) {
     final chunksForEntry = perEntry.putIfAbsent(
       candidate.entry.id,
-      () => <_GlobalChunkCandidate>[],
+      () => <GlobalChunkCandidate>[],
     );
     if (chunksForEntry.any((c) => c.chunkIndex == candidate.chunkIndex)) {
       return false;
@@ -544,70 +439,4 @@ class MemoryExcerptSelector {
     chunksForEntry.add(candidate);
     return true;
   }
-
-  static double _scoreChunk(String text, Set<String> terms) {
-    final lower = text.toLowerCase();
-    var score = 0.0;
-    for (final term in terms) {
-      if (lower.contains(term)) score += 2.0;
-    }
-    for (final durable in _durableTerms) {
-      if (lower.contains(durable)) score += 0.5;
-    }
-    if (RegExp(r'\b[A-Z][a-z]{2,}\b').hasMatch(text)) score += 0.35;
-    if (RegExp(r'\d').hasMatch(text)) score += 0.2;
-    if (text.length < 40) score -= 0.2;
-    return score;
-  }
-
-  static const _durableTerms = <String>{
-    'promise',
-    'promised',
-    'secret',
-    'injury',
-    'wound',
-    'debt',
-    'map',
-    'ritual',
-    'location',
-    'relationship',
-    'trust',
-  };
-}
-
-class _ExcerptChunk {
-  final int index;
-  final String text;
-  final int tokenCost;
-
-  const _ExcerptChunk(this.index, this.text, this.tokenCost);
-}
-
-class _ScoredChunk {
-  final _ExcerptChunk chunk;
-  final double score;
-
-  const _ScoredChunk(this.chunk, this.score);
-}
-
-class _GlobalChunkCandidate {
-  final MemoryEntry entry;
-  final double entryScore;
-  final double recencyScore;
-  final double vectorScore;
-  final int chunkIndex;
-  final String text;
-  final int tokenCost;
-  final double relevance;
-
-  const _GlobalChunkCandidate({
-    required this.entry,
-    required this.entryScore,
-    this.recencyScore = 0,
-    this.vectorScore = 0,
-    required this.chunkIndex,
-    required this.text,
-    required this.tokenCost,
-    required this.relevance,
-  });
 }

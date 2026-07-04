@@ -1,14 +1,11 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/pipeline_settings.dart';
 import 'aux_retry_runner.dart';
 import 'idle_timeout_guard.dart';
 import 'transport/chat_transport_request.dart';
-import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
 
 /// Resolved auxiliary API configuration for a non-streaming LLM call.
@@ -37,8 +34,8 @@ class AuxApiConfig {
 ///
 /// Usage:
 /// ```dart
-/// final client = AuxLlmClient(ref);
-/// final resolver = StudioSlotResolver(ref);
+/// const client = AuxLlmClient();
+/// final resolver = StudioSlotResolver();
 /// final config = await resolver.resolve(
 ///   apiConfigId: studioConfig.cleanerApiConfigId,
 ///   modelOverride: pipeline.cleaner.postCleanerModel,
@@ -53,9 +50,7 @@ class AuxApiConfig {
 /// );
 /// ```
 class AuxLlmClient {
-  final Ref _ref;
-
-  AuxLlmClient(this._ref);
+  const AuxLlmClient();
 
   int resolveCleanerTimeout(PipelineSettings settings) {
     return settings.cleaner.postCleanerTimeoutMs > 0

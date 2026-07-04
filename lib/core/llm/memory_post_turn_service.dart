@@ -1,92 +1,41 @@
 import 'dart:async';
 
-import '../db/repositories/memory_book_repo.dart';
-import '../db/repositories/memory_salience_repo.dart';
-import '../state/memory_settings_provider.dart';
 import 'memory_cadence_service.dart';
-import 'memory_graph_builder.dart';
-import 'memory_salience_scorer.dart';
 
 /// Post-turn memory pipeline (Phase G4).
 ///
-/// Runs after the assistant response is saved. Fire-and-forget — does NOT
-/// block generation. Performs:
-/// 1. Increment assistant message counter.
-/// 2. If cadence allows: rebuild entity graph for new/changed entries.
-/// 3. Rescore salience for entries without salience.
-/// 4. Mark cadence run.
+/// **DISABLED** — the heuristic entity graph + salience scorer produce
+/// garbage on non-English text (Russian RP). The `MemoryEntityExtractor`
+/// relies on `[A-Z][a-z]` proper-noun detection which doesn't work for
+/// Cyrillic, and the stoplist / preposition guards are insufficient.
 ///
-/// Errors are logged, not shown to user.
+/// Studio Ledger (LLM-based entity tracking in `tracker_rows`) covers the
+/// same use case with much higher quality — it writes `npc:Name.field`,
+/// `world:location`, `scene.present_entities`, etc.
+///
+/// The graph/salience/cadence tables remain in the DB for forward compat,
+/// but no new rows are written until the extractor is rewritten.
+///
+/// Reference for a future LLM-based rewrite (Tier 2 sidecar approach):
+/// https://github.com/prolix-oc/Lumiverse/blob/main/src/services/memory-cortex/
+/// — Lumiverse uses heuristic Tier 1 + LLM sidecar Tier 2 with arbitration.
 class MemoryPostTurnService {
-  final MemoryBookRepo _bookRepo;
-  final MemorySalienceRepo _salienceRepo;
   final MemoryCadenceService _cadenceService;
-  final MemoryGraphBuilder _graphBuilder;
-  final MemoryGlobalSettings Function() _readGlobalSettings;
 
-  MemoryPostTurnService(
-    this._bookRepo,
-    this._salienceRepo,
-    this._cadenceService,
-    this._graphBuilder,
-    this._readGlobalSettings,
-  );
+  MemoryPostTurnService(this._cadenceService);
 
   /// Run post-turn memory work. Fire-and-forget; caller should not await.
+  ///
+  /// **Currently a no-op** — entity graph + salience disabled. See class
+  /// doc for rationale. Only the cadence counter is incremented so the
+  /// table stays consistent when the feature is re-enabled.
   Future<void> runPostTurn(String sessionId) async {
     try {
       await _cadenceService.incrementAssistant(sessionId);
-
-      final gs = _readGlobalSettings();
-      if (gs.memoryMode == 'fast') return;
-
-      final book = await _bookRepo.getBySessionId(sessionId);
-      if (book == null || !book.settings.enabled) return;
-
-      final shouldRunGraph = await _cadenceService.shouldRun(
-        sessionId,
-        'graph',
-        memoryMode: book.settings.memoryMode,
-        cadenceInterval: book.settings.cadenceInterval,
-      );
-      if (!shouldRunGraph) return;
-
-      // Update entity graph + salience for entries
-      final knownCharacterNames = <String>[];
-      final activeEntries = book.entries
-          .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
-          .toList();
-
-      for (final entry in activeEntries) {
-        try {
-          await _graphBuilder.updateForEntry(
-            entry,
-            sessionId: sessionId,
-            knownCharacterNames: knownCharacterNames,
-          );
-        } catch (_) {
-          // Graph update failure is non-fatal
-        }
-      }
-
-      // Rescore salience for entries without it
-      final existingSalience = await _salienceRepo.getBySessionId(sessionId);
-      final scoredIds = existingSalience.map((s) => s.memoryEntryId).toSet();
-      for (final entry in activeEntries) {
-        if (!scoredIds.contains(entry.id)) {
-          try {
-            final salience = MemorySalienceScorer.score(
-              entry,
-              sessionId: sessionId,
-            );
-            await _salienceRepo.upsert(salience);
-          } catch (_) {
-            // Non-fatal
-          }
-        }
-      }
-
-      await _cadenceService.markRun(sessionId, 'graph');
+      // Entity graph + salience rebuild disabled — see class doc.
+      // To re-enable, rewrite MemoryEntityExtractor for non-English text
+      // (LLM-based extraction or Cyrillic-aware heuristics) and restore
+      // the full body from git history.
     } catch (_) {
       // Post-turn failures are non-fatal; do not surface to user
     }

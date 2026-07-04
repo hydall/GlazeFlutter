@@ -3,17 +3,15 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
+import '../models/api_config.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
-import '../state/db_provider.dart';
 import 'aux_llm_client.dart';
 import 'transport/llm_protocol.dart';
 import 'vector_math.dart';
-import '../../features/settings/api_list_provider.dart';
 
 /// Result of a single dedup decision for a pair of near-duplicate entries.
 typedef DedupPairDecision = ({String entryAId, String entryBId, String action, String? mergedContent, String? mergedTitle, List<String>? mergedKeys});
@@ -52,15 +50,19 @@ class MemoryDedupResult {
 ///    - "keep": both entries are sufficiently distinct, no action
 /// 5. Apply the decisions atomically via MemoryBookRepo.
 class MemoryDedupService {
-  final Ref _ref;
   final AuxLlmClient _llm;
   final EmbeddingRepo _embeddingRepo;
   final MemoryBookRepo _bookRepo;
+  final Future<List<ApiConfig>> Function() _loadApiConfigs;
+  final ApiConfig? Function() _activeApiConfig;
 
-  MemoryDedupService(this._ref)
-      : _llm = AuxLlmClient(_ref),
-        _embeddingRepo = _ref.read(embeddingRepoProvider),
-        _bookRepo = _ref.read(memoryBookRepoProvider);
+  MemoryDedupService({
+    required this._llm,
+    required this._embeddingRepo,
+    required this._bookRepo,
+    required this._loadApiConfigs,
+    required this._activeApiConfig,
+  });
 
   /// Run the dedup pass on the memory book for [sessionId].
   ///
@@ -285,8 +287,9 @@ class MemoryDedupService {
       );
     }
 
-    await _ref.read(apiListProvider.future);
-    final chatConfig = _ref.read(activeApiConfigProvider);
+    // Ensure API list is loaded before reading the active config.
+    await _loadApiConfigs();
+    final chatConfig = _activeApiConfig();
     if (chatConfig == null) {
       throw Exception('No chat API config available for $errorLabel');
     }

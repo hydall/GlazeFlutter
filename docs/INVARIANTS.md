@@ -301,6 +301,25 @@ OpenRouter `cache_control`) a long stable prefix to hit across turns.
 `cacheControlTtl` / `cacheBreakpointMode` are wired through
 `ResolvedAgentConfig.fromApiConfig` → `ChatTransportRequest` → transport.
 
+### INV-ST6: Memory Graph (entity extraction + salience) is DISABLED
+
+`MemoryPostTurnService.runPostTurn` is a **no-op** — only the cadence
+counter is incremented. The heuristic `MemoryEntityExtractor` (relies on
+`[A-Z][a-z]` proper-noun detection) does not work for Cyrillic text and
+produces garbage entities. The 4 graph tables
+(`memory_entity_rows`, `memory_salience_rows`, `memory_cadence_rows`,
+`memory_consolidation_rows`) remain in the DB for forward compat but
+receive no new rows.
+
+Entity tracking is handled by **Studio Ledger** (LLM-based, writes
+`npc:Name.field`, `world:location`, `scene.present_entities` into
+`tracker_rows`) — see INV-ST1 through INV-ST5.
+
+**Do NOT re-enable** the heuristic extractor without rewriting it for
+non-English text. Reference for a future LLM-based approach:
+[Lumiverse Memory Cortex](https://github.com/prolix-oc/Lumiverse/tree/main/src/services/memory-cortex)
+— heuristic Tier 1 + LLM sidecar Tier 2 with arbitration.
+
 ---
 
 ## 4c. Tracker Snapshot Rollback Invariants

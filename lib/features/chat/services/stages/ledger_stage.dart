@@ -3,13 +3,18 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
+import '../../../../core/llm/macro_engine.dart';
 import '../../../../core/llm/studio_ledger_service.dart';
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/models/agent_operation_record.dart';
+import '../../../../core/models/api_config.dart';
 import '../../../../core/models/chat_message.dart';
 import '../../../../core/models/pipeline_settings.dart';
+import '../../../../core/models/studio_config.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../../../core/state/memory_agent_providers.dart';
+import '../../../../core/state/character_provider.dart';
+import '../../../settings/api_list_provider.dart';
 import '../../../../shared/widgets/glaze_toast.dart';
 import '../../state/agent_operations_log_provider.dart';
 import '../../state/post_gen_status_provider.dart';
@@ -46,8 +51,14 @@ class LedgerStage {
     required int genId,
     required String finalAssistantText,
     required ChatMessage targetMessage,
+    bool isManualRerun = false,
+    AuxApiConfig? resolvedConfig,
   }) async {
     if (!ctx.ref.mounted) return;
+
+    final isCurrent = isManualRerun
+        ? () => ctx.ref.mounted
+        : () => ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId);
 
     try {
       final pipeline = ctx.ref.read(pipelineSettingsProvider);
@@ -56,12 +67,15 @@ class LedgerStage {
       // StudioConfig.enabled to decide whether the ledger should run.
       var studioConfigEnabled = false;
       var studioCleanerApiConfigId = '';
+      StudioPreset? studioPreset;
+      var studioPresetId = 'default';
       try {
         final studioConfig = await ctx.ref
             .read(studioConfigRepoProvider)
             .getBySessionId(sessionId);
         studioConfigEnabled = studioConfig?.enabled == true;
         studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
+        studioPresetId = studioConfig?.studioPresetId ?? 'default';
       } catch (_) {}
       if (!studioConfigEnabled) {
         await _recordDiag(
@@ -70,6 +84,15 @@ class LedgerStage {
           reason: 'skipped, studio disabled',
         );
         return;
+      }
+
+      // Load the Studio preset to get ledger-section blocks.
+      try {
+        studioPreset = await ctx.ref
+            .read(studioPresetRepoProvider)
+            .getById(studioPresetId);
+      } catch (e) {
+        debugPrint('[StudioLedger] preset load failed: $e');
       }
 
       // Cadence (plan §Model Cadence). Studio Ledger is mandatory while Studio
@@ -101,7 +124,7 @@ class LedgerStage {
         );
         return;
       }
-      if (!ctx.abortHandler.isCurrentGen(genId)) {
+      if (!isCurrent()) {
         await _recordDiag(
           sessionId: sessionId,
           targetMessage: targetMessage,
@@ -110,22 +133,34 @@ class LedgerStage {
         return;
       }
 
-      // Resolve the Studio cleaner slot (fail-explicit).
+      // Resolve the LLM config. When the caller provides a pre-resolved
+      // config (e.g. the cleaner stage passes its own resolved config so
+      // the ledger inherits the same model without re-resolving), use it
+      // directly. Otherwise resolve from the Studio cleaner slot.
       final AuxApiConfig ledgerConfig;
-      try {
-        ledgerConfig = await StudioSlotResolver(ctx.ref).resolve(
-          apiConfigId: studioCleanerApiConfigId,
-          errorLabel: 'studio-ledger',
-          modelOverride: pipeline.cleaner.postCleanerModel,
-        );
-      } catch (e) {
-        debugPrint('[StudioLedger] slot resolution failed: $e');
-        await _recordDiag(
-          sessionId: sessionId,
-          targetMessage: targetMessage,
-          reason: 'skipped, slot resolution failed: $e',
-        );
-        return;
+      if (resolvedConfig != null) {
+        ledgerConfig = resolvedConfig;
+      } else {
+        try {
+          await ctx.ref.read(apiListProvider.future);
+          final apiConfigs =
+              ctx.ref.read(apiListProvider).value ?? const <ApiConfig>[];
+          ledgerConfig = StudioSlotResolver.resolve(
+            apiConfigs: apiConfigs,
+            apiConfigId: studioCleanerApiConfigId,
+            fallback: ctx.ref.read(activeApiConfigProvider),
+            errorLabel: 'studio-ledger',
+            modelOverride: pipeline.cleaner.postCleanerModel,
+          );
+        } catch (e) {
+          debugPrint('[StudioLedger] slot resolution failed: $e');
+          await _recordDiag(
+            sessionId: sessionId,
+            targetMessage: targetMessage,
+            reason: 'skipped, slot resolution failed: $e',
+          );
+          return;
+        }
       }
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
@@ -139,6 +174,21 @@ class LedgerStage {
       }
 
       final service = ctx.ref.read(studioLedgerServiceProvider);
+
+      // Build MacroContext for resolving preset-block macros.
+      final character = ctx.ref.read(characterByIdProvider(ctx.charId));
+      final ledgerMacroCtx = MacroContext(
+        charName: character?.name ?? '',
+        charDescription: character?.description,
+        charScenario: character?.scenario,
+        charPersonality: character?.personality,
+        charMesExample: character?.mesExample,
+        userName: 'User',
+        macroName: character?.macroName,
+        charId: ctx.charId,
+        sessionId: sessionId,
+      );
+
       final result = await service.run(
         sessionId: sessionId,
         settings: pipeline,
@@ -149,8 +199,9 @@ class LedgerStage {
         swipeId: targetMessage.swipeId,
         agentSwipeId: targetMessage.agentSwipeId,
         forceEnabled: true,
-        isStillCurrent: () =>
-            ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId),
+        isStillCurrent: isCurrent,
+        ledgerBlocks: studioPreset?.blocks ?? const [],
+        macroCtx: ledgerMacroCtx,
       );
 
       await _recordDiag(
