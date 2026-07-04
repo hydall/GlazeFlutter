@@ -642,7 +642,7 @@ class StreamGenerationService {
   }
 
   static void _log(String message) {
-    debugPrint('[StudioGen] ');
+    debugPrint('[StudioGen] $message');
   }
 
   String _resolvedTrackerModel(ApiConfig apiConfig) {

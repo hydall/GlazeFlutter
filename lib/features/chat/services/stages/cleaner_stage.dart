@@ -10,6 +10,7 @@ import '../../../../core/llm/macro_engine.dart';
 import '../../../../core/llm/prompt_builder.dart' show PromptPayload;
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/llm/tokenizer.dart';
+import '../../../../core/llm/cleaner/audit_prompt_builder.dart' show AuditResult;
 import '../../../../core/models/agent_operation_record.dart';
 import '../../../../core/models/api_config.dart';
 import '../../../../core/models/character.dart';
@@ -361,8 +362,11 @@ class CleanerStage {
     // Pass 0: Character/World Auditor (diagnostic, optional). Runs only when
     // characterCheckEnabled AND promptPayload is available (exact generation
     // snapshot). Returns null on failure → cleaner runs without audit notes.
+    // When the cleaner_audit preset block is present, the auditor also acts
+    // as Beauty Shard: it sees the actual text and assigns speaker colors.
     List<String>? auditIssues;
-    Future<List<String>?>? auditFuture;
+    Map<String, dynamic>? auditBeauty;
+    Future<AuditResult>? auditFuture;
     int? auditStartedAt;
     if (factCheckEnabled) {
       final auditPayload = promptPayload;
@@ -387,12 +391,14 @@ class CleanerStage {
             settings: pipeline,
             config: cleanerConfig,
             cancelToken: _auditCancelToken,
+            cleanerBlocks: cleanerBlocks,
+            beautyState: beautyState,
           )
           .catchError((Object e) {
             debugPrint(
               '[PostCleaner] audit failed session=$sessionId error=$e',
             );
-            return null;
+            return const AuditResult(issues: null);
           });
     }
 
@@ -453,7 +459,9 @@ class CleanerStage {
     // degrades gracefully to `null` notes.
     if (auditFuture != null) {
       try {
-        auditIssues = await auditFuture;
+        final auditResult = await auditFuture;
+        auditIssues = auditResult.issues;
+        auditBeauty = auditResult.beauty;
         _factChecker.record(
           sessionId: sessionId,
           messageId: targetMessage.id,
@@ -463,7 +471,8 @@ class CleanerStage {
         );
         debugPrint(
           '[PostCleaner] audit session=$sessionId '
-          'issues=${auditIssues?.length ?? "null(timeout/failed)"}',
+          'issues=${auditIssues?.length ?? "null(timeout/failed)"} '
+          'beauty=${auditBeauty != null ? "assigned" : "none"}',
         );
       } catch (e) {
         debugPrint('[PostCleaner] audit await error=$e');
@@ -491,6 +500,14 @@ class CleanerStage {
         factCheckEnabled: true,
       );
     }
+    // When audit returned beauty assignments, use them as the beauty brief
+    // instead of the pre-gen Beauty Shard brief (which ran before seeing
+    // the actual text). The audit-based brief is more accurate because it
+    // sees the actual speakers in the response.
+    final effectiveBeautyBrief = auditBeauty != null
+        ? 'Speaker colors: ${auditBeauty['speakers'] ?? <String, dynamic>{}}\n'
+            'Thought colors: ${auditBeauty['thoughts'] ?? <String, dynamic>{}}'
+        : beautyBrief;
     final result = await cleanerService.runCleaner(
       sessionId: sessionId,
       settings: pipeline,
@@ -500,7 +517,7 @@ class CleanerStage {
       recentMessages: recentMessages,
       auditIssues: auditIssues,
       cancelToken: _cleanerCancelToken,
-      beautyBrief: beautyBrief,
+      beautyBrief: effectiveBeautyBrief,
       beautyState: beautyState,
       cleanerBlocks: cleanerBlocks,
       macroCtx: macroCtx,
