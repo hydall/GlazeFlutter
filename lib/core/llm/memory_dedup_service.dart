@@ -57,16 +57,12 @@ class MemoryDedupService {
   final ApiConfig? Function() _activeApiConfig;
 
   MemoryDedupService({
-    required AuxLlmClient llm,
-    required EmbeddingRepo embeddingRepo,
-    required MemoryBookRepo bookRepo,
-    required Future<List<ApiConfig>> Function() loadApiConfigs,
-    required ApiConfig? Function() activeApiConfig,
-  })  : _llm = llm,
-        _embeddingRepo = embeddingRepo,
-        _bookRepo = bookRepo,
-        _loadApiConfigs = loadApiConfigs,
-        _activeApiConfig = activeApiConfig;
+    required this._llm,
+    required this._embeddingRepo,
+    required this._bookRepo,
+    required this._loadApiConfigs,
+    required this._activeApiConfig,
+  });
 
   /// Run the dedup pass on the memory book for [sessionId].
   ///

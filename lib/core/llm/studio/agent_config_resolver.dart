@@ -25,14 +25,11 @@ class AgentConfigResolver {
   final Future<String> Function(String sessionId) _readRunApiConfigId;
 
   AgentConfigResolver({
-    required Future<List<ApiConfig>> Function() loadApiConfigs,
-    required ApiConfig? Function() readActiveApiConfig,
-    required PipelineSettings Function() readPipelineSettings,
-    required Future<String> Function(String sessionId) readRunApiConfigId,
-  })  : _loadApiConfigs = loadApiConfigs,
-        _readActiveApiConfig = readActiveApiConfig,
-        _readPipelineSettings = readPipelineSettings,
-        _readRunApiConfigId = readRunApiConfigId;
+    required this._loadApiConfigs,
+    required this._readActiveApiConfig,
+    required this._readPipelineSettings,
+    required this._readRunApiConfigId,
+  });
 
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,

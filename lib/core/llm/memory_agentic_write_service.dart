@@ -35,14 +35,11 @@ class MemoryAgenticWriteService {
   );
 
   MemoryAgenticWriteService({
-    required AuxLlmClient llm,
-    required MemoryBookRepo bookRepo,
-    required TrackerRepo trackerRepo,
-    required TrackerSnapshotRepo snapshotRepo,
-  })  : _llm = llm,
-        _bookRepo = bookRepo,
-        _trackerRepo = trackerRepo,
-        _snapshotRepo = snapshotRepo;
+    required this._llm,
+    required this._bookRepo,
+    required this._trackerRepo,
+    required this._snapshotRepo,
+  });
 
   /// Run the agentic write-loop after a turn is finalized.
   ///

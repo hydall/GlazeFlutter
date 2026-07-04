@@ -33,10 +33,9 @@ class AgentRunner {
   );
 
   AgentRunner({
-    required AgentConfigResolver configResolver,
-    required PipelineSettings Function() readPipelineSettings,
-  })  : _configResolver = configResolver,
-        _readPipelineSettings = readPipelineSettings;
+    required this._configResolver,
+    required this._readPipelineSettings,
+  });
 
   /// Run a single agent against the LLM. Streaming is driven by
   /// [onFinalResponseUpdate] / [onIntermediateUpdate]; the returned

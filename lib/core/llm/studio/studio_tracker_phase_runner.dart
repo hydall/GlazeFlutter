@@ -59,24 +59,16 @@ class StudioTrackerPhaseRunner {
   final void Function(String message) _log;
 
   StudioTrackerPhaseRunner({
-    required StudioPresetRepo presetRepo,
-    required TrackerBatcher batcher,
-    required StudioBriefCache briefCache,
-    required StudioBriefParser briefParser,
-    required StudioBatchCoordinator batchCoordinator,
-    required StudioAgentExecutor executor,
-    required StudioTrackerResultMapper resultMapper,
-    required PipelineSettings Function() readPipelineSettings,
-    required void Function(String message) log,
-  })  : _presetRepo = presetRepo,
-        _batcher = batcher,
-        _briefCache = briefCache,
-        _briefParser = briefParser,
-        _batchCoordinator = batchCoordinator,
-        _executor = executor,
-        _resultMapper = resultMapper,
-        _readPipelineSettings = readPipelineSettings,
-        _log = log;
+    required this._presetRepo,
+    required this._batcher,
+    required this._briefCache,
+    required this._briefParser,
+    required this._batchCoordinator,
+    required this._executor,
+    required this._resultMapper,
+    required this._readPipelineSettings,
+    required this._log,
+  });
   /// Resolves the DB Studio preset for [config]. Returns the preset or an
   /// error string if no preset is found.
   Future<({StudioPreset? preset, String? error})> resolvePreset(

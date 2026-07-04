@@ -95,15 +95,11 @@ class StudioLedgerService {
   final VisibleLedgerStore _ledgerStore;
 
   StudioLedgerService({
-    required AuxLlmClient llm,
-    required TrackerRepo trackerRepo,
-    required MemoryBookRepo bookRepo,
-    required TrackerSnapshotRepo snapshotRepo,
-  })  : _llm = llm,
-        _trackerRepo = trackerRepo,
-        _bookRepo = bookRepo,
-        _snapshotRepo = snapshotRepo,
-        _parser = const StudioLedgerExportParser(),
+    required this._llm,
+    required this._trackerRepo,
+    required this._bookRepo,
+    required this._snapshotRepo,
+  })  : _parser = const StudioLedgerExportParser(),
         _promptBuilder = const StudioLedgerPrompt(),
         _opApplier = const LedgerOpApplier(),
         _factWriter = const DurableFactWriter(),

@@ -43,14 +43,11 @@ class PostCleanerService {
   final void Function() _invalidateChatHistory;
 
   PostCleanerService({
-    required AuxLlmClient llm,
-    required ChatRepo chatRepo,
-    required TrackerSnapshotRepo snapshotRepo,
-    required void Function() invalidateChatHistory,
-  })  : _llm = llm,
-        _chatRepo = chatRepo,
-        _snapshotRepo = snapshotRepo,
-        _invalidateChatHistory = invalidateChatHistory;
+    required this._llm,
+    required this._chatRepo,
+    required this._snapshotRepo,
+    required this._invalidateChatHistory,
+  });
 
   /// Run the POST-cleaner on the last assistant message.
   ///
