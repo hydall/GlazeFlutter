@@ -19,7 +19,6 @@ import '../../../core/llm/memory_injection_service.dart'
 import '../../../core/llm/studio_ledger_service.dart';
 import '../../../core/llm/studio_slot_resolver.dart';
 import '../../../core/llm/lorebook_providers.dart' show embeddingConfigProvider;
-import '../../../core/models/api_config.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/services/generation_notification_service.dart';
@@ -29,7 +28,6 @@ import '../../../core/utils/time_helpers.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../cloud_sync/sync_provider.dart' show notifySyncMessageGenerated;
 import '../../extensions/services/extension_post_gen_service.dart';
-import '../../settings/api_list_provider.dart';
 import '../../chat_history/chat_history_provider.dart';
 import '../abort_handler.dart';
 import '../chat_generation_service.dart';
@@ -61,9 +59,11 @@ class GenerationOutcome {
 ///   2. handle regen rollback if the service's regenTargetId does not match
 ///   3. handle restoration rollback if `abortHandler.restorationMessage` is set
 ///   4. clear `restorationMessage` and chat image `imgGenCancelToken`
-///   5. kick off [ChatGenerationService.processImageTags]
-///   6. kick off [ChatGenerationService.processExtensions]
-///   7. notify sync, fire foreground notification preview
+///   5. sync + notification (immediate)
+///   6. post-cleaner (Studio ON: fact-checker + rewrite + ext blocks + ledger)
+///   7. image tags (after cleaner on canonical text, or immediate if Studio off)
+///   8. write-loop (Studio ON: after cleaner on canonical text)
+///   9. embed + auto-create drafts (parallel fire-and-forget)
 ///
 /// This class is a thin orchestrator — no business logic, no state ownership.
 /// Constructor-injected dependencies: the [Ref] (for repo/provider reads),
@@ -201,71 +201,14 @@ class GenerationPipeline {
       if (regenOutcome != null) {
         // INV-EG1: extensions + image tags must run after successful regen too.
         if (regenSucceeded && result.session != null) {
-          await _runPostTextSide(
+          await _runPostGenTasks(
             result: result.copyWith(isGenerating: false, regenTargetId: null),
             genId: genId,
             character: character,
             service: service,
             notifService: notifService,
+            regenTargetId: regenTargetId,
           );
-          if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
-            return null;
-          }
-
-          await _autoCreateMemoryDrafts(result.session);
-
-          // Keep the foreground service alive for post-gen tasks.
-          await notifService.onPostGenStarted();
-          final postGenFutures = <Future<void>>[];
-
-          // Stage 3.5: embed raw chat-message chunks (fire-and-forget),
-          // mirroring the normal-send path.
-          postGenFutures.add(
-            _embedChatMessages(
-              sessionId: result.session!.id,
-              messages: result.session!.messages,
-              genId: genId,
-            ),
-          );
-
-          // Stage 2: Agentic write-loop — MUST run on regen too. On regen,
-          // SavedMessageWriter resets agentSwipes to a single fresh 'final'
-          // (agentSwipeId=0), so the write-loop anchors the new snapshot to
-          // (messageId, swipeId, 0). The stale snapshot from the previous
-          // swipe is excluded via getLatestCommittedExcludingMessage using
-          // the real regenTargetId (NOT the null-ized copy passed to
-          // _runPostTextSide above).
-          postGenFutures.add(
-            _runAgenticWriteLoop(
-              sessionId: result.session!.id,
-              messages: result.session!.messages,
-              genId: genId,
-              regenTargetId: regenTargetId,
-            ),
-          );
-
-          // POST-cleaner on regen: run after successful regen. The cleaner
-          // rewrites the regenerated assistant message, preserving the
-          // original as a swipe.
-          postGenFutures.add(
-            _runPostCleaner(
-              sessionId: result.session!.id,
-              messages: result.session!.messages,
-              genId: genId,
-              promptPayload: result.promptPayload,
-              character: character,
-            ),
-          );
-
-          // Stage 5: Studio Ledger — always launched from
-          // _executeAndApplyCleaner (cleaner is always-on now).
-
-          unawaited(
-            Future.wait(postGenFutures).whenComplete(() {
-              notifService.onPostGenFinished();
-            }),
-          );
-          // No need for the raw-text fallback path.
         }
         return regenOutcome;
       }
@@ -301,87 +244,17 @@ class GenerationPipeline {
       }
       abortHandler.clearStreaming();
 
-      // Post-text side: image tags, extensions, sync, notification.
-      await _runPostTextSide(
+      // Post-generation tasks: sync + notification, then (in order)
+      // cleaner → image tags → write-loop, with embed + auto-drafts in
+      // parallel. See PLAN_STUDIO_PIPELINE_SEPARATION.md §New Pipeline Order.
+      await _runPostGenTasks(
         result: result,
         genId: genId,
         character: character,
         service: service,
         notifService: notifService,
+        regenTargetId: regenTargetId,
       );
-
-      if (!abortHandler.isCurrentGen(genId)) {
-        return null;
-      }
-
-      await _autoCreateMemoryDrafts(result.session);
-
-      // Stage 2: Agentic write-loop — runs on both normal send AND regen.
-      // On regen, SavedMessageWriter resets agentSwipes to a single fresh
-      // 'final' (agentSwipeId=0), so the write-loop anchors the new snapshot
-      // to (messageId, swipeId, 0) — mirroring Marinara's retry-agents which
-      // re-run the full agent cycle per swipe. The stale snapshot from the
-      // previous swipe is excluded via getLatestCommittedExcludingMessage.
-      if (result.session != null) {
-        // Keep the foreground service alive for post-gen tasks so the OS
-        // doesn't suspend the app (screen off) while write-loop, cleaner,
-        // ledger, or extension blocks are still running.
-        await notifService.onPostGenStarted();
-        final postGenFutures = <Future<void>>[];
-
-        // Stage 3.5: Embed raw chat-message chunks (fire-and-forget,
-        // best-effort insurance for the lossy MemoryBook compression).
-        // Pairs with Stage 1's MessageRecallService cosine search to give
-        // the LLM access to verbatim original chunks from earlier in the
-        // chat. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3).
-        postGenFutures.add(
-          _embedChatMessages(
-            sessionId: result.session!.id,
-            messages: result.session!.messages,
-            genId: genId,
-          ),
-        );
-
-        // Stage 2: Agentic write-loop — runs on both normal send AND regen.
-        // On regen, SavedMessageWriter resets agentSwipes to a single fresh
-        // 'final' (agentSwipeId=0), so the write-loop anchors the new snapshot
-        // to (messageId, swipeId, 0) — mirroring Marinara's retry-agents which
-        // re-run the full agent cycle per swipe. The stale snapshot from the
-        // previous swipe is excluded via getLatestCommittedExcludingMessage.
-        postGenFutures.add(
-          _runAgenticWriteLoop(
-            sessionId: result.session!.id,
-            messages: result.session!.messages,
-            genId: genId,
-            regenTargetId: regenTargetId,
-          ),
-        );
-
-        // Stage 4: POST-cleaner — silently rewrite the final assistant
-        // message to remove clichés/repetition. Fire-and-forget; falls back
-        // to original text on error. Original preserved as a swipe.
-        postGenFutures.add(
-          _runPostCleaner(
-            sessionId: result.session!.id,
-            messages: result.session!.messages,
-            genId: genId,
-            promptPayload: result.promptPayload,
-            character: character,
-          ),
-        );
-
-        // Stage 5: Studio Ledger — always launched from
-        // _executeAndApplyCleaner (cleaner is always-on now).
-        // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Pipeline Placement.
-
-        // Track all post-gen tasks and release the foreground hold when
-        // they all complete (success or failure).
-        unawaited(
-          Future.wait(postGenFutures).whenComplete(() {
-            notifService.onPostGenFinished();
-          }),
-        );
-      }
 
       return GenerationOutcome(
         state: getState().value ?? result,
@@ -496,63 +369,161 @@ class GenerationPipeline {
     );
   }
 
-  Future<void> _runPostTextSide({
+  /// Post-generation task scheduler. Replaces the old inline postGenFutures
+  /// blocks in both the normal and regen paths. Implements the pipeline order
+  /// from PLAN_STUDIO_PIPELINE_SEPARATION.md §New Pipeline Order:
+  ///
+  /// Studio ON:
+  ///   3. Sync + notification (immediate, awaited)
+  ///   4. Post-cleaner (fact-checker + rewrite + ext blocks + ledger)
+  ///   5. Image tags — on canonical text, after cleaner
+  ///   6. Write-loop — on canonical text, after cleaner
+  ///   8. Embed (parallel fire-and-forget)
+  ///   9. Auto-create drafts (parallel fire-and-forget)
+  ///
+  /// Studio OFF:
+  ///   2. Sync + notification (immediate, awaited)
+  ///   3. Image tags (immediate)
+  ///   4. Ext blocks (immediate, agentSwipeId=-1)
+  ///   5. Embed (parallel fire-and-forget)
+  ///   6. Auto-create drafts (parallel fire-and-forget)
+  Future<void> _runPostGenTasks({
     required ChatState result,
     required int genId,
     required Character? character,
     required ChatGenerationService service,
     required GenerationNotificationService notifService,
+    String? regenTargetId,
   }) async {
-    final imgCancelToken = CancelToken();
-    abortHandler.imgGenCancelToken = imgCancelToken;
+    if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+    if (result.session == null) return;
 
+    final sessionId = result.session!.id;
+
+    // Stage 3 / 2: Sync + notification (immediate, awaited).
+    await _runSyncAndNotification(
+      result: result,
+      genId: genId,
+      character: character,
+      notifService: notifService,
+    );
+    if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
+    // Keep the foreground service alive for post-gen tasks so the OS
+    // doesn't suspend the app (screen off) while cleaner, write-loop,
+    // ledger, or extension blocks are still running.
+    await notifService.onPostGenStarted();
+
+    // Determine Studio status to branch the post-gen sequence.
+    var studioEnabled = false;
     try {
-      await service.processImageTags(
-        currentState: result,
-        charId: charId,
-        cancelToken: imgCancelToken,
-        onStateUpdate: (s) {
-          if (abortHandler.isCurrentGen(genId)) setState(AsyncData(s));
-        },
-      );
-      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+      final studioConfig = await ref
+          .read(studioConfigRepoProvider)
+          .getBySessionId(sessionId);
+      studioEnabled = studioConfig?.enabled == true;
     } catch (e) {
       debugPrint(
-        '[GenerationPipeline] processImageTags failed (continuing): $e',
+        '[GenerationPipeline] StudioConfig load failed session=$sessionId: $e',
       );
-    } finally {
-      if (identical(abortHandler.imgGenCancelToken, imgCancelToken)) {
-        abortHandler.imgGenCancelToken = null;
-      }
     }
+    if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
-    final lastMessage = result.session?.messages.lastOrNull;
-    final hasGenerationError = lastMessage?.isError == true;
+    final postGenFutures = <Future<void>>[];
 
-    if (character != null && result.session != null && !hasGenerationError) {
-      // Defer extension blocks when the POST-cleaner is enabled: the
-      // cleaner rewrites the trailing assistant message into a new blue
-      // sub-swipe, and ext blocks must bind to that cleaned swipe (see
-      // _executeAndApplyCleaner's wasCleaned branch). Launching them here
-      // on the raw streamed text would create blocks bound to the 'final'
-      // swipe that the user never sees after the cleaner runs. When the
-      // cleaner is disabled (or skipped/failed), _runPostCleaner's else
-      // branch launches extensions with agentSwipeId=-1 (legacy binding
-      // to the top-level swipe, identical to the pre-patch behavior).
-      final bookRepo = ref.read(memoryBookRepoProvider);
-      final book = await bookRepo.getBySessionId(result.session!.id);
-      // Cleaner is always-on. Extensions are deferred to the cleaner pipeline
-      // when a memory book exists; otherwise they run immediately.
-      if (book == null) {
-        await service.processExtensions(
-          charId: charId,
-          session: result.session!,
-          character: character,
+    // Stage 8 / 5: Embed raw chat-message chunks (parallel fire-and-forget,
+    // independent of cleaner — operates on raw message text, not the cleaned
+    // swipe). Pairs with MessageRecallService cosine search.
+    postGenFutures.add(
+      _embedChatMessages(
+        sessionId: sessionId,
+        messages: result.session!.messages,
+        genId: genId,
+      ),
+    );
+
+    // Stage 9 / 6: Auto-create memory drafts (parallel fire-and-forget,
+    // no LLM — just a planner over the MemoryBook).
+    postGenFutures.add(_autoCreateMemoryDrafts(result.session));
+
+    if (studioEnabled) {
+      // Studio ON: cleaner runs first, then image tags + write-loop on
+      // canonical text. Ledger is launched from inside _executeAndApplyCleaner.
+      // Ext blocks are launched from inside _executeAndApplyCleaner's 5
+      // branches (bound to the swipe the user will see).
+      final cleanerTask = _runPostCleaner(
+        sessionId: sessionId,
+        messages: result.session!.messages,
+        genId: genId,
+        promptPayload: result.promptPayload,
+        character: character,
+      );
+      postGenFutures.add(cleanerTask);
+
+      // Stage 5: Image tags — on canonical text, after cleaner. Re-read
+      // the session from DB so image tags bind to the cleaned swipe.
+      postGenFutures.add(
+        cleanerTask.then((_) async {
+          if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+          final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
+          if (refreshed == null) return;
+          await _runImageTagsStage(
+            result: ChatState(session: refreshed),
+            genId: genId,
+            service: service,
+          );
+        }),
+      );
+
+      // Stage 6: Write-loop — on canonical text, after cleaner. Returns
+      // early internally if Studio is disabled (defensive — studioEnabled
+      // is checked above, but _runAgenticWriteLoop re-checks too).
+      postGenFutures.add(
+        cleanerTask.then((_) => _runAgenticWriteLoop(
+              sessionId: sessionId,
+              messages: result.session!.messages,
+              genId: genId,
+              regenTargetId: regenTargetId,
+            )),
+      );
+    } else {
+      // Studio OFF: image tags + ext blocks run immediately (no cleaner).
+      postGenFutures.add(
+        _runImageTagsStage(
+          result: result,
+          genId: genId,
+          service: service,
+        ),
+      );
+      if (character != null) {
+        postGenFutures.add(
+          _launchExtensionsForSwipe(
+            session: result.session!,
+            character: character,
+            agentSwipeId: -1,
+          ),
         );
-        if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
       }
     }
 
+    // Track all post-gen tasks and release the foreground hold when
+    // they all complete (success or failure).
+    unawaited(
+      Future.wait(postGenFutures).whenComplete(() {
+        notifService.onPostGenFinished();
+      }),
+    );
+  }
+
+  /// Stage 3: Sync + notification. Runs immediately after generation
+  /// completes (or after regen rollback handling). Extracted from the old
+  /// `_runPostTextSide` so that image tags and extension blocks can be
+  /// scheduled independently (and after the cleaner when Studio is on).
+  Future<void> _runSyncAndNotification({
+    required ChatState result,
+    required int genId,
+    required Character? character,
+    required GenerationNotificationService notifService,
+  }) async {
     if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
     notifySyncMessageGenerated(ref);
@@ -568,6 +539,38 @@ class GenerationPipeline {
           : null,
       avatarPath: character?.avatarPath,
     );
+  }
+
+  /// Stage 5: Image tags. Operates on the canonical text — when Studio is
+  /// enabled this runs AFTER the cleaner completes (re-reads the session
+  /// from DB so image tags bind to the cleaned swipe, not the raw stream).
+  /// When Studio is off, this runs immediately after sync.
+  Future<void> _runImageTagsStage({
+    required ChatState result,
+    required int genId,
+    required ChatGenerationService service,
+  }) async {
+    final imgCancelToken = CancelToken();
+    abortHandler.imgGenCancelToken = imgCancelToken;
+
+    try {
+      await service.processImageTags(
+        currentState: result,
+        charId: charId,
+        cancelToken: imgCancelToken,
+        onStateUpdate: (s) {
+          if (abortHandler.isCurrentGen(genId)) setState(AsyncData(s));
+        },
+      );
+    } catch (e) {
+      debugPrint(
+        '[GenerationPipeline] processImageTags failed (continuing): $e',
+      );
+    } finally {
+      if (identical(abortHandler.imgGenCancelToken, imgCancelToken)) {
+        abortHandler.imgGenCancelToken = null;
+      }
+    }
   }
 
   /// Launch extension blocks for the trailing assistant message, bound to
@@ -1577,11 +1580,11 @@ class GenerationPipeline {
         cleanedAgentSwipeId =
             postFallbackMsg?.agentSwipeId ?? cleanedAgentSwipeId;
       }
-      // Launch extension blocks bound to the NEW cleaned swipe. Extensions
-      // were deferred in _runPostTextSide when the cleaner is enabled, so
-      // this is the only place they start for the cleaned path. Blocks are
-      // bound to (messageId, swipeId, agentSwipeId=cleanedAgentSwipeId) so
-      // switching to a different blue swipe shows its own blocks. See
+      // Launch extension blocks bound to the NEW cleaned swipe. For Studio
+      // ON sessions, ext blocks are launched exclusively from here (the
+      // cleaner owns the canonical swipe). Blocks are bound to
+      // (messageId, swipeId, agentSwipeId=cleanedAgentSwipeId) so switching
+      // to a different blue swipe shows its own blocks. See
       // docs/plans/PLAN_EXT_BLOCKS_AFTER_CLEANER.md.
       if (character != null && ref.mounted) {
         final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
@@ -1631,8 +1634,9 @@ class GenerationPipeline {
       }
       // Cleaner skipped → no cleaned swipe exists. Launch extensions bound
       // to the original 'final' swipe (agentSwipeId=-1 = legacy binding).
-      // These blocks were deferred in _runPostTextSide and must still run
-      // even though the cleaner produced no output.
+      // For Studio ON sessions, ext blocks are launched exclusively from
+      // the cleaner pipeline, so they must still run even when the cleaner
+      // produced no output.
       if (character != null && ref.mounted) {
         final refreshed = await ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {

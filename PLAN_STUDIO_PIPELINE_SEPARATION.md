@@ -58,6 +58,14 @@
 
 ## Implementation Phases (all in one PR)
 
+### Commit breakdown
+1. `0445cade` — Phase 1+2: split PipelineSettings into 5 nested sub-models + delete dead dialogs
+2. `06e7358d` — Phase 3a: StudioSlotResolver + idle timeout + service signature changes + remove routing fields
+3. `06e7358d` — Phase 3a: StudioSlotResolver + idle timeout + service signature changes + remove routing fields
+4. *(pending)* — Phase 4: reorder pipeline stages ✅
+5. *(pending)* — Phase 5: decompose generation_pipeline.dart
+6. *(pending)* — Phase 6: UI updates
+
 ### Phase 1: Delete dead code + fields ✅ DONE
 - [x] Delete `post_building_menu_dialog.dart` (1835 lines)
 - [x] Delete `studio_menu_dialog.dart` (1464 lines)
@@ -93,24 +101,43 @@
 - **Key design decision:** Nested sub-models within a single `PipelineSettings` root + single provider + single SP key, instead of 5 separate providers/SP keys. Rationale: `aux*` fields are shared across cleaner/ledger/write-loop, and `aux_llm_client.dart` resolver methods take `PipelineSettings` as a parameter — splitting into 5 providers would require multi-provider reads in single functions and signature changes. The nested approach achieves the same god-object decomposition with mechanical access-path changes only.
 - **Migration:** Old flat `pipelineSettings` SP JSON → each sub-model's `fromJson` picks up its own fields from the flat map (unknown keys ignored by freezed). Nested JSON persisted back on first load. Idempotent.
 
-### Phase 3: Model routing — 4 slots + fail explicitly
-- [ ] Create `StudioSlotResolver` — `resolveSlot()` throws if empty/not found
-- [ ] Remove `resolveConfigForCleaner`, `resolveConfigForAudit`, `resolveConfigForConsolidation`, `resolveConfigForMemoryGeneration` from `AuxLlmClient`
-- [ ] `PostCleanerService.runCleaner` — accept `AuxApiConfig` directly, remove `studioApiConfigId`/`useStudioApiConfigSlot` params
-- [ ] `PostCleanerService.runCharacterAudit` — same
-- [ ] `StudioLedgerService` — resolve via `StudioSlotResolver` (cleaner slot)
-- [ ] `MemoryAgenticWriteService` — resolve via `StudioSlotResolver` (cleaner slot), gate by `studioConfig.enabled`
-- [ ] `MemoryDraftGenerator` — resolve via `MemoryBookApiSettings`
-- [ ] `MemoryDedupService` — resolve via `MemoryBookApiSettings`
-- [ ] Remove non-Studio cleaner branch from `generation_pipeline.dart`
-- [ ] Remove unconditional `StudioConfigRepo` read for non-Studio sessions
+### Phase 3: Model routing — 4 slots + fail explicitly + idle timeout ✅ DONE
+- [x] Create `StudioSlotResolver` (`lib/core/llm/studio_slot_resolver.dart`) — `resolve()` throws if empty/not found; `resolveFromList()` static helper for widget contexts
+- [x] Remove `resolveConfig`, `resolveConfigForCleaner`, `resolveConfigForAudit`, `resolveConfigForConsolidation`, `resolveConfigForMemoryGeneration`, `resolveStudioSlotConfig` from `AuxLlmClient` (all 6 resolvers removed)
+- [x] `PostCleanerService.runCleaner` — accept `AuxApiConfig` directly, remove `studioApiConfigId`/`useStudioApiConfigSlot` params
+- [x] `PostCleanerService.runCharacterAudit` — same
+- [x] `StudioLedgerService.run` — accept `AuxApiConfig` directly, remove `studioCleanerApiConfigId` param
+- [x] `MemoryAgenticWriteService.runWriteLoop` — accept `AuxApiConfig` directly, gated by `studioConfig.enabled` in caller
+- [x] `MemoryDedupService` — inline `_resolveMemoryBookConfig` (resolves `memoryBookApi.*` directly)
+- [x] `MemoryDraftGenerator` — already resolved `memoryBookApi.*` inline (Phase 2)
+- [x] Remove non-Studio cleaner branch from `generation_pipeline.dart` — cleaner gated by `studioConfig.enabled`
+- [x] Write-loop gated by `studioConfig.enabled` in `_runAgenticWriteLoop` + `tracker_memory_recovery_service.dart`
+- [x] `agentic_operations_log_dialog.dart` + `ledger_diagnostics_sheet.dart` — use `StudioSlotResolver.resolveFromList`
+- [x] `studio_build_llm_client.dart` — simplified config resolution (removed `aux*` fallback, uses active chat config only)
+- [x] Remove routing fields from sub-models: `postCleanerSource/Endpoint/ApiKey` from `CleanerSettings`; `auxSource/Model/Endpoint/ApiKey` + `consolidationSource/Model/Endpoint/ApiKey` from `MemoryPipelineSettings`
+- [x] `build_runner` + `flutter analyze` (0 errors) + `flutter test` (1499/1499 passed)
+- **Idle timeout for aux LLM calls** (bonus — mirrors `AgentStreamRunner` pattern):
+  - New `IdleTimeoutGuard` helper (`lib/core/llm/idle_timeout_guard.dart`)
+  - `AuxLlmClient._callOnce` + `_callStream`: idle timeout instead of hard total timeout
+  - Timer cancelled on first chunk (text OR reasoning delta) — long generation never cut off
+  - 60s default = first-byte timeout, not total generation timeout
+  - Affects: cleaner, fact-checker, ledger, write-loop, dedup
 
-### Phase 4: Reorder pipeline stages
-- [ ] Move `_runPostCleaner` before image tags and ext blocks
-- [ ] Extract image tags from `_runPostTextSide` into separate stage after cleaner
-- [ ] Ext blocks always after cleaner (remove `book == null` condition in PostTextSide)
-- [ ] Move `_runAgenticWriteLoop` after cleaner
-- [ ] Keep embed + auto-create drafts as parallel fire-and-forget
+### Phase 4: Reorder pipeline stages ✅ DONE
+- [x] Split `_runPostTextSide` into `_runSyncAndNotification` (sync + notification only) + `_runImageTagsStage` (image tags only)
+- [x] Remove `book == null` ext blocks branch from old `_runPostTextSide` — ext blocks now always launch from cleaner (Studio ON) or explicit `_launchExtensionsForSwipe` call (Studio OFF)
+- [x] Create `_runPostGenTasks` shared method (replaces inline postGenFutures in both normal + regen paths)
+- [x] Move `_runPostCleaner` before image tags — cleaner runs first, then image tags chained via `cleanerTask.then(...)`
+- [x] Image tags re-read session from DB after cleaner completes → operates on canonical text (cleaned swipe)
+- [x] Move `_runAgenticWriteLoop` after cleaner — chained via `cleanerTask.then(...)` (on canonical text)
+- [x] Keep embed + auto-create drafts as parallel fire-and-forget (independent of cleaner)
+- [x] Studio ON: cleaner → image tags + write-loop (chained); embed + drafts (parallel); ledger + ext blocks launched from inside cleaner
+- [x] Studio OFF: image tags + ext blocks run immediately (no cleaner); embed + drafts (parallel)
+- [x] Delete dead `ChatGenerationService.processExtensions` (no callers remain — `_launchExtensionsForSwipe` calls `extensionPostGenServiceProvider` directly)
+- [x] Remove unused imports: `api_config.dart`, `api_list_provider.dart`
+- [x] Update class docstring with new pipeline order
+- [x] Update stale comments in `_executeAndApplyCleaner` (removed `_runPostTextSide` references)
+- [x] `flutter analyze` (0 errors) + `flutter test` (1499/1499 passed)
 
 ### Phase 5: Decompose generation_pipeline.dart
 - [ ] Create `PipelineStage` abstract interface + `StageContext`
