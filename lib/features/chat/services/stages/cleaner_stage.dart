@@ -506,8 +506,13 @@ class CleanerStage {
       macroCtx: macroCtx,
       onCleanedChunk: (text) {
         if (!abortCheck()) return;
+        var displayText = parseBeautyState(text).cleanedText;
+        final markerIdx = displayText.indexOf('<glaze_beauty_state');
+        if (markerIdx >= 0) {
+          displayText = displayText.substring(0, markerIdx).trimRight();
+        }
         ctx.ref.read(streamingStateProvider(ctx.charId).notifier).state =
-            StreamingState(text: text, targetMessageId: targetMessage.id);
+            StreamingState(text: displayText, targetMessageId: targetMessage.id);
         if (text.length >= _lastStreamedText.length) {
           _lastStreamedText = text;
         }
