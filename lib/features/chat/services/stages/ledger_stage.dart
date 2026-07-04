@@ -48,8 +48,14 @@ class LedgerStage {
     required int genId,
     required String finalAssistantText,
     required ChatMessage targetMessage,
+    bool isManualRerun = false,
+    AuxApiConfig? resolvedConfig,
   }) async {
     if (!ctx.ref.mounted) return;
+
+    final isCurrent = isManualRerun
+        ? () => ctx.ref.mounted
+        : () => ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId);
 
     try {
       final pipeline = ctx.ref.read(pipelineSettingsProvider);
@@ -103,7 +109,7 @@ class LedgerStage {
         );
         return;
       }
-      if (!ctx.abortHandler.isCurrentGen(genId)) {
+      if (!isCurrent()) {
         await _recordDiag(
           sessionId: sessionId,
           targetMessage: targetMessage,
@@ -112,27 +118,34 @@ class LedgerStage {
         return;
       }
 
-      // Resolve the Studio cleaner slot (fail-explicit).
+      // Resolve the LLM config. When the caller provides a pre-resolved
+      // config (e.g. the cleaner stage passes its own resolved config so
+      // the ledger inherits the same model without re-resolving), use it
+      // directly. Otherwise resolve from the Studio cleaner slot.
       final AuxApiConfig ledgerConfig;
-      try {
-        await ctx.ref.read(apiListProvider.future);
-        final apiConfigs =
-            ctx.ref.read(apiListProvider).value ?? const <ApiConfig>[];
-        ledgerConfig = StudioSlotResolver.resolve(
-          apiConfigs: apiConfigs,
-          apiConfigId: studioCleanerApiConfigId,
-          fallback: ctx.ref.read(activeApiConfigProvider),
-          errorLabel: 'studio-ledger',
-          modelOverride: pipeline.cleaner.postCleanerModel,
-        );
-      } catch (e) {
-        debugPrint('[StudioLedger] slot resolution failed: $e');
-        await _recordDiag(
-          sessionId: sessionId,
-          targetMessage: targetMessage,
-          reason: 'skipped, slot resolution failed: $e',
-        );
-        return;
+      if (resolvedConfig != null) {
+        ledgerConfig = resolvedConfig;
+      } else {
+        try {
+          await ctx.ref.read(apiListProvider.future);
+          final apiConfigs =
+              ctx.ref.read(apiListProvider).value ?? const <ApiConfig>[];
+          ledgerConfig = StudioSlotResolver.resolve(
+            apiConfigs: apiConfigs,
+            apiConfigId: studioCleanerApiConfigId,
+            fallback: ctx.ref.read(activeApiConfigProvider),
+            errorLabel: 'studio-ledger',
+            modelOverride: pipeline.cleaner.postCleanerModel,
+          );
+        } catch (e) {
+          debugPrint('[StudioLedger] slot resolution failed: $e');
+          await _recordDiag(
+            sessionId: sessionId,
+            targetMessage: targetMessage,
+            reason: 'skipped, slot resolution failed: $e',
+          );
+          return;
+        }
       }
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
@@ -156,8 +169,7 @@ class LedgerStage {
         swipeId: targetMessage.swipeId,
         agentSwipeId: targetMessage.agentSwipeId,
         forceEnabled: true,
-        isStillCurrent: () =>
-            ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId),
+        isStillCurrent: isCurrent,
       );
 
       await _recordDiag(

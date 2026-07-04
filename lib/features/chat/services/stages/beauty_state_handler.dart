@@ -15,11 +15,13 @@ class BeautyStateHandler {
   /// beauty brief is found.
   static String extractBeautyBrief(ChatMessage message) {
     for (final output in message.studioOutputs) {
-      final agentId = (output['agentId'] ?? '').toString().toLowerCase();
+      // Field names match studioOutputsToJson() in studio_stream_interceptor.dart:
+      // {'id': agentId, 'name': agentName, 'content': brief}.
+      final agentId = (output['id'] ?? '').toString().toLowerCase();
       final agentName =
-          (output['agentName'] ?? '').toString().toLowerCase();
-      final brief = (output['brief'] ?? '').toString();
-      if ((agentId == 'beauty' ||
+          (output['name'] ?? '').toString().toLowerCase();
+      final brief = (output['content'] ?? '').toString();
+      if ((agentId.contains('beauty') ||
           agentName.contains('beauty shard') ||
           agentName.contains('beauty')) &&
           brief.trim().isNotEmpty) {

@@ -749,8 +749,10 @@ class CleanerStage {
     }
 
     // Stage 7: Studio Ledger — fired here so it always receives the final
-    // canonical text.
-    if (ctx.ref.mounted && !isManualRerun) {
+    // canonical text. Runs on both auto and manual rerun — on manual rerun
+    // the ledger inherits the cleaner's resolved config so it doesn't
+    // re-resolve (and doesn't fall back to the active chat API).
+    if (ctx.ref.mounted) {
       final ledgerText = selectStudioLedgerTextAfterCleaner(
         cleanerStatus: result.status,
         wasCleaned: result.wasCleaned,
@@ -769,6 +771,8 @@ class CleanerStage {
           genId: genId,
           finalAssistantText: ledgerText,
           targetMessage: ledgerTargetMessage ?? targetMessage,
+          isManualRerun: isManualRerun,
+          resolvedConfig: cleanerConfig,
         ),
       );
     }

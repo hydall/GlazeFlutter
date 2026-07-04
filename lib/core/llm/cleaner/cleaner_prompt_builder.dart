@@ -260,6 +260,14 @@ class CleanerPromptBuilder {
           'inner thoughts (in italics or marked as thought).',
         )
         ..writeln(
+          '- If the styling state has a `reserved.lumia_ooc` color, wrap the '
+          'text inside <lumiaooc>...</lumiaooc> blocks with '
+          '<font color="#HEX">text</font> using that color. If the text is '
+          'already wrapped in a <font> tag, leave it unchanged. Do not alter '
+          'the <lumiaooc> wrapper, the text content, or the block position — '
+          'only add the color tag if missing.',
+        )
+        ..writeln(
           '- At the very END of your cleaned response, after all narrative '
           'and HTML, emit exactly one marker with the updated state:',
         )
