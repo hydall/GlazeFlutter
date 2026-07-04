@@ -4,7 +4,10 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/db/app_db.dart';
+import 'package:glaze_flutter/core/models/cleaner_settings.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/memory_book_api_settings.dart';
+import 'package:glaze_flutter/core/models/memory_pipeline_settings.dart';
 import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 import 'package:glaze_flutter/core/state/db_provider.dart';
 import 'package:glaze_flutter/core/state/memory_settings_provider.dart';
@@ -55,9 +58,10 @@ void main() {
           .read(pipelineSettingsProvider.notifier)
           .save(
             const PipelineSettings(
-              postCleanerEnabled: true,
-              postCleanerBannedWords: 'suddenly, palpable',
-              auxModel: 'aux-mini',
+              cleaner: CleanerSettings(
+                postCleanerBannedWords: 'suddenly, palpable',
+              ),
+              memoryPipeline: MemoryPipelineSettings(auxTimeoutMs: 30000),
             ),
           );
       container1.dispose();
@@ -69,112 +73,15 @@ void main() {
 
       // Before load(), state is defaults (proves load() is what restores it).
       expect(
-        container2.read(pipelineSettingsProvider).postCleanerEnabled,
-        true,
+        container2.read(pipelineSettingsProvider).cleaner.postCleanerBannedWords,
+        '',
       );
 
       await container2.read(pipelineSettingsProvider.notifier).load();
 
       final loaded = container2.read(pipelineSettingsProvider);
-      expect(loaded.postCleanerEnabled, true);
-      expect(loaded.postCleanerBannedWords, 'suddenly, palpable');
-      expect(loaded.auxModel, 'aux-mini');
-    },
-  );
-
-  test(
-    'pipeline settings v1 migration upgrades old false defaults to true',
-    () async {
-      // Simulate an existing install that persisted the old @Default(false)
-      // values before the Post Building Menu was removed and the defaults
-      // changed to true. The migration should upgrade those fields to true
-      // while leaving user-chosen values and non-migrated fields untouched.
-      SharedPreferences.setMockInitialValues({
-        'pipelineSettings': jsonEncode({
-          'postCleanerEnabled': false,
-          'postCleanerCharacterCheckEnabled': false,
-          'studioLedgerEnabled': false,
-          'agenticWriteEnabled': false,
-          'agenticWriteBlockNextGen': false,
-          'agentWriteApprovalRequired': false,
-          'memoryDedupAutoEnabled': false,
-          'postCleanerDisableReasoning': false,
-          'auxModel': 'aux-mini',
-        }),
-      });
-
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      await container.read(pipelineSettingsProvider.notifier).load();
-
-      final loaded = container.read(pipelineSettingsProvider);
-      expect(loaded.postCleanerEnabled, isTrue);
-      expect(loaded.postCleanerCharacterCheckEnabled, isTrue);
-      expect(loaded.studioLedgerEnabled, isTrue);
-      expect(loaded.agenticWriteEnabled, isTrue);
-      expect(loaded.agenticWriteBlockNextGen, isTrue);
-      expect(loaded.auxModel, 'aux-mini');
-
-      // Not migrated — stay false.
-      expect(loaded.agentWriteApprovalRequired, isFalse);
-      expect(loaded.memoryDedupAutoEnabled, isFalse);
-      expect(loaded.postCleanerDisableReasoning, isFalse);
-    },
-  );
-
-  test(
-    'pipeline settings v1 migration is idempotent — rerun load() keeps true',
-    () async {
-      // After the first load() ran the migration and persisted the upgraded
-      // JSON + schema version, a second load() must not flip anything back.
-      SharedPreferences.setMockInitialValues({
-        'pipelineSettings': jsonEncode({
-          'postCleanerEnabled': true,
-          'studioLedgerEnabled': true,
-          'agenticWriteEnabled': true,
-          'agenticWriteBlockNextGen': true,
-          'postCleanerCharacterCheckEnabled': true,
-        }),
-        'pipelineSettingsSchemaVersion': 1,
-      });
-
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      await container.read(pipelineSettingsProvider.notifier).load();
-
-      final loaded = container.read(pipelineSettingsProvider);
-      expect(loaded.postCleanerEnabled, isTrue);
-      expect(loaded.studioLedgerEnabled, isTrue);
-      expect(loaded.agenticWriteEnabled, isTrue);
-      expect(loaded.agenticWriteBlockNextGen, isTrue);
-      expect(loaded.postCleanerCharacterCheckEnabled, isTrue);
-    },
-  );
-
-  test(
-    'pipeline settings v1 migration preserves user-chosen true values',
-    () async {
-      // If the user had explicitly set a field to true before the migration,
-      // it must remain true (no regression).
-      SharedPreferences.setMockInitialValues({
-        'pipelineSettings': jsonEncode({
-          'postCleanerEnabled': true,
-          'studioLedgerEnabled': true,
-          'agenticWriteBlockNextGen': false,
-        }),
-      });
-
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      await container.read(pipelineSettingsProvider.notifier).load();
-
-      final loaded = container.read(pipelineSettingsProvider);
-      expect(loaded.postCleanerEnabled, isTrue);
-      expect(loaded.studioLedgerEnabled, isTrue);
-      expect(loaded.agenticWriteBlockNextGen, isTrue);
+      expect(loaded.cleaner.postCleanerBannedWords, 'suddenly, palpable');
+      expect(loaded.memoryPipeline.auxTimeoutMs, 30000);
     },
   );
 
@@ -229,11 +136,15 @@ void main() {
         .read(pipelineSettingsProvider.notifier)
         .save(
           const PipelineSettings(
-            auxSource: 'custom',
-            auxModel: 'aux-mini',
-            auxEndpoint: 'https://aux.example/v1',
-            auxApiKey: 'aux-key',
-            auxTimeoutMs: 4500,
+            memoryPipeline: MemoryPipelineSettings(
+              auxTimeoutMs: 4500,
+            ),
+            memoryBookApi: MemoryBookApiSettings(
+              generationSource: 'custom',
+              generationModel: 'mem-mini',
+              generationEndpoint: 'https://mem.example/v1',
+              generationApiKey: 'mem-key',
+            ),
           ),
         );
 
@@ -259,11 +170,13 @@ void main() {
     expect(memoryJson['queryRecentTurns'], 4);
     expect(memoryJson['queryMaxChars'], 750);
 
-    expect(pipelineJson['auxSource'], 'custom');
-    expect(pipelineJson['auxModel'], 'aux-mini');
-    expect(pipelineJson['auxEndpoint'], 'https://aux.example/v1');
-    expect(pipelineJson['auxApiKey'], 'aux-key');
-    expect(pipelineJson['auxTimeoutMs'], 4500);
+    final pipelineMp = pipelineJson['memoryPipeline'] as Map<String, dynamic>;
+    expect(pipelineMp['auxTimeoutMs'], 4500);
+    final pipelineMb = pipelineJson['memoryBookApi'] as Map<String, dynamic>;
+    expect(pipelineMb['generationSource'], 'custom');
+    expect(pipelineMb['generationModel'], 'mem-mini');
+    expect(pipelineMb['generationEndpoint'], 'https://mem.example/v1');
+    expect(pipelineMb['generationApiKey'], 'mem-key');
   });
 
   test('new memory books inherit advanced selector tuning', () async {
@@ -296,7 +209,13 @@ void main() {
 
     await container
         .read(pipelineSettingsProvider.notifier)
-        .save(const PipelineSettings(auxModel: 'aux-mini', auxTimeoutMs: 4500));
+        .save(
+          const PipelineSettings(
+            memoryPipeline: MemoryPipelineSettings(
+              auxTimeoutMs: 4500,
+            ),
+          ),
+        );
 
     final repo = container.read(memoryBookRepoProvider);
     final book = await repo.ensureForSession('session_advanced');
@@ -317,8 +236,7 @@ void main() {
     // Pipeline settings are now a singleton global — the same instance is
     // returned by the StateNotifierProvider for every session.
     final pipeline = container.read(pipelineSettingsProvider);
-    expect(pipeline.auxModel, 'aux-mini');
-    expect(pipeline.auxTimeoutMs, 4500);
+    expect(pipeline.memoryPipeline.auxTimeoutMs, 4500);
   });
 
   test('memory book settings update persists selector inputs', () async {

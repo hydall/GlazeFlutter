@@ -137,7 +137,7 @@ class StudioAgentExecutor {
       try {
         final override = _ref
             .read(pipelineSettingsProvider)
-            .studioPostTrackerContextSize;
+            .studioAgent.studioPostTrackerContextSize;
         final effectiveAgent = override > 0
             ? agent.copyWith(contextSize: override)
             : agent;
@@ -266,7 +266,7 @@ class StudioAgentExecutor {
       isFinalResponse: true,
       finalContextOverride: _ref
           .read(pipelineSettingsProvider)
-          .studioFinalContextSize,
+          .studioAgent.studioFinalContextSize,
     );
     final runner = _ref.read(agentRunnerProvider);
     final result = await runner.runAgent(

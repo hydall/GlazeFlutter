@@ -12,24 +12,16 @@ import 'package:glaze_flutter/features/extensions/models/block_config.dart';
 import 'package:glaze_flutter/features/extensions/screens/preset_editor/block_edit_dialog.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Test 19: User InfBlocks are panel-visible but not injected by default when
-// Studio Canon is enabled.
-// Test 20: Enabling user InfBlock prompt injection under Studio Canon shows a
-// fullscreen warning.
+// Test 19: User InfBlocks are panel-visible but not injected by default.
+// Test 20: Enabling user InfBlock prompt injection always shows a fullscreen
+// warning (Studio Canon is always-on when Studio is enabled).
 // ─────────────────────────────────────────────────────────────────────────────
 
 void main() {
-  Future<ProviderContainer> setupContainer({
-    required bool studioLedgerEnabled,
-  }) async {
+  Future<ProviderContainer> setupContainer() async {
     SharedPreferences.setMockInitialValues({});
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      'pipelineSettings',
-      '{"studioLedgerEnabled":$studioLedgerEnabled}',
-    );
     final container = ProviderContainer(
       overrides: [appDbProvider.overrideWithValue(db)],
     );
@@ -55,11 +47,9 @@ void main() {
     });
   });
 
-  group('Test 20 — Fullscreen warning under Studio Canon', () {
-    testWidgets('shows fullscreen warning when enabling inject while Studio '
-        'Ledger is enabled', (tester) async {
-      final container = await setupContainer(studioLedgerEnabled: true);
-      await container.read(pipelineSettingsProvider.notifier).load();
+  group('Test 20 — Fullscreen warning when enabling inject', () {
+    testWidgets('shows fullscreen warning when enabling inject', (tester) async {
+      final container = await setupContainer();
 
       final block = const BlockConfig(
         id: 'b1',
@@ -78,14 +68,12 @@ void main() {
       );
       await tester.pump();
 
-      // Find the inject switch by its title text (the localized key).
       final injectSwitchFinder = find.ancestor(
         of: find.text('block_inject_title'),
         matching: find.byType(SwitchListTile),
       );
       expect(injectSwitchFinder, findsOneWidget);
 
-      // Scroll until the inject switch is visible, then tap.
       await tester.scrollUntilVisible(
         injectSwitchFinder,
         100,
@@ -94,50 +82,9 @@ void main() {
       await tester.tap(injectSwitchFinder);
       await tester.pumpAndSettle();
 
-      // The fullscreen warning should be shown.
       expect(find.text('Not recommended with Studio Canon'), findsOneWidget);
       expect(find.text('Continue anyway'), findsOneWidget);
-      // The warning wraps a Scaffold (full-screen).
       expect(find.byType(Scaffold), findsWidgets);
-    });
-
-    testWidgets('no warning when Studio Ledger is disabled', (tester) async {
-      final container = await setupContainer(studioLedgerEnabled: false);
-      await container.read(pipelineSettingsProvider.notifier).load();
-
-      final block = const BlockConfig(
-        id: 'b1',
-        name: 'Test',
-        type: BlockType.infoblock,
-      );
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: MaterialApp(
-            home: Scaffold(
-              body: BlockEditDialog(block: block, onSave: (_) {}),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      final injectSwitchFinder = find.ancestor(
-        of: find.text('block_inject_title'),
-        matching: find.byType(SwitchListTile),
-      );
-      expect(injectSwitchFinder, findsOneWidget);
-
-      await tester.scrollUntilVisible(
-        injectSwitchFinder,
-        100,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(injectSwitchFinder);
-      await tester.pumpAndSettle();
-
-      // No warning should be shown.
-      expect(find.text('Not recommended with Studio Canon'), findsNothing);
     });
   });
 }

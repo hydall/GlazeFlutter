@@ -33,16 +33,16 @@ class MemoryDraftGenerator {
       prompt = '$prompt\n\n$historyText';
     }
 
-    final isCustom = pipeline.generationSource == 'custom';
+    final isCustom = pipeline.memoryBookApi.generationSource == 'custom';
     String endpoint;
     String apiKey;
     String model;
     String protocol;
 
     if (isCustom) {
-      endpoint = pipeline.generationEndpoint;
-      apiKey = pipeline.generationApiKey;
-      model = pipeline.generationModel;
+      endpoint = pipeline.memoryBookApi.generationEndpoint;
+      apiKey = pipeline.memoryBookApi.generationApiKey;
+      model = pipeline.memoryBookApi.generationModel;
       protocol = LlmProtocol.openai;
     } else {
       await _ref.read(apiListProvider.future);
@@ -52,8 +52,8 @@ class MemoryDraftGenerator {
       }
       endpoint = chatConfig.endpoint;
       apiKey = chatConfig.apiKey;
-      model = pipeline.generationModel.isNotEmpty
-          ? pipeline.generationModel
+      model = pipeline.memoryBookApi.generationModel.isNotEmpty
+          ? pipeline.memoryBookApi.generationModel
           : chatConfig.model;
       protocol = chatConfig.protocol;
     }
@@ -63,10 +63,10 @@ class MemoryDraftGenerator {
       throw Exception('API not configured for memory generation');
     }
 
-    final maxTokens = (pipeline.generationMaxTokens != null && pipeline.generationMaxTokens! > 0)
-        ? pipeline.generationMaxTokens!
+    final maxTokens = (pipeline.memoryBookApi.generationMaxTokens != null && pipeline.memoryBookApi.generationMaxTokens! > 0)
+        ? pipeline.memoryBookApi.generationMaxTokens!
         : 2000;
-    final temperature = pipeline.generationTemperature ?? 0.4;
+    final temperature = pipeline.memoryBookApi.generationTemperature ?? 0.4;
 
     final completer = Completer<String>();
     final transport = pickChatTransport(protocol);

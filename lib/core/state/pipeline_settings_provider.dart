@@ -3,17 +3,23 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../models/cleaner_settings.dart';
+import '../models/ledger_settings.dart';
+import '../models/memory_book_api_settings.dart';
+import '../models/memory_pipeline_settings.dart';
 import '../models/pipeline_settings.dart';
+import '../models/studio_agent_settings.dart';
 import 'shared_prefs_provider.dart';
 
 /// Global pipeline LLM settings, persisted in SharedPreferences under the
 /// 'pipelineSettings' key. Loaded once at startup. This is a singleton global —
 /// the same [PipelineSettings] instance applies to every chat session.
 ///
-/// Previously a per-session Drift row (`pipeline_settings_rows`) merged with a
-/// [PipelineGlobalSettings] subset; that table was dropped in schema v52 and
-/// the two freezed classes were merged into this single [PipelineSettings]
-/// shape.
+/// The JSON format changed from flat (all fields at the root level) to nested
+/// (fields grouped under `studioAgent`, `cleaner`, `ledger`, `memoryPipeline`,
+/// `memoryBookApi` sub-objects). The [load] method handles both formats
+/// idempotently — flat JSON is migrated to nested on first load and persisted
+/// back so subsequent loads read the nested format directly.
 final pipelineSettingsProvider =
     StateNotifierProvider<PipelineSettingsNotifier, PipelineSettings>(
       (ref) => PipelineSettingsNotifier(ref),
@@ -23,32 +29,19 @@ class PipelineSettingsNotifier extends StateNotifier<PipelineSettings> {
   final Ref _ref;
   PipelineSettingsNotifier(this._ref) : super(const PipelineSettings());
 
-  /// Current schema version for pipeline settings migration. Bump when
-  /// adding a new migration step in [_applyMigrations].
-  static const int kCurrentSchemaVersion = 1;
-
-  /// SharedPreferences key storing the schema version integer.
-  static const String _kVersionKey = 'pipelineSettingsSchemaVersion';
-
   Future<void> load() async {
     final prefs = await _ref.read(sharedPreferencesProvider.future);
     final raw = prefs.getString('pipelineSettings');
     if (raw != null) {
       try {
         final json = jsonDecode(raw) as Map<String, dynamic>;
-        final migrated = _migrateLegacySidecarJson(json);
-        final version = prefs.getInt(_kVersionKey) ?? 0;
-        if (version < kCurrentSchemaVersion) {
-          _applyMigrations(migrated, fromVersion: version);
-          await prefs.setInt(_kVersionKey, kCurrentSchemaVersion);
-          state = PipelineSettings.fromJson(migrated);
-          await prefs.setString('pipelineSettings', jsonEncode(state.toJson()));
-        } else {
-          state = PipelineSettings.fromJson(migrated);
+        state = _parseSettingsJson(json);
+        // Persist back if migration occurred (flat → nested).
+        final encoded = jsonEncode(state.toJson());
+        if (encoded != raw) {
+          await prefs.setString('pipelineSettings', encoded);
         }
       } catch (_) {}
-    } else {
-      await prefs.setInt(_kVersionKey, kCurrentSchemaVersion);
     }
   }
 
@@ -58,6 +51,39 @@ class PipelineSettingsNotifier extends StateNotifier<PipelineSettings> {
     await prefs.setString('pipelineSettings', jsonEncode(settings.toJson()));
   }
 
+  /// Parses the SharedPreferences JSON into [PipelineSettings], handling both
+  /// the new nested format and the legacy flat format.
+  ///
+  /// **Nested format** (current): JSON has `studioAgent`, `cleaner`, `ledger`,
+  /// `memoryPipeline`, `memoryBookApi` sub-objects — parsed directly via
+  /// [PipelineSettings.fromJson].
+  ///
+  /// **Flat format** (legacy): All fields at the root level. Each sub-model's
+  /// `fromJson` picks up its own fields from the flat map and uses `@Default`
+  /// values for the rest — extra keys are silently ignored. The legacy
+  /// `sidecar*` → `aux*` rename is applied first.
+  PipelineSettings _parseSettingsJson(Map<String, dynamic> json) {
+    // Already nested — parse directly.
+    if (json.containsKey('studioAgent')) {
+      return PipelineSettings.fromJson(json);
+    }
+
+    // Legacy flat format — migrate sidecar → aux, then partition into
+    // sub-models. Each sub-model's fromJson reads only its own fields from
+    // the flat map; unknown keys are ignored by freezed's generated decoder.
+    final migrated = _migrateLegacySidecarJson(json);
+    return PipelineSettings(
+      studioAgent: StudioAgentSettings.fromJson(migrated),
+      cleaner: CleanerSettings.fromJson(migrated),
+      ledger: LedgerSettings.fromJson(migrated),
+      memoryPipeline: MemoryPipelineSettings.fromJson(migrated),
+      memoryBookApi: MemoryBookApiSettings.fromJson(migrated),
+    );
+  }
+
+  /// Migrates very old installs that use `sidecar*` keys to the current
+  /// `aux*` naming. Idempotent — uses `putIfAbsent` so already-migrated JSON
+  /// is untouched.
   Map<String, dynamic> _migrateLegacySidecarJson(Map<String, dynamic> json) {
     final migrated = Map<String, dynamic>.from(json);
     migrated.putIfAbsent('auxSource', () => migrated['sidecarSource']);
@@ -66,42 +92,5 @@ class PipelineSettingsNotifier extends StateNotifier<PipelineSettings> {
     migrated.putIfAbsent('auxApiKey', () => migrated['sidecarApiKey']);
     migrated.putIfAbsent('auxTimeoutMs', () => migrated['sidecarTimeoutMs']);
     return migrated;
-  }
-
-  /// Applies migrations from [fromVersion] up to [kCurrentSchemaVersion].
-  /// Each migration step mutates [json] in place.
-  void _applyMigrations(Map<String, dynamic> json, {required int fromVersion}) {
-    if (fromVersion < 1) {
-      _migrateV1(json);
-    }
-  }
-
-  /// Migration v0 → v1: several PipelineSettings bool fields changed their
-  /// @Default from false to true because the Post Building Menu (the only UI
-  /// that exposed their toggles) was removed. Existing installs that still
-  /// have the old `false` value persisted in SharedPreferences are upgraded
-  /// to `true` so the pipeline runs with the new intended defaults.
-  ///
-  /// Only upgrades fields that are explicitly `false` in the JSON — if the
-  /// user had set them to `true`, they stay `true`. Fields absent from the
-  /// JSON are not touched here; `fromJson` will use the new `@Default(true)`.
-  ///
-  /// Not upgraded (kept at user's choice / old default):
-  /// - agentWriteApprovalRequired (stays false)
-  /// - memoryDedupAutoEnabled (stays false, manual Dedup only)
-  /// - postCleanerDisableReasoning (disable flag, stays false)
-  void _migrateV1(Map<String, dynamic> json) {
-    const fieldsToUpgrade = <String>[
-      'postCleanerEnabled',
-      'postCleanerCharacterCheckEnabled',
-      'studioLedgerEnabled',
-      'agenticWriteEnabled',
-      'agenticWriteBlockNextGen',
-    ];
-    for (final field in fieldsToUpgrade) {
-      if (json[field] == false) {
-        json[field] = true;
-      }
-    }
   }
 }

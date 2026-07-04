@@ -349,7 +349,7 @@ sentinel anchor has `messageId = ''`, so it is never matched.
 
 ### INV-TS3: Read path is snapshot-first with `tracker_rows` fallback ✅ ENFORCED (Phase 3)
 
-The 3 read call sites (`generation_pipeline.dart`, `studio_menu_dialog.dart`,
+The 3 read call sites (`prompt_payload_builder.dart`, `write_loop_stage.dart`,
 `agentic_operations_log_dialog.dart`) call `getLatestCommitted` /
 `getLatest` first and fall back to `trackerRepoProvider.getBySessionId`
 when no snapshot exists. This keeps legacy sessions (pre-Phase-1, not yet

@@ -104,7 +104,7 @@ Rules:
       prompt: prompt,
       maxTokens: 1000,
       temperature: 0.2,
-      timeoutMs: settings.auxTimeoutMs,
+      timeoutMs: settings.memoryPipeline.auxTimeoutMs,
       cancelToken: cancelToken,
     );
     if (!outcome.isOk || outcome.text == null) {
@@ -131,7 +131,7 @@ Rules:
         prompt: retryPrompt,
         maxTokens: 1000,
         temperature: 0.2,
-        timeoutMs: settings.auxTimeoutMs,
+        timeoutMs: settings.memoryPipeline.auxTimeoutMs,
         cancelToken: cancelToken,
       );
       if (retryOutcome.isOk && retryOutcome.text != null) {

@@ -50,20 +50,18 @@ class PostCleanerService {
   Future<PostCleanerResult> runCleaner({
     required String sessionId,
     required PipelineSettings settings,
+    required AuxApiConfig config,
     required String assistantText,
     List<String> broadcastBlocks = const [],
     List<ChatMessage> recentMessages = const [],
     List<String>? auditIssues,
     CancelToken? cancelToken,
     void Function(String accumulatedText)? onCleanedChunk,
-    String studioApiConfigId = '',
-    bool useStudioApiConfigSlot = false,
     String beautyBrief = '',
     String? beautyState,
   }) async {
-    // Post-cleaner is always-on (hardcoded in backend). The postCleanerEnabled
-    // toggle was removed from the UI — the cleaner always runs when Studio is
-    // enabled. The old early-return on !settings.postCleanerEnabled is gone.
+    // Post-cleaner is always-on (Studio-only). Continuity checks and
+    // character/world audits always run.
 
     // Strip any hidden reasoning (`<think>…</think>` / `<thinking>…`) that the
     // generator left inside the saved message content. If it reaches the
@@ -83,16 +81,6 @@ class PostCleanerService {
     }
 
     try {
-      final config = useStudioApiConfigSlot || studioApiConfigId.isNotEmpty
-          ? await _llm.resolveStudioSlotConfig(
-              studioApiConfigId,
-              errorLabel: 'post-cleaner',
-              modelOverride: settings.postCleanerModel,
-            )
-          : await _llm.resolveConfigForCleaner(
-              settings,
-              errorLabel: 'post-cleaner',
-            );
       if (token.isCancelled) {
         return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
       }
@@ -301,16 +289,16 @@ class PostCleanerService {
       broadcastBlocks: broadcastBlocks,
       recentMessages: recentMessages,
       auditIssues: auditIssues,
-      maxCharsPerMessage: settings.postCleanerMaxCharsPerMessage,
-      bannedWords: settings.postCleanerBannedWords,
-      avoidInstructions: settings.postCleanerAvoidInstructions,
-      styleInstructions: settings.postCleanerStyleInstructions,
+      maxCharsPerMessage: settings.cleaner.postCleanerMaxCharsPerMessage,
+      bannedWords: settings.cleaner.postCleanerBannedWords,
+      avoidInstructions: settings.cleaner.postCleanerAvoidInstructions,
+      styleInstructions: settings.cleaner.postCleanerStyleInstructions,
       beautyBrief: beautyBrief,
       beautyState: beautyState,
     );
 
-    final effectiveMaxTokens = settings.postCleanerMaxTokens > 0
-        ? settings.postCleanerMaxTokens
+    final effectiveMaxTokens = settings.cleaner.postCleanerMaxTokens > 0
+        ? settings.cleaner.postCleanerMaxTokens
         : (assistantText.length ~/ 2).clamp(1000, 16000);
 
     // When the caller passes an onCleanedChunk callback, stream the rewrite
@@ -321,17 +309,17 @@ class PostCleanerService {
         config: config,
         prompt: prompt,
         maxTokens: effectiveMaxTokens,
-        temperature: settings.postCleanerTemperature,
+        temperature: settings.cleaner.postCleanerTemperature,
         timeoutMs: _llm.resolveCleanerTimeout(settings),
         cancelToken: cancelToken,
         onChunk: onCleanedChunk,
-        requestReasoning: settings.postCleanerDisableReasoning
+        requestReasoning: settings.cleaner.postCleanerDisableReasoning
             ? false
-            : settings.postCleanerRequestReasoning,
-        omitReasoning: settings.postCleanerDisableReasoning
+            : settings.cleaner.postCleanerRequestReasoning,
+        omitReasoning: settings.cleaner.postCleanerDisableReasoning
             ? true
-            : settings.postCleanerOmitReasoning,
-        omitReasoningEffort: settings.postCleanerOmitReasoningEffort,
+            : settings.cleaner.postCleanerOmitReasoning,
+        omitReasoningEffort: settings.cleaner.postCleanerOmitReasoningEffort,
       );
     }
 
@@ -339,16 +327,16 @@ class PostCleanerService {
       config: config,
       prompt: prompt,
       maxTokens: effectiveMaxTokens,
-      temperature: settings.postCleanerTemperature,
+      temperature: settings.cleaner.postCleanerTemperature,
       timeoutMs: _llm.resolveCleanerTimeout(settings),
       cancelToken: cancelToken,
-      requestReasoning: settings.postCleanerDisableReasoning
+      requestReasoning: settings.cleaner.postCleanerDisableReasoning
           ? false
-          : settings.postCleanerRequestReasoning,
-      omitReasoning: settings.postCleanerDisableReasoning
+          : settings.cleaner.postCleanerRequestReasoning,
+      omitReasoning: settings.cleaner.postCleanerDisableReasoning
           ? true
-          : settings.postCleanerOmitReasoning,
-      omitReasoningEffort: settings.postCleanerOmitReasoningEffort,
+          : settings.cleaner.postCleanerOmitReasoning,
+      omitReasoningEffort: settings.cleaner.postCleanerOmitReasoningEffort,
     );
   }
 
@@ -752,9 +740,8 @@ class PostCleanerService {
     String? entitiesContent,
     List<ChatMessage> recentMessages = const [],
     required PipelineSettings settings,
+    required AuxApiConfig config,
     CancelToken? cancelToken,
-    String studioApiConfigId = '',
-    bool useStudioApiConfigSlot = false,
   }) async {
     if (assistantText.trim().isEmpty) return const [];
 
@@ -762,16 +749,6 @@ class PostCleanerService {
     if (token.isCancelled) return null;
 
     try {
-      final config = useStudioApiConfigSlot || studioApiConfigId.isNotEmpty
-          ? await _llm.resolveStudioSlotConfig(
-              studioApiConfigId,
-              errorLabel: 'post-cleaner-audit',
-              modelOverride: settings.postCleanerModel,
-            )
-          : await _llm.resolveConfigForAudit(
-              settings,
-              errorLabel: 'post-cleaner-audit',
-            );
       if (token.isCancelled) return null;
 
       final prompt = buildAuditPrompt(
@@ -784,7 +761,7 @@ class PostCleanerService {
         arcContent: arcContent,
         entitiesContent: entitiesContent,
         recentMessages: recentMessages,
-        maxCharsPerMessage: settings.postCleanerMaxCharsPerMessage,
+        maxCharsPerMessage: settings.cleaner.postCleanerMaxCharsPerMessage,
       );
 
       // Auditor: cheap, JSON-only, low temperature, small token budget.

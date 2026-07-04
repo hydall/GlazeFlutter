@@ -6,7 +6,9 @@ import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/llm/agent_runner.dart';
 import 'package:glaze_flutter/core/llm/studio_api_config_resolver.dart';
 import 'package:glaze_flutter/core/models/api_config.dart';
+import 'package:glaze_flutter/core/models/memory_book_api_settings.dart';
 import 'package:glaze_flutter/core/models/pipeline_settings.dart';
+import 'package:glaze_flutter/core/models/studio_agent_settings.dart';
 import 'package:glaze_flutter/core/models/studio_config.dart';
 import 'package:glaze_flutter/core/state/db_provider.dart';
 import 'package:glaze_flutter/features/settings/api_list_provider.dart';
@@ -209,7 +211,13 @@ void main() {
             );
         await container
             .read(pipelineSettingsProvider.notifier)
-            .save(const PipelineSettings(generationModel: 'memory-book-model'));
+            .save(
+              const PipelineSettings(
+                memoryBookApi: MemoryBookApiSettings(
+                  generationModel: 'memory-book-model',
+                ),
+              ),
+            );
 
         final resolved = await container
             .read(agentRunnerProvider)
@@ -270,8 +278,12 @@ void main() {
             .read(pipelineSettingsProvider.notifier)
             .save(
               const PipelineSettings(
-                generationModel: 'memory-book-model',
-                studioFinalModelOverride: 'studio-final-model',
+                memoryBookApi: MemoryBookApiSettings(
+                  generationModel: 'memory-book-model',
+                ),
+                studioAgent: StudioAgentSettings(
+                  studioFinalModelOverride: 'studio-final-model',
+                ),
               ),
             );
 

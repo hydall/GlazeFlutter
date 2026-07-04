@@ -18,8 +18,7 @@ import '../state/recovery_state_provider.dart';
 import '../services/tracker_memory_recovery_service.dart';
 import 'studio_preset_editor_sheet.dart';
 
-/// Studio Settings as a bottom sheet — replaces the full-screen
-/// [StudioSettingsScreen]. Single scrollable page.
+/// Studio Settings as a bottom sheet. Single scrollable page.
 ///
 /// Contents:
 /// - Studio enable/disable toggle
@@ -161,10 +160,14 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             label: 'Final Generator',
             description: 'Expensive — high-quality prose generation',
             emptyLabel: 'Use active chat model',
-            value: pipeline.studioFinalModelOverride,
+            value: pipeline.studioAgent.studioFinalModelOverride,
             apiConfigId: config.expensiveApiConfigId,
             onChanged: (model) => _savePipelineModel(
-              (p) => p.copyWith(studioFinalModelOverride: model),
+              (p) => p.copyWith(
+                studioAgent: p.studioAgent.copyWith(
+                  studioFinalModelOverride: model,
+                ),
+              ),
             ),
             onApiConfigChanged: (apiConfigId) =>
                 _save(config.copyWith(expensiveApiConfigId: apiConfigId)),
@@ -177,10 +180,14 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             label: 'Trackers',
             description: 'Cheap — compact JSON briefs, fast',
             emptyLabel: 'Use active chat model',
-            value: pipeline.studioTrackerModelOverride,
+            value: pipeline.studioAgent.studioTrackerModelOverride,
             apiConfigId: config.cheapApiConfigId,
             onChanged: (model) => _savePipelineModel(
-              (p) => p.copyWith(studioTrackerModelOverride: model),
+              (p) => p.copyWith(
+                studioAgent: p.studioAgent.copyWith(
+                  studioTrackerModelOverride: model,
+                ),
+              ),
             ),
             onApiConfigChanged: (apiConfigId) =>
                 _save(config.copyWith(cheapApiConfigId: apiConfigId)),
@@ -192,10 +199,14 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             label: 'Cleaner (Post-Processing)',
             description: 'Semi-expensive — prose rewrite + continuity audit',
             emptyLabel: 'Use tracker/chat model',
-            value: pipeline.postCleanerModel,
+            value: pipeline.cleaner.postCleanerModel,
             apiConfigId: config.cleanerApiConfigId,
             onChanged: (model) =>
-                _savePipelineModel((p) => p.copyWith(postCleanerModel: model)),
+                _savePipelineModel(
+                  (p) => p.copyWith(
+                    cleaner: p.cleaner.copyWith(postCleanerModel: model),
+                  ),
+                ),
             onApiConfigChanged: (apiConfigId) =>
                 _save(config.copyWith(cleanerApiConfigId: apiConfigId)),
             onSettings: () => _openSlotSettings(slot: StudioSlot.cleaner),
@@ -371,9 +382,13 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   label: Text('$value'),
-                  selected: pipeline.studioPostTrackerContextSize == value,
+                  selected: pipeline.studioAgent.studioPostTrackerContextSize == value,
                   onSelected: (_) => _savePipelineModel(
-                    (p) => p.copyWith(studioPostTrackerContextSize: value),
+                    (p) => p.copyWith(
+                    studioAgent: p.studioAgent.copyWith(
+                      studioPostTrackerContextSize: value,
+                    ),
+                  ),
                   ),
                 ),
               ),
@@ -779,51 +794,57 @@ class StudioSlotSettings {
     switch (slot) {
       case StudioSlot.finalGenerator:
         return pipeline.copyWith(
-          studioFinalTemperature: temperature,
-          studioFinalTopP: topP,
-          studioFinalTopK: topK,
-          studioFinalFrequencyPenalty: frequencyPenalty,
-          studioFinalPresencePenalty: presencePenalty,
-          studioFinalRequestReasoning: requestReasoning,
-          studioFinalReasoningEffort: reasoningEffort,
-          studioFinalOmitTemperature: omitTemperature,
-          studioFinalOmitTopP: omitTopP,
-          studioFinalOmitReasoning: omitReasoning,
-          studioFinalOmitReasoningEffort: omitReasoningEffort,
-          studioFinalMaxTokens: maxTokens,
-          studioFinalTimeoutMs: timeoutMs,
+          studioAgent: pipeline.studioAgent.copyWith(
+            studioFinalTemperature: temperature,
+            studioFinalTopP: topP,
+            studioFinalTopK: topK,
+            studioFinalFrequencyPenalty: frequencyPenalty,
+            studioFinalPresencePenalty: presencePenalty,
+            studioFinalRequestReasoning: requestReasoning,
+            studioFinalReasoningEffort: reasoningEffort,
+            studioFinalOmitTemperature: omitTemperature,
+            studioFinalOmitTopP: omitTopP,
+            studioFinalOmitReasoning: omitReasoning,
+            studioFinalOmitReasoningEffort: omitReasoningEffort,
+            studioFinalMaxTokens: maxTokens,
+            studioFinalTimeoutMs: timeoutMs,
+          ),
         );
       case StudioSlot.tracker:
         return pipeline.copyWith(
-          studioTrackerTemperature: temperature,
-          studioTrackerTopP: topP,
-          studioTrackerTopK: topK,
-          studioTrackerFrequencyPenalty: frequencyPenalty,
-          studioTrackerPresencePenalty: presencePenalty,
-          studioTrackerRequestReasoning: requestReasoning,
-          studioTrackerReasoningEffort: reasoningEffort,
-          studioTrackerOmitTemperature: omitTemperature,
-          studioTrackerOmitTopP: omitTopP,
-          studioTrackerOmitReasoning: omitReasoning,
-          studioTrackerOmitReasoningEffort: omitReasoningEffort,
-          studioTrackerMaxTokens: maxTokens,
-          studioTrackerTimeoutMs: timeoutMs,
+          studioAgent: pipeline.studioAgent.copyWith(
+            studioTrackerTemperature: temperature,
+            studioTrackerTopP: topP,
+            studioTrackerTopK: topK,
+            studioTrackerFrequencyPenalty: frequencyPenalty,
+            studioTrackerPresencePenalty: presencePenalty,
+            studioTrackerRequestReasoning: requestReasoning,
+            studioTrackerReasoningEffort: reasoningEffort,
+            studioTrackerOmitTemperature: omitTemperature,
+            studioTrackerOmitTopP: omitTopP,
+            studioTrackerOmitReasoning: omitReasoning,
+            studioTrackerOmitReasoningEffort: omitReasoningEffort,
+            studioTrackerMaxTokens: maxTokens,
+            studioTrackerTimeoutMs: timeoutMs,
+          ),
         );
       case StudioSlot.cleaner:
         return pipeline.copyWith(
-          postCleanerTemperature: temperature,
-          postCleanerTopP: topP,
-          postCleanerTopK: topK,
-          postCleanerFrequencyPenalty: frequencyPenalty,
-          postCleanerPresencePenalty: presencePenalty,
-          postCleanerRequestReasoning: requestReasoning,
-          postCleanerReasoningEffort: reasoningEffort,
-          postCleanerOmitTemperature: omitTemperature,
-          postCleanerOmitTopP: omitTopP,
-          postCleanerOmitReasoning: omitReasoning,
-          postCleanerOmitReasoningEffort: omitReasoningEffort,
-          postCleanerMaxTokens: maxTokens,
-          postCleanerTimeoutMs: timeoutMs,
+          cleaner: pipeline.cleaner.copyWith(
+            postCleanerTemperature: temperature,
+            postCleanerTopP: topP,
+            postCleanerTopK: topK,
+            postCleanerFrequencyPenalty: frequencyPenalty,
+            postCleanerPresencePenalty: presencePenalty,
+            postCleanerRequestReasoning: requestReasoning,
+            postCleanerReasoningEffort: reasoningEffort,
+            postCleanerOmitTemperature: omitTemperature,
+            postCleanerOmitTopP: omitTopP,
+            postCleanerOmitReasoning: omitReasoning,
+            postCleanerOmitReasoningEffort: omitReasoningEffort,
+            postCleanerMaxTokens: maxTokens,
+            postCleanerTimeoutMs: timeoutMs,
+          ),
         );
     }
   }
@@ -861,65 +882,65 @@ class _StudioSlotSettingsDialogState extends State<_StudioSlotSettingsDialog> {
     final p = widget.pipeline;
     switch (widget.slot) {
       case StudioSlot.finalGenerator:
-        _temperature = p.studioFinalTemperature;
-        _topP = p.studioFinalTopP;
-        _topK = p.studioFinalTopK;
-        _frequencyPenalty = p.studioFinalFrequencyPenalty;
-        _presencePenalty = p.studioFinalPresencePenalty;
-        _requestReasoning = p.studioFinalRequestReasoning;
-        _reasoningEffort = p.studioFinalReasoningEffort;
-        _omitTemperature = p.studioFinalOmitTemperature;
-        _omitTopP = p.studioFinalOmitTopP;
-        _omitReasoning = p.studioFinalOmitReasoning;
-        _omitReasoningEffort = p.studioFinalOmitReasoningEffort;
+        _temperature = p.studioAgent.studioFinalTemperature;
+        _topP = p.studioAgent.studioFinalTopP;
+        _topK = p.studioAgent.studioFinalTopK;
+        _frequencyPenalty = p.studioAgent.studioFinalFrequencyPenalty;
+        _presencePenalty = p.studioAgent.studioFinalPresencePenalty;
+        _requestReasoning = p.studioAgent.studioFinalRequestReasoning;
+        _reasoningEffort = p.studioAgent.studioFinalReasoningEffort;
+        _omitTemperature = p.studioAgent.studioFinalOmitTemperature;
+        _omitTopP = p.studioAgent.studioFinalOmitTopP;
+        _omitReasoning = p.studioAgent.studioFinalOmitReasoning;
+        _omitReasoningEffort = p.studioAgent.studioFinalOmitReasoningEffort;
         _maxTokensCtrl = TextEditingController(
-          text: p.studioFinalMaxTokens > 0 ? '${p.studioFinalMaxTokens}' : '',
+          text: p.studioAgent.studioFinalMaxTokens > 0 ? '${p.studioAgent.studioFinalMaxTokens}' : '',
         );
         _timeoutCtrl = TextEditingController(
-          text: p.studioFinalTimeoutMs > 0
-              ? '${p.studioFinalTimeoutMs ~/ 1000}'
+          text: p.studioAgent.studioFinalTimeoutMs > 0
+              ? '${p.studioAgent.studioFinalTimeoutMs ~/ 1000}'
               : '',
         );
       case StudioSlot.tracker:
-        _temperature = p.studioTrackerTemperature;
-        _topP = p.studioTrackerTopP;
-        _topK = p.studioTrackerTopK;
-        _frequencyPenalty = p.studioTrackerFrequencyPenalty;
-        _presencePenalty = p.studioTrackerPresencePenalty;
-        _requestReasoning = p.studioTrackerRequestReasoning;
-        _reasoningEffort = p.studioTrackerReasoningEffort;
-        _omitTemperature = p.studioTrackerOmitTemperature;
-        _omitTopP = p.studioTrackerOmitTopP;
-        _omitReasoning = p.studioTrackerOmitReasoning;
-        _omitReasoningEffort = p.studioTrackerOmitReasoningEffort;
+        _temperature = p.studioAgent.studioTrackerTemperature;
+        _topP = p.studioAgent.studioTrackerTopP;
+        _topK = p.studioAgent.studioTrackerTopK;
+        _frequencyPenalty = p.studioAgent.studioTrackerFrequencyPenalty;
+        _presencePenalty = p.studioAgent.studioTrackerPresencePenalty;
+        _requestReasoning = p.studioAgent.studioTrackerRequestReasoning;
+        _reasoningEffort = p.studioAgent.studioTrackerReasoningEffort;
+        _omitTemperature = p.studioAgent.studioTrackerOmitTemperature;
+        _omitTopP = p.studioAgent.studioTrackerOmitTopP;
+        _omitReasoning = p.studioAgent.studioTrackerOmitReasoning;
+        _omitReasoningEffort = p.studioAgent.studioTrackerOmitReasoningEffort;
         _maxTokensCtrl = TextEditingController(
-          text: p.studioTrackerMaxTokens > 0
-              ? '${p.studioTrackerMaxTokens}'
+          text: p.studioAgent.studioTrackerMaxTokens > 0
+              ? '${p.studioAgent.studioTrackerMaxTokens}'
               : '',
         );
         _timeoutCtrl = TextEditingController(
-          text: p.studioTrackerTimeoutMs > 0
-              ? '${p.studioTrackerTimeoutMs ~/ 1000}'
+          text: p.studioAgent.studioTrackerTimeoutMs > 0
+              ? '${p.studioAgent.studioTrackerTimeoutMs ~/ 1000}'
               : '',
         );
       case StudioSlot.cleaner:
-        _temperature = p.postCleanerTemperature;
-        _topP = p.postCleanerTopP;
-        _topK = p.postCleanerTopK;
-        _frequencyPenalty = p.postCleanerFrequencyPenalty;
-        _presencePenalty = p.postCleanerPresencePenalty;
-        _requestReasoning = p.postCleanerRequestReasoning;
-        _reasoningEffort = p.postCleanerReasoningEffort;
-        _omitTemperature = p.postCleanerOmitTemperature;
-        _omitTopP = p.postCleanerOmitTopP;
-        _omitReasoning = p.postCleanerOmitReasoning;
-        _omitReasoningEffort = p.postCleanerOmitReasoningEffort;
+        _temperature = p.cleaner.postCleanerTemperature;
+        _topP = p.cleaner.postCleanerTopP;
+        _topK = p.cleaner.postCleanerTopK;
+        _frequencyPenalty = p.cleaner.postCleanerFrequencyPenalty;
+        _presencePenalty = p.cleaner.postCleanerPresencePenalty;
+        _requestReasoning = p.cleaner.postCleanerRequestReasoning;
+        _reasoningEffort = p.cleaner.postCleanerReasoningEffort;
+        _omitTemperature = p.cleaner.postCleanerOmitTemperature;
+        _omitTopP = p.cleaner.postCleanerOmitTopP;
+        _omitReasoning = p.cleaner.postCleanerOmitReasoning;
+        _omitReasoningEffort = p.cleaner.postCleanerOmitReasoningEffort;
         _maxTokensCtrl = TextEditingController(
-          text: p.postCleanerMaxTokens > 0 ? '${p.postCleanerMaxTokens}' : '',
+          text: p.cleaner.postCleanerMaxTokens > 0 ? '${p.cleaner.postCleanerMaxTokens}' : '',
         );
         _timeoutCtrl = TextEditingController(
-          text: p.postCleanerTimeoutMs > 0
-              ? '${p.postCleanerTimeoutMs ~/ 1000}'
+          text: p.cleaner.postCleanerTimeoutMs > 0
+              ? '${p.cleaner.postCleanerTimeoutMs ~/ 1000}'
               : '',
         );
     }

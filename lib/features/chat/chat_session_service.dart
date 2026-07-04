@@ -277,7 +277,7 @@ class ChatSessionService {
     // leak into the fresh chat.
     await _ref.read(trackerSnapshotRepoProvider).deleteBySessionId(session.id);
     // Also wipe the live `tracker_rows` store. Without this, the UI
-    // ("Tracker values" tab, studio_menu_dialog) falls back to
+    // ("Tracker values" tab) falls back to
     // `trackerRepo.getBySessionId` when no snapshot is found and shows the
     // pre-clear trackers. Both stores are session-scoped and must be cleared
     // together.

@@ -40,6 +40,7 @@ class MemoryAgenticWriteService {
   Future<MemoryWriteLoopResult> runWriteLoop({
     required String sessionId,
     required PipelineSettings settings,
+    required AuxApiConfig config,
     required String recentHistoryText,
     required List<Tracker> currentTrackers,
     required String messageId,
@@ -48,9 +49,8 @@ class MemoryAgenticWriteService {
     CancelToken? cancelToken,
     bool Function()? isStillCurrent,
   }) async {
-    // Agentic write-loop is always-on. The agenticWriteEnabled toggle was
-    // removed from the UI — the write-loop always runs (subject to cadence).
-    // The old early-return on !settings.agenticWriteEnabled is gone.
+    // Agentic write-loop is always-on (Studio-only). The write-loop always
+    // runs subject to cadence. Agent writes always require manual approval.
 
     final token = cancelToken ?? CancelToken();
     if (token.isCancelled) {
@@ -58,10 +58,6 @@ class MemoryAgenticWriteService {
     }
 
     try {
-      final config = await _llm.resolveConfigForMemoryGeneration(
-        settings,
-        errorLabel: 'agentic write-loop',
-      );
       if (token.isCancelled) {
         return const MemoryWriteLoopResult(status: 'aborted');
       }
@@ -186,7 +182,7 @@ class MemoryAgenticWriteService {
         agentSwipeId: agentSwipeId,
         requests: response.memoryRequests,
         shouldAbort: () => token.isCancelled || isStillCurrent?.call() == false,
-        requireApproval: settings.agentWriteApprovalRequired,
+        requireApproval: true,
       );
 
       return MemoryWriteLoopResult(
@@ -267,10 +263,9 @@ class MemoryAgenticWriteService {
     var denied = 0;
     final errors = <String>[];
 
-    // Three write paths (patch #4 + follow-up):
-    // - requireApproval=true → ALL requests become MemoryDrafts in
-    //   pendingDrafts for manual user review (Marinara
-    //   agentWriteApprovalRequired analog). Append-only updates to
+    // Three write paths:
+    // - requireApproval=true (hardcoded) → ALL requests become MemoryDrafts
+    //   in pendingDrafts for manual user review. Append-only updates to
     //   existing entries are also deferred: the newFacts are written as
     //   a draft whose content is the appended text, NOT merged into the
     //   existing entry until the user approves. See

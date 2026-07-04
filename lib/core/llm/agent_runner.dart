@@ -145,35 +145,35 @@ class AgentRunner {
     final pipeline = _ref.read(pipelineSettingsProvider);
     final effectiveResolved = isFinalResponse
         ? resolved.copyWithReasoning(
-            requestReasoning: pipeline.studioFinalDisableReasoning
+            requestReasoning: pipeline.studioAgent.studioFinalDisableReasoning
                 ? false
-                : pipeline.studioFinalRequestReasoning,
-            omitReasoning: pipeline.studioFinalDisableReasoning
+                : pipeline.studioAgent.studioFinalRequestReasoning,
+            omitReasoning: pipeline.studioAgent.studioFinalDisableReasoning
                 ? true
-                : pipeline.studioFinalOmitReasoning,
-            omitReasoningEffort: pipeline.studioFinalOmitReasoningEffort,
-            reasoningEffort: pipeline.studioFinalReasoningEffort,
+                : pipeline.studioAgent.studioFinalOmitReasoning,
+            omitReasoningEffort: pipeline.studioAgent.studioFinalOmitReasoningEffort,
+            reasoningEffort: pipeline.studioAgent.studioFinalReasoningEffort,
           )
         : agent.phase == 'post_processing'
         ? resolved.copyWithReasoning(
-            requestReasoning: pipeline.postCleanerDisableReasoning
+            requestReasoning: pipeline.cleaner.postCleanerDisableReasoning
                 ? false
-                : pipeline.postCleanerRequestReasoning,
-            omitReasoning: pipeline.postCleanerDisableReasoning
+                : pipeline.cleaner.postCleanerRequestReasoning,
+            omitReasoning: pipeline.cleaner.postCleanerDisableReasoning
                 ? true
-                : pipeline.postCleanerOmitReasoning,
-            omitReasoningEffort: pipeline.postCleanerOmitReasoningEffort,
-            reasoningEffort: pipeline.postCleanerReasoningEffort,
+                : pipeline.cleaner.postCleanerOmitReasoning,
+            omitReasoningEffort: pipeline.cleaner.postCleanerOmitReasoningEffort,
+            reasoningEffort: pipeline.cleaner.postCleanerReasoningEffort,
           )
         : resolved.copyWithReasoning(
-            requestReasoning: pipeline.studioTrackerDisableReasoning
+            requestReasoning: pipeline.studioAgent.studioTrackerDisableReasoning
                 ? false
-                : pipeline.studioTrackerRequestReasoning,
-            omitReasoning: pipeline.studioTrackerDisableReasoning
+                : pipeline.studioAgent.studioTrackerRequestReasoning,
+            omitReasoning: pipeline.studioAgent.studioTrackerDisableReasoning
                 ? true
-                : pipeline.studioTrackerOmitReasoning,
-            omitReasoningEffort: pipeline.studioTrackerOmitReasoningEffort,
-            reasoningEffort: pipeline.studioTrackerReasoningEffort,
+                : pipeline.studioAgent.studioTrackerOmitReasoning,
+            omitReasoningEffort: pipeline.studioAgent.studioTrackerOmitReasoningEffort,
+            reasoningEffort: pipeline.studioAgent.studioTrackerReasoningEffort,
           );
     return _streamRunner.run(
       agent: agent,
@@ -200,7 +200,7 @@ class AgentRunner {
   ///   Studio menu: studioFinalModelOverride for the final generator,
   ///   postCleanerModel for post-processing trackers, studioTrackerModelOverride
   ///   for pre-gen trackers. The final generator intentionally does not read
-  ///   PipelineSettings.generationModel because that field belongs to MemoryBook
+  ///   PipelineSettings.memoryBookApi.generationModel because that field belongs to MemoryBook
   ///   generation / agentic write-loop routing.
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,
@@ -224,68 +224,68 @@ class AgentRunner {
           .resolveAgentConfig(
             current,
             runApiConfigId,
-            pipeline.studioFinalModelOverride,
+            pipeline.studioAgent.studioFinalModelOverride,
           )
           .copyWithSampling(
-            topP: pipeline.studioFinalTopP,
-            topK: pipeline.studioFinalTopK,
-            frequencyPenalty: pipeline.studioFinalFrequencyPenalty,
-            presencePenalty: pipeline.studioFinalPresencePenalty,
-            omitTemperature: pipeline.studioFinalOmitTemperature,
-            omitTopP: pipeline.studioFinalOmitTopP,
+            topP: pipeline.studioAgent.studioFinalTopP,
+            topK: pipeline.studioAgent.studioFinalTopK,
+            frequencyPenalty: pipeline.studioAgent.studioFinalFrequencyPenalty,
+            presencePenalty: pipeline.studioAgent.studioFinalPresencePenalty,
+            omitTemperature: pipeline.studioAgent.studioFinalOmitTemperature,
+            omitTopP: pipeline.studioAgent.studioFinalOmitTopP,
           );
     } else if (agent.phase == 'post_processing') {
-      if (pipeline.postCleanerModel.isNotEmpty) {
+      if (pipeline.cleaner.postCleanerModel.isNotEmpty) {
         return resolver
             .resolveAgentConfig(
               current,
               runApiConfigId,
-              pipeline.postCleanerModel,
+              pipeline.cleaner.postCleanerModel,
             )
             .copyWithSampling(
-              topP: pipeline.postCleanerTopP,
-              topK: pipeline.postCleanerTopK,
-              frequencyPenalty: pipeline.postCleanerFrequencyPenalty,
-              presencePenalty: pipeline.postCleanerPresencePenalty,
-              omitTemperature: pipeline.postCleanerOmitTemperature,
-              omitTopP: pipeline.postCleanerOmitTopP,
+              topP: pipeline.cleaner.postCleanerTopP,
+              topK: pipeline.cleaner.postCleanerTopK,
+              frequencyPenalty: pipeline.cleaner.postCleanerFrequencyPenalty,
+              presencePenalty: pipeline.cleaner.postCleanerPresencePenalty,
+              omitTemperature: pipeline.cleaner.postCleanerOmitTemperature,
+              omitTopP: pipeline.cleaner.postCleanerOmitTopP,
             );
       }
       return resolver
           .resolveAgentConfig(current, runApiConfigId, '')
           .copyWithSampling(
-            topP: pipeline.postCleanerTopP,
-            topK: pipeline.postCleanerTopK,
-            frequencyPenalty: pipeline.postCleanerFrequencyPenalty,
-            presencePenalty: pipeline.postCleanerPresencePenalty,
-            omitTemperature: pipeline.postCleanerOmitTemperature,
-            omitTopP: pipeline.postCleanerOmitTopP,
+            topP: pipeline.cleaner.postCleanerTopP,
+            topK: pipeline.cleaner.postCleanerTopK,
+            frequencyPenalty: pipeline.cleaner.postCleanerFrequencyPenalty,
+            presencePenalty: pipeline.cleaner.postCleanerPresencePenalty,
+            omitTemperature: pipeline.cleaner.postCleanerOmitTemperature,
+            omitTopP: pipeline.cleaner.postCleanerOmitTopP,
           );
-    } else if (pipeline.studioTrackerModelOverride.isNotEmpty) {
+    } else if (pipeline.studioAgent.studioTrackerModelOverride.isNotEmpty) {
       return resolver
           .resolveAgentConfig(
             current,
             runApiConfigId,
-            pipeline.studioTrackerModelOverride,
+            pipeline.studioAgent.studioTrackerModelOverride,
           )
           .copyWithSampling(
-            topP: pipeline.studioTrackerTopP,
-            topK: pipeline.studioTrackerTopK,
-            frequencyPenalty: pipeline.studioTrackerFrequencyPenalty,
-            presencePenalty: pipeline.studioTrackerPresencePenalty,
-            omitTemperature: pipeline.studioTrackerOmitTemperature,
-            omitTopP: pipeline.studioTrackerOmitTopP,
+            topP: pipeline.studioAgent.studioTrackerTopP,
+            topK: pipeline.studioAgent.studioTrackerTopK,
+            frequencyPenalty: pipeline.studioAgent.studioTrackerFrequencyPenalty,
+            presencePenalty: pipeline.studioAgent.studioTrackerPresencePenalty,
+            omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
+            omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,
           );
     }
     return resolver
         .resolveAgentConfig(current, runApiConfigId, '')
         .copyWithSampling(
-          topP: pipeline.studioTrackerTopP,
-          topK: pipeline.studioTrackerTopK,
-          frequencyPenalty: pipeline.studioTrackerFrequencyPenalty,
-          presencePenalty: pipeline.studioTrackerPresencePenalty,
-          omitTemperature: pipeline.studioTrackerOmitTemperature,
-          omitTopP: pipeline.studioTrackerOmitTopP,
+          topP: pipeline.studioAgent.studioTrackerTopP,
+          topK: pipeline.studioAgent.studioTrackerTopK,
+          frequencyPenalty: pipeline.studioAgent.studioTrackerFrequencyPenalty,
+          presencePenalty: pipeline.studioAgent.studioTrackerPresencePenalty,
+          omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
+          omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,
         );
   }
 
@@ -305,24 +305,24 @@ class AgentRunner {
   /// Resolution order:
   /// 1. [StudioAgent.timeoutMs] (>4000ms, clamped to [1000, 120000]) —
   ///    per-agent override set at Studio build time.
-  /// 2. [PipelineSettings.studioTimeoutMs] (>0, clamped to [1000, 120000])
+  /// 2. [PipelineSettings.studioAgent.studioTimeoutMs] (>0, clamped to [1000, 120000])
   ///    — global user setting from the Post-Building menu.
   /// 3. hardcoded fallback: final generator 90s, trackers 60s.
   int effectiveTimeoutMs(StudioAgent agent, bool isFinalResponse) {
     final fallback = isFinalResponse ? 90000 : 60000;
     final pipeline = _ref.read(pipelineSettingsProvider);
     final slot = isFinalResponse
-        ? pipeline.studioFinalTimeoutMs
+        ? pipeline.studioAgent.studioFinalTimeoutMs
         : agent.phase == 'post_processing'
-        ? pipeline.postCleanerTimeoutMs
-        : pipeline.studioTrackerTimeoutMs;
+        ? pipeline.cleaner.postCleanerTimeoutMs
+        : pipeline.studioAgent.studioTrackerTimeoutMs;
     if (slot > 0) {
       return slot.clamp(1000, 120000);
     }
     if (agent.timeoutMs > 4000) {
       return agent.timeoutMs.clamp(1000, 120000);
     }
-    final global = pipeline.studioTimeoutMs;
+    final global = pipeline.studioAgent.studioTimeoutMs;
     if (global > 0) {
       return global.clamp(1000, 120000);
     }
@@ -330,53 +330,53 @@ class AgentRunner {
   }
 
   /// Max tokens override. Two tiers:
-  /// - Final generator: [PipelineSettings.studioFinalMaxTokens] (>0)
+  /// - Final generator: [PipelineSettings.studioAgent.studioFinalMaxTokens] (>0)
   ///   overrides the per-agent default (8000).
-  /// - Trackers: [PipelineSettings.studioTrackerMaxTokens] (>0) overrides the
+  /// - Trackers: [PipelineSettings.studioAgent.studioTrackerMaxTokens] (>0) overrides the
   ///   per-agent default (1600). Lets the user tighten/loosen the compact JSON
   ///   brief budget for all 7 pre-gen agents at once from the Studio menu.
   /// Returns null when the relevant global override is 0 and the caller should
   /// use the agent's own value.
   int? effectiveMaxTokens(StudioAgent agent, bool isFinalResponse) {
     if (isFinalResponse) {
-      final global = _ref.read(pipelineSettingsProvider).studioFinalMaxTokens;
+      final global = _ref.read(pipelineSettingsProvider).studioAgent.studioFinalMaxTokens;
       if (global > 0) return global;
       return null;
     }
     if (agent.phase == 'post_processing') {
       final cleanerGlobal = _ref
           .read(pipelineSettingsProvider)
-          .postCleanerMaxTokens;
+          .cleaner.postCleanerMaxTokens;
       if (cleanerGlobal > 0) return cleanerGlobal;
       return null;
     }
     final trackerGlobal = _ref
         .read(pipelineSettingsProvider)
-        .studioTrackerMaxTokens;
+        .studioAgent.studioTrackerMaxTokens;
     if (trackerGlobal > 0) return trackerGlobal;
     return null;
   }
 
   /// Temperature override. Two tiers:
-  /// - Final generator: [PipelineSettings.studioFinalTemperature] (>= 0)
+  /// - Final generator: [PipelineSettings.studioAgent.studioFinalTemperature] (>= 0)
   ///   overrides the per-agent default (0.8).
-  /// - Trackers: [PipelineSettings.studioTrackerTemperature] (>= 0) overrides
+  /// - Trackers: [PipelineSettings.studioAgent.studioTrackerTemperature] (>= 0) overrides
   ///   the per-agent default (0.3). Lets the user tune the creativity of all
   ///   7 pre-gen agents at once from the Studio menu.
   /// Returns null when the relevant global override is negative and the
   /// caller should use the agent's own value.
   double? effectiveTemperature(StudioAgent agent, bool isFinalResponse) {
     if (isFinalResponse) {
-      final global = _ref.read(pipelineSettingsProvider).studioFinalTemperature;
+      final global = _ref.read(pipelineSettingsProvider).studioAgent.studioFinalTemperature;
       if (global >= 0) return global;
       return null;
     }
     if (agent.phase == 'post_processing') {
-      return _ref.read(pipelineSettingsProvider).postCleanerTemperature;
+      return _ref.read(pipelineSettingsProvider).cleaner.postCleanerTemperature;
     }
     final trackerGlobal = _ref
         .read(pipelineSettingsProvider)
-        .studioTrackerTemperature;
+        .studioAgent.studioTrackerTemperature;
     if (trackerGlobal >= 0) return trackerGlobal;
     return null;
   }

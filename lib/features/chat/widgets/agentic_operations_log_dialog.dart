@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
 import '../../../core/llm/studio_ledger_service.dart';
+import '../../../core/llm/studio_slot_resolver.dart';
+import '../../../core/models/api_config.dart';
+import '../../settings/api_list_provider.dart';
 import '../../../core/models/agent_operation_record.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/tracker.dart';
@@ -384,11 +388,35 @@ class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
         upToMessageId: target.id,
       );
       final startedAt = DateTime.now().millisecondsSinceEpoch;
+      final pipeline = ref.read(pipelineSettingsProvider);
+      await ref.read(apiListProvider.future);
+      final apiConfigs =
+          ref.read(apiListProvider).value ?? const <ApiConfig>[];
+      final AuxApiConfig ledgerConfig;
+      try {
+        ledgerConfig = StudioSlotResolver.resolveFromList(
+          apiConfigs: apiConfigs,
+          apiConfigId: studioConfig?.cleanerApiConfigId ?? '',
+          errorLabel: 'ledger-rerun',
+          modelOverride: pipeline.cleaner.postCleanerModel,
+        );
+      } catch (e) {
+        if (mounted) {
+          GlazeToast.showWithoutContext(
+            'Studio Ledger rerun failed: $e',
+            duration: 4000,
+            isError: true,
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
       final result = await ref
           .read(studioLedgerServiceProvider)
           .run(
             sessionId: sessionId,
-            settings: ref.read(pipelineSettingsProvider),
+            settings: pipeline,
+            config: ledgerConfig,
             finalAssistantText: target.content,
             recentHistoryText: recentHistory,
             messageId: target.id,
@@ -396,9 +424,6 @@ class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
             agentSwipeId: target.agentSwipeId,
             forceEnabled: true,
             isStillCurrent: () => mounted,
-            studioCleanerApiConfigId: studioConfig?.enabled == true
-                ? studioConfig?.cleanerApiConfigId ?? ''
-                : '',
           );
       if (!mounted) return;
       await ref

@@ -72,7 +72,7 @@ class _MemoryGenerationSettingsSheetState
   // ── Memory generation model ──────────────────────────────────────────
   // Restored from pre-eec6d6f2 (pipeline settings separation). The model
   // dropdown lives here in the MemoryBooks sheet; it reads/writes
-  // PipelineSettings.generationModel. Endpoint/key are always inherited
+  // PipelineSettings.memoryBookApi.generationModel. Endpoint/key are always inherited
   // from the active chat API (generationSource='current').
   List<String> _fetchedModels = const [];
   bool _fetchingModels = false;
@@ -132,7 +132,7 @@ class _MemoryGenerationSettingsSheetState
     _queryMaxChars = s.queryMaxChars;
     // Load the generation model from PipelineSettings.
     _generationModel =
-        ref.read(pipelineSettingsProvider).generationModel;
+        ref.read(pipelineSettingsProvider).memoryBookApi.generationModel;
   }
 
   @override
@@ -1029,7 +1029,7 @@ class _MemoryGenerationSettingsSheetState
 
   /// Model dropdown for the Memory Generation LLM. Fetches models from the
   /// active chat API endpoint on open. Writes the selection to
-  /// PipelineSettings.generationModel.
+  /// PipelineSettings.memoryBookApi.generationModel.
   Widget _buildModelSelector() {
     final models = <String>{
       ..._fetchedModels,
@@ -1080,7 +1080,13 @@ class _MemoryGenerationSettingsSheetState
                   final pipeline = ref.read(pipelineSettingsProvider);
                   await ref
                       .read(pipelineSettingsProvider.notifier)
-                      .save(pipeline.copyWith(generationModel: model));
+                      .save(
+                        pipeline.copyWith(
+                          memoryBookApi: pipeline.memoryBookApi.copyWith(
+                            generationModel: model,
+                          ),
+                        ),
+                      );
                 },
               ),
             ),
