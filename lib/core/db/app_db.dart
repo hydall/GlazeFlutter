@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-   int get schemaVersion => 56;
+   int get schemaVersion => 57;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -932,6 +932,41 @@ class AppDatabase extends _$AppDatabase {
           debugPrint('Migration 56 (preset block update) failed: $e');
         }
       }
+      if (from < 57) {
+        // Move cleaner_beauty block to the end of the cleaner section (order 99)
+        // so the LLM sees styling instructions last among preset blocks, closest
+        // to the runtime suffix (recency effect).
+        try {
+          final row = await customSelect(
+            'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
+            variables: [Variable.withString('default')],
+          ).getSingleOrNull();
+          if (row != null) {
+            final blocksJson = row.read<String>('blocks_json');
+            final blocks = (jsonDecode(blocksJson) as List<dynamic>)
+                .cast<Map<String, dynamic>>();
+            var changed = false;
+            for (var i = 0; i < blocks.length; i++) {
+              if (blocks[i]['id'] == 'cleaner_beauty' &&
+                  blocks[i]['section'] == 'cleaner') {
+                blocks[i]['order'] = 99;
+                changed = true;
+                break;
+              }
+            }
+            if (changed) {
+              await customStatement(
+                'UPDATE studio_preset_rows SET blocks_json = ?, '
+                "updated_at = CAST(strftime('%s','now') AS INTEGER) "
+                'WHERE preset_id = ?',
+                [jsonEncode(blocks), 'default'],
+              );
+            }
+          }
+        } catch (e) {
+          debugPrint('Migration 57 (cleaner_beauty reorder) failed: $e');
+        }
+      }
     },
   );
 }
@@ -1371,7 +1406,7 @@ PREFER
       'content':
           'BEAUTY SHARD (visual styling — you own this):\n\nBeauty Shard brief:\n{{beautyBrief}}\n\nCurrent styling state:\n{{getvar::glaze_beauty_state}}\n\nStyling rules:\n- Apply the speaker colors from the styling state to ALL character dialogue using <font color="#HEX">"text"</font> tags.\n- Apply the thought colors to inner thoughts using <font color="#HEX"><i>text</i></font> tags.\n- Reuse existing colors for established speakers. Assign a new color only for a speaker not yet in the state.\n- If the assistant text already has <font> color tags, verify they match the styling state. Fix mismatches; do not remove correct tags.\n- Do NOT color narrative prose — only dialogue (in quotes) and inner thoughts (in italics or marked as thought).\n- If the styling state has a reserved lumia_ooc color, wrap the text inside <lumiaooc>...</lumiaooc> blocks with <font color="#HEX">text</font> using that color. If the text is already wrapped in a <font> tag, leave it unchanged. Do not alter the <lumiaooc> wrapper, the text content, or the block position — only add the color tag if missing.\n- At the very END of your cleaned response, after all narrative and HTML, emit exactly one marker with the updated state:\n\n<glaze_beauty_state>\n{"speakers":{"Name":"#hex"},"thoughts":{"Name":"#hex"},"palette":"dark|light","font":"sans-serif","bg":"#hex","art_style":"...","reserved":{"lumia_ooc":"#9370DB"}}\n</glaze_beauty_state>\n\nThe marker is parsed and stripped automatically — the user never sees it. Do not put it inside an HTML artifact or a code block.',
       'enabled': true,
-      'order': 5,
+      'order': 99,
       'section': 'cleaner',
     },
     // ─── ledger section (1 block) ───
