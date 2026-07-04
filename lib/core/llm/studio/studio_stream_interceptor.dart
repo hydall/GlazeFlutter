@@ -1,5 +1,4 @@
 import '../../models/chat_message.dart';
-import '../../models/studio_config.dart';
 import '../prompt_builder.dart' show PromptPayload;
 import '../studio_stage_brief.dart';
 import '../../../features/chat/state/studio_cycle_state_provider.dart';
@@ -26,23 +25,6 @@ class StudioStreamInterceptor {
         ? nonHidden.length - finalContextSize
         : 0;
     return nonHidden.skip(start).map((m) => m.id).toSet();
-  }
-
-  /// Compute the max context size across all pre-generation trackers except
-  /// the last one (the final generator). Falls back to 5 when there are
-  /// fewer than 2 pre-gen agents.
-  static int maxStudioTrackerContextSize(StudioConfig config) {
-    final preGen =
-        config.agents
-            .where((a) => a.enabled && a.phase == 'pre_generation')
-            .toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
-    if (preGen.length <= 1) return 5;
-    preGen.removeLast();
-    if (preGen.isEmpty) return 5;
-    return preGen
-        .map((a) => a.contextSize)
-        .fold<int>(1, (max, size) => size > max ? size : max);
   }
 
   /// Clone a [PromptPayload] with a different `sourceWindowVisibleMessageIds`.

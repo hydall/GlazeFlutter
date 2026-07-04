@@ -86,10 +86,9 @@ abstract class StudioAgentSettings with _$StudioAgentSettings {
     // requestReasoning=false and omitReasoning=true. Trackers emit compact
     // JSON briefs, so a hidden think-block wastes tokens. Gemini-only.
     @Default(false) bool studioTrackerDisableReasoning,
-    // Context size override for ALL non-final Studio agents. When > 0,
-    // overrides the per-agent contextSize and the batch MAX-of-all-agents
-    // logic. 0 = use per-agent contextSize (default 5 per agent).
-    @Default(0) int studioTrackerContextSize,
+    // Context size for ALL non-final Studio agents (batch + individual).
+    // This is the single source of truth — per-agent contextSize is ignored.
+    @Default(8) int studioTrackerContextSize,
 
     // ── Post-processing trackers ──────────────────────────────────────────
     // Number of trailing chat messages forwarded to post-processing

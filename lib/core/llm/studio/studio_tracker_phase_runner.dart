@@ -130,10 +130,12 @@ class StudioTrackerPhaseRunner {
       final sceneKey = _briefCache.sceneCacheKey(promptPayload);
       final turnIndex = _briefCache.assistantTurnCount(promptPayload);
 
-      final historyForScan = promptResult.messages
+      final allHistory = promptResult.messages
           .where((m) => m.isHistory)
           .map((m) => m.content)
           .toList();
+      final historyForScan =
+          allHistory.length > 8 ? allHistory.sublist(allHistory.length - 8) : allHistory;
       final dueTrackers = preGenTrackers.where((a) {
         final interval = a.runInterval <= 0 ? 1 : a.runInterval;
         if (turnIndex % interval != 0) return false;
@@ -187,14 +189,10 @@ class StudioTrackerPhaseRunner {
           sessionId: sessionId,
           cancelToken: token,
           apiConfigId: config.cheapApiConfigId,
-          batchContextSize: trackerContextOverride > 0
-              ? trackerContextOverride
-              : group.batchContextSize,
+          batchContextSize: trackerContextOverride,
         ),
         runIndividual: (agent) => _executor.runIndividualTracker(
-          agent: trackerContextOverride > 0
-              ? agent.copyWith(contextSize: trackerContextOverride)
-              : agent,
+          agent: agent.copyWith(contextSize: trackerContextOverride),
           config: config,
           studioPreset: studioPreset,
           promptResult: promptResult,

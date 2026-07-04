@@ -181,9 +181,8 @@ class StreamGenerationService {
       final triggeredMemories = promptResult.triggeredMemories;
 
       if (studioConfig != null) {
-        final trackerContextSize = pipelineSettings.studioAgent.studioTrackerContextSize > 0
-            ? pipelineSettings.studioAgent.studioTrackerContextSize
-            : StudioStreamInterceptor.maxStudioTrackerContextSize(studioConfig);
+        final trackerContextSize =
+            pipelineSettings.studioAgent.studioTrackerContextSize;
         final trackerVisibleMessageIds = StudioStreamInterceptor.computeStudioFinalVisibleMessageIds(
           payload.history,
           trackerContextSize,
