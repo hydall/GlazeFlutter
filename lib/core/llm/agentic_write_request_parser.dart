@@ -6,9 +6,12 @@ import 'package:flutter/foundation.dart';
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
+import '../models/studio_config.dart';
 import '../models/tracker.dart';
 import 'memory_agentic_tools.dart';
 import 'aux_llm_client.dart';
+import 'macro_engine.dart';
+import 'studio/studio_aux_prompt_assembler.dart';
 
 /// Builds the agentic write-loop prompt + parses the LLM's JSON response
 /// into tracker/memory write requests. Extracted from
@@ -35,6 +38,8 @@ class AgenticWriteRequestParser {
     required List<Tracker> currentTrackers,
     required CancelToken cancelToken,
     List<MemoryEntry> existingMemories = const [],
+    List<StudioPresetBlock> writeloopBlocks = const [],
+    MacroContext? macroCtx,
   }) async {
     final trackersBlock = currentTrackers.isEmpty
         ? '(no active trackers)'
@@ -60,23 +65,7 @@ class AgenticWriteRequestParser {
               })
               .join('\n');
 
-    final prompt =
-        '''You are a memory agent for a roleplay conversation. You run every 5 turns and analyze the recent conversation batch to decide what facts to persist so they survive context truncation.
-
-Recent conversation (last ~5 turns):
-$recentHistoryText
-
-Current trackers:
-$trackersBlock
-
-Existing memory entries already in the MemoryBook:
-$existingBlock
-
-Decide what to write. You have two tools:
-
-1. updateTracker — lightweight key-value state that persists across turns (mood, location, relationship status, inventory, ongoing promises).
-2. writeMemory — a pending memory draft for significant events, revelations, promises. These require user approval before becoming active.
-
+    final jsonSuffix = '''
 Respond with ONLY a JSON object (no markdown, no explanation):
 {
   "trackers": [
@@ -98,6 +87,35 @@ Rules:
 - If nothing is worth persisting, return: {"trackers": [], "memories": []}
 - Keep tracker values short (1-5 words).
 - Memory content should be 1-3 sentences describing what happened and why it matters.''';
+
+    final String prompt;
+    if (writeloopBlocks.isNotEmpty && macroCtx != null) {
+      prompt = const StudioAuxPromptAssembler().assemble(
+        blocks: writeloopBlocks,
+        section: 'writeloop',
+        macroCtx: macroCtx,
+        customReplacements: {
+          '{{recentHistoryText}}': recentHistoryText,
+          '{{trackersBlock}}': trackersBlock,
+          '{{existingBlock}}': existingBlock,
+        },
+        runtimeSuffix: jsonSuffix,
+      );
+    } else {
+      prompt =
+          '''You are a memory agent for a roleplay conversation. You run every 5 turns and analyze the recent conversation batch to decide what facts to persist so they survive context truncation.
+
+Recent conversation (last ~5 turns):
+$recentHistoryText
+
+Current trackers:
+$trackersBlock
+
+Existing memory entries already in the MemoryBook:
+$existingBlock
+
+$jsonSuffix''';
+    }
 
     final outcome = await _llm.callOnceWithLog(
       config: config,

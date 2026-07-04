@@ -9,12 +9,14 @@ import '../db/repositories/tracker_snapshot_repo.dart';
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
+import '../models/studio_config.dart';
 import '../models/tracker.dart';
 import '../utils/id_generator.dart';
 import 'agentic_write_request_parser.dart';
 import 'memory_agentic_policy.dart';
 import 'memory_agentic_tools.dart';
 import 'aux_llm_client.dart';
+import 'macro_engine.dart';
 
 /// Agentic write-loop service (Stage 1).
 ///
@@ -56,6 +58,8 @@ class MemoryAgenticWriteService {
     required int agentSwipeId,
     CancelToken? cancelToken,
     bool Function()? isStillCurrent,
+    List<StudioPresetBlock> writeloopBlocks = const [],
+    MacroContext? macroCtx,
   }) async {
     // Agentic write-loop is always-on (Studio-only). The write-loop always
     // runs subject to cadence. Agent writes always require manual approval.
@@ -95,6 +99,8 @@ class MemoryAgenticWriteService {
         currentTrackers: currentTrackers,
         cancelToken: token,
         existingMemories: existingMemories,
+        writeloopBlocks: writeloopBlocks,
+        macroCtx: macroCtx,
       );
 
       if (token.isCancelled || isStillCurrent?.call() == false) {

@@ -3,14 +3,17 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
+import '../../../../core/llm/macro_engine.dart';
 import '../../../../core/llm/studio_ledger_service.dart';
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/models/agent_operation_record.dart';
 import '../../../../core/models/api_config.dart';
 import '../../../../core/models/chat_message.dart';
 import '../../../../core/models/pipeline_settings.dart';
+import '../../../../core/models/studio_config.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../../../core/state/memory_agent_providers.dart';
+import '../../../../core/state/character_provider.dart';
 import '../../../settings/api_list_provider.dart';
 import '../../../../shared/widgets/glaze_toast.dart';
 import '../../state/agent_operations_log_provider.dart';
@@ -64,12 +67,15 @@ class LedgerStage {
       // StudioConfig.enabled to decide whether the ledger should run.
       var studioConfigEnabled = false;
       var studioCleanerApiConfigId = '';
+      StudioPreset? studioPreset;
+      var studioPresetId = 'default';
       try {
         final studioConfig = await ctx.ref
             .read(studioConfigRepoProvider)
             .getBySessionId(sessionId);
         studioConfigEnabled = studioConfig?.enabled == true;
         studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
+        studioPresetId = studioConfig?.studioPresetId ?? 'default';
       } catch (_) {}
       if (!studioConfigEnabled) {
         await _recordDiag(
@@ -78,6 +84,15 @@ class LedgerStage {
           reason: 'skipped, studio disabled',
         );
         return;
+      }
+
+      // Load the Studio preset to get ledger-section blocks.
+      try {
+        studioPreset = await ctx.ref
+            .read(studioPresetRepoProvider)
+            .getById(studioPresetId);
+      } catch (e) {
+        debugPrint('[StudioLedger] preset load failed: $e');
       }
 
       // Cadence (plan §Model Cadence). Studio Ledger is mandatory while Studio
@@ -159,6 +174,21 @@ class LedgerStage {
       }
 
       final service = ctx.ref.read(studioLedgerServiceProvider);
+
+      // Build MacroContext for resolving preset-block macros.
+      final character = ctx.ref.read(characterByIdProvider(ctx.charId));
+      final ledgerMacroCtx = MacroContext(
+        charName: character?.name ?? '',
+        charDescription: character?.description,
+        charScenario: character?.scenario,
+        charPersonality: character?.personality,
+        charMesExample: character?.mesExample,
+        userName: 'User',
+        macroName: character?.macroName,
+        charId: ctx.charId,
+        sessionId: sessionId,
+      );
+
       final result = await service.run(
         sessionId: sessionId,
         settings: pipeline,
@@ -170,6 +200,8 @@ class LedgerStage {
         agentSwipeId: targetMessage.agentSwipeId,
         forceEnabled: true,
         isStillCurrent: isCurrent,
+        ledgerBlocks: studioPreset?.blocks ?? const [],
+        macroCtx: ledgerMacroCtx,
       );
 
       await _recordDiag(

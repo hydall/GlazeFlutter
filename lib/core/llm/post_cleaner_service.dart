@@ -18,6 +18,10 @@ import 'beauty_state_parser.dart';
 import 'cleaner/audit_prompt_builder.dart';
 import 'cleaner/cleaner_prompt_builder.dart';
 import 'cleaner/cleaner_text_guard.dart';
+import 'macro_engine.dart';
+import 'shared/message_range_formatter.dart';
+import 'studio/studio_aux_prompt_assembler.dart';
+import '../models/studio_config.dart';
 
 // Re-export extracted specialists for backward compat (tests import these
 // symbols from post_cleaner_service.dart).
@@ -73,6 +77,8 @@ class PostCleanerService {
     void Function(String accumulatedText)? onCleanedChunk,
     String beautyBrief = '',
     String? beautyState,
+    List<StudioPresetBlock> cleanerBlocks = const [],
+    MacroContext? macroCtx,
   }) async {
     // Post-cleaner is always-on (Studio-only). Continuity checks and
     // character/world audits always run.
@@ -110,6 +116,8 @@ class PostCleanerService {
         onCleanedChunk: onCleanedChunk,
         beautyBrief: beautyBrief,
         beautyState: beautyState,
+        cleanerBlocks: cleanerBlocks,
+        macroCtx: macroCtx,
       );
 
       if (token.isCancelled) {
@@ -265,8 +273,10 @@ class PostCleanerService {
     void Function(String accumulatedText)? onCleanedChunk,
     String beautyBrief = '',
     String? beautyState,
+    List<StudioPresetBlock> cleanerBlocks = const [],
+    MacroContext? macroCtx,
   }) async {
-    final prompt = CleanerPromptBuilder.buildCleanerPrompt(
+    final prompt = _buildCleanerPrompt(
       assistantText: assistantText,
       broadcastBlocks: broadcastBlocks,
       recentMessages: recentMessages,
@@ -277,6 +287,8 @@ class PostCleanerService {
       styleInstructions: settings.cleaner.postCleanerStyleInstructions,
       beautyBrief: beautyBrief,
       beautyState: beautyState,
+      cleanerBlocks: cleanerBlocks,
+      macroCtx: macroCtx,
     );
 
     final effectiveMaxTokens = settings.cleaner.postCleanerMaxTokens > 0
@@ -349,6 +361,180 @@ class PostCleanerService {
         beautyBrief: beautyBrief,
         beautyState: beautyState,
       );
+
+  /// Builds the cleaner prompt from preset blocks when available, falling
+  /// back to [CleanerPromptBuilder] when no preset blocks are supplied.
+  ///
+  /// When [cleanerBlocks] is non-empty and [macroCtx] is provided, the prompt
+  /// is assembled from the preset's `cleaner` section blocks with macros
+  /// resolved. Runtime data (recent messages, audit issues, assistant text)
+  /// and broadcast blocks are appended as a code-owned suffix. The beauty
+  /// brief/state are injected via custom replacements so a `cleaner_beauty`
+  /// block can use `{{beautyBrief}}` and `{{getvar::glaze_beauty_state}}`.
+  String _buildCleanerPrompt({
+    required String assistantText,
+    List<String> broadcastBlocks = const [],
+    List<ChatMessage> recentMessages = const [],
+    List<String>? auditIssues,
+    int maxCharsPerMessage = 3000,
+    String bannedWords = '',
+    String avoidInstructions = '',
+    String styleInstructions = '',
+    String beautyBrief = '',
+    String? beautyState,
+    List<StudioPresetBlock> cleanerBlocks = const [],
+    MacroContext? macroCtx,
+  }) {
+    if (cleanerBlocks.isEmpty || macroCtx == null) {
+      return CleanerPromptBuilder.buildCleanerPrompt(
+        assistantText: assistantText,
+        broadcastBlocks: broadcastBlocks,
+        recentMessages: recentMessages,
+        auditIssues: auditIssues,
+        maxCharsPerMessage: maxCharsPerMessage,
+        bannedWords: bannedWords,
+        avoidInstructions: avoidInstructions,
+        styleInstructions: styleInstructions,
+        beautyBrief: beautyBrief,
+        beautyState: beautyState,
+      );
+    }
+
+    final customReplacements = <String, String>{};
+    if (beautyBrief.trim().isNotEmpty) {
+      customReplacements['{{beautyBrief}}'] = beautyBrief.trim();
+    } else {
+      customReplacements['{{beautyBrief}}'] = '';
+    }
+
+    final skipBlockIds = <String>{};
+    if (beautyBrief.trim().isEmpty) {
+      skipBlockIds.add('cleaner_beauty');
+    }
+
+    final suffix = StringBuffer();
+
+    if (broadcastBlocks.isNotEmpty) {
+      final rules = broadcastBlocks
+          .map((b) => b.trim())
+          .where((b) => b.isNotEmpty)
+          .toList();
+      if (rules.isNotEmpty) {
+        suffix
+          ..writeln()
+          ..writeln(
+            'AUTHORITATIVE RULES (from the active preset — follow these exactly; '
+            'they OVERRIDE the generic guidance above, especially for output '
+            'language and formatting):',
+          )
+          ..writeln()
+          ..writeln(rules.join('\n\n---\n\n'))
+          ..writeln();
+      }
+    }
+
+    if (recentMessages.isNotEmpty) {
+      final history = formatRecentMessages(recentMessages, maxCharsPerMessage);
+      if (history.isNotEmpty) {
+        suffix
+          ..writeln('RECENT CHAT HISTORY:')
+          ..writeln(history)
+          ..writeln();
+      }
+    }
+
+    if (auditIssues != null && auditIssues.isNotEmpty) {
+      suffix
+        ..writeln('CHARACTER CONSISTENCY NOTES (from auditor — fix these):')
+        ..writeln(auditIssues.map((i) => '- $i').join('\n'))
+        ..writeln()
+        ..writeln(
+          'Apply minimal fixes for these issues while also cleaning style.',
+        )
+        ..writeln(
+          'Do not add new content to resolve them. Prefer rephrasing that '
+          'preserves the prose\'s voice; only delete or neutralize when '
+          'rephrasing would bloat the text.',
+        )
+        ..writeln();
+    }
+
+    if (bannedWords.trim().isNotEmpty ||
+        avoidInstructions.trim().isNotEmpty ||
+        styleInstructions.trim().isNotEmpty) {
+      suffix
+        ..writeln(
+          'GLOBAL STYLE OVERRIDES (user-defined cross-chat rules — apply '
+          'ALONGSIDE the authoritative rules above; do not contradict them):',
+        )
+        ..writeln();
+      if (bannedWords.trim().isNotEmpty) {
+        suffix
+          ..writeln(
+            'BANNED WORDS (never use these, even if the original has them):',
+          )
+          ..writeln(bannedWords.trim())
+          ..writeln();
+      }
+      if (avoidInstructions.trim().isNotEmpty) {
+        suffix
+          ..writeln('AVOID (specific patterns to steer away from):')
+          ..writeln(avoidInstructions.trim())
+          ..writeln();
+      }
+      if (styleInstructions.trim().isNotEmpty) {
+        suffix
+          ..writeln('PREFER (style direction to lean into):')
+          ..writeln(styleInstructions.trim())
+          ..writeln();
+      }
+    }
+
+    if (recentMessages.isNotEmpty) {
+      suffix
+        ..writeln('Continuity rules:')
+        ..writeln(
+          '- Before editing style, silently check the assistant response '
+          'against RECENT CHAT HISTORY.',
+        )
+        ..writeln(
+          '- Fix only clear local continuity contradictions that are directly '
+          'contradicted by the provided context: who said what, who is '
+          'present, current position, clothing, held objects, object '
+          'ownership, and recent actions.',
+        )
+        ..writeln('- If the context is ambiguous, keep the original wording.')
+        ..writeln('- Do not invent missing details.')
+        ..writeln(
+          '- Do not add new events, explanations, dialogue, memories, or '
+          'motivations.',
+        )
+        ..writeln(
+          '- Prefer minimal edits: fix the contradiction while keeping the '
+          'sentence vivid. Rephrase rather than delete when possible; only '
+          'shorten or neutralize when rephrasing would bloat the text.',
+        )
+        ..writeln(
+          '- If correcting a continuity issue requires adding a new '
+          'paragraph or scene event, do not fix it — only clean style.',
+        )
+        ..writeln();
+    }
+
+    suffix
+      ..writeln()
+      ..writeln('Assistant response to clean:')
+      ..write(assistantText);
+
+    return const StudioAuxPromptAssembler().assemble(
+      blocks: cleanerBlocks,
+      section: 'cleaner',
+      macroCtx: macroCtx,
+      customReplacements: customReplacements,
+      runtimeSuffix: suffix.toString(),
+      skipBlockIds: skipBlockIds,
+    );
+  }
 
   /// Applies the cleaned text to the session: appends a blue 'cleaned' agent
   /// swipe carrying [cleanedText] to the last assistant message via

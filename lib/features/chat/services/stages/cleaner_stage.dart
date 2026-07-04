@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
 import '../../../../core/llm/beauty_state_parser.dart';
+import '../../../../core/llm/macro_engine.dart';
 import '../../../../core/llm/prompt_builder.dart' show PromptPayload;
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/llm/tokenizer.dart';
@@ -14,6 +15,7 @@ import '../../../../core/models/api_config.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/chat_message.dart';
 import '../../../../core/models/pipeline_settings.dart';
+import '../../../../core/models/studio_config.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../../../core/state/memory_agent_providers.dart';
 import '../../../../core/state/character_provider.dart';
@@ -147,6 +149,8 @@ class CleanerStage {
       List<String> broadcastBlocks = const [];
       var studioConfigEnabled = false;
       var studioCleanerApiConfigId = '';
+      StudioPreset? studioPreset;
+      var studioPresetId = 'default';
       try {
         final studioConfig = await ctx.ref
             .read(studioConfigRepoProvider)
@@ -154,6 +158,7 @@ class CleanerStage {
         broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
         studioConfigEnabled = studioConfig?.enabled == true;
         studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
+        studioPresetId = studioConfig?.studioPresetId ?? 'default';
       } catch (e) {
         debugPrint(
           '[PostCleaner] broadcast load failed session=$sessionId error=$e',
@@ -166,6 +171,18 @@ class CleanerStage {
         debugPrint('[PostCleaner] skipping — Studio not enabled');
         return;
       }
+
+      // Load the Studio preset to get cleaner-section blocks.
+      try {
+        studioPreset = await ctx.ref
+            .read(studioPresetRepoProvider)
+            .getById(studioPresetId);
+      } catch (e) {
+        debugPrint(
+          '[PostCleaner] preset load failed session=$sessionId error=$e',
+        );
+      }
+      if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
 
       // Resolve the Studio cleaner slot (fail-explicit).
       final AuxApiConfig cleanerConfig;
@@ -189,14 +206,16 @@ class CleanerStage {
       // Extract Beauty Shard brief from the assistant message's studioOutputs.
       var beautyBrief = '';
       String? beautyState;
+      Map<String, String> sessionVars = {};
+      final Character? effectiveChar = character ??
+          ctx.ref.read(characterByIdProvider(ctx.charId));
       try {
         beautyBrief = BeautyStateHandler.extractBeautyBrief(lastAssistant);
         // Load current beauty state from session vars.
         final session = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (session != null) {
-          beautyState = BeautyStateHandler.extractBeautyState(
-            session.sessionVars,
-          );
+          sessionVars = session.sessionVars;
+          beautyState = BeautyStateHandler.extractBeautyState(sessionVars);
         }
       } catch (e) {
         debugPrint(
@@ -204,6 +223,20 @@ class CleanerStage {
         );
       }
       if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
+
+      // Build MacroContext for resolving preset-block macros.
+      final cleanerMacroCtx = MacroContext(
+        charName: effectiveChar?.name ?? '',
+        charDescription: effectiveChar?.description,
+        charScenario: effectiveChar?.scenario,
+        charPersonality: effectiveChar?.personality,
+        charMesExample: effectiveChar?.mesExample,
+        userName: 'User',
+        macroName: effectiveChar?.macroName,
+        sessionVars: sessionVars,
+        charId: ctx.charId,
+        sessionId: sessionId,
+      );
 
       await _executeAndApplyCleaner(
         sessionId: sessionId,
@@ -214,10 +247,12 @@ class CleanerStage {
         broadcastBlocks: broadcastBlocks,
         pipeline: pipeline,
         promptPayload: promptPayload,
-        character: character,
+        character: effectiveChar,
         cleanerConfig: cleanerConfig,
         beautyBrief: beautyBrief,
         beautyState: beautyState,
+        cleanerBlocks: studioPreset?.blocks ?? const [],
+        macroCtx: cleanerMacroCtx,
       );
     } catch (e) {
       debugPrint('[PostCleaner] failed session=$sessionId error=$e');
@@ -288,6 +323,8 @@ class CleanerStage {
     required AuxApiConfig cleanerConfig,
     String beautyBrief = '',
     String? beautyState,
+    List<StudioPresetBlock> cleanerBlocks = const [],
+    MacroContext? macroCtx,
   }) async {
     final isManualRerun = genId < 0;
     bool abortCheck() =>
@@ -465,6 +502,8 @@ class CleanerStage {
       cancelToken: _cleanerCancelToken,
       beautyBrief: beautyBrief,
       beautyState: beautyState,
+      cleanerBlocks: cleanerBlocks,
+      macroCtx: macroCtx,
       onCleanedChunk: (text) {
         if (!abortCheck()) return;
         ctx.ref.read(streamingStateProvider(ctx.charId).notifier).state =
@@ -841,6 +880,8 @@ class CleanerStage {
     List<String> broadcastBlocks = const [];
     var studioConfigEnabled = false;
     var studioCleanerApiConfigId = '';
+    StudioPreset? studioPreset;
+    var studioPresetId = 'default';
     try {
       final studioConfig = await ctx.ref
           .read(studioConfigRepoProvider)
@@ -848,6 +889,7 @@ class CleanerStage {
       broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
       studioConfigEnabled = studioConfig?.enabled == true;
       studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
+      studioPresetId = studioConfig?.studioPresetId ?? 'default';
     } catch (e) {
       debugPrint(
         '[PostCleaner] rerun broadcast load failed session=$sessionId error=$e',
@@ -859,6 +901,18 @@ class CleanerStage {
       debugPrint('[PostCleaner] rerun skipped — Studio not enabled');
       return;
     }
+
+    // Load the Studio preset to get cleaner-section blocks (same as auto path).
+    try {
+      studioPreset = await ctx.ref
+          .read(studioPresetRepoProvider)
+          .getById(studioPresetId);
+    } catch (e) {
+      debugPrint(
+        '[PostCleaner] rerun preset load failed session=$sessionId error=$e',
+      );
+    }
+    if (!ctx.ref.mounted) return;
 
     // Resolve the Studio cleaner slot (fail-explicit).
     final AuxApiConfig cleanerConfig;
@@ -886,13 +940,13 @@ class CleanerStage {
     // Extract Beauty Shard brief + state (same as the auto path).
     var beautyBrief = '';
     String? beautyState;
+    Map<String, String> sessionVars = {};
     try {
       beautyBrief = BeautyStateHandler.extractBeautyBrief(target);
-      final session = await ctx.ref.read(chatRepoProvider).getById(sessionId);
-      if (session != null) {
-        beautyState = BeautyStateHandler.extractBeautyState(
-          session.sessionVars,
-        );
+      final rerunSession = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+      if (rerunSession != null) {
+        sessionVars = rerunSession.sessionVars;
+        beautyState = BeautyStateHandler.extractBeautyState(sessionVars);
       }
     } catch (e) {
       debugPrint(
@@ -900,6 +954,20 @@ class CleanerStage {
       );
     }
     if (!ctx.ref.mounted) return;
+
+    // Build MacroContext for resolving preset-block macros (rerun path).
+    final cleanerMacroCtx = MacroContext(
+      charName: character?.name ?? '',
+      charDescription: character?.description,
+      charScenario: character?.scenario,
+      charPersonality: character?.personality,
+      charMesExample: character?.mesExample,
+      userName: 'User',
+      macroName: character?.macroName,
+      sessionVars: sessionVars,
+      charId: ctx.charId,
+      sessionId: sessionId,
+    );
 
     try {
       await _executeAndApplyCleaner(
@@ -915,6 +983,8 @@ class CleanerStage {
         cleanerConfig: cleanerConfig,
         beautyBrief: beautyBrief,
         beautyState: beautyState,
+        cleanerBlocks: studioPreset?.blocks ?? const [],
+        macroCtx: cleanerMacroCtx,
       );
     } catch (e) {
       debugPrint('[PostCleaner] rerun failed session=$sessionId error=$e');

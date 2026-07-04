@@ -110,6 +110,17 @@ void main() {
       expect(ids, contains('cleaner_aiism'));
       expect(ids, contains('cleaner_audit'));
       expect(ids, contains('cleaner_rules'));
+      expect(ids, contains('cleaner_beauty'));
+    });
+
+    test('cleaner_beauty has beauty state macro and lumiaooc coloring rule', () {
+      final blocks = studioPresetSeedBlocks();
+      final beauty = blocks.firstWhere((b) => b['id'] == 'cleaner_beauty');
+      final content = beauty['content'] as String;
+      expect(content, contains('{{beautyBrief}}'));
+      expect(content, contains('{{getvar::glaze_beauty_state}}'));
+      expect(content, contains('lumiaooc'));
+      expect(content, contains('glaze_beauty_state'));
     });
 
     test('cleaner_rules contains concrete NoriMyn prose guard rules', () {

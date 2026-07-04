@@ -9,10 +9,14 @@ import '../db/repositories/tracker_snapshot_repo.dart';
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
+import '../models/studio_config.dart';
+import '../models/tracker.dart';
 import 'aux_llm_client.dart';
 import 'ledger/durable_fact_writer.dart';
 import 'ledger/ledger_op_applier.dart';
 import 'ledger/visible_ledger_store.dart';
+import 'macro_engine.dart';
+import 'studio/studio_aux_prompt_assembler.dart';
 import 'studio_ledger_export_parser.dart';
 import 'studio_ledger_prompt.dart';
 
@@ -126,6 +130,8 @@ class StudioLedgerService {
     bool forceEnabled = false,
     bool Function()? isStillCurrent,
     CancelToken? cancelToken,
+    List<StudioPresetBlock> ledgerBlocks = const [],
+    MacroContext? macroCtx,
   }) async {
     // Studio Ledger is always-on when Studio is enabled. forceEnabled is
     // still respected for manual triggers.
@@ -158,11 +164,13 @@ class StudioLedgerService {
       }
 
       // ── 3. Build prompt ─────────────────────────────────────────────────
-      final prompt = _promptBuilder.build(
+      final prompt = _buildLedgerPrompt(
         finalAssistantText: finalAssistantText,
         recentHistoryText: recentHistoryText,
         currentTrackers: currentTrackers,
         recentMemoryEntries: recentEntries,
+        ledgerBlocks: ledgerBlocks,
+        macroCtx: macroCtx,
       );
 
       // ── 4. Call LLM ─────────────────────────────────────────────────────
@@ -365,6 +373,111 @@ class StudioLedgerService {
         elapsedMs: sw.elapsedMilliseconds,
       );
     }
+  }
+
+  /// Builds the ledger prompt from preset blocks when available, falling
+  /// back to [StudioLedgerPrompt] when no preset blocks are supplied.
+  /// The output structure template (`<glaze_memory_export>` +
+  /// `<studio_ledger>`) is always code-appended — the parser depends on it.
+  String _buildLedgerPrompt({
+    required String finalAssistantText,
+    required String recentHistoryText,
+    required List<Tracker> currentTrackers,
+    required List<MemoryEntry> recentMemoryEntries,
+    List<StudioPresetBlock> ledgerBlocks = const [],
+    MacroContext? macroCtx,
+  }) {
+    if (ledgerBlocks.isEmpty || macroCtx == null) {
+      return _promptBuilder.build(
+        finalAssistantText: finalAssistantText,
+        recentHistoryText: recentHistoryText,
+        currentTrackers: currentTrackers,
+        recentMemoryEntries: recentMemoryEntries,
+      );
+    }
+
+    final trackerBlock = _buildTrackerBlock(currentTrackers);
+    final memoryBlock = _buildMemoryBlock(recentMemoryEntries);
+
+    final runtimeSuffix = '''
+<current_state>
+$trackerBlock
+</current_state>
+
+<existing_memory>
+$memoryBlock
+</existing_memory>
+
+<recent_chat>
+$recentHistoryText
+</recent_chat>
+
+<final_assistant_response>
+$finalAssistantText
+</final_assistant_response>
+
+Now produce the Studio Ledger output. You MUST return BOTH blocks below.
+The <glaze_memory_export> block is MANDATORY — even when there is nothing
+to write, include it with empty arrays. Do not omit it under any circumstance.
+
+Required response template (follow this exact structure):
+<glaze_memory_export>
+{"ops":[],"durableFacts":[]}
+</glaze_memory_export>
+<studio_ledger>
+Compact continuity snapshot here.
+</studio_ledger>
+
+The <glaze_memory_export> block MUST come first, before <studio_ledger>.
+It must contain a single JSON object with "ops" and "durableFacts" arrays.
+When there are no state changes or durable facts, output empty arrays —
+do NOT skip the block.
+
+Ops format:
+{"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"durableFacts":[{"title":"…","content":"…","keys":["…"],"entities":["…"]}]}
+
+Allowed namespaces: npc:, relationship:, arc:, world:, scene.
+Allowed ops: set, append_unique, delete.
+Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).
+Max value length: 2000 chars.''';
+
+    return const StudioAuxPromptAssembler().assemble(
+      blocks: ledgerBlocks,
+      section: 'ledger',
+      macroCtx: macroCtx,
+      runtimeSuffix: runtimeSuffix,
+    );
+  }
+
+  String _buildTrackerBlock(List<Tracker> trackers) {
+    if (trackers.isEmpty) return '(no prior state)';
+    final ledgerTrackers = trackers
+        .where((t) => t.scope == 'ledger' || t.scope == 'chat')
+        .where(
+          (t) =>
+              t.name.startsWith('npc:') ||
+              t.name.startsWith('relationship:') ||
+              t.name.startsWith('arc:') ||
+              t.name.startsWith('world:') ||
+              t.name.startsWith('scene.'),
+        )
+        .toList();
+    if (ledgerTrackers.isEmpty) return '(no prior state)';
+    return ledgerTrackers
+        .map((t) => '${t.name}: ${t.value}')
+        .join('\n');
+  }
+
+  String _buildMemoryBlock(List<MemoryEntry> entries) {
+    if (entries.isEmpty) return '(no existing memory)';
+    return entries
+        .take(20)
+        .map((e) {
+          final keys = e.keys.isEmpty ? '' : ' [${e.keys.join(', ')}]';
+          final locked = e.locked ? ' [locked]' : '';
+          return '- ${e.title.isNotEmpty ? e.title : e.id}$keys$locked';
+        })
+        .join('\n');
   }
 
   bool _isNoWriteLedgerOutput(LedgerParseResult parseResult) {
