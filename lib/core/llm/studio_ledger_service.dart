@@ -9,13 +9,17 @@ import '../db/repositories/tracker_repo.dart';
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
-import '../models/studio_ledger_export.dart';
 import '../state/db_provider.dart';
-import '../utils/id_generator.dart';
-import '../utils/time_helpers.dart';
 import 'aux_llm_client.dart';
+import 'ledger/durable_fact_writer.dart';
+import 'ledger/ledger_op_applier.dart';
+import 'ledger/visible_ledger_store.dart';
 import 'studio_ledger_export_parser.dart';
 import 'studio_ledger_prompt.dart';
+
+export 'ledger/durable_fact_writer.dart';
+export 'ledger/ledger_op_applier.dart';
+export 'ledger/visible_ledger_store.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // StudioLedgerService
@@ -85,11 +89,17 @@ class StudioLedgerService {
   final AuxLlmClient _llm;
   final StudioLedgerExportParser _parser;
   final StudioLedgerPrompt _promptBuilder;
+  final LedgerOpApplier _opApplier;
+  final DurableFactWriter _factWriter;
+  final VisibleLedgerStore _ledgerStore;
 
   StudioLedgerService(this._ref)
     : _llm = AuxLlmClient(_ref),
       _parser = const StudioLedgerExportParser(),
-      _promptBuilder = const StudioLedgerPrompt();
+      _promptBuilder = const StudioLedgerPrompt(),
+      _opApplier = const LedgerOpApplier(),
+      _factWriter = const DurableFactWriter(),
+      _ledgerStore = const VisibleLedgerStore();
 
   /// Run the Studio Ledger for [sessionId] on [finalAssistantText].
   ///
@@ -216,7 +226,7 @@ class StudioLedgerService {
 
       if (!parseResult.hasExport) {
         // Store visible ledger as diagnostics even when export is invalid.
-        await _storeVisibleLedger(
+        await _ledgerStore.storeVisibleLedger(
           sessionId: sessionId,
           messageId: messageId,
           swipeId: swipeId,
@@ -254,7 +264,7 @@ class StudioLedgerService {
       for (final op in export.ops) {
         if (token.isCancelled || isStillCurrent?.call() == false) break;
         try {
-          await _applyOp(
+          await _opApplier.applyOp(
             op: op,
             sessionId: sessionId,
             messageId: messageId,
@@ -278,7 +288,7 @@ class StudioLedgerService {
       if (export.durableFacts.isNotEmpty &&
           token.isCancelled == false &&
           isStillCurrent?.call() != false) {
-        durableFactsWritten = await _writeDurableFacts(
+        durableFactsWritten = await _factWriter.writeDurableFacts(
           sessionId: sessionId,
           messageId: messageId,
           facts: export.durableFacts,
@@ -291,7 +301,7 @@ class StudioLedgerService {
       }
 
       // ── 8. Store visible ledger as internal diagnostics ─────────────────
-      await _storeVisibleLedger(
+      await _ledgerStore.storeVisibleLedger(
         sessionId: sessionId,
         messageId: messageId,
         swipeId: swipeId,
@@ -363,199 +373,5 @@ class StudioLedgerService {
     if (reason == 'empty export (no ops, no durable facts)') return true;
     if (reason == 'no <glaze_memory_export> block found') return true;
     return false;
-  }
-
-  // ── Op application ──────────────────────────────────────────────────────────
-
-  Future<void> _applyOp({
-    required LedgerOp op,
-    required String sessionId,
-    required String messageId,
-    required int swipeId,
-    required int agentSwipeId,
-    required TrackerRepo trackerRepo,
-  }) async {
-    // Plan §Manual Overrides and Locks: if canon_lock:<key> = 'true',
-    // Studio Ledger must not update that state key.
-    final lockKey = 'canon_lock:${op.key}';
-    final lock = await trackerRepo.get(sessionId, lockKey);
-    if (lock != null && lock.value.trim().toLowerCase() == 'true') {
-      debugPrint('[StudioLedger] op blocked by canon_lock key=${op.key}');
-      return;
-    }
-
-    final provenance = _buildLedgerProvenance(
-      messageId: messageId,
-      swipeId: swipeId,
-      agentSwipeId: agentSwipeId,
-      evidence: op.evidence,
-    );
-
-    switch (op.op) {
-      case 'set':
-        await trackerRepo.upsertValue(
-          sessionId,
-          op.key,
-          op.value,
-          scope: 'ledger',
-          provenance: provenance,
-        );
-      case 'append_unique':
-        // Read current value and append if not already present.
-        final existing = await trackerRepo.get(sessionId, op.key);
-        final currentValue = existing?.value ?? '';
-        if (_containsValue(currentValue, op.value)) {
-          debugPrint(
-            '[StudioLedger] append_unique skipped (already present) '
-            'key=${op.key}',
-          );
-          return;
-        }
-        final newValue = currentValue.isEmpty
-            ? op.value
-            : '$currentValue\n${op.value}';
-        await trackerRepo.upsertValue(
-          sessionId,
-          op.key,
-          newValue,
-          scope: 'ledger',
-          provenance: provenance,
-        );
-      case 'delete':
-        await trackerRepo.delete(sessionId, op.key);
-    }
-  }
-
-  /// Returns true when [haystack] already contains [needle] as a line or
-  /// substring (case-insensitive, trimmed). Used for append_unique semantics.
-  bool _containsValue(String haystack, String needle) {
-    if (haystack.isEmpty || needle.isEmpty) return false;
-    final needleLower = needle.trim().toLowerCase();
-    return haystack
-        .split('\n')
-        .any((line) => line.trim().toLowerCase() == needleLower);
-  }
-
-  // ── Durable facts ───────────────────────────────────────────────────────────
-
-  /// Write [facts] to MemoryBook with dedup by title+content hash.
-  /// Returns count of facts actually written.
-  Future<int> _writeDurableFacts({
-    required String sessionId,
-    required String messageId,
-    required List<LedgerDurableFact> facts,
-    required MemoryBookRepo bookRepo,
-  }) async {
-    if (facts.isEmpty) return 0;
-    var written = 0;
-
-    // Load existing entries for dedup.
-    final book = await bookRepo.getBySessionId(sessionId);
-    final existing = book?.entries ?? const <MemoryEntry>[];
-    final existingHashes = existing
-        .map((MemoryEntry e) => e.sourceHash)
-        .where((String h) => h.isNotEmpty)
-        .toSet();
-
-    final toAdd = <MemoryEntry>[];
-    for (final fact in facts) {
-      if (fact.title.trim().isEmpty || fact.content.trim().isEmpty) continue;
-      final hash = _hashFact(fact.title, fact.content);
-      if (existingHashes.contains(hash)) {
-        debugPrint(
-          '[StudioLedger] dedup: skipping existing fact "${fact.title}"',
-        );
-        continue;
-      }
-      existingHashes.add(hash);
-      toAdd.add(
-        MemoryEntry(
-          id: generateId(),
-          title: fact.title.trim(),
-          content: fact.content.trim(),
-          keys: fact.keys,
-          kind: 'studio_ledger',
-          source: 'studio_ledger',
-          sourceHash: hash,
-          messageIds: [messageId],
-          importance: 0.6,
-          status: 'active',
-          createdAt: currentTimestampSeconds(),
-        ),
-      );
-      written++;
-    }
-
-    if (toAdd.isNotEmpty) {
-      await bookRepo.appendApprovedEntries(sessionId, toAdd);
-    }
-
-    return written;
-  }
-
-  /// Compute a stable dedup hash for a (title, content) pair.
-  String _hashFact(String title, String content) {
-    final normalized =
-        '${title.trim().toLowerCase()}|${content.trim().toLowerCase()}';
-    // Simple djb2 hash — enough for dedup without crypto overhead.
-    var hash = 5381;
-    for (final cp in normalized.codeUnits) {
-      hash = ((hash << 5) + hash) ^ cp;
-      hash &= 0xFFFFFFFF; // keep 32-bit
-    }
-    return 'sl_${hash.toRadixString(16)}';
-  }
-
-  // ── Visible ledger ──────────────────────────────────────────────────────────
-
-  /// Store the visible ledger as an internal diagnostic tracker row.
-  /// Key: `_ledger:$messageId` — scoped to this specific message.
-  Future<void> _storeVisibleLedger({
-    required String sessionId,
-    required String messageId,
-    required int swipeId,
-    required int agentSwipeId,
-    required String visibleLedger,
-    required TrackerRepo trackerRepo,
-  }) async {
-    if (visibleLedger.isEmpty) return;
-    try {
-      await trackerRepo.upsertValue(
-        sessionId,
-        '_ledger:$messageId',
-        visibleLedger.length > 8000
-            ? '${visibleLedger.substring(0, 8000)}…[truncated]'
-            : visibleLedger,
-        scope: 'ledger_diagnostic',
-        provenance: _buildLedgerProvenance(
-          messageId: messageId,
-          swipeId: swipeId,
-          agentSwipeId: agentSwipeId,
-        ),
-      );
-    } catch (e) {
-      debugPrint('[StudioLedger] failed to store visible ledger: $e');
-    }
-  }
-
-  String _buildLedgerProvenance({
-    required String messageId,
-    required int swipeId,
-    required int agentSwipeId,
-    String evidence = '',
-  }) {
-    final parts = <String>[
-      'source=studio_ledger',
-      'message=$messageId',
-      'swipe=$swipeId',
-      'agentSwipe=$agentSwipeId',
-    ];
-    final trimmedEvidence = evidence.trim();
-    if (trimmedEvidence.isNotEmpty) {
-      parts.add(
-        'evidence=${trimmedEvidence.substring(0, trimmedEvidence.length.clamp(0, 80))}',
-      );
-    }
-    return parts.join('|');
   }
 }

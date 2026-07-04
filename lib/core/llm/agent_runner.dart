@@ -7,10 +7,8 @@ import '../models/api_config.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
 import '../utils/error_format.dart';
-import '../../features/settings/api_list_provider.dart';
 import 'agent_stream_runner.dart';
-import 'reasoning_stripper.dart';
-import 'studio_api_config_resolver.dart';
+import 'studio/agent_config_resolver.dart';
 import 'transport/transport_factory.dart';
 
 /// Thin LLM orchestrator extracted from `MemoryStudioService` (Phase 5.1,
@@ -30,6 +28,7 @@ class AgentRunner {
   late final AgentStreamRunner _streamRunner = AgentStreamRunner(
     pickChatTransport,
   );
+  late final AgentConfigResolver _configResolver = AgentConfigResolver(_ref);
 
   AgentRunner(this._ref);
 
@@ -190,110 +189,24 @@ class AgentRunner {
     );
   }
 
-  /// Resolve which API config an agent uses. With the 3-slot model (v55):
-  /// - [apiConfigId] — if non-empty, overrides `runApiConfigId` from the
-  ///   StudioConfig. Callers pass `cheapApiConfigId` for trackers,
-  ///   `expensiveApiConfigId` for the final generator, `cleanerApiConfigId`
-  ///   for post-processing agents. When empty, falls back to `runApiConfigId`
-  ///   then to the active chat config.
-  /// - Model overrides are global PipelineSettings values configured from the
-  ///   Studio menu: studioFinalModelOverride for the final generator,
-  ///   postCleanerModel for post-processing trackers, studioTrackerModelOverride
-  ///   for pre-gen trackers. The final generator intentionally does not read
-  ///   PipelineSettings.memoryBookApi.generationModel because that field belongs to MemoryBook
-  ///   generation / agentic write-loop routing.
+  /// Resolve which API config an agent uses. Delegates to
+  /// [AgentConfigResolver]. Kept as a facade so callers (TrackerBatcher,
+  /// tests) can call `runner.resolveAgentConfig(...)` without importing the
+  /// resolver directly.
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,
     ApiConfig current,
     String sessionId, {
     bool isFinalResponse = false,
     String? apiConfigId,
-  }) async {
-    await _ref.read(apiListProvider.future);
-    final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
-    final runApiConfigId = (apiConfigId != null && apiConfigId.isNotEmpty)
-        ? apiConfigId
-        : await _readRunApiConfigId(sessionId);
-    final resolver = StudioApiConfigResolver(
-      apiConfigs: apiConfigs,
-      activeConfig: _ref.read(activeApiConfigProvider),
+  }) {
+    return _configResolver.resolveAgentConfig(
+      agent,
+      current,
+      sessionId,
+      isFinalResponse: isFinalResponse,
+      apiConfigId: apiConfigId,
     );
-    final pipeline = _ref.read(pipelineSettingsProvider);
-    if (isFinalResponse) {
-      return resolver
-          .resolveAgentConfig(
-            current,
-            runApiConfigId,
-            pipeline.studioAgent.studioFinalModelOverride,
-          )
-          .copyWithSampling(
-            topP: pipeline.studioAgent.studioFinalTopP,
-            topK: pipeline.studioAgent.studioFinalTopK,
-            frequencyPenalty: pipeline.studioAgent.studioFinalFrequencyPenalty,
-            presencePenalty: pipeline.studioAgent.studioFinalPresencePenalty,
-            omitTemperature: pipeline.studioAgent.studioFinalOmitTemperature,
-            omitTopP: pipeline.studioAgent.studioFinalOmitTopP,
-          );
-    } else if (agent.phase == 'post_processing') {
-      if (pipeline.cleaner.postCleanerModel.isNotEmpty) {
-        return resolver
-            .resolveAgentConfig(
-              current,
-              runApiConfigId,
-              pipeline.cleaner.postCleanerModel,
-            )
-            .copyWithSampling(
-              topP: pipeline.cleaner.postCleanerTopP,
-              topK: pipeline.cleaner.postCleanerTopK,
-              frequencyPenalty: pipeline.cleaner.postCleanerFrequencyPenalty,
-              presencePenalty: pipeline.cleaner.postCleanerPresencePenalty,
-              omitTemperature: pipeline.cleaner.postCleanerOmitTemperature,
-              omitTopP: pipeline.cleaner.postCleanerOmitTopP,
-            );
-      }
-      return resolver
-          .resolveAgentConfig(current, runApiConfigId, '')
-          .copyWithSampling(
-            topP: pipeline.cleaner.postCleanerTopP,
-            topK: pipeline.cleaner.postCleanerTopK,
-            frequencyPenalty: pipeline.cleaner.postCleanerFrequencyPenalty,
-            presencePenalty: pipeline.cleaner.postCleanerPresencePenalty,
-            omitTemperature: pipeline.cleaner.postCleanerOmitTemperature,
-            omitTopP: pipeline.cleaner.postCleanerOmitTopP,
-          );
-    } else if (pipeline.studioAgent.studioTrackerModelOverride.isNotEmpty) {
-      return resolver
-          .resolveAgentConfig(
-            current,
-            runApiConfigId,
-            pipeline.studioAgent.studioTrackerModelOverride,
-          )
-          .copyWithSampling(
-            topP: pipeline.studioAgent.studioTrackerTopP,
-            topK: pipeline.studioAgent.studioTrackerTopK,
-            frequencyPenalty: pipeline.studioAgent.studioTrackerFrequencyPenalty,
-            presencePenalty: pipeline.studioAgent.studioTrackerPresencePenalty,
-            omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
-            omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,
-          );
-    }
-    return resolver
-        .resolveAgentConfig(current, runApiConfigId, '')
-        .copyWithSampling(
-          topP: pipeline.studioAgent.studioTrackerTopP,
-          topK: pipeline.studioAgent.studioTrackerTopK,
-          frequencyPenalty: pipeline.studioAgent.studioTrackerFrequencyPenalty,
-          presencePenalty: pipeline.studioAgent.studioTrackerPresencePenalty,
-          omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
-          omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,
-        );
-  }
-
-  Future<String> _readRunApiConfigId(String sessionId) async {
-    final config = await _ref
-        .read(studioConfigRepoProvider)
-        .getBySessionId(sessionId);
-    return config?.runApiConfigId ?? '';
   }
 
   /// Per-agent idle timeout. The idle timer fires only if the model emits
@@ -380,14 +293,6 @@ class AgentRunner {
     if (trackerGlobal >= 0) return trackerGlobal;
     return null;
   }
-
-  /// Strip `<think>`/Plan-internally directives from a message before sending
-  /// to a model that won't honor them. Delegates to [ReasoningStripper]; kept
-  /// as a static shim because call sites reference
-  /// `AgentRunner.stripPromptLevelReasoning`.
-  static List<Map<String, dynamic>> stripPromptLevelReasoning(
-    List<Map<String, dynamic>> messages,
-  ) => ReasoningStripper.stripMessageReasoning(messages);
 }
 
 /// Successful single-agent run. Mirrors the former `_StudioAgentRunResult`.
