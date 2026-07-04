@@ -15,7 +15,6 @@ import '../llm/post_cleaner_service.dart';
 import '../llm/studio_ledger_service.dart';
 import '../models/api_config.dart';
 import 'db_provider.dart';
-import 'memory_settings_provider.dart';
 
 /// Provider for the entity graph builder.
 final memoryGraphBuilderProvider = Provider<MemoryGraphBuilder>((ref) {
@@ -40,13 +39,10 @@ final memoryCadenceServiceProvider = Provider<MemoryCadenceService>((ref) {
 });
 
 /// Post-turn pipeline service. Fire-and-forget after assistant response.
+/// Currently a no-op (entity graph disabled) — only cadence counter runs.
 final memoryPostTurnServiceProvider = Provider<MemoryPostTurnService>((ref) {
   return MemoryPostTurnService(
-    ref.watch(memoryBookRepoProvider),
-    ref.watch(memorySalienceRepoProvider),
     ref.watch(memoryCadenceServiceProvider),
-    ref.watch(memoryGraphBuilderProvider),
-    () => ref.read(memoryGlobalSettingsProvider),
   );
 });
 

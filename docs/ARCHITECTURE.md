@@ -916,7 +916,7 @@ not oversights:
 | `ChatSummaries` | `summary_repo.dart` | v30: `enabled`; one per session |
 | `MemoryBookRows` | `memory_book_repo.dart` | |
 | `MemoryCatalogRows` | `memory_catalog_repo.dart` | v29; rebuildable per-session Memory Catalog state |
-| `MemoryGraph*` | `memory_*_repo.dart` | v35; 4 tables (`memory_entity_rows`, `memory_salience_rows`, `memory_cadence_rows`, `memory_consolidation_rows`) |
+| `MemoryGraph*` | `memory_*_repo.dart` | v35; 4 tables (`memory_entity_rows`, `memory_salience_rows`, `memory_cadence_rows`, `memory_consolidation_rows`). **DISABLED** — heuristic entity extractor produces garbage on non-English text (see §"Disabled features" below). Tables remain for forward compat; no new rows written. |
 | `ExtensionPresets` | `extension_presets_repository.dart` | v20 |
 | `InfoBlocks` | `info_blocks_repository.dart` | v20; v22 adds `status` TEXT (default `'done'`) + `order` INTEGER (default 0); v27 adds `swipe_id` |
 | `StudioConfigRows` | `studio_config_repo.dart` | v36; reusable Studio profiles, v42 adds `profileId`/`profileName` for session-to-profile binding, v43 `builderPromptTemplate`, v44 `maxFinalHistoryMessages`, v46 `routingMode` |
@@ -1217,6 +1217,25 @@ the message header.
 Open issues:
 
 1. **`onboarding_service.dart`** — UI lives in `features/onboarding/onboarding_screen.dart`, but the service still imports `package:flutter/material.dart` for `BuildContext` and pushes via `rootNavigatorKey.currentState.push()`.
+
+2. **Memory Graph (entity extraction + salience) — DISABLED.**
+   `MemoryPostTurnService.runPostTurn` is a no-op: only the cadence counter
+   is incremented; the entity graph + salience rebuild is commented out.
+   The heuristic `MemoryEntityExtractor` relies on `[A-Z][a-z]` proper-noun
+   detection which does not work for Cyrillic (Russian RP) — it produces
+   garbage like "Encryption", "Non", "The" as character entities. The
+   stoplist (~25 words) and preposition guards are insufficient compared
+   to Lumiverse's ~150-word stoplist + adjective-follower filter + sentence
+   -start position index + preposition attachment guard.
+   Studio Ledger (LLM-based, writes `npc:Name.field`, `world:location`,
+   etc. into `tracker_rows`) covers the same use case with much higher
+   quality and is the canonical entity tracker going forward.
+   The 4 graph tables (`memory_entity_rows`, `memory_salience_rows`,
+   `memory_cadence_rows`, `memory_consolidation_rows`) remain in the DB
+   for forward compatibility.
+   **Reference for a future LLM-based rewrite:**
+   [Lumiverse Memory Cortex](https://github.com/prolix-oc/Lumiverse/tree/main/src/services/memory-cortex)
+   — heuristic Tier 1 + LLM sidecar Tier 2 with arbitration & grading.
 
 Resolved (kept for history; details in git / PR notes):
 
