@@ -1,14 +1,9 @@
-import 'dart:convert';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/db/studio_seed_blocks.dart';
 import '../../../core/models/studio_config.dart';
-import '../../../core/services/file_export_service.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../shared/widgets/glaze_toast.dart';
 import '../../studio/widgets/studio_block_editor_dialog.dart';
 
 /// Studio Preset Editor as a bottom sheet — replaces the full-screen
@@ -168,16 +163,6 @@ class _StudioPresetEditorSheetState
                   onPressed: _resetToDefaults,
                   icon: const Icon(Icons.restore, size: 18),
                   label: const Text('Reset'),
-                ),
-                TextButton.icon(
-                  onPressed: _importPreset,
-                  icon: const Icon(Icons.file_upload_outlined, size: 18),
-                  label: const Text('Import'),
-                ),
-                TextButton.icon(
-                  onPressed: _exportPreset,
-                  icon: const Icon(Icons.file_download_outlined, size: 18),
-                  label: const Text('Export'),
                 ),
               ],
             ),
@@ -365,54 +350,5 @@ class _StudioPresetEditorSheetState
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       ),
     );
-  }
-
-  Future<void> _importPreset() async {
-    final current = _preset;
-    if (current == null) return;
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['json'],
-      withData: true,
-    );
-    if (result == null || result.files.isEmpty) return;
-
-    try {
-      final bytes = result.files.single.bytes;
-      if (bytes == null) {
-        if (mounted) GlazeToast.show(context, 'Could not read preset file.');
-        return;
-      }
-      final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
-      final imported = StudioPreset.fromJson(decoded);
-      await _save(
-        imported.copyWith(
-          id: current.id,
-          name: imported.name.isNotEmpty ? imported.name : current.name,
-          updatedAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      );
-      if (mounted) GlazeToast.show(context, 'Preset imported.');
-    } catch (e) {
-      if (mounted) GlazeToast.show(context, 'Failed to import preset: $e');
-    }
-  }
-
-  Future<void> _exportPreset() async {
-    final preset = _preset;
-    if (preset == null) return;
-    final safeName = (preset.name.isNotEmpty ? preset.name : preset.id)
-        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
-    final data = const JsonEncoder.withIndent('  ').convert(preset.toJson());
-    try {
-      final path = await FileExportService.export(
-        data: data,
-        filename: 'studio_preset_$safeName.json',
-        subfolder: 'studio_presets',
-      );
-      if (mounted) GlazeToast.show(context, 'Preset exported to $path');
-    } catch (e) {
-      if (mounted) GlazeToast.show(context, 'Failed to export preset: $e');
-    }
   }
 }

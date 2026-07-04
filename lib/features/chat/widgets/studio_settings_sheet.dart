@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +10,7 @@ import '../../../core/llm/model_fetcher.dart';
 import '../../../core/llm/studio_controller_ontology.dart';
 import '../../../core/models/pipeline_settings.dart';
 import '../../../core/models/studio_config.dart';
+import '../../../core/services/file_export_service.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/utils/time_helpers.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -275,6 +278,16 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
           unawaited(_createStudioPreset(config));
         },
       ),
+      BottomSheetItem(
+        label: 'Import preset from file',
+        hint: 'Create a new preset from a JSON file',
+        icon: Icons.file_upload_outlined,
+        iconColor: Theme.of(context).colorScheme.primary,
+        onTap: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          unawaited(_importPreset(config));
+        },
+      ),
       ..._studioPresets.map((preset) {
         final active = preset.id == config.studioPresetId;
         final name = preset.name.isNotEmpty ? preset.name : preset.id;
@@ -294,6 +307,21 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             Navigator.of(context, rootNavigator: true).pop();
             _save(config.copyWith(studioPresetId: preset.id));
           },
+          actions: [
+            BottomSheetAction(
+              icon: Icons.file_download_outlined,
+              onTap: () => _exportPreset(preset),
+            ),
+            if (preset.id != 'default')
+              BottomSheetAction(
+                icon: Icons.delete_outline,
+                color: Theme.of(context).colorScheme.error,
+                onTap: () {
+                  Navigator.of(context, rootNavigator: true).pop();
+                  _deletePreset(preset, config);
+                },
+              ),
+          ],
         );
       }),
     ];
@@ -359,6 +387,127 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     nextPresets.sort((a, b) => a.name.compareTo(b.name));
     setState(() => _studioPresets = nextPresets);
     await _save(config.copyWith(studioPresetId: preset.id));
+  }
+
+  Future<void> _importPreset(StudioConfig config) async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    try {
+      final bytes = result.files.single.bytes;
+      if (bytes == null) {
+        if (mounted) GlazeToast.show(context, 'Could not read preset file.');
+        return;
+      }
+      final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+      final imported = StudioPreset.fromJson(decoded);
+      if (!mounted) return;
+
+      final nameCtrl = TextEditingController(
+        text: imported.name.isNotEmpty ? imported.name : 'Imported Preset',
+      );
+      final name = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Import Studio Preset'),
+          content: TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Preset name',
+              hintText: 'My Imported Preset',
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(nameCtrl.text),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+      nameCtrl.dispose();
+      final trimmedName = name?.trim() ?? '';
+      if (!mounted || trimmedName.isEmpty) return;
+
+      final now = currentTimestampSeconds();
+      final preset = imported.copyWith(
+        id: 'studio_$now',
+        name: trimmedName,
+        updatedAt: now,
+      );
+      await ref.read(studioPresetRepoProvider).upsert(preset);
+      if (!mounted) return;
+      final nextPresets = await ref.read(studioPresetRepoProvider).getAll();
+      nextPresets.sort((a, b) => a.name.compareTo(b.name));
+      setState(() => _studioPresets = nextPresets);
+      await _save(config.copyWith(studioPresetId: preset.id));
+      if (mounted) GlazeToast.show(context, 'Preset "$trimmedName" imported.');
+    } catch (e) {
+      if (mounted) GlazeToast.show(context, 'Failed to import preset: $e');
+    }
+  }
+
+  Future<void> _exportPreset(StudioPreset preset) async {
+    final safeName = (preset.name.isNotEmpty ? preset.name : preset.id)
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+    final data = const JsonEncoder.withIndent('  ').convert(preset.toJson());
+    try {
+      final path = await FileExportService.export(
+        data: data,
+        filename: 'studio_preset_$safeName.json',
+        subfolder: 'studio_presets',
+      );
+      if (mounted) GlazeToast.show(context, 'Preset exported to $path');
+    } catch (e) {
+      if (mounted) GlazeToast.show(context, 'Failed to export preset: $e');
+    }
+  }
+
+  Future<void> _deletePreset(StudioPreset preset, StudioConfig config) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Preset'),
+        content: Text(
+          'Delete "${preset.name.isNotEmpty ? preset.name : preset.id}"? '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await ref.read(studioPresetRepoProvider).delete(preset.id);
+    if (!mounted) return;
+
+    final nextPresets = await ref.read(studioPresetRepoProvider).getAll();
+    nextPresets.sort((a, b) => a.name.compareTo(b.name));
+    setState(() => _studioPresets = nextPresets);
+
+    if (config.studioPresetId == preset.id) {
+      await _save(config.copyWith(studioPresetId: 'default'));
+    }
+    if (mounted) GlazeToast.show(context, 'Preset deleted.');
   }
 
   Widget _buildPostTrackerContextSetting(PipelineSettings pipeline) {
