@@ -6,6 +6,7 @@ import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/models/pipeline_settings.dart';
+import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_book_ops_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/state/pipeline_settings_provider.dart';
@@ -392,6 +393,37 @@ class MemoryBookController {
         .save(
           s.copyWith(vectorSearchEnabled: nextVector, keyMatchMode: nextMode),
         );
+  }
+
+  /// Runs memory deduplication. When [entryIds] is provided, dedup is
+  /// scoped to those entries only (used by the "only selected swipes"
+  /// filter). Returns a human-readable result string for toast display.
+  Future<String> runDedup({Set<String>? entryIds}) async {
+    final pipeline = _ref.read(pipelineSettingsProvider);
+    final dedupService = _ref.read(memoryDedupServiceProvider);
+
+    final result = await dedupService.runDedup(
+      sessionId: _sessionId,
+      settings: pipeline,
+      entryIds: entryIds,
+      threshold: pipeline.memoryPipeline.memoryDedupThreshold,
+    );
+
+    if (result.status == 'ok') {
+      await load();
+    }
+
+    return switch (result.status) {
+      'ok' => 'Dedup: ${result.merged} merged, ${result.dropped} dropped, '
+          '${result.kept} kept (${result.pairsSentToLlm} pairs from '
+          '${result.candidatesChecked} entries)',
+      'no_book' => 'No memory book found.',
+      'aborted' => 'Dedup aborted.',
+      'timeout' => 'Dedup timed out.',
+      'llm_error' => 'Dedup: LLM error (${result.pairsSentToLlm} pairs found).',
+      'error' => 'Dedup failed.',
+      _ => 'Dedup: ${result.status}',
+    };
   }
 
   void dispose() => _draftGen.dispose();

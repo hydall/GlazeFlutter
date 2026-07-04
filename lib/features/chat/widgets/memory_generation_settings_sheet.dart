@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/memory_budget.dart';
-import '../../../core/llm/sse_client.dart';
+import '../../../core/llm/model_fetcher.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/services/memory_prompt_presets.dart';
 import '../../../core/state/memory_settings_provider.dart';
@@ -1116,20 +1116,11 @@ class _MemoryGenerationSettingsSheetState
     }
     setState(() => _fetchingModels = true);
     try {
-      final models = await SseClient().fetchModels(
+      final ids = await ModelFetcher.fetchModelIds(
         endpoint: config.endpoint,
         apiKey: config.apiKey,
+        fallbackModel: config.model,
       );
-      final ids = models
-          .map((m) => m['id'])
-          .whereType<String>()
-          .where((id) => id.trim().isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
-      if (config.model.isNotEmpty && !ids.contains(config.model)) {
-        ids.insert(0, config.model);
-      }
       if (!mounted) return;
       setState(() => _fetchedModels = ids);
     } catch (e) {

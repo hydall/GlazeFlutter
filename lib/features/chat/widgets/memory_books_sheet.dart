@@ -6,14 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/memory_book.dart';
-import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/memory_settings_provider.dart';
-import '../../../core/state/pipeline_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../memory/controllers/memory_book_controller.dart';
+import '../../memory/utils/memory_swipe_filter.dart';
 import 'memory_entry_editor_sheet.dart';
 import 'memory_generation_settings_sheet.dart';
 
@@ -37,55 +36,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   late final MemoryBookController _ctrl;
   Timer? _elapsedTimer;
   bool _hideUnselectedMemories = false;
-
-  /// Extract the set of memory entry IDs that were injected (via
-  /// `triggeredMemories`) for the currently selected swipe of each
-  /// assistant message. Used to filter the memory list so only entries
-  /// bound to visible swipes are shown.
-  Set<String> _getSelectedSwipeMemoryIds() {
-    final ids = <String>{};
-    for (final msg in widget.messages) {
-      if (msg.role != 'assistant') continue;
-      for (final tm in msg.triggeredMemories) {
-        if (tm.id.isNotEmpty) ids.add(tm.id);
-      }
-      final meta = msg.swipeId >= 0 && msg.swipeId < msg.swipesMeta.length
-          ? msg.swipesMeta[msg.swipeId]
-          : const <String, dynamic>{};
-      final rawTriggered = meta['triggeredMemories'];
-      if (rawTriggered is List) {
-        for (final raw in rawTriggered) {
-          if (raw is! Map) continue;
-          final id = raw['id'] as String? ?? '';
-          if (id.isNotEmpty) ids.add(id);
-        }
-      }
-    }
-    return ids;
-  }
-
-  Set<String> _getSelectedSwipeSourceMessageIds() {
-    final ids = <String>{};
-    for (final msg in widget.messages) {
-      if (msg.role != 'assistant') continue;
-      if (msg.isHidden || msg.isTyping || msg.isError) continue;
-      ids.add(msg.id);
-    }
-    return ids;
-  }
-
-  Set<String> _getSelectedSwipeSourceKeys() {
-    final keys = <String>{};
-    for (final msg in widget.messages) {
-      if (msg.role != 'assistant') continue;
-      if (msg.isHidden || msg.isTyping || msg.isError) continue;
-      keys.add(_sourceKey(msg.id, msg.swipeId, msg.agentSwipeId));
-    }
-    return keys;
-  }
-
-  static String _sourceKey(String messageId, int swipeId, int agentSwipeId) =>
-      '$messageId:$swipeId:$agentSwipeId';
 
   @override
   void initState() {
@@ -173,25 +123,20 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     // triggeredMemories for the currently selected swipes, or entries whose
     // source message is currently visible. Agentic write-loop memories are
     // created after generation, so they never appear in triggeredMemories.
-    final selectedMemoryIds = _getSelectedSwipeMemoryIds();
-    final selectedSourceMessageIds = _getSelectedSwipeSourceMessageIds();
-    final selectedSourceKeys = _getSelectedSwipeSourceKeys();
+    final selectedMemoryIds =
+        MemorySwipeFilter.selectedSwipeMemoryIds(widget.messages);
+    final selectedSourceMessageIds =
+        MemorySwipeFilter.selectedSwipeSourceMessageIds(widget.messages);
+    final selectedSourceKeys =
+        MemorySwipeFilter.selectedSwipeSourceKeys(widget.messages);
 
-    bool filterFn(MemoryEntry e) {
-      if (!_hideUnselectedMemories) return true;
-      if (selectedMemoryIds.contains(e.id)) return true;
-      if (e.messageIds.isEmpty) return false;
-      final sourceKey = _sourceKey(
-        e.messageIds.first,
-        e.sourceSwipeId,
-        e.sourceAgentSwipeId,
-      );
-      if (selectedSourceKeys.contains(sourceKey)) return true;
-      final hasLegacyProvenance =
-          e.sourceSwipeId == 0 && e.sourceAgentSwipeId == 0;
-      return hasLegacyProvenance &&
-          e.messageIds.any(selectedSourceMessageIds.contains);
-    }
+    bool filterFn(MemoryEntry e) => MemorySwipeFilter.entryMatches(
+          e,
+          hideUnselected: _hideUnselectedMemories,
+          selectedMemoryIds: selectedMemoryIds,
+          selectedSourceMessageIds: selectedSourceMessageIds,
+          selectedSourceKeys: selectedSourceKeys,
+        );
 
     final filteredCurated = curatedEntries.where(filterFn).toList();
     final filteredAgent = agentEntries.where(filterFn).toList();
@@ -1402,53 +1347,15 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   }
 
   void _dedupMemories() async {
-    final pipeline = ref.read(pipelineSettingsProvider);
-    final dedupService = ref.read(memoryDedupServiceProvider);
-
-    // Scope dedup to entries from selected swipes when the filter is on.
     Set<String>? entryIds;
     if (_hideUnselectedMemories) {
-      entryIds = _getSelectedSwipeMemoryIds();
+      entryIds = MemorySwipeFilter.selectedSwipeMemoryIds(widget.messages);
     }
 
     GlazeToast.show(context, 'Deduplicating memories...');
 
-    final result = await dedupService.runDedup(
-      sessionId: widget.sessionId,
-      settings: pipeline,
-      entryIds: entryIds,
-      threshold: pipeline.memoryPipeline.memoryDedupThreshold,
-    );
+    final toastText = await _ctrl.runDedup(entryIds: entryIds);
 
-    if (!mounted) return;
-
-    String toastText;
-    switch (result.status) {
-      case 'ok':
-        toastText =
-            'Dedup: ${result.merged} merged, ${result.dropped} dropped, ${result.kept} kept '
-            '(${result.pairsSentToLlm} pairs from ${result.candidatesChecked} entries)';
-        await _ctrl.load();
-        if (mounted) setState(() {});
-        break;
-      case 'no_book':
-        toastText = 'No memory book found.';
-        break;
-      case 'aborted':
-        toastText = 'Dedup aborted.';
-        break;
-      case 'timeout':
-        toastText = 'Dedup timed out.';
-        break;
-      case 'llm_error':
-        toastText = 'Dedup: LLM error (${result.pairsSentToLlm} pairs found).';
-        break;
-      case 'error':
-        toastText = 'Dedup failed.';
-        break;
-      default:
-        toastText = 'Dedup: ${result.status}';
-    }
     if (!mounted) return;
     GlazeToast.show(context, toastText);
   }
