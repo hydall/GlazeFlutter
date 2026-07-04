@@ -173,6 +173,13 @@ class StudioLedgerService {
         macroCtx: macroCtx,
       );
 
+      debugPrint(
+        '[StudioLedger] prompt session=$sessionId '
+        'chars=${prompt.length} '
+        'usingPresetBlocks=${ledgerBlocks.isNotEmpty && macroCtx != null} '
+        'first500=${prompt.length > 500 ? prompt.substring(0, 500) : prompt}',
+      );
+
       // ── 4. Call LLM ─────────────────────────────────────────────────────
       final maxTokens = settings.ledger.studioLedgerMaxTokens > 0
           ? settings.ledger.studioLedgerMaxTokens
@@ -224,7 +231,14 @@ class StudioLedgerService {
       }
 
       // ── 5. Parse + validate ─────────────────────────────────────────────
-      final parseResult = _parser.parse(outcome.text!);
+      final rawResponse = outcome.text!;
+      debugPrint(
+        '[StudioLedger] raw response session=$sessionId '
+        'chars=${rawResponse.length} '
+        'first1000=${rawResponse.length > 1000 ? rawResponse.substring(0, 1000) : rawResponse}',
+      );
+
+      final parseResult = _parser.parse(rawResponse);
 
       debugPrint(
         '[StudioLedger] parsed session=$sessionId '
