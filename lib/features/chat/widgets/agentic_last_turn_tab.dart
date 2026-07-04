@@ -167,6 +167,7 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
         ledgerConfig = StudioSlotResolver.resolve(
           apiConfigs: apiConfigs,
           apiConfigId: studioConfig?.cleanerApiConfigId ?? '',
+          fallback: ref.read(activeApiConfigProvider),
           errorLabel: 'ledger-rerun',
           modelOverride: pipeline.cleaner.postCleanerModel,
         );

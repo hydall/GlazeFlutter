@@ -141,6 +141,7 @@ class WriteLoopStage {
         writeLoopConfig = StudioSlotResolver.resolve(
           apiConfigs: apiConfigs,
           apiConfigId: studioCleanerApiConfigId,
+          fallback: ctx.ref.read(activeApiConfigProvider),
           errorLabel: 'agentic write-loop',
           modelOverride: pipeline.cleaner.postCleanerModel,
         );

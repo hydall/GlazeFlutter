@@ -121,6 +121,7 @@ class LedgerStage {
         ledgerConfig = StudioSlotResolver.resolve(
           apiConfigs: apiConfigs,
           apiConfigId: studioCleanerApiConfigId,
+          fallback: ctx.ref.read(activeApiConfigProvider),
           errorLabel: 'studio-ledger',
           modelOverride: pipeline.cleaner.postCleanerModel,
         );

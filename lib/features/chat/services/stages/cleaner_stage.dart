@@ -176,6 +176,7 @@ class CleanerStage {
         cleanerConfig = StudioSlotResolver.resolve(
           apiConfigs: apiConfigs,
           apiConfigId: studioCleanerApiConfigId,
+          fallback: ctx.ref.read(activeApiConfigProvider),
           errorLabel: 'post-cleaner',
           modelOverride: pipeline.cleaner.postCleanerModel,
         );
@@ -864,6 +865,7 @@ class CleanerStage {
       cleanerConfig = StudioSlotResolver.resolve(
         apiConfigs: apiConfigs,
         apiConfigId: studioCleanerApiConfigId,
+        fallback: ctx.ref.read(activeApiConfigProvider),
         errorLabel: 'post-cleaner-rerun',
         modelOverride: pipeline.cleaner.postCleanerModel,
       );

@@ -194,6 +194,7 @@ class TrackerMemoryRecoveryService {
             return StudioSlotResolver.resolve(
               apiConfigs: apiConfigs,
               apiConfigId: studioConfig.cleanerApiConfigId,
+              fallback: _ref.read(activeApiConfigProvider),
               errorLabel: 'recovery write-loop',
               modelOverride: pipeline.cleaner.postCleanerModel,
             );

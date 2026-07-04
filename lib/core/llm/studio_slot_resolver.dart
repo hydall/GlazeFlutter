@@ -33,16 +33,33 @@ class StudioSlotResolver {
   static AuxApiConfig resolve({
     required List<ApiConfig> apiConfigs,
     required String apiConfigId,
+    ApiConfig? fallback,
     String errorLabel = 'studio-slot',
     String modelOverride = '',
   }) {
     if (apiConfigId.isEmpty) {
+      if (fallback != null) {
+        final model =
+            modelOverride.isNotEmpty ? modelOverride : fallback.model;
+        debugPrint(
+          '[StudioSlotResolver] $errorLabel: apiConfigId is empty — '
+          'falling back to active chat API config (model=$model)',
+        );
+        return AuxApiConfig(
+          endpoint: fallback.endpoint,
+          apiKey: fallback.apiKey,
+          model: model,
+          protocol: fallback.protocol,
+        );
+      }
       debugPrint(
-        '[StudioSlotResolver] $errorLabel: apiConfigId is empty — '
-        'configure the Studio cleaner slot',
+        '[StudioSlotResolver] $errorLabel: apiConfigId is empty and no '
+        'fallback available — configure the Studio slot or set an active '
+        'chat API config',
       );
       throw Exception(
-        'Studio slot "$errorLabel" not configured: apiConfigId is empty',
+        'Studio slot "$errorLabel" not configured: apiConfigId is empty and '
+        'no active chat API config available as fallback',
       );
     }
     final selected =
