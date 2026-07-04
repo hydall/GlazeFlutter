@@ -882,6 +882,25 @@ class CleanerStage {
     // Manual rerun has no promptPayload snapshot (the original generation
     // context is gone), so the character-audit pass is skipped.
     final character = ctx.ref.read(characterByIdProvider(ctx.charId));
+
+    // Extract Beauty Shard brief + state (same as the auto path).
+    var beautyBrief = '';
+    String? beautyState;
+    try {
+      beautyBrief = BeautyStateHandler.extractBeautyBrief(target);
+      final session = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+      if (session != null) {
+        beautyState = BeautyStateHandler.extractBeautyState(
+          session.sessionVars,
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        '[PostCleaner] rerun beauty extraction failed session=$sessionId error=$e',
+      );
+    }
+    if (!ctx.ref.mounted) return;
+
     try {
       await _executeAndApplyCleaner(
         sessionId: sessionId,
@@ -894,6 +913,8 @@ class CleanerStage {
         promptPayload: null,
         character: character,
         cleanerConfig: cleanerConfig,
+        beautyBrief: beautyBrief,
+        beautyState: beautyState,
       );
     } catch (e) {
       debugPrint('[PostCleaner] rerun failed session=$sessionId error=$e');
