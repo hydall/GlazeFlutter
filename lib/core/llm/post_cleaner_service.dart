@@ -400,31 +400,16 @@ class PostCleanerService {
       );
     }
 
-    // customReplacements for {{beautyBrief}} are applied inline when
-    // pre-resolving the cleaner_beauty block above. The assembler no
-    // longer needs them.
-
-    // Always skip cleaner_beauty in the assembler — it is appended to the
-    // END of the runtime suffix (right before the assistant text) so the
-    // LLM sees the styling instructions last, matching the old
-    // CleanerPromptBuilder structure where BEAUTY SHARD was the final
-    // section before the text to clean.
-    final skipBlockIds = <String>{'cleaner_audit', 'cleaner_beauty'};
-
-    // Extract and pre-resolve the cleaner_beauty block for suffix appending.
-    String? beautySection;
+    final customReplacements = <String, String>{};
     if (beautyBrief.trim().isNotEmpty) {
-      final beautyBlock = cleanerBlocks
-          .where((b) => b.enabled && b.section == 'cleaner' && b.id == 'cleaner_beauty')
-          .firstOrNull;
-      if (beautyBlock != null && beautyBlock.content.trim().isNotEmpty) {
-        var beautyContent = beautyBlock.content;
-        beautyContent = replaceMacros(beautyContent, macroCtx).text;
-        beautyContent = beautyContent.replaceAll('{{beautyBrief}}', beautyBrief.trim());
-        if (beautyContent.trim().isNotEmpty) {
-          beautySection = beautyContent.trim();
-        }
-      }
+      customReplacements['{{beautyBrief}}'] = beautyBrief.trim();
+    } else {
+      customReplacements['{{beautyBrief}}'] = '';
+    }
+
+    final skipBlockIds = <String>{'cleaner_audit'};
+    if (beautyBrief.trim().isEmpty) {
+      skipBlockIds.add('cleaner_beauty');
     }
 
     final suffix = StringBuffer();
@@ -536,16 +521,6 @@ class PostCleanerService {
         ..writeln();
     }
 
-    // Append the beauty section as the LAST instruction block before the
-    // assistant text — primacy/recency effect means the LLM follows
-    // instructions closest to the text to clean.
-    if (beautySection != null) {
-      suffix
-        ..writeln()
-        ..writeln(beautySection)
-        ..writeln();
-    }
-
     suffix
       ..writeln()
       ..writeln('Assistant response to clean:')
@@ -555,6 +530,7 @@ class PostCleanerService {
       blocks: cleanerBlocks,
       section: 'cleaner',
       macroCtx: macroCtx,
+      customReplacements: customReplacements,
       runtimeSuffix: suffix.toString(),
       skipBlockIds: skipBlockIds,
     );
