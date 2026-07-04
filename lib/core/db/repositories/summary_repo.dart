@@ -16,6 +16,13 @@ class SummaryRepo extends DatabaseAccessor<AppDatabase>
         .getSingleOrNull();
   }
 
+  Future<List<String>> getAllSessionIds() async {
+    final rows = await select(chatSummaries).get();
+    return rows.map((r) => r.sessionId).toList();
+  }
+
+  Future<List<ChatSummary>> getAll() => select(chatSummaries).get();
+
   Future<void> put({
     required String sessionId,
     required String content,

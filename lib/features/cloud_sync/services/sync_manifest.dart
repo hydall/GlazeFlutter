@@ -24,6 +24,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncTrackerValueStore _trackerValueStore;
   final SyncStudioConfigStore _studioConfigStore;
   final SyncStudioPresetStore? _studioPresetStore;
+  final SyncChatSummaryStore? _chatSummaryStore;
+  final SyncCharacterFolderStore? _characterFolderStore;
+  final SyncMemoryGraphStore? _memoryGraphStore;
   final SyncImageStore? _imageStore;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
@@ -46,6 +49,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required this._trackerValueStore,
     required this._studioConfigStore,
     this._studioPresetStore,
+    this._chatSummaryStore,
+    this._characterFolderStore,
+    this._memoryGraphStore,
     this._imageStore,
   });
 
@@ -318,6 +324,60 @@ class SyncManifestBuilder implements SyncManifestProvider {
       }
     }
 
+    // Chat summaries — per-session, like tracker_value.
+    if (_chatSummaryStore != null) {
+      final summarySessionIds = await _chatSummaryStore.getAllSessionIds();
+      for (final sessionId in summarySessionIds) {
+        final summary = await _chatSummaryStore.getBySessionId(sessionId);
+        if (summary == null) continue;
+        final hash = SyncSerialization.computeSyncHash(summary);
+        final key = entryKey('chat_summary', sessionId);
+        final prevEntry = previous.entries[key];
+        final cloudEntry = cloudManifest?.entries[key];
+        final updatedAt = _resolveUpdatedAt(
+          hash: hash,
+          prevEntry: prevEntry,
+          cloudEntry: cloudEntry,
+          now: now,
+        );
+
+        entries[key] = SyncManifestEntry(
+          type: 'chat_summary',
+          id: sessionId,
+          path: cloudPath('chat_summary', sessionId),
+          updatedAt: updatedAt,
+          hash: hash,
+        );
+      }
+    }
+
+    // Memory graph — per-session, packs 5 tables into one JSON.
+    if (_memoryGraphStore != null) {
+      final graphSessionIds = await _memoryGraphStore.getAllSessionIds();
+      for (final sessionId in graphSessionIds) {
+        final graph = await _memoryGraphStore.getBySessionId(sessionId);
+        if (graph == null) continue;
+        final hash = SyncSerialization.computeSyncHash(graph);
+        final key = entryKey('memory_graph', sessionId);
+        final prevEntry = previous.entries[key];
+        final cloudEntry = cloudManifest?.entries[key];
+        final updatedAt = _resolveUpdatedAt(
+          hash: hash,
+          prevEntry: prevEntry,
+          cloudEntry: cloudEntry,
+          now: now,
+        );
+
+        entries[key] = SyncManifestEntry(
+          type: 'memory_graph',
+          id: sessionId,
+          path: cloudPath('memory_graph', sessionId),
+          updatedAt: updatedAt,
+          hash: hash,
+        );
+      }
+    }
+
     await _addSingletons(entries, previous, now, cloudManifest);
     await _addDeletedEntries(entries, now);
 
@@ -448,6 +508,30 @@ class SyncManifestBuilder implements SyncManifestProvider {
       final settings = await _extensionsSettingsStore.get();
       final settingsJson = settings.toJson();
       final hash = SyncSerialization.computeSyncHash(settingsJson);
+      final key = entryKey(type, type);
+      final prevEntry = previous.entries[key];
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+
+      entries[key] = SyncManifestEntry(
+        type: type,
+        id: type,
+        path: cloudPath(type, type),
+        updatedAt: updatedAt,
+        hash: hash,
+      );
+    }
+
+    // Character folders — singleton (all folders + members in one JSON).
+    if (_characterFolderStore != null) {
+      const type = 'character_folders';
+      final data = await _characterFolderStore.getAll();
+      final hash = SyncSerialization.computeSyncHash(data);
       final key = entryKey(type, type);
       final prevEntry = previous.entries[key];
       final cloudEntry = cloudManifest?.entries[key];

@@ -1,9 +1,13 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/db/app_db.dart';
+import '../../../core/db/repositories/character_folder_repo.dart';
 import '../../../core/db/repositories/extension_presets_repository.dart';
 import '../../../core/db/repositories/info_blocks_repository.dart';
+import '../../../core/db/repositories/summary_repo.dart';
 import '../../../core/db/repositories/tracker_snapshot_repo.dart';
 import '../../../core/db/repositories/tracker_repo.dart';
 import '../../../core/models/tracker.dart';
@@ -145,5 +149,268 @@ class TrackerValueSyncStore implements SyncTrackerValueStore {
   @override
   Future<void> insertRaw(Map<String, dynamic> tracker) async {
     await _repo.upsert(Tracker.fromJson(tracker));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ChatSummarySyncStore
+// ---------------------------------------------------------------------------
+
+/// Adapter wrapping [SummaryRepo] for cloud sync of chat summaries.
+/// Per-session collection, same shape as [TrackerValueSyncStore].
+class ChatSummarySyncStore implements SyncChatSummaryStore {
+  final SummaryRepo _repo;
+
+  ChatSummarySyncStore(this._repo);
+
+  @override
+  Future<List<String>> getAllSessionIds() => _repo.getAllSessionIds();
+
+  @override
+  Future<Map<String, dynamic>?> getBySessionId(String sessionId) async {
+    final row = await _repo.get(sessionId);
+    if (row == null) return null;
+    return {
+      'sessionId': row.sessionId,
+      'content': row.content,
+      'enabled': row.enabled,
+      'messageCount': row.messageCount,
+      'prompt': row.prompt,
+      'updatedAt': row.updatedAt,
+    };
+  }
+
+  @override
+  Future<void> putRaw(Map<String, dynamic> summary) async {
+    final sessionId = summary['sessionId'] as String? ?? '';
+    if (sessionId.isEmpty) return;
+    await _repo.put(
+      sessionId: sessionId,
+      content: summary['content'] as String? ?? '',
+      messageCount: summary['messageCount'] as int? ?? 0,
+      enabled: summary['enabled'] as bool?,
+      prompt: summary['prompt'] as String?,
+    );
+  }
+
+  @override
+  Future<void> deleteBySessionId(String sessionId) =>
+      _repo.deleteBySessionId(sessionId);
+}
+
+// ---------------------------------------------------------------------------
+// CharacterFolderSyncStore
+// ---------------------------------------------------------------------------
+
+/// Adapter wrapping [CharacterFolderRepo] for cloud sync of character folders
+/// and their membership rows. Singleton — all folders + members in one JSON.
+class CharacterFolderSyncStore implements SyncCharacterFolderStore {
+  final CharacterFolderRepo _repo;
+
+  CharacterFolderSyncStore(this._repo);
+
+  @override
+  Future<Map<String, dynamic>> getAll() async {
+    final folders = await _repo.getFolders();
+    final members = await _repo.getAllMembers();
+    return {
+      '__singleton': true,
+      'folders': folders
+          .map((f) => {
+                'folderId': f.id,
+                'name': f.name,
+                'color': f.color,
+                'sortOrder': f.sortOrder,
+                'createdAt': f.createdAt,
+                'updatedAt': f.updatedAt,
+              })
+          .toList(),
+      'members': members
+          .map((m) => {
+                'folderId': m.folderId,
+                'charId': m.charId,
+                'addedAt': m.addedAt,
+              })
+          .toList(),
+    };
+  }
+
+  @override
+  Future<void> applyAll(Map<String, dynamic> data) async {
+    final folders = (data['folders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final members = (data['members'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+    await _repo.deleteAllFoldersAndMembers();
+    for (final f in folders) {
+      await _repo.upsertFolderRaw(
+        CharacterFolderRow(
+          folderId: f['folderId'] as String? ?? '',
+          name: f['name'] as String? ?? '',
+          color: f['color'] as String?,
+          sortOrder: f['sortOrder'] as int? ?? 0,
+          createdAt: f['createdAt'] as int? ?? 0,
+          updatedAt: f['updatedAt'] as int? ?? 0,
+        ),
+      );
+    }
+    for (final m in members) {
+      await _repo.upsertMemberRaw(
+        CharacterFolderMemberRow(
+          folderId: m['folderId'] as String? ?? '',
+          charId: m['charId'] as String? ?? '',
+          addedAt: m['addedAt'] as int? ?? 0,
+        ),
+      );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MemoryGraphSyncStore
+// ---------------------------------------------------------------------------
+
+/// Adapter for cloud sync of the 5 memory-graph tables. Per-session —
+/// all rows for one session packed into a single JSON payload.
+class MemoryGraphSyncStore implements SyncMemoryGraphStore {
+  final AppDatabase _db;
+
+  MemoryGraphSyncStore(this._db);
+
+  @override
+  Future<List<String>> getAllSessionIds() async {
+    final ids = <String>{};
+    final catalog = await _db.customSelect(
+      "SELECT DISTINCT chatSessionId FROM memory_catalog_rows",
+    ).get();
+    for (final r in catalog) {
+      ids.add(r.read<String>('chatSessionId'));
+    }
+    final entities = await _db.customSelect(
+      "SELECT DISTINCT chatSessionId FROM memory_entity_rows",
+    ).get();
+    for (final r in entities) {
+      ids.add(r.read<String>('chatSessionId'));
+    }
+    final salience = await _db.customSelect(
+      "SELECT DISTINCT chatSessionId FROM memory_salience_rows",
+    ).get();
+    for (final r in salience) {
+      ids.add(r.read<String>('chatSessionId'));
+    }
+    final cadence = await _db.customSelect(
+      "SELECT DISTINCT chatSessionId FROM memory_cadence_rows",
+    ).get();
+    for (final r in cadence) {
+      ids.add(r.read<String>('chatSessionId'));
+    }
+    final consolidation = await _db.customSelect(
+      "SELECT DISTINCT chatSessionId FROM memory_consolidation_rows",
+    ).get();
+    for (final r in consolidation) {
+      ids.add(r.read<String>('chatSessionId'));
+    }
+    return ids.toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getBySessionId(String sessionId) async {
+    final catalog = await (_db.select(_db.memoryCatalogRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .get();
+    final entities = await (_db.select(_db.memoryEntityRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .get();
+    final salience = await (_db.select(_db.memorySalienceRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .get();
+    final cadence = await (_db.select(_db.memoryCadenceRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .get();
+    final consolidation = await (_db.select(_db.memoryConsolidationRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .get();
+
+    if (catalog.isEmpty &&
+        entities.isEmpty &&
+        salience.isEmpty &&
+        cadence.isEmpty &&
+        consolidation.isEmpty) {
+      return null;
+    }
+
+    return {
+      '__memoryGraph': true,
+      'sessionId': sessionId,
+      'catalog': catalog.map((r) => r.toJson()).toList(),
+      'entities': entities.map((r) => r.toJson()).toList(),
+      'salience': salience.map((r) => r.toJson()).toList(),
+      'cadence': cadence.map((r) => r.toJson()).toList(),
+      'consolidation': consolidation.map((r) => r.toJson()).toList(),
+    };
+  }
+
+  @override
+  Future<void> applyBySessionId(
+    String sessionId,
+    Map<String, dynamic> data,
+  ) async {
+    await deleteBySessionId(sessionId);
+
+    final catalog = (data['catalog'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final entities = (data['entities'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final salience = (data['salience'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final cadence = (data['cadence'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final consolidation =
+        (data['consolidation'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+    for (final row in catalog) {
+      await _db.into(_db.memoryCatalogRows).insert(
+            MemoryCatalogRow.fromJson(row),
+            mode: InsertMode.insertOrReplace,
+          );
+    }
+    for (final row in entities) {
+      await _db.into(_db.memoryEntityRows).insert(
+            MemoryEntityRow.fromJson(row),
+            mode: InsertMode.insertOrReplace,
+          );
+    }
+    for (final row in salience) {
+      await _db.into(_db.memorySalienceRows).insert(
+            MemorySalienceRow.fromJson(row),
+            mode: InsertMode.insertOrReplace,
+          );
+    }
+    for (final row in cadence) {
+      await _db.into(_db.memoryCadenceRows).insert(
+            MemoryCadenceRow.fromJson(row),
+            mode: InsertMode.insertOrReplace,
+          );
+    }
+    for (final row in consolidation) {
+      await _db.into(_db.memoryConsolidationRows).insert(
+            MemoryConsolidationRow.fromJson(row),
+            mode: InsertMode.insertOrReplace,
+          );
+    }
+  }
+
+  @override
+  Future<void> deleteBySessionId(String sessionId) async {
+    await (_db.delete(_db.memoryCatalogRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .go();
+    await (_db.delete(_db.memoryEntityRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .go();
+    await (_db.delete(_db.memorySalienceRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .go();
+    await (_db.delete(_db.memoryCadenceRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .go();
+    await (_db.delete(_db.memoryConsolidationRows)
+          ..where((t) => t.chatSessionId.equals(sessionId)))
+        .go();
   }
 }

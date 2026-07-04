@@ -194,6 +194,13 @@ class BackupExporter {
       'studio_preset_rows',
       'tracker_rows',
       'tracker_snapshots',
+      'character_folders',
+      'character_folder_members',
+      'memory_catalog_rows',
+      'memory_entity_rows',
+      'memory_salience_rows',
+      'memory_cadence_rows',
+      'memory_consolidation_rows',
     ];
   }
 }
