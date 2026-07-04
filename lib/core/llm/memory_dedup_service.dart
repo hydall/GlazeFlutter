@@ -11,7 +11,9 @@ import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
 import '../state/db_provider.dart';
 import 'aux_llm_client.dart';
+import 'transport/llm_protocol.dart';
 import 'vector_math.dart';
+import '../../features/settings/api_list_provider.dart';
 
 /// Result of a single dedup decision for a pair of near-duplicate entries.
 typedef DedupPairDecision = ({String entryAId, String entryBId, String action, String? mergedContent, String? mergedTitle, List<String>? mergedKeys});
@@ -141,7 +143,7 @@ class MemoryDedupService {
       }
 
       // 4. Build the batch LLM prompt with all candidate pairs.
-      final config = await _llm.resolveConfig(
+      final config = await _resolveMemoryBookConfig(
         settings,
         errorLabel: 'memory dedup',
       );
@@ -155,7 +157,7 @@ class MemoryDedupService {
         prompt: prompt,
         maxTokens: 2000,
         temperature: 0.1,
-        timeoutMs: settings.auxTimeoutMs,
+        timeoutMs: settings.memoryPipeline.auxTimeoutMs,
         cancelToken: cancelToken,
       );
 
@@ -262,6 +264,41 @@ class MemoryDedupService {
         totalElapsedMs: DateTime.now().millisecondsSinceEpoch - startedMs,
       );
     }
+  }
+
+  /// Resolves the MemoryBook API config from [settings.memoryBookApi].
+  /// Falls back to the active chat API config when source is 'current'.
+  Future<AuxApiConfig> _resolveMemoryBookConfig(
+    PipelineSettings settings, {
+    String errorLabel = 'memory',
+  }) async {
+    final mb = settings.memoryBookApi;
+    if (mb.generationSource == 'custom') {
+      if (mb.generationEndpoint.isEmpty || mb.generationModel.isEmpty) {
+        throw Exception('MemoryBook custom config incomplete for $errorLabel');
+      }
+      return AuxApiConfig(
+        endpoint: mb.generationEndpoint,
+        apiKey: mb.generationApiKey,
+        model: mb.generationModel,
+        protocol: LlmProtocol.openai,
+      );
+    }
+
+    await _ref.read(apiListProvider.future);
+    final chatConfig = _ref.read(activeApiConfigProvider);
+    if (chatConfig == null) {
+      throw Exception('No chat API config available for $errorLabel');
+    }
+    final model = mb.generationModel.isNotEmpty
+        ? mb.generationModel
+        : chatConfig.model;
+    return AuxApiConfig(
+      endpoint: chatConfig.endpoint,
+      apiKey: chatConfig.apiKey,
+      model: model,
+      protocol: chatConfig.protocol,
+    );
   }
 
   /// Build the batch LLM prompt for all candidate pairs.

@@ -2,9 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/studio_stage_brief.dart';
+import '../../../core/llm/studio_slot_resolver.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
@@ -172,8 +174,8 @@ class TrackerMemoryRecoveryService {
 
       if (token.isCancelled) break;
 
-      // B. Memory agentic write-loop re-run.
-      if (recoverMemory) {
+      // B. Memory agentic write-loop re-run (Studio-only).
+      if (recoverMemory && studioConfig != null) {
         try {
           final recentHistory = extractRecentHistoryText(
             session.messages.sublist(0, msgIdx + 1),
@@ -184,9 +186,15 @@ class TrackerMemoryRecoveryService {
               .getLatestCommittedExcludingMessage(sessionId, target.id);
           final trackers = snapshot?.trackers ??
               await _ref.read(trackerRepoProvider).getBySessionId(sessionId);
+          final writeLoopConfig = await StudioSlotResolver(_ref).resolve(
+            apiConfigId: studioConfig.cleanerApiConfigId,
+            errorLabel: 'recovery write-loop',
+            modelOverride: pipeline.cleaner.postCleanerModel,
+          );
           final res = await _ref.read(memoryAgenticWriteServiceProvider).runWriteLoop(
             sessionId: sessionId,
             settings: pipeline,
+            config: writeLoopConfig,
             recentHistoryText: recentHistory,
             currentTrackers: trackers,
             messageId: target.id,

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/prompt_builder.dart' show PromptPayload;
+import '../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/llm/beauty_state_parser.dart';
 import '../../../core/models/chat_message.dart';
@@ -16,6 +17,7 @@ import '../../../core/llm/memory_agentic_service.dart';
 import '../../../core/llm/memory_injection_service.dart'
     show chatMessageEmbeddingServiceProvider;
 import '../../../core/llm/studio_ledger_service.dart';
+import '../../../core/llm/studio_slot_resolver.dart';
 import '../../../core/llm/lorebook_providers.dart' show embeddingConfigProvider;
 import '../../../core/models/api_config.dart';
 import '../../../core/state/memory_agent_providers.dart';
@@ -720,6 +722,22 @@ class GenerationPipeline {
     final pipeline = ref.read(pipelineSettingsProvider);
 
     try {
+      // Write-loop is Studio-only. Gate by StudioConfig.enabled.
+      var studioConfigEnabled = false;
+      var studioCleanerApiConfigId = '';
+      try {
+        final studioConfig = await ref
+            .read(studioConfigRepoProvider)
+            .getBySessionId(sessionId);
+        studioConfigEnabled = studioConfig?.enabled == true;
+        studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
+      } catch (_) {}
+      if (!studioConfigEnabled) {
+        debugPrint('[AgenticWrite] skipping — Studio not enabled');
+        return;
+      }
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
       final bookRepo = ref.read(memoryBookRepoProvider);
       final book = await bookRepo.getBySessionId(sessionId);
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
@@ -795,10 +813,24 @@ class GenerationPipeline {
         return;
       }
 
+      // Resolve the Studio cleaner slot for the write-loop (fail-explicit).
+      final AuxApiConfig writeLoopConfig;
+      try {
+        writeLoopConfig = await StudioSlotResolver(ref).resolve(
+          apiConfigId: studioCleanerApiConfigId,
+          errorLabel: 'agentic write-loop',
+          modelOverride: pipeline.cleaner.postCleanerModel,
+        );
+      } catch (e) {
+        debugPrint('[AgenticWrite] slot resolution failed: $e');
+        return;
+      }
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
       debugPrint(
         '[AgenticWrite] starting write-loop session=$sessionId '
-        'model=${pipeline.generationModel.isEmpty ? "<chat>" : pipeline.generationModel} '
-        'timeoutMs=${pipeline.auxTimeoutMs} '
+        'model=${writeLoopConfig.model} '
+        'timeoutMs=${pipeline.memoryPipeline.auxTimeoutMs} '
         'existingTrackers=${trackers.length} '
         'historyChars=${recentHistory.length}',
       );
@@ -815,6 +847,7 @@ class GenerationPipeline {
       final result = await agenticService.runWriteLoop(
         sessionId: sessionId,
         settings: pipeline,
+        config: writeLoopConfig,
         recentHistoryText: recentHistory,
         currentTrackers: trackers,
         messageId: lastAssistant.id,
@@ -899,9 +932,9 @@ class GenerationPipeline {
                 messageId: messages.isNotEmpty ? messages.last.id : null,
                 attempts: result.attempts,
                 totalElapsedMs: result.totalElapsedMs,
-                model: pipeline.generationModel.isEmpty
+                model: pipeline.memoryBookApi.generationModel.isEmpty
                     ? null
-                    : pipeline.generationModel,
+                    : pipeline.memoryBookApi.generationModel,
                 summary: status == AgentOperationStatus.ok
                     ? (totalWritten > 0
                           ? 'wrote $totalWritten item${totalWritten > 1 ? 's' : ''}'
@@ -918,37 +951,13 @@ class GenerationPipeline {
     } catch (e) {
       debugPrint('[AgenticWrite] failed session=$sessionId error=$e');
     }
-
-    // Auto-dedup: if enabled, run a delayed dedup pass after the write-loop
-    // completes. Fire-and-forget — does not block generation. Only runs when
-    // the write-loop actually executed (not skipped by cadence) and
-    // memoryDedupAutoEnabled is true.
-    if (ref.mounted && pipeline.memoryDedupAutoEnabled) {
-      try {
-        final dedupService = ref.read(memoryDedupServiceProvider);
-        final dedupResult = await dedupService.runDedup(
-          sessionId: sessionId,
-          settings: pipeline,
-          threshold: pipeline.memoryDedupThreshold,
-          isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
-        );
-        debugPrint(
-          '[MemoryDedup] auto result session=$sessionId status=${dedupResult.status} '
-          'merged=${dedupResult.merged} dropped=${dedupResult.dropped} '
-          'kept=${dedupResult.kept} pairs=${dedupResult.pairsSentToLlm}',
-        );
-      } catch (e) {
-        debugPrint('[MemoryDedup] auto failed session=$sessionId error=$e');
-      }
-    }
   }
 
   /// Returns a non-null skip reason when the cadence should suppress the
   /// agentic write-loop, or null when the run should proceed.
   ///
   /// Cadence is hardcoded: the write-loop runs every 5 assistant turns
-  /// (batch mode — the LLM analyzes 5 U-A turns at once). The old
-  /// agenticWriteRunMode / runAgenticEveryN settings are no longer consulted.
+  /// (batch mode — the LLM analyzes 5 U-A turns at once).
   String? _resolveAgenticWriteCadence(
     PipelineSettings pipeline,
     int assistantTurnCount,
@@ -985,8 +994,6 @@ class GenerationPipeline {
   }) async {
     try {
       if (!abortHandler.isCurrentGen(genId)) return;
-      final pipeline = ref.read(pipelineSettingsProvider);
-      if (!pipeline.messageRecallEnabled) return;
       final config = ref.read(embeddingConfigProvider);
       if (config.endpoint.isEmpty) return;
       await ref
@@ -1060,9 +1067,7 @@ class GenerationPipeline {
       // Collect bounded recent chat history before the assistant response for
       // conservative local continuity checks. Uses configurable history window
       // from settings. Excludes the response being cleaned itself.
-      final maxHistory = pipeline.postCleanerContinuityEnabled
-          ? pipeline.postCleanerHistoryMessages
-          : 0;
+      final maxHistory = pipeline.cleaner.postCleanerHistoryMessages;
       final recentMessages = <ChatMessage>[];
       if (maxHistory > 0 && lastAssistantIndex > 0) {
         final start = (lastAssistantIndex - maxHistory).clamp(
@@ -1079,22 +1084,41 @@ class GenerationPipeline {
       // Load broadcast blocks (output language + prose guards) captured at
       // Studio build time so the cleaner applies the user's own rules instead
       // of a hardcoded English-only cliché list. Absent (no Studio) = defaults.
+      // The cleaner is Studio-only — skip entirely when Studio is disabled.
       List<String> broadcastBlocks = const [];
-      var studioCleanerApiConfigId = '';
       var studioConfigEnabled = false;
+      var studioCleanerApiConfigId = '';
       try {
         final studioConfig = await ref
             .read(studioConfigRepoProvider)
             .getBySessionId(sessionId);
         broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
         studioConfigEnabled = studioConfig?.enabled == true;
-        studioCleanerApiConfigId = studioConfigEnabled
-            ? studioConfig?.cleanerApiConfigId ?? ''
-            : '';
+        studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
       } catch (e) {
         debugPrint(
           '[PostCleaner] broadcast load failed session=$sessionId error=$e',
         );
+      }
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
+      // Cleaner is Studio-only. Skip when Studio is disabled.
+      if (!studioConfigEnabled) {
+        debugPrint('[PostCleaner] skipping — Studio not enabled');
+        return;
+      }
+
+      // Resolve the Studio cleaner slot (fail-explicit).
+      final AuxApiConfig cleanerConfig;
+      try {
+        cleanerConfig = await StudioSlotResolver(ref).resolve(
+          apiConfigId: studioCleanerApiConfigId,
+          errorLabel: 'post-cleaner',
+          modelOverride: pipeline.cleaner.postCleanerModel,
+        );
+      } catch (e) {
+        debugPrint('[PostCleaner] slot resolution failed: $e');
+        return;
       }
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
@@ -1139,8 +1163,7 @@ class GenerationPipeline {
         pipeline: pipeline,
         promptPayload: promptPayload,
         character: character,
-        studioCleanerApiConfigId: studioCleanerApiConfigId,
-        useStudioCleanerSlot: studioConfigEnabled,
+        cleanerConfig: cleanerConfig,
         beautyBrief: beautyBrief,
         beautyState: beautyState,
       );
@@ -1220,8 +1243,7 @@ class GenerationPipeline {
     required PipelineSettings pipeline,
     PromptPayload? promptPayload,
     Character? character,
-    String studioCleanerApiConfigId = '',
-    bool useStudioCleanerSlot = false,
+    required AuxApiConfig cleanerConfig,
     String beautyBrief = '',
     String? beautyState,
   }) async {
@@ -1231,18 +1253,17 @@ class GenerationPipeline {
 
     debugPrint(
       '[PostCleaner] starting session=$sessionId '
-      'model=${useStudioCleanerSlot ? (pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : "<studio-cleaner-slot>") : (pipeline.postCleanerModel.isNotEmpty ? pipeline.postCleanerModel : (pipeline.auxModel.isEmpty ? "<chat>" : pipeline.auxModel))} '
-      'timeoutMs=${pipeline.postCleanerTimeoutMs > 0 ? pipeline.postCleanerTimeoutMs : pipeline.auxTimeoutMs} '
+      'model=${cleanerConfig.model} '
+      'timeoutMs=${pipeline.cleaner.postCleanerTimeoutMs > 0 ? pipeline.cleaner.postCleanerTimeoutMs : pipeline.memoryPipeline.auxTimeoutMs} '
       'textChars=${assistantText.length} '
       'broadcastBlocks=${broadcastBlocks.length} '
       'historyMessages=${recentMessages.length} '
-      'continuity=${pipeline.postCleanerContinuityEnabled} '
-      'charCheck=${pipeline.postCleanerCharacterCheckEnabled} '
+      'continuity=true '
+      'charCheck=true '
       'rerun=$isManualRerun',
     );
 
-    final factCheckEnabled =
-        pipeline.postCleanerCharacterCheckEnabled && promptPayload != null;
+    final factCheckEnabled = promptPayload != null;
 
     ref.read(postCleanerStateProvider.notifier).state = factCheckEnabled
         ? PostCleanerState.factChecking(
@@ -1290,9 +1311,8 @@ class GenerationPipeline {
             entitiesContent: auditPayload.entitiesContent,
             recentMessages: recentMessages,
             settings: pipeline,
+            config: cleanerConfig,
             cancelToken: _auditCancelToken,
-            studioApiConfigId: studioCleanerApiConfigId,
-            useStudioApiConfigSlot: useStudioCleanerSlot,
           )
           .catchError((Object e) {
             debugPrint(
@@ -1365,7 +1385,7 @@ class GenerationPipeline {
           messageId: targetMessage.id,
           startedAtMs: auditStartedAt ?? DateTime.now().millisecondsSinceEpoch,
           issues: auditIssues,
-          model: _factCheckerModelLabel(pipeline, studioCleanerApiConfigId),
+          model: cleanerConfig.model,
         );
         debugPrint(
           '[PostCleaner] audit session=$sessionId '
@@ -1380,7 +1400,7 @@ class GenerationPipeline {
           startedAtMs: auditStartedAt ?? DateTime.now().millisecondsSinceEpoch,
           issues: null,
           error: '$e',
-          model: _factCheckerModelLabel(pipeline, studioCleanerApiConfigId),
+          model: cleanerConfig.model,
         );
       }
     }
@@ -1400,13 +1420,12 @@ class GenerationPipeline {
     final result = await cleanerService.runCleaner(
       sessionId: sessionId,
       settings: pipeline,
+      config: cleanerConfig,
       assistantText: assistantText,
       broadcastBlocks: broadcastBlocks,
       recentMessages: recentMessages,
       auditIssues: auditIssues,
       cancelToken: _cleanerCancelToken,
-      studioApiConfigId: studioCleanerApiConfigId,
-      useStudioApiConfigSlot: useStudioCleanerSlot,
       beautyBrief: beautyBrief,
       beautyState: beautyState,
       onCleanedChunk: (text) {
@@ -1788,7 +1807,7 @@ class GenerationPipeline {
   /// Fire-and-forget — does not block generation or user interaction.
   /// Extracts entity/relationship/arc/world state and durable MemoryBook facts
   /// from the final assistant response and persists them via
-  /// [StudioLedgerService]. Only runs when [PipelineSettings.studioLedgerEnabled].
+  /// [StudioLedgerService]. Only runs when Studio is enabled.
   ///
   /// [finalAssistantText] — the text the ledger should analyse. When the
   /// POST-cleaner is enabled, this is the cleaned text (plan §Pipeline
@@ -1815,9 +1834,8 @@ class GenerationPipeline {
     try {
       final pipeline = ref.read(pipelineSettingsProvider);
 
-      // Ledger is always-on when Studio is enabled. The studioLedgerEnabled
-      // toggle was removed from the UI. We still check StudioConfig.enabled
-      // to decide whether the ledger should run.
+      // Ledger is always-on when Studio is enabled. We check
+      // StudioConfig.enabled to decide whether the ledger should run.
       var studioConfigEnabled = false;
       var studioCleanerApiConfigId = '';
       try {
@@ -1874,6 +1892,24 @@ class GenerationPipeline {
         return;
       }
 
+      // Resolve the Studio cleaner slot (fail-explicit).
+      final AuxApiConfig ledgerConfig;
+      try {
+        ledgerConfig = await StudioSlotResolver(ref).resolve(
+          apiConfigId: studioCleanerApiConfigId,
+          errorLabel: 'studio-ledger',
+          modelOverride: pipeline.cleaner.postCleanerModel,
+        );
+      } catch (e) {
+        debugPrint('[StudioLedger] slot resolution failed: $e');
+        await _recordLedgerDiag(
+          sessionId: sessionId,
+          targetMessage: targetMessage,
+          reason: 'skipped, slot resolution failed: $e',
+        );
+        return;
+      }
+
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
       if (ref.mounted) {
@@ -1888,6 +1924,7 @@ class GenerationPipeline {
       final result = await service.run(
         sessionId: sessionId,
         settings: pipeline,
+        config: ledgerConfig,
         finalAssistantText: finalAssistantText,
         recentHistoryText: recentHistory,
         messageId: targetMessage.id,
@@ -1895,7 +1932,6 @@ class GenerationPipeline {
         agentSwipeId: targetMessage.agentSwipeId,
         forceEnabled: true,
         isStillCurrent: () => ref.mounted && abortHandler.isCurrentGen(genId),
-        studioCleanerApiConfigId: studioCleanerApiConfigId,
       );
 
       await _recordLedgerDiag(
@@ -2012,21 +2048,6 @@ class GenerationPipeline {
         );
   }
 
-  String? _factCheckerModelLabel(
-    PipelineSettings pipeline,
-    String studioCleanerApiConfigId,
-  ) {
-    if (pipeline.postCleanerModel.isNotEmpty) return pipeline.postCleanerModel;
-    if (studioCleanerApiConfigId.isNotEmpty) {
-      final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
-      final selected = apiConfigs
-          .where((config) => config.id == studioCleanerApiConfigId)
-          .firstOrNull;
-      return selected?.model ?? ref.read(activeApiConfigProvider)?.model;
-    }
-    return ref.read(activeApiConfigProvider)?.model;
-  }
-
   void _recordStudioLedgerOperation({
     required String sessionId,
     required ChatMessage targetMessage,
@@ -2072,22 +2093,22 @@ class GenerationPipeline {
     int assistantTurnCount,
     String finalAssistantText,
   ) {
-    switch (pipeline.studioLedgerRunMode) {
+    switch (pipeline.ledger.studioLedgerRunMode) {
       case 'disabled':
         return 'skipped, runMode=disabled';
       case 'manual':
         return 'skipped, runMode=manual';
       case 'every_n':
-        final n = pipeline.studioLedgerIntervalN < 1
+        final n = pipeline.ledger.studioLedgerIntervalN < 1
             ? 1
-            : pipeline.studioLedgerIntervalN;
+            : pipeline.ledger.studioLedgerIntervalN;
         if (n > 1 && assistantTurnCount % n != 0) {
           return 'skipped, runMode=every_n interval=$n turn=$assistantTurnCount';
         }
         return null;
       case 'conditional':
         final reasons = <String>[];
-        if (pipeline.studioLedgerRunWhenMentionedEntitiesChanged &&
+        if (pipeline.ledger.studioLedgerRunWhenMentionedEntitiesChanged &&
             !finalAssistantText.trim().isNotEmpty) {
           reasons.add('no entities changed');
         }
@@ -2187,9 +2208,7 @@ class GenerationPipeline {
 
     // Collect recent chat history before the target message for continuity
     // checks (same window as the auto path).
-    final maxHistory = pipeline.postCleanerContinuityEnabled
-        ? pipeline.postCleanerHistoryMessages
-        : 0;
+    final maxHistory = pipeline.cleaner.postCleanerHistoryMessages;
     final recentMessages = <ChatMessage>[];
     if (maxHistory > 0 && targetIndex > 0) {
       final start = (targetIndex - maxHistory).clamp(0, targetIndex);
@@ -2201,22 +2220,40 @@ class GenerationPipeline {
     }
 
     // Load broadcast blocks (same as auto path).
+    // Cleaner is Studio-only — skip rerun when Studio is disabled.
     List<String> broadcastBlocks = const [];
-    var studioCleanerApiConfigId = '';
     var studioConfigEnabled = false;
+    var studioCleanerApiConfigId = '';
     try {
       final studioConfig = await ref
           .read(studioConfigRepoProvider)
           .getBySessionId(sessionId);
       broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
       studioConfigEnabled = studioConfig?.enabled == true;
-      studioCleanerApiConfigId = studioConfigEnabled
-          ? studioConfig?.cleanerApiConfigId ?? ''
-          : '';
+      studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
     } catch (e) {
       debugPrint(
         '[PostCleaner] rerun broadcast load failed session=$sessionId error=$e',
       );
+    }
+    if (!ref.mounted) return;
+
+    if (!studioConfigEnabled) {
+      debugPrint('[PostCleaner] rerun skipped — Studio not enabled');
+      return;
+    }
+
+    // Resolve the Studio cleaner slot (fail-explicit).
+    final AuxApiConfig cleanerConfig;
+    try {
+      cleanerConfig = await StudioSlotResolver(ref).resolve(
+        apiConfigId: studioCleanerApiConfigId,
+        errorLabel: 'post-cleaner-rerun',
+        modelOverride: pipeline.cleaner.postCleanerModel,
+      );
+    } catch (e) {
+      debugPrint('[PostCleaner] rerun slot resolution failed: $e');
+      return;
     }
     if (!ref.mounted) return;
 
@@ -2236,8 +2273,7 @@ class GenerationPipeline {
         pipeline: pipeline,
         promptPayload: null,
         character: character,
-        studioCleanerApiConfigId: studioCleanerApiConfigId,
-        useStudioCleanerSlot: studioConfigEnabled,
+        cleanerConfig: cleanerConfig,
       );
     } catch (e) {
       debugPrint('[PostCleaner] rerun failed session=$sessionId error=$e');

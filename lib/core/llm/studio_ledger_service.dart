@@ -103,6 +103,7 @@ class StudioLedgerService {
   Future<LedgerRunResult> run({
     required String sessionId,
     required PipelineSettings settings,
+    required AuxApiConfig config,
     required String finalAssistantText,
     required String recentHistoryText,
     required String messageId,
@@ -111,11 +112,8 @@ class StudioLedgerService {
     bool forceEnabled = false,
     bool Function()? isStillCurrent,
     CancelToken? cancelToken,
-    String studioCleanerApiConfigId = '',
   }) async {
-    // Studio Ledger is always-on when Studio is enabled. The studioLedgerEnabled
-    // toggle was removed from the UI — the ledger always runs. The old
-    // early-return on !settings.studioLedgerEnabled is gone. forceEnabled is
+    // Studio Ledger is always-on when Studio is enabled. forceEnabled is
     // still respected for manual triggers.
 
     if (finalAssistantText.trim().isEmpty) {
@@ -129,12 +127,7 @@ class StudioLedgerService {
     final sw = Stopwatch()..start();
 
     try {
-      // ── 1. Resolve LLM config ───────────────────────────────────────────
-      final config = await _llm.resolveStudioSlotConfig(
-        studioCleanerApiConfigId,
-        errorLabel: 'studio-ledger',
-        modelOverride: settings.postCleanerModel,
-      );
+      // ── 1. LLM config is resolved by the caller via StudioSlotResolver ──
       if (token.isCancelled || isStillCurrent?.call() == false) {
         return LedgerRunResult.aborted;
       }
@@ -162,11 +155,11 @@ class StudioLedgerService {
       );
 
       // ── 4. Call LLM ─────────────────────────────────────────────────────
-      final maxTokens = settings.studioLedgerMaxTokens > 0
-          ? settings.studioLedgerMaxTokens
+      final maxTokens = settings.ledger.studioLedgerMaxTokens > 0
+          ? settings.ledger.studioLedgerMaxTokens
           : 2000;
-      final temperature = settings.studioLedgerTemperature >= 0
-          ? settings.studioLedgerTemperature
+      final temperature = settings.ledger.studioLedgerTemperature >= 0
+          ? settings.ledger.studioLedgerTemperature
           : 0.2;
       final timeoutMs = _llm.resolveLedgerTimeout(settings);
 

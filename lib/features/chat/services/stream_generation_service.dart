@@ -104,8 +104,8 @@ class StreamGenerationService {
       final pipelineSettings = _ref.read(pipelineSettingsProvider);
       final studioFinalContextSize = studioConfig == null
           ? 0
-          : pipelineSettings.studioFinalContextSize > 0
-          ? pipelineSettings.studioFinalContextSize
+          : pipelineSettings.studioAgent.studioFinalContextSize > 0
+          ? pipelineSettings.studioAgent.studioFinalContextSize
           : studioConfig.maxFinalHistoryMessages;
       final studioFinalVisibleMessageIds = studioConfig == null
           ? const <String>{}
@@ -184,8 +184,8 @@ class StreamGenerationService {
       final triggeredMemories = promptResult.triggeredMemories;
 
       if (studioConfig != null) {
-        final trackerContextSize = pipelineSettings.studioTrackerContextSize > 0
-            ? pipelineSettings.studioTrackerContextSize
+        final trackerContextSize = pipelineSettings.studioAgent.studioTrackerContextSize > 0
+            ? pipelineSettings.studioAgent.studioTrackerContextSize
             : _maxStudioTrackerContextSize(studioConfig);
         final trackerVisibleMessageIds = computeStudioFinalVisibleMessageIds(
           payload.history,
@@ -926,7 +926,7 @@ class StreamGenerationService {
   String _resolvedTrackerModel(ApiConfig apiConfig) {
     final override = _ref
         .read(pipelineSettingsProvider)
-        .studioTrackerModelOverride;
+        .studioAgent.studioTrackerModelOverride;
     return override.isNotEmpty ? override : apiConfig.model;
   }
 

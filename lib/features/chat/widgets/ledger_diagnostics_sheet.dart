@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
+import '../../../core/llm/studio_ledger_service.dart';
+import '../../../core/llm/studio_slot_resolver.dart';
+import '../../../core/models/api_config.dart';
+import '../../settings/api_list_provider.dart';
 import '../../../core/db/repositories/tracker_repo.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/tracker.dart';
@@ -30,7 +35,7 @@ import '../../../core/state/memory_agent_providers.dart';
 ///   - delete
 ///   - source-message navigation (when [onScrollToMessage] is provided)
 ///
-/// Opened from [StudioMenuDialog] via the "Ledger State" button.
+/// Ledger diagnostics bottom sheet showing tracker/canon state.
 class LedgerDiagnosticsSheet extends ConsumerStatefulWidget {
   final String sessionId;
   final Future<void> Function(String messageId)? onScrollToMessage;
@@ -231,6 +236,26 @@ class _LedgerDiagnosticsSheetState
           .read(studioConfigRepoProvider)
           .getBySessionId(widget.sessionId);
       if (!mounted) return;
+      await ref.read(apiListProvider.future);
+      final apiConfigs =
+          ref.read(apiListProvider).value ?? const <ApiConfig>[];
+      final AuxApiConfig ledgerConfig;
+      try {
+        ledgerConfig = StudioSlotResolver.resolveFromList(
+          apiConfigs: apiConfigs,
+          apiConfigId: studioConfig?.cleanerApiConfigId ?? '',
+          errorLabel: 'ledger-rerun',
+          modelOverride: pipeline.cleaner.postCleanerModel,
+        );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Studio Ledger rerun failed: $e')),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
       final recentHistory = _recentHistoryText(
         messages,
         maxMessages: 10,
@@ -241,6 +266,7 @@ class _LedgerDiagnosticsSheetState
           .run(
             sessionId: widget.sessionId,
             settings: pipeline,
+            config: ledgerConfig,
             finalAssistantText: target.content,
             recentHistoryText: recentHistory,
             messageId: target.id,
@@ -248,9 +274,6 @@ class _LedgerDiagnosticsSheetState
             agentSwipeId: target.agentSwipeId,
             forceEnabled: true,
             isStillCurrent: () => mounted,
-            studioCleanerApiConfigId: studioConfig?.enabled == true
-                ? studioConfig?.cleanerApiConfigId ?? ''
-                : '',
           );
 
       await ref

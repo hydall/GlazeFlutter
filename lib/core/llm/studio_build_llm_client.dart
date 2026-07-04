@@ -4,10 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/api_config.dart';
-import '../state/pipeline_settings_provider.dart';
 import '../../features/settings/api_list_provider.dart';
 import 'transport/chat_transport_request.dart';
-import 'transport/llm_protocol.dart';
 import 'transport/transport_factory.dart';
 
 /// One-shot, non-streaming LLM call used at BUILD time by
@@ -19,12 +17,9 @@ import 'transport/transport_factory.dart';
 /// [call] signature matches `RouterLlmCall`, so `StudioBlockRouter` can be
 /// constructed with `client.call` directly.
 ///
-/// Config resolution order (verbatim from the original `_callLlm`):
+/// Config resolution order:
 /// 1. explicit [apiConfig] argument (the resolved build config), else
-/// 2. the aux config when `pipelineSettings.auxSource == 'custom'`,
-///    else
-/// 3. the active chat API config, with the aux model id overriding the
-///    chat model when set.
+/// 2. the active chat API config.
 class StudioBuildLlmClient {
   final Ref _ref;
 
@@ -35,8 +30,6 @@ class StudioBuildLlmClient {
     ApiConfig? apiConfig,
     CancelToken? cancelToken,
   }) async {
-    final settings = _ref.read(pipelineSettingsProvider);
-    final isCustom = settings.auxSource == 'custom';
     String endpoint;
     String apiKey;
     String model;
@@ -47,11 +40,6 @@ class StudioBuildLlmClient {
       apiKey = apiConfig.apiKey;
       model = apiConfig.model;
       protocol = apiConfig.protocol;
-    } else if (isCustom) {
-      endpoint = settings.auxEndpoint;
-      apiKey = settings.auxApiKey;
-      model = settings.auxModel;
-      protocol = LlmProtocol.openai;
     } else {
       await _ref.read(apiListProvider.future);
       final chatConfig = _ref.read(activeApiConfigProvider);
@@ -62,9 +50,7 @@ class StudioBuildLlmClient {
       }
       endpoint = chatConfig.endpoint;
       apiKey = chatConfig.apiKey;
-      model = settings.auxModel.isNotEmpty
-          ? settings.auxModel
-          : chatConfig.model;
+      model = chatConfig.model;
       protocol = chatConfig.protocol;
     }
 
