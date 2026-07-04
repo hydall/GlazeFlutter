@@ -152,7 +152,7 @@ class ExtensionPostGenService {
     return preset;
   }
 
-  /// Called by GenerationPipeline after assistant message is finalised.
+  /// Called by ExtBlocksStage after assistant message is finalised.
   /// When the POST-cleaner is enabled, [agentSwipeId] identifies the blue
   /// cleaned sub-swipe the blocks should bind to (and read for content).
   /// When the cleaner is disabled or skipped, [agentSwipeId] stays -1

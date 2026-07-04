@@ -62,8 +62,8 @@
 1. `0445cade` — Phase 1+2: split PipelineSettings into 5 nested sub-models + delete dead dialogs
 2. `06e7358d` — Phase 3a: StudioSlotResolver + idle timeout + service signature changes + remove routing fields
 3. `06e7358d` — Phase 3a: StudioSlotResolver + idle timeout + service signature changes + remove routing fields
-4. *(pending)* — Phase 4: reorder pipeline stages ✅
-5. *(pending)* — Phase 5: decompose generation_pipeline.dart
+4. `78008aa7` — Phase 4: reorder pipeline stages ✅
+5. *(pending)* — Phase 5: decompose generation_pipeline.dart ✅
 6. *(pending)* — Phase 6: UI updates
 
 ### Phase 1: Delete dead code + fields ✅ DONE
@@ -139,20 +139,27 @@
 - [x] Update stale comments in `_executeAndApplyCleaner` (removed `_runPostTextSide` references)
 - [x] `flutter analyze` (0 errors) + `flutter test` (1499/1499 passed)
 
-### Phase 5: Decompose generation_pipeline.dart
-- [ ] Create `PipelineStage` abstract interface + `StageContext`
-- [ ] `RegenResolver` — regen success/rollback/restoration
-- [ ] `PostTextHandler` — sync + notification
-- [ ] `ImageTagStage` — processImageTags
-- [ ] `CleanerStage` — fact-checker + cleaner + beauty + ext blocks launch
-- [ ] `ExtBlocksStage` — _launchExtensionsForSwipe
-- [ ] `WriteLoopStage` — cadence + runWriteLoop + orphan cleanup (Studio-only)
-- [ ] `LedgerStage` — cadence + run + diag (Studio-only)
-- [ ] `ChatEmbedStage` — embed chat messages
-- [ ] `MemoryDraftStage` — auto-create memory drafts
-- [ ] `PostGenCoordinator` — postGenFutures + wake-lock + notifications
-- [ ] `GenerationPipeline` — thin sequencer calling stages
-- [ ] Move `rerunCleaner` → `CleanerStage.rerun()`
+### Phase 5: Decompose generation_pipeline.dart ✅ DONE
+- [x] Create `StageContext` value class (`stages/stage_context.dart`)
+- [x] `RegenResolver` — regen success/rollback/restoration (`stages/regen_resolver.dart`)
+- [x] `SyncNotificationStage` — sync + notification (`stages/sync_notification_stage.dart`)
+- [x] `ImageTagStage` — processImageTags (`stages/image_tag_stage.dart`)
+- [x] `CleanerStage` — fact-checker + cleaner + beauty + ext blocks launch + ledger launch (`stages/cleaner_stage.dart`)
+- [x] `ExtBlocksStage` — _launchExtensionsForSwipe (`stages/ext_blocks_stage.dart`)
+- [x] `WriteLoopStage` — cadence + runWriteLoop + orphan cleanup (`stages/write_loop_stage.dart`)
+- [x] `LedgerStage` — cadence + run + diag (`stages/ledger_stage.dart`)
+- [x] `ChatEmbedStage` — embed chat messages (`stages/chat_embed_stage.dart`)
+- [x] `MemoryDraftStage` — auto-create memory drafts (`stages/memory_draft_stage.dart`)
+- [x] `PostGenCoordinator` — postGenFutures + wake-lock + notifications (`stages/post_gen_coordinator.dart`)
+- [x] `GenerationPipeline` — thin sequencer calling stages (264 lines, down from 2437)
+- [x] Move `rerunCleaner` → `CleanerStage.rerun()`
+- [x] Extract `pipeline_utils.dart` — `extractRecentHistoryText`, `selectStudioLedgerTextAfterCleaner`, status mappers, `assembleLorebooksContent`
+- [x] Remove dead `abortPostCleaner()` method (Stop button uses `cleanerCancelTokenProvider` directly)
+- [x] Remove `@visibleForTesting` from `selectStudioLedgerTextAfterCleaner` (used in production `CleanerStage`)
+- [x] Re-export `extractRecentHistoryText` + `selectStudioLedgerTextAfterCleaner` from `generation_pipeline.dart` for backward compat
+- [x] Update `tracker_memory_recovery_service.dart` import
+- [x] Update stale doc comments referencing `GenerationPipeline._runPostCleaner`
+- [x] `flutter analyze` (0 errors, 0 new warnings) + `flutter test` (1499/1499 passed)
 
 ### Phase 6: UI updates
 - [ ] `StudioSettingsSheet` — update reads/writes to new sub-model providers

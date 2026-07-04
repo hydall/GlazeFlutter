@@ -11,7 +11,7 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../state/recovery_state_provider.dart';
-import 'generation_pipeline.dart';
+import 'generation_pipeline.dart' show extractRecentHistoryText;
 
 /// Result of a recovery batch.
 class RecoveryResult {

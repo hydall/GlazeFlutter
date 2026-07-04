@@ -83,14 +83,14 @@ class PostCleanerState {
 
 enum PostCleanerPhase { idle, factChecking, running, done, skipped, error }
 
-/// Global POST-cleaner live state. Set by [GenerationPipeline._runPostCleaner]
+/// Global POST-cleaner live state. Set by [CleanerStage.run]
 /// and watched by [PostCleanerStatusCard] in the chat UI.
 final postCleanerStateProvider = StateProvider<PostCleanerState>(
   (_) => const PostCleanerState.idle(),
 );
 
 /// Cancel token for the in-flight POST-cleaner LLM call. Set by
-/// `GenerationPipeline._runPostCleaner` when the cleaner starts, cleared in
+/// `CleanerStage.run` when the cleaner starts, cleared in
 /// its `finally` block. The Stop button in [PostCleanerStatusCard] reads
 /// this and cancels it.
 final cleanerCancelTokenProvider = StateProvider<CancelToken?>((_) => null);

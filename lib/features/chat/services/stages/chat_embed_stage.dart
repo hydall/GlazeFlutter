@@ -1,0 +1,52 @@
+import 'package:flutter/foundation.dart';
+
+import '../../../../core/llm/lorebook_providers.dart' show embeddingConfigProvider;
+import '../../../../core/llm/memory_injection_service.dart'
+    show chatMessageEmbeddingServiceProvider;
+import '../../../../core/models/chat_message.dart';
+import 'stage_context.dart';
+
+/// Stage 3.5: embed raw chat-message chunks (fire-and-forget, best-effort
+/// insurance for the lossy MemoryBook compression).
+///
+/// Idempotent via textHash — chunks whose content has not changed since
+/// the last embedding pass are skipped. Filters to visible user+assistant
+/// messages, groups them into fixed-size chunks (default 5), and stores
+/// one embedding row per chunk under `sourceType='chat_message'`. The
+/// [MessageRecallService] cosine-searches against these rows on the next
+/// generation and injects top-K chunks as `<recalled_messages>` in the
+/// prompt.
+///
+/// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3) and §2.1 (ADR:
+/// mobile escape hatch if latency / binary size becomes prohibitive).
+///
+/// Staleness guard: aborts early if a newer generation has started. The
+/// underlying [ChatMessageEmbeddingService] wraps all errors in try/catch
+/// and records them via `putEmbeddingError` so the next run can retry —
+/// this method never throws to the caller.
+class ChatEmbedStage {
+  final StageContext ctx;
+
+  ChatEmbedStage(this.ctx);
+
+  Future<void> run({
+    required String sessionId,
+    required List<ChatMessage> messages,
+    required int genId,
+  }) async {
+    try {
+      if (!ctx.abortHandler.isCurrentGen(genId)) return;
+      final config = ctx.ref.read(embeddingConfigProvider);
+      if (config.endpoint.isEmpty) return;
+      await ctx.ref
+          .read(chatMessageEmbeddingServiceProvider)
+          .indexSessionMessages(
+            sessionId: sessionId,
+            messages: messages,
+            config: config,
+          );
+    } catch (e) {
+      debugPrint('[ChatEmbedStage] failed session=$sessionId error=$e');
+    }
+  }
+}
