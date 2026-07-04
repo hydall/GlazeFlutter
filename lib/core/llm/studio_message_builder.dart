@@ -1,5 +1,4 @@
 import '../models/studio_config.dart';
-import 'beauty_shard_instruction.dart';
 import 'history_assembler.dart';
 import 'macro_engine.dart';
 import 'prompt_builder.dart';
@@ -89,24 +88,6 @@ class StudioMessageBuilder {
               control
                 ..writeln()
                 ..writeln(styleContract);
-            }
-            if (_hasEnabledBeautyShard(config)) {
-              final macroCtx = MacroContext(
-                charName: promptPayload.character.name,
-                userName: promptPayload.persona?.name ?? 'User',
-                personaPrompt: promptPayload.persona?.prompt,
-                sessionVars: promptPayload.sessionVars,
-                globalVars: promptPayload.globalVars,
-                charId: promptPayload.character.id,
-                sessionId: promptPayload.sessionId ?? '',
-              );
-              final expanded = replaceMacros(
-                beautyShardFinalMarkerContract,
-                macroCtx,
-              ).text;
-              control
-                ..writeln()
-                ..writeln(expanded);
             }
           }
           final controlText = control.toString().trim();
@@ -541,9 +522,9 @@ class StudioMessageBuilder {
       '{{studio_meta_brief}}': _renderBriefs(
         _briefsForController(briefs, 'meta'),
       ),
-      '{{studio_beauty_brief}}': _renderBriefs(
-        _briefsForController(briefs, 'beauty'),
-      ),
+      // Beauty brief is NOT injected into the final agent — the post-cleaner
+      // owns beauty/styling application so the main model can focus on prose.
+      '{{studio_beauty_brief}}': '',
     };
     var expanded = content;
     for (final entry in replacements.entries) {
@@ -619,19 +600,6 @@ class StudioMessageBuilder {
   /// roles — those ARE conversation turns, not instructions.
   String _normalizeInstructionRole(String role) {
     return 'system';
-  }
-
-  bool _hasEnabledBeautyShard(StudioConfig config) {
-    return config.agents.any((agent) {
-      if (!agent.enabled) return false;
-      final id = agent.id.toLowerCase();
-      final name = agent.name.toLowerCase();
-      final text = '$id\n$name';
-      return id == 'beauty' ||
-          text.contains('_beauty_') ||
-          text.contains('beauty shard') ||
-          name == 'beauty';
-    });
   }
 }
 

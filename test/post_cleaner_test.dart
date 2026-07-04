@@ -103,9 +103,9 @@ void main() {
   });
 
   group('PipelineSettings.postCleanerEnabled', () {
-    test('defaults to false', () {
+    test('defaults to true', () {
       const settings = PipelineSettings();
-      expect(settings.postCleanerEnabled, isFalse);
+      expect(settings.postCleanerEnabled, isTrue);
     });
 
     test('can be set to true', () {

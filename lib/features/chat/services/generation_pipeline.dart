@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/prompt_builder.dart' show PromptPayload;
 import '../../../core/llm/tokenizer.dart';
+import '../../../core/llm/beauty_state_parser.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/agent_operation_record.dart';
@@ -35,6 +36,7 @@ import '../chat_session_service.dart';
 import '../chat_state.dart';
 import '../state/agent_operations_log_provider.dart';
 import '../state/post_cleaner_state_provider.dart';
+import '../state/post_gen_status_provider.dart';
 import '../utils/message_preview.dart';
 
 /// Result of [GenerationPipeline.run] when the regen target's id did not
@@ -210,9 +212,13 @@ class GenerationPipeline {
 
           await _autoCreateMemoryDrafts(result.session);
 
+          // Keep the foreground service alive for post-gen tasks.
+          await notifService.onPostGenStarted();
+          final postGenFutures = <Future<void>>[];
+
           // Stage 3.5: embed raw chat-message chunks (fire-and-forget),
           // mirroring the normal-send path.
-          unawaited(
+          postGenFutures.add(
             _embedChatMessages(
               sessionId: result.session!.id,
               messages: result.session!.messages,
@@ -227,7 +233,7 @@ class GenerationPipeline {
           // swipe is excluded via getLatestCommittedExcludingMessage using
           // the real regenTargetId (NOT the null-ized copy passed to
           // _runPostTextSide above).
-          unawaited(
+          postGenFutures.add(
             _runAgenticWriteLoop(
               sessionId: result.session!.id,
               messages: result.session!.messages,
@@ -239,7 +245,7 @@ class GenerationPipeline {
           // POST-cleaner on regen: run after successful regen. The cleaner
           // rewrites the regenerated assistant message, preserving the
           // original as a swipe.
-          unawaited(
+          postGenFutures.add(
             _runPostCleaner(
               sessionId: result.session!.id,
               messages: result.session!.messages,
@@ -251,6 +257,12 @@ class GenerationPipeline {
 
           // Stage 5: Studio Ledger — always launched from
           // _executeAndApplyCleaner (cleaner is always-on now).
+
+          unawaited(
+            Future.wait(postGenFutures).whenComplete(() {
+              notifService.onPostGenFinished();
+            }),
+          );
           // No need for the raw-text fallback path.
         }
         return regenOutcome;
@@ -309,12 +321,18 @@ class GenerationPipeline {
       // re-run the full agent cycle per swipe. The stale snapshot from the
       // previous swipe is excluded via getLatestCommittedExcludingMessage.
       if (result.session != null) {
+        // Keep the foreground service alive for post-gen tasks so the OS
+        // doesn't suspend the app (screen off) while write-loop, cleaner,
+        // ledger, or extension blocks are still running.
+        await notifService.onPostGenStarted();
+        final postGenFutures = <Future<void>>[];
+
         // Stage 3.5: Embed raw chat-message chunks (fire-and-forget,
         // best-effort insurance for the lossy MemoryBook compression).
         // Pairs with Stage 1's MessageRecallService cosine search to give
         // the LLM access to verbatim original chunks from earlier in the
         // chat. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3).
-        unawaited(
+        postGenFutures.add(
           _embedChatMessages(
             sessionId: result.session!.id,
             messages: result.session!.messages,
@@ -328,7 +346,7 @@ class GenerationPipeline {
         // to (messageId, swipeId, 0) — mirroring Marinara's retry-agents which
         // re-run the full agent cycle per swipe. The stale snapshot from the
         // previous swipe is excluded via getLatestCommittedExcludingMessage.
-        unawaited(
+        postGenFutures.add(
           _runAgenticWriteLoop(
             sessionId: result.session!.id,
             messages: result.session!.messages,
@@ -340,7 +358,7 @@ class GenerationPipeline {
         // Stage 4: POST-cleaner — silently rewrite the final assistant
         // message to remove clichés/repetition. Fire-and-forget; falls back
         // to original text on error. Original preserved as a swipe.
-        unawaited(
+        postGenFutures.add(
           _runPostCleaner(
             sessionId: result.session!.id,
             messages: result.session!.messages,
@@ -353,6 +371,14 @@ class GenerationPipeline {
         // Stage 5: Studio Ledger — always launched from
         // _executeAndApplyCleaner (cleaner is always-on now).
         // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Pipeline Placement.
+
+        // Track all post-gen tasks and release the foreground hold when
+        // they all complete (success or failure).
+        unawaited(
+          Future.wait(postGenFutures).whenComplete(() {
+            notifService.onPostGenFinished();
+          }),
+        );
       }
 
       return GenerationOutcome(
@@ -559,6 +585,13 @@ class GenerationPipeline {
     if (session.id.isEmpty || session.messages.isEmpty) return;
     final lastMessage = session.messages.last;
     if (lastMessage.role == 'user' || lastMessage.isError) return;
+    if (ref.mounted) {
+      ref.read(postGenStatusProvider.notifier).state =
+          PostGenStatusState.running(
+            sessionId: session.id,
+            task: PostGenTask.extBlocks,
+          );
+    }
     try {
       final extensionService = ref.read(extensionPostGenServiceProvider);
       await extensionService.processAfterGeneration(
@@ -568,10 +601,24 @@ class GenerationPipeline {
         persona: null,
         agentSwipeId: agentSwipeId,
       );
+      if (ref.mounted) {
+        ref.read(postGenStatusProvider.notifier).state =
+            PostGenStatusState.done(
+              sessionId: session.id,
+              task: PostGenTask.extBlocks,
+            );
+      }
     } catch (e) {
       debugPrint(
         '[GenerationPipeline] extension launch for swipe=$agentSwipeId failed: $e',
       );
+      if (ref.mounted) {
+        ref.read(postGenStatusProvider.notifier).state =
+            PostGenStatusState.error(
+              sessionId: session.id,
+              task: PostGenTask.extBlocks,
+            );
+      }
     }
   }
 
@@ -756,6 +803,14 @@ class GenerationPipeline {
         'historyChars=${recentHistory.length}',
       );
 
+      if (ref.mounted) {
+        ref.read(postGenStatusProvider.notifier).state =
+            PostGenStatusState.running(
+              sessionId: sessionId,
+              task: PostGenTask.writeLoop,
+            );
+      }
+
       final agenticService = ref.read(memoryAgenticWriteServiceProvider);
       final result = await agenticService.runWriteLoop(
         sessionId: sessionId,
@@ -775,6 +830,24 @@ class GenerationPipeline {
         'memoriesWritten=${result.memoryResult?.written ?? 0} '
         'error=${result.error ?? "none"}',
       );
+
+      if (ref.mounted) {
+        final detail =
+            'Write-loop done (${result.trackerResult?.written ?? 0} trackers, '
+            '${result.memoryResult?.written ?? 0} memories)';
+        ref.read(postGenStatusProvider.notifier).state =
+            result.status == 'ok'
+                ? PostGenStatusState.done(
+                    sessionId: sessionId,
+                    task: PostGenTask.writeLoop,
+                    detail: detail,
+                  )
+                : PostGenStatusState.error(
+                    sessionId: sessionId,
+                    task: PostGenTask.writeLoop,
+                    detail: 'Write-loop ${result.status}',
+                  );
+      }
 
       // Post-write guard: the user may have deleted the assistant message
       // WHILE the write-loop was running (it can take 60s+). If so, the
@@ -1025,6 +1098,37 @@ class GenerationPipeline {
       }
       if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
+      // Extract Beauty Shard brief from the assistant message's studioOutputs.
+      // The beauty shard runs as a pre-gen tracker; its brief is stored in
+      // studioOutputs but no longer injected into the final agent. Instead,
+      // we pass it to the post-cleaner so the cleaner owns styling.
+      var beautyBrief = '';
+      String? beautyState;
+      try {
+        for (final output in lastAssistant.studioOutputs) {
+          final agentId = (output['agentId'] ?? '').toString().toLowerCase();
+          final agentName = (output['agentName'] ?? '').toString().toLowerCase();
+          final brief = (output['brief'] ?? '').toString();
+          if ((agentId == 'beauty' ||
+              agentName.contains('beauty shard') ||
+              agentName.contains('beauty')) &&
+              brief.trim().isNotEmpty) {
+            beautyBrief = brief;
+            break;
+          }
+        }
+        // Load current beauty state from session vars.
+        final session = await ref.read(chatRepoProvider).getById(sessionId);
+        if (session != null) {
+          beautyState = session.sessionVars[beautyStateVarKey];
+        }
+      } catch (e) {
+        debugPrint(
+          '[PostCleaner] beauty brief extraction failed session=$sessionId error=$e',
+        );
+      }
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
+
       await _executeAndApplyCleaner(
         sessionId: sessionId,
         genId: genId,
@@ -1037,6 +1141,8 @@ class GenerationPipeline {
         character: character,
         studioCleanerApiConfigId: studioCleanerApiConfigId,
         useStudioCleanerSlot: studioConfigEnabled,
+        beautyBrief: beautyBrief,
+        beautyState: beautyState,
       );
     } catch (e) {
       debugPrint('[PostCleaner] failed session=$sessionId error=$e');
@@ -1116,6 +1222,8 @@ class GenerationPipeline {
     Character? character,
     String studioCleanerApiConfigId = '',
     bool useStudioCleanerSlot = false,
+    String beautyBrief = '',
+    String? beautyState,
   }) async {
     final isManualRerun = genId < 0;
     bool abortCheck() =>
@@ -1299,6 +1407,8 @@ class GenerationPipeline {
       cancelToken: _cleanerCancelToken,
       studioApiConfigId: studioCleanerApiConfigId,
       useStudioApiConfigSlot: useStudioCleanerSlot,
+      beautyBrief: beautyBrief,
+      beautyState: beautyState,
       onCleanedChunk: (text) {
         if (!abortCheck()) return;
         // Stream the cleaner's rewrite into the target assistant message in
@@ -1571,6 +1681,34 @@ class GenerationPipeline {
       }
     }
 
+    // Persist the updated beauty state from the cleaner output. The cleaner
+    // owns beauty/styling: it emits a <glaze_beauty_state> marker which was
+    // already parsed and stripped by PostCleanerService. Here we save the
+    // extracted JSON to session vars so the next turn's beauty shard tracker
+    // can read it via {{getvar::glaze_beauty_state}}.
+    if (result.beautyMarkerFound &&
+        result.beautyStateJson != null &&
+        result.beautyStateJson!.trim().isNotEmpty &&
+        ref.mounted) {
+      try {
+        await ref.read(chatRepoProvider).updateSessionVarsJson(
+          sessionId,
+          (vars) {
+            final updated = Map<String, dynamic>.from(vars);
+            updated[beautyStateVarKey] = result.beautyStateJson!;
+            return updated;
+          },
+        );
+        debugPrint(
+          '[PostCleaner] beauty state persisted session=$sessionId',
+        );
+      } catch (e) {
+        debugPrint(
+          '[PostCleaner] beauty state persist failed session=$sessionId error=$e',
+        );
+      }
+    }
+
     // Reset the streaming state so the WebView stops treating the bubble
     // as isTyping. The chatHistoryProvider invalidate below pushes the
     // finalized message (with the new cleaned swipe) to the WebView.
@@ -1738,6 +1876,14 @@ class GenerationPipeline {
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
+      if (ref.mounted) {
+        ref.read(postGenStatusProvider.notifier).state =
+            PostGenStatusState.running(
+              sessionId: sessionId,
+              task: PostGenTask.ledger,
+            );
+      }
+
       final service = ref.read(studioLedgerServiceProvider);
       final result = await service.run(
         sessionId: sessionId,
@@ -1766,6 +1912,23 @@ class GenerationPipeline {
         targetMessage: targetMessage,
         result: result,
       );
+
+      if (ref.mounted) {
+        final detail =
+            'Ledger ${result.status} (ops=${result.opsApplied}, facts=${result.durableFactsWritten})';
+        ref.read(postGenStatusProvider.notifier).state =
+            result.status == 'ok'
+                ? PostGenStatusState.done(
+                    sessionId: sessionId,
+                    task: PostGenTask.ledger,
+                    detail: detail,
+                  )
+                : PostGenStatusState.error(
+                    sessionId: sessionId,
+                    task: PostGenTask.ledger,
+                    detail: detail,
+                  );
+      }
 
       if (_ledgerStatusToOp(result.status).isFailure) {
         GlazeToast.showWithoutContext(

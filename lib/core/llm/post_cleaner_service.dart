@@ -16,6 +16,7 @@ import '../../features/chat/chat_session_service.dart';
 import '../../features/chat_history/chat_history_provider.dart';
 import 'aux_llm_client.dart';
 import 'aux_retry_runner.dart';
+import 'beauty_state_parser.dart';
 
 /// POST-cleaner service (Stage 4).
 ///
@@ -57,6 +58,8 @@ class PostCleanerService {
     void Function(String accumulatedText)? onCleanedChunk,
     String studioApiConfigId = '',
     bool useStudioApiConfigSlot = false,
+    String beautyBrief = '',
+    String? beautyState,
   }) async {
     // Post-cleaner is always-on (hardcoded in backend). The postCleanerEnabled
     // toggle was removed from the UI — the cleaner always runs when Studio is
@@ -103,6 +106,8 @@ class PostCleanerService {
         auditIssues: auditIssues,
         cancelToken: token,
         onCleanedChunk: onCleanedChunk,
+        beautyBrief: beautyBrief,
+        beautyState: beautyState,
       );
 
       if (token.isCancelled) {
@@ -186,14 +191,22 @@ class PostCleanerService {
         );
       }
 
+      // Strip any <glaze_beauty_state> marker the cleaner emitted and
+      // extract the updated state JSON. The marker is parsed here (not in
+      // the pipeline) so the caller receives already-clean text + state.
+      final beautyParsed = parseBeautyState(cleaned);
+      final finalCleanedText = beautyParsed.cleanedText;
+
       return PostCleanerResult(
         status: 'ok',
-        cleanedText: cleaned,
+        cleanedText: finalCleanedText,
         originalText: assistantText,
-        wasCleaned: cleaned != assistantText,
+        wasCleaned: finalCleanedText != assistantText,
         attempts: outcome.attempts,
         totalElapsedMs: outcome.totalElapsedMs,
         model: config.model,
+        beautyStateJson: beautyParsed.stateJson,
+        beautyMarkerFound: beautyParsed.markerFound,
       );
     } on TimeoutException {
       return PostCleanerResult(status: 'timeout', cleanedText: assistantText);
@@ -280,6 +293,8 @@ class PostCleanerService {
     List<String>? auditIssues,
     required CancelToken cancelToken,
     void Function(String accumulatedText)? onCleanedChunk,
+    String beautyBrief = '',
+    String? beautyState,
   }) async {
     final prompt = buildCleanerPrompt(
       assistantText: assistantText,
@@ -290,6 +305,8 @@ class PostCleanerService {
       bannedWords: settings.postCleanerBannedWords,
       avoidInstructions: settings.postCleanerAvoidInstructions,
       styleInstructions: settings.postCleanerStyleInstructions,
+      beautyBrief: beautyBrief,
+      beautyState: beautyState,
     );
 
     final effectiveMaxTokens = settings.postCleanerMaxTokens > 0
@@ -352,6 +369,8 @@ class PostCleanerService {
     String bannedWords = '',
     String avoidInstructions = '',
     String styleInstructions = '',
+    String beautyBrief = '',
+    String? beautyState,
   }) {
     final rules = broadcastBlocks
         .map((b) => b.trim())
@@ -547,6 +566,64 @@ class PostCleanerService {
         ..writeln(
           '- If correcting a continuity issue requires adding a new '
           'paragraph or scene event, do not fix it — only clean style.',
+        )
+        ..writeln();
+    }
+
+    // Beauty Shard — styling state owned by the cleaner (not the final agent).
+    // When a beauty brief is provided, the cleaner is responsible for applying
+    // speaker/thought colors and emitting the updated state marker.
+    if (beautyBrief.trim().isNotEmpty) {
+      buffer
+        ..writeln('BEAUTY SHARD (visual styling — you own this):')
+        ..writeln()
+        ..writeln('Beauty Shard brief:')
+        ..writeln(beautyBrief.trim())
+        ..writeln();
+      if (beautyState != null && beautyState.trim().isNotEmpty) {
+        buffer
+          ..writeln('Current styling state:')
+          ..writeln(beautyState.trim())
+          ..writeln();
+      }
+      buffer
+        ..writeln('Styling rules:')
+        ..writeln(
+          '- Apply the speaker colors from the styling state to ALL character '
+          'dialogue using <font color="#HEX">"text"</font> tags.',
+        )
+        ..writeln(
+          '- Apply the thought colors to inner thoughts using '
+          '<font color="#HEX"><i>text</i></font> tags.',
+        )
+        ..writeln(
+          '- Reuse existing colors for established speakers. Assign a new '
+          'color only for a speaker not yet in the state.',
+        )
+        ..writeln(
+          '- If the assistant text already has <font> color tags, verify they '
+          'match the styling state. Fix mismatches; do not remove correct tags.',
+        )
+        ..writeln(
+          '- Do NOT color narrative prose — only dialogue (in quotes) and '
+          'inner thoughts (in italics or marked as thought).',
+        )
+        ..writeln(
+          '- At the very END of your cleaned response, after all narrative '
+          'and HTML, emit exactly one marker with the updated state:',
+        )
+        ..writeln()
+        ..writeln('<glaze_beauty_state>')
+        ..writeln(
+          '{"speakers":{"Name":"#hex"},"thoughts":{"Name":"#hex"},'
+          '"palette":"dark|light","font":"sans-serif","bg":"#hex",'
+          '"art_style":"...","reserved":{"lumia_ooc":"#9370DB"}}',
+        )
+        ..writeln('</glaze_beauty_state>')
+        ..writeln()
+        ..writeln(
+          'The marker is parsed and stripped automatically — the user never '
+          'sees it. Do not put it inside an HTML artifact or a code block.',
         )
         ..writeln();
     }
@@ -917,6 +994,8 @@ class PostCleanerResult {
   final List<AgentOperationAttempt> attempts;
   final int totalElapsedMs;
   final String? model;
+  final String? beautyStateJson;
+  final bool beautyMarkerFound;
 
   const PostCleanerResult({
     required this.status,
@@ -927,5 +1006,7 @@ class PostCleanerResult {
     this.attempts = const [],
     this.totalElapsedMs = 0,
     this.model,
+    this.beautyStateJson,
+    this.beautyMarkerFound = false,
   });
 }
