@@ -1,11 +1,6 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/memory_catalog_repo.dart';
@@ -19,7 +14,6 @@ import '../state/memory_settings_provider.dart';
 import 'embedding_service.dart';
 import 'embedding_types.dart';
 import 'chat_message_embedding_service.dart';
-import 'memory_catalog_builder.dart';
 import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
 import 'memory_embedding_service.dart';
@@ -28,7 +22,13 @@ import 'memory_formatting.dart';
 import 'message_recall_service.dart';
 import 'memory_selector.dart';
 import 'retrieval_query_builder.dart';
-import 'vector_math.dart';
+import 'memory/memory_catalog_matcher.dart';
+import 'memory/memory_vector_searcher.dart';
+
+export 'memory/memory_catalog_matcher.dart'
+    show CatalogMatchResult, MemoryCatalogMatcher;
+export 'memory/memory_vector_searcher.dart'
+    show MemoryVectorMatchResult, MemoryVectorSearcher;
 
 class MemoryInjectionResult {
   final List<MemoryEntry> entries;
@@ -78,6 +78,8 @@ class MemoryInjectionService {
   final MemoryEntityRepo? _entityRepo;
   final EmbeddingService _embeddingService;
   final MemoryGlobalSettings Function() _readGlobalSettings;
+  late final MemoryVectorSearcher _vectorSearcher;
+  late final MemoryCatalogMatcher _catalogMatcher;
 
   MemoryInjectionService(
     this._repo,
@@ -87,7 +89,10 @@ class MemoryInjectionService {
     this._readGlobalSettings, {
     this._salienceRepo,
     this._entityRepo,
-  });
+  }) {
+    _vectorSearcher = MemoryVectorSearcher(_embeddingRepo, _embeddingService);
+    _catalogMatcher = MemoryCatalogMatcher(_catalogRepo);
+  }
 
   /// Build injection candidates + diagnostics. Returns the raw selection
   /// (with source-window exclusion applied) plus all scored candidates
@@ -191,7 +196,11 @@ class MemoryInjectionService {
     // Entity fusion (Phase G3): match entity names/aliases in query text
     var entityOverlapByEntryId = const <String, int>{};
     if (_entityRepo != null && book.settings.memoryMode != 'fast') {
-      final scanText = _selectorScanText(book.settings, history, currentText);
+      final scanText = MemoryCatalogMatcher.selectorScanText(
+        book.settings,
+        history,
+        currentText,
+      );
       final entities = await _entityRepo.getBySessionId(sessionId);
       if (entities.isNotEmpty) {
         final lowerQuery = scanText.toLowerCase();
@@ -214,19 +223,32 @@ class MemoryInjectionService {
     var queryEmotions = const <String>[];
     if (book.settings.memoryMode != 'fast') {
       queryEmotions = RetrievalQueryBuilder.extractEmotionalContext(
-        _selectorScanText(book.settings, history, currentText),
+        MemoryCatalogMatcher.selectorScanText(
+          book.settings,
+          history,
+          currentText,
+        ),
       );
     }
 
-    var vectorMatches = const _MemoryVectorMatchResult();
-    final keywordMatchedTerms = _keywordMatches(
+    var vectorMatches = const MemoryVectorMatchResult();
+    final keywordMatchedTerms = MemoryCatalogMatcher.keywordMatches(
       activeEntries,
-      _selectorScanText(book.settings, history, currentText),
+      MemoryCatalogMatcher.selectorScanText(
+        book.settings,
+        history,
+        currentText,
+      ),
       book.settings.keyMatchMode,
     );
     final catalogMatches = book.settings.memoryMode == 'balanced'
-        ? await _catalogMatches(book, activeEntries, history, currentText)
-        : const _CatalogMatchResult();
+        ? await _catalogMatcher.match(
+            book: book,
+            activeEntries: activeEntries,
+            history: history,
+            currentText: currentText,
+          )
+        : const CatalogMatchResult();
     if (shouldAbort?.call() == true) {
       return finish(const MemorySelection(), settings: book.settings);
     }
@@ -234,7 +256,7 @@ class MemoryInjectionService {
         embeddingConfig != null &&
         embeddingConfig.endpoint.isNotEmpty &&
         history.isNotEmpty) {
-      vectorMatches = await _vectorSearchMemory(
+      vectorMatches = await _vectorSearcher.search(
         activeEntries,
         history,
         currentText,
@@ -376,337 +398,6 @@ class MemoryInjectionService {
       candidatesTotal: selection.allScores.length,
     );
   }
-
-  Future<_MemoryVectorMatchResult> _vectorSearchMemory(
-    List<MemoryEntry> entries,
-    List<ChatMessage> history,
-    String currentText,
-    EmbeddingConfig config,
-    MemoryGlobalSettings settings, {
-    bool Function()? shouldAbort,
-    CancelToken? cancelToken,
-  }) async {
-    try {
-      if (shouldAbort?.call() == true) return const _MemoryVectorMatchResult();
-      debugPrint('[mem-vec] reading embeddings from DB...');
-      final embeddingRows = await _embeddingRepo.getBySourceType(
-        'memory_entry',
-      );
-      if (shouldAbort?.call() == true) return const _MemoryVectorMatchResult();
-      final embeddingMap = <String, EmbeddingRow>{};
-      for (final row in embeddingRows) {
-        embeddingMap[row.entryId] = row;
-      }
-      debugPrint('[mem-vec] loaded ${embeddingRows.length} embedding rows');
-
-      final candidates = <VectorCandidate>[];
-      for (int i = 0; i < entries.length; i++) {
-        final entry = entries[i];
-        debugPrint(
-          '[mem-vec] processing entry ${i + 1}/${entries.length}: id=${entry.id}',
-        );
-        final row = embeddingMap[entry.id];
-        if (shouldAbort?.call() == true) {
-          return const _MemoryVectorMatchResult();
-        }
-        if (row == null || !_embeddingRepo.hasUsableVectors(row)) {
-          debugPrint('[mem-vec]   skipped: no row or no vectorsBlob');
-          continue;
-        }
-
-        final text = entry.content;
-        final hints = MemoryEmbeddingService.extractMemoryRetrievalHints(entry);
-        final fingerprint = jsonEncode({'text': text, 'retrievalHints': hints});
-        final currentHash = sha256.convert(utf8.encode(fingerprint)).toString();
-        if (row.textHash != currentHash) {
-          debugPrint('[mem-vec]   skipped: hash mismatch');
-          continue;
-        }
-
-        final vectors = _embeddingRepo.decodeVectors(row);
-        if (vectors == null || vectors.isEmpty) {
-          debugPrint('[mem-vec]   skipped: vectors null or empty');
-          continue;
-        }
-        final chunkTexts = _decodeMemoryChunkTexts(row, vectors.length);
-
-        candidates.add(
-          VectorCandidate(
-            id: entry.id,
-            vectors: vectors
-                .asMap()
-                .entries
-                .map(
-                  (v) => VectorChunk(
-                    text: v.key < chunkTexts.length ? chunkTexts[v.key] : '',
-                    vector: v.value,
-                  ),
-                )
-                .toList(),
-            metadata: {
-              'hints': _embeddingRepo.decodeHints(row) ?? [],
-              'chunkTexts': chunkTexts,
-            },
-          ),
-        );
-        debugPrint(
-          '[mem-vec]   added candidate with ${vectors.length} vectors',
-        );
-      }
-      debugPrint('[mem-vec] valid candidates: ${candidates.length}');
-
-      if (candidates.isEmpty) return const _MemoryVectorMatchResult();
-
-      final queryText = settings.memoryMode == 'legacy'
-          ? _legacyVectorQuery(history, currentText)
-          : RetrievalQueryBuilder.build(
-              currentText: currentText,
-              history: history,
-              includeAssistant: settings.queryIncludeAssistant,
-              recentTurns: settings.queryRecentTurns,
-              maxChars: settings.queryMaxChars,
-            );
-      if (queryText.isEmpty) return const _MemoryVectorMatchResult();
-      if (shouldAbort?.call() == true) return const _MemoryVectorMatchResult();
-
-      debugPrint(
-        '[mem-vec] calling embedding API (endpoint=${config.endpoint})...',
-      );
-      final queryChunks = await _embeddingService
-          .getEmbeddingsWithChunks(
-            [queryText],
-            config,
-            cancelToken: cancelToken,
-          )
-          .timeout(const Duration(seconds: 15), onTimeout: () => []);
-      if (cancelToken?.isCancelled == true) {
-        return const _MemoryVectorMatchResult();
-      }
-      debugPrint(
-        '[mem-vec] embedding API returned ${queryChunks.length} chunks',
-      );
-      if (queryChunks.isEmpty) return const _MemoryVectorMatchResult();
-
-      final queryVecChunks = queryChunks
-          .map((c) => VectorChunk(text: c.text, vector: c.vector))
-          .toList();
-      final results = findTopKMulti(
-        queryVecChunks,
-        candidates,
-        candidates.length,
-        0,
-      );
-
-      final threshold = settings.vectorThreshold;
-      final topK = settings.maxInjectedEntries.clamp(1, 50);
-      final scores = <String, double>{};
-      final chunksByEntryId = <String, List<String>>{};
-      for (final result
-          in results.where((r) => r.score >= threshold).take(topK)) {
-        scores[result.id] = result.score;
-        final chunkTexts = result.metadata['chunkTexts'];
-        if (chunkTexts is List && result.bestCandidateChunk != null) {
-          final bestIndex = result.bestCandidateChunk!;
-          final matched = <String>[];
-          if (bestIndex >= 0 && bestIndex < chunkTexts.length) {
-            final text = chunkTexts[bestIndex];
-            if (text is String && text.trim().isNotEmpty) matched.add(text);
-          }
-          final neighboringIndexes = [bestIndex - 1, bestIndex + 1];
-          for (final index in neighboringIndexes) {
-            if (index < 0 || index >= chunkTexts.length) continue;
-            final text = chunkTexts[index];
-            if (text is String && text.trim().isNotEmpty) matched.add(text);
-          }
-          if (matched.isNotEmpty) chunksByEntryId[result.id] = matched;
-        }
-      }
-      return _MemoryVectorMatchResult(
-        scores: scores,
-        chunksByEntryId: chunksByEntryId,
-      );
-    } catch (_) {
-      return const _MemoryVectorMatchResult();
-    }
-  }
-
-  List<String> _decodeMemoryChunkTexts(EmbeddingRow row, int vectorCount) {
-    final metadata = _embeddingRepo.decodeMetadata(row);
-    final chunks = metadata?['chunks'];
-    if (chunks is! List) return const [];
-    final texts = List<String>.filled(vectorCount, '');
-    for (final chunk in chunks) {
-      if (chunk is! Map) continue;
-      final indexRaw = chunk['index'];
-      final textRaw = chunk['text'];
-      if (indexRaw is! num || textRaw is! String) continue;
-      final index = indexRaw.toInt();
-      if (index < 0 || index >= texts.length) continue;
-      texts[index] = textRaw;
-    }
-    return texts;
-  }
-
-  Future<_CatalogMatchResult> _catalogMatches(
-    MemoryBook book,
-    List<MemoryEntry> activeEntries,
-    List<ChatMessage> history,
-    String currentText,
-  ) async {
-    try {
-      var rows = await _catalogRepo.getBySessionId(book.sessionId);
-      final activeIds = activeEntries.map((entry) => entry.id).toSet();
-      final usableRows = rows
-          .where(
-            (row) =>
-                activeIds.contains(row.memoryEntryId) &&
-                row.status == 'active' &&
-                !row.stale,
-          )
-          .toList(growable: false);
-      if (usableRows.length != activeEntries.length) {
-        rows = await _catalogRepo.rebuildForMemoryBook(book);
-      }
-
-      final scanText = RetrievalQueryBuilder.build(
-        currentText: currentText,
-        history: history,
-        includeAssistant: book.settings.queryIncludeAssistant,
-        recentTurns: book.settings.queryRecentTurns,
-        maxChars: book.settings.queryMaxChars,
-      ).toLowerCase();
-      if (scanText.isEmpty) return const _CatalogMatchResult();
-
-      final activeMap = {for (final entry in activeEntries) entry.id: entry};
-      final scores = <String, double>{};
-      final termsByEntryId = <String, List<String>>{};
-      for (final row in rows) {
-        final entry = activeMap[row.memoryEntryId];
-        if (entry == null || row.status != 'active' || row.stale) continue;
-        final matched = _matchedCatalogTerms(row, scanText);
-        if (matched.isEmpty) continue;
-        termsByEntryId[row.memoryEntryId] = matched;
-        scores[row.memoryEntryId] = _catalogScore(matched, row);
-      }
-      return _CatalogMatchResult(
-        scores: scores,
-        termsByEntryId: termsByEntryId,
-      );
-    } catch (_) {
-      return const _CatalogMatchResult();
-    }
-  }
-
-  static String _legacyVectorQuery(
-    List<ChatMessage> history,
-    String currentText,
-  ) {
-    final parts = <String>[];
-    if (currentText.trim().isNotEmpty) parts.add(currentText.trim());
-    var chars = parts.fold<int>(0, (sum, part) => sum + part.length);
-    for (int i = history.length - 1; i >= 0; i--) {
-      final msg = history[i];
-      if (msg.isHidden || msg.isTyping || msg.role != 'user') continue;
-      final text = msg.content.trim();
-      if (text.isEmpty || text == currentText.trim()) continue;
-      if (chars + text.length > 1500) break;
-      parts.add(text);
-      chars += text.length;
-    }
-    return parts.join('\n').trim();
-  }
-
-  static String _selectorScanText(
-    MemoryBookSettings settings,
-    List<ChatMessage> history,
-    String currentText,
-  ) {
-    if (settings.memoryMode == 'legacy') {
-      return _legacyVectorQuery(history, currentText).toLowerCase();
-    }
-    return RetrievalQueryBuilder.build(
-      currentText: currentText,
-      history: history,
-      includeAssistant: settings.queryIncludeAssistant,
-      recentTurns: settings.queryRecentTurns,
-      maxChars: settings.queryMaxChars,
-    ).toLowerCase();
-  }
-
-  static Map<String, List<String>> _keywordMatches(
-    List<MemoryEntry> entries,
-    String scanText,
-    String keyMatchMode,
-  ) {
-    if (scanText.isEmpty) return const {};
-    final matchedByEntry = <String, List<String>>{};
-    for (final entry in entries) {
-      final matched = <String>[];
-      for (final key in entry.keys) {
-        if (key.trim().isEmpty) continue;
-        final lowerKey = key.toLowerCase();
-        final hit = switch (keyMatchMode) {
-          'glaze' => memoryKeyMatchesGlaze(lowerKey, scanText),
-          'both' =>
-            scanText.contains(lowerKey) ||
-                memoryKeyMatchesGlaze(lowerKey, scanText),
-          _ => scanText.contains(lowerKey),
-        };
-        if (hit) matched.add(key);
-      }
-      if (matched.isNotEmpty) matchedByEntry[entry.id] = matched;
-    }
-    return matchedByEntry;
-  }
-
-  static List<String> _matchedCatalogTerms(
-    MemoryCatalogRow row,
-    String scanText,
-  ) {
-    final terms = <String>{
-      ...row.keys,
-      ...row.entities,
-      ...row.locations,
-      ...row.topics,
-      row.title,
-    };
-    final matched = <String>[];
-    for (final raw in terms) {
-      final term = raw.trim().toLowerCase();
-      if (term.length < 3) continue;
-      if (scanText.contains(term)) matched.add(raw.trim());
-    }
-    matched.sort();
-    return matched;
-  }
-
-  static double _catalogScore(List<String> matched, MemoryCatalogRow row) {
-    final tokenFactor = row.tokenCount <= 0
-        ? 1.0
-        : 1.0 / (1.0 + row.tokenCount / 8000);
-    final importance = row.importance.clamp(0, 1) * 0.5;
-    return (matched.length.clamp(1, 6) * 0.75 + importance) * tokenFactor;
-  }
-}
-
-class _MemoryVectorMatchResult {
-  final Map<String, double> scores;
-  final Map<String, List<String>> chunksByEntryId;
-
-  const _MemoryVectorMatchResult({
-    this.scores = const {},
-    this.chunksByEntryId = const {},
-  });
-}
-
-class _CatalogMatchResult {
-  final Map<String, double> scores;
-  final Map<String, List<String>> termsByEntryId;
-
-  const _CatalogMatchResult({
-    this.scores = const {},
-    this.termsByEntryId = const {},
-  });
 }
 
 final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
