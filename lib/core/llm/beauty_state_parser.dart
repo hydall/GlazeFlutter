@@ -90,3 +90,35 @@ BeautyStateParseResult parseBeautyState(String text) {
     markerFound: true,
   );
 }
+
+/// Result of applying beauty-state extraction to an assistant response.
+///
+/// Carries the [text] with markers stripped and the [vars] map with the
+/// parsed beauty-state JSON merged in (under [beautyStateVarKey]).
+class BeautyStateResult {
+  final String text;
+  final Map<String, String>? vars;
+  const BeautyStateResult({required this.text, required this.vars});
+}
+
+/// Strips any `<glaze_beauty_state>...</glaze_beauty_state>` marker from
+/// the assistant response and merges the parsed JSON state into the pending
+/// session vars (success-only persistence — INV-C5 still holds because this
+/// is only called from the two success-path `writeAssistant` call sites).
+/// When no marker is found, returns [text] and [vars] unchanged.
+BeautyStateResult applyBeautyState(
+  String text,
+  Map<String, String>? pendingVars,
+) {
+  final parsed = parseBeautyState(text);
+  if (!parsed.markerFound) {
+    return BeautyStateResult(text: text, vars: pendingVars);
+  }
+  final vars = parsed.stateJson == null
+      ? pendingVars
+      : <String, String>{
+          ...?pendingVars,
+          beautyStateVarKey: parsed.stateJson!,
+        };
+  return BeautyStateResult(text: parsed.cleanedText, vars: vars);
+}
