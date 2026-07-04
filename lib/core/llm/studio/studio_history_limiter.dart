@@ -12,6 +12,7 @@ class StudioHistoryLimiter {
 
   static final _htmlTagRegex = RegExp(r'</?[a-zA-Z][^>]*>');
   static final _multiNewlineRegex = RegExp(r'\n{3,}');
+  static final _fontTagRegex = RegExp(r'</?font\b[^>]*>', caseSensitive: false);
 
   /// Cap how many trailing chat messages reach the FINAL responder.
   ///
@@ -28,8 +29,17 @@ class StudioHistoryLimiter {
     final limit = pipelineOverride > 0
         ? pipelineOverride
         : config.maxFinalHistoryMessages;
-    if (limit <= 0 || history.length <= limit) return history;
-    return history.sublist(history.length - limit);
+    final sliced = (limit <= 0 || history.length <= limit)
+        ? history
+        : history.sublist(history.length - limit);
+    return sliced
+        .map(
+          (m) => PromptMessage(
+            role: m.role,
+            content: stripFontTags(m.content),
+          ),
+        )
+        .toList();
   }
 
   /// Trim trailing chat history for a tracker (intermediate agent).
@@ -85,5 +95,13 @@ class StudioHistoryLimiter {
     final stripped = text.replaceAll(_htmlTagRegex, '');
     final collapsed = stripped.replaceAll(_multiNewlineRegex, '\n\n');
     return collapsed.trim();
+  }
+
+  /// Strips only `<font>` tags from text, preserving the inner content and
+  /// all other HTML (e.g. `<lumiaooc>`, `<i>`, `<b>`). Used for the final
+  /// responder's chat history so the model does not see cosmetic color
+  /// styling applied by the post-cleaner and does not mimic it.
+  static String stripFontTags(String text) {
+    return text.replaceAll(_fontTagRegex, '');
   }
 }
