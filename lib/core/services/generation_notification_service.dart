@@ -210,6 +210,24 @@ class GenerationNotificationService {
     await _releaseForeground();
   }
 
+  /// Acquire an additional foreground hold for post-generation tasks
+  /// (write-loop, post-cleaner, ledger, extension blocks). These run
+  /// fire-and-forget AFTER [onGenerationCompleted] releases the generation
+  /// hold. Without this, the OS may suspend the app mid-task when the screen
+  /// turns off, causing crashes.
+  Future<void> onPostGenStarted() async {
+    await _acquireForeground(
+      notificationTitle: 'Glaze',
+      notificationText: 'Processing response...',
+    );
+  }
+
+  /// Release the post-generation foreground hold. Must be called exactly once
+  /// for each [onPostGenStarted] call, after ALL post-gen tasks complete.
+  Future<void> onPostGenFinished() async {
+    await _releaseForeground();
+  }
+
   Future<void> onSyncStarted() async {
     await _acquireForeground(
       notificationTitle: 'Glaze',

@@ -51,6 +51,7 @@ import 'widgets/chat_input_bar.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_activity_card.dart';
 import 'widgets/post_cleaner_status_card.dart';
+import 'widgets/post_gen_status_card.dart';
 import 'widgets/studio_status_card.dart';
 import 'widgets/quick_replies_panel.dart';
 import 'widgets/chat_webview_widget.dart';
@@ -1383,6 +1384,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
               right: 12,
               top: messageListTop + memoryTopReserve + 56,
               child: const StudioStatusCard(),
+            ),
+            // Post-gen tasks (write-loop, ledger, ext blocks) live status.
+            Positioned(
+              left: 12,
+              right: 12,
+              top: messageListTop + memoryTopReserve + 112,
+              child: const PostGenStatusCard(),
             ),
             // Bottom panel: drawer + input bar
             Positioned.fill(
