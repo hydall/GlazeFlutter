@@ -54,6 +54,8 @@ class StudioBriefParser {
     if (typed != null) return typed;
     final sectioned = sectionStudioBrief(trimmed);
     if (sectioned != null) return sectioned;
+    final fieldBased = _fieldBasedBrief(trimmed);
+    if (fieldBased != null) return fieldBased;
 
     final fallback = _safeControllerFallback(agent);
     _log(
@@ -61,6 +63,81 @@ class StudioBriefParser {
       'chars=${trimmed.length} first200=${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}',
     );
     return fallback;
+  }
+
+  /// Parse a field-based brief (lines like `key: value`) into Focus/Constraints/
+  /// Avoid sections. Recognizes common controller field names and maps them to
+  /// the appropriate section. Returns null if the text does not look like a
+  /// field-based brief or if it looks like scene prose.
+  String? _fieldBasedBrief(String text) {
+    if (looksLikeSceneProse(text)) return null;
+
+    // Require at least 2 recognized field lines to accept as field-based.
+    final focus = <String>[];
+    final constraints = <String>[];
+    final avoid = <String>[];
+
+    final fieldRegex = RegExp(r'^[-\s]*([a-z_]+)\s*:\s*(.+)$', caseSensitive: false);
+    int recognized = 0;
+
+    for (final rawLine in text.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+      final match = fieldRegex.firstMatch(line);
+      if (match == null) continue;
+      final key = match.group(1)!.toLowerCase().trim();
+      final value = match.group(2)!.trim();
+      if (value.isEmpty) continue;
+
+      final item = '$key: $value';
+      final cleaned = cleanBriefItem(item);
+      if (cleaned == null) continue;
+
+      // Map known fields to sections.
+      switch (key) {
+        case 'beat_type':
+        case 'tempo':
+        case 'scene_pressure':
+        case 'what_must_advance':
+        case 'active_characters':
+          if (!focus.any((e) => e.toLowerCase() == cleaned.toLowerCase())) {
+            focus.add(cleaned);
+          }
+          recognized++;
+        case 'target_length':
+        case 'target_paragraphs':
+        case 'stop_point':
+        case 'speech_mode':
+        case 'who_can_speak':
+        case 'who_should_not_speak':
+        case 'voice_constraints':
+        case 'low_speech_reason':
+          if (!constraints.any((e) => e.toLowerCase() == cleaned.toLowerCase())) {
+            constraints.add(cleaned);
+          }
+          recognized++;
+        case 'avoid_repeating':
+          if (!avoid.any((e) => e.toLowerCase() == cleaned.toLowerCase())) {
+            avoid.add(cleaned);
+          }
+          recognized++;
+        default:
+          // Unknown field — put in constraints as a generic item.
+          if (!constraints.any((e) => e.toLowerCase() == cleaned.toLowerCase())) {
+            constraints.add(cleaned);
+          }
+          recognized++;
+      }
+    }
+
+    if (recognized < 2) return null;
+    if ([...focus, ...constraints, ...avoid].isEmpty) return null;
+
+    return _buildStudioBrief(
+      focus: focus,
+      constraints: constraints,
+      avoid: avoid,
+    );
   }
 
   String? _typedStudioBrief(StudioAgent agent, String text) {
