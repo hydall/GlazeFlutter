@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/state/db_provider.dart';
 import '../state/post_cleaner_state_provider.dart';
 import '../state/studio_cycle_state_provider.dart';
 
@@ -36,12 +35,8 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
   Widget build(BuildContext context) {
     final state = ref.watch(studioCycleStateProvider);
     final cleanerState = ref.watch(postCleanerStateProvider);
-    final pipeline = ref.watch(pipelineSettingsProvider);
     final cs = Theme.of(context).colorScheme;
-    final totalSteps =
-        pipeline.postCleanerEnabled && pipeline.postCleanerCharacterCheckEnabled
-        ? 4
-        : 3;
+    const totalSteps = 4;
 
     // Detect cleaning phase: cleaner running while Studio was active.
     // Studio "was active" = phase is writingFinal or done (i.e. the cycle

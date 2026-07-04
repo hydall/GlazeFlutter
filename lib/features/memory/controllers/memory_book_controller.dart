@@ -1,4 +1,4 @@
-﻿import 'package:easy_localization/easy_localization.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/lorebook_providers.dart';
@@ -112,16 +112,16 @@ class MemoryBookController {
     final batchSize = s.batchSize;
     final pg = pipelineSettings;
     final outTokens =
-        (pg.generationMaxTokens != null && pg.generationMaxTokens! > 0)
-        ? '${pg.generationMaxTokens} out'
+        (pg.memoryBookApi.generationMaxTokens != null && pg.memoryBookApi.generationMaxTokens! > 0)
+        ? '${pg.memoryBookApi.generationMaxTokens} out'
         : 'memory_books_summary_auto_out'.tr();
     return '$mode • $interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget • $packing • ${s.memoryExcerptChunksPerEntry}x${s.memoryExcerptTokensPerChunk} chunks';
   }
 
   String get searchModelLabel {
     final pg = pipelineSettings;
-    return pg.generationModel.isNotEmpty
-        ? pg.generationModel
+    return pg.memoryBookApi.generationModel.isNotEmpty
+        ? pg.memoryBookApi.generationModel
         : 'memory_books_current_llm_model'.tr();
   }
 

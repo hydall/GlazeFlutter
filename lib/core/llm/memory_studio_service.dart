@@ -204,7 +204,7 @@ class MemoryStudioService {
       );
       final trackerContextOverride = _ref
           .read(pipelineSettingsProvider)
-          .studioTrackerContextSize;
+          .studioAgent.studioTrackerContextSize;
       final fetchedResults = await batcher.runPhase(
         batchGroups: grouping.batchGroups,
         individualAgents: grouping.individualAgents,
@@ -533,7 +533,7 @@ class MemoryStudioService {
 
       final trackerContextOverride = _ref
           .read(pipelineSettingsProvider)
-          .studioTrackerContextSize;
+          .studioAgent.studioTrackerContextSize;
       final fetchedResults = await batcher.runPhase(
         batchGroups: grouping.batchGroups,
         individualAgents: grouping.individualAgents,

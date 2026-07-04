@@ -1417,7 +1417,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       sessionId: widget.sessionId,
       settings: pipeline,
       entryIds: entryIds,
-      threshold: pipeline.memoryDedupThreshold,
+      threshold: pipeline.memoryPipeline.memoryDedupThreshold,
     );
 
     if (!mounted) return;

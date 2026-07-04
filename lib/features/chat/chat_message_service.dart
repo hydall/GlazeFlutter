@@ -112,8 +112,8 @@ class ChatMessageService {
       // committed snapshot is the one written for the PREVIOUS message —
       // that is the tracker state the user should see after deletion.
       // Roll back the live `tracker_rows` store to it so the UI
-      // (agentic_operations_log_dialog "Tracker values" tab,
-      // studio_menu_dialog tracker preview) shows the rolled-back state
+      // (agentic_operations_log_dialog "Tracker values" tab)
+      // shows the rolled-back state
       // instead of the cumulative state that included writes from the
       // deleted message. Sentinel anchor (messageId='') survives
       // deleteForMessage and serves as the legacy baseline.

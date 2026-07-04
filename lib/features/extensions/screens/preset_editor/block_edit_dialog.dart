@@ -2,7 +2,6 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/state/db_provider.dart';
 import '../../models/block_config.dart';
 import 'widgets/api_config_selector.dart';
 import 'widgets/block_trigger_picker.dart';
@@ -132,9 +131,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
       return;
     }
 
-    final pipeline = ref.read(pipelineSettingsProvider);
-    if (pipeline.studioLedgerEnabled) {
-      final proceed = await showDialog<bool>(
+    final proceed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => Dialog(
@@ -213,8 +210,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
           ),
         ),
       );
-      if (proceed != true) return;
-    }
+    if (proceed != true) return;
 
     setState(() => _inject = true);
   }

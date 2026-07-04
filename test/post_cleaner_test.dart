@@ -4,7 +4,6 @@ import 'package:glaze_flutter/core/llm/post_cleaner_service.dart';
 import 'package:glaze_flutter/core/models/agent_operation_record.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
-import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 import 'package:glaze_flutter/core/models/persona.dart';
 
 void main() {
@@ -102,24 +101,18 @@ void main() {
     });
   });
 
-  group('PipelineSettings.postCleanerEnabled', () {
-    test('defaults to true', () {
-      const settings = PipelineSettings();
-      expect(settings.postCleanerEnabled, isTrue);
+  group('Post-cleaner trigger suppression', () {
+    // The cleaner is always-on. The trigger in GenerationPipeline is guarded
+    // by: regenTargetId == null (no studio-final term).
+    bool cleanerTriggers(String? regenTargetId) =>
+        regenTargetId == null;
+
+    test('normal send → triggers', () {
+      expect(cleanerTriggers(null), isTrue);
     });
 
-    test('can be set to true', () {
-      const settings = PipelineSettings(postCleanerEnabled: true);
-      expect(settings.postCleanerEnabled, isTrue);
-    });
-
-    test('independent from agenticWriteEnabled', () {
-      const settings = PipelineSettings(
-        postCleanerEnabled: true,
-        agenticWriteEnabled: false,
-      );
-      expect(settings.postCleanerEnabled, isTrue);
-      expect(settings.agenticWriteEnabled, isFalse);
+    test('regen → does not trigger (regenTargetId != null)', () {
+      expect(cleanerTriggers('msg_123'), isFalse);
     });
   });
 
@@ -171,22 +164,17 @@ void main() {
   });
 
   group('Post-cleaner trigger suppression', () {
-    // The trigger in GenerationPipeline is guarded by:
-    //   regenTargetId == null && postCleanerEnabled
-    // (no studio-final term — that path was removed).
-    bool cleanerTriggers(String? regenTargetId, bool postCleanerEnabled) =>
-        regenTargetId == null && postCleanerEnabled;
+    // The cleaner is always-on. The trigger in GenerationPipeline is guarded
+    // by: regenTargetId == null (no studio-final term).
+    bool cleanerTriggers(String? regenTargetId) =>
+        regenTargetId == null;
 
-    test('normal send with postCleanerEnabled → triggers', () {
-      expect(cleanerTriggers(null, true), isTrue);
-    });
-
-    test('normal send without postCleanerEnabled → does not trigger', () {
-      expect(cleanerTriggers(null, false), isFalse);
+    test('normal send → triggers', () {
+      expect(cleanerTriggers(null), isTrue);
     });
 
     test('regen → does not trigger (regenTargetId != null)', () {
-      expect(cleanerTriggers('msg_123', true), isFalse);
+      expect(cleanerTriggers('msg_123'), isFalse);
     });
   });
 
