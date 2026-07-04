@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -17,6 +16,15 @@ import '../../features/chat_history/chat_history_provider.dart';
 import 'aux_llm_client.dart';
 import 'aux_retry_runner.dart';
 import 'beauty_state_parser.dart';
+import 'cleaner/audit_prompt_builder.dart';
+import 'cleaner/cleaner_prompt_builder.dart';
+import 'cleaner/cleaner_text_guard.dart';
+
+// Re-export extracted specialists for backward compat (tests import these
+// symbols from post_cleaner_service.dart).
+export 'cleaner/audit_prompt_builder.dart' show AuditPromptBuilder;
+export 'cleaner/cleaner_prompt_builder.dart' show CleanerPromptBuilder;
+export 'cleaner/cleaner_text_guard.dart' show CleanerTextGuard;
 
 /// POST-cleaner service (Stage 4).
 ///
@@ -163,8 +171,11 @@ class PostCleanerService {
       // LLM failure mode of flattening formatting when asked to "rewrite for
       // clarity". Does NOT verify the *same* tags/fences survive, just that
       // *some* survive — structural equality is the cleaner prompt's job.
-      if (textRewriteDropsProtectedMarkup(assistantText, cleaned) ||
-          lumiaoocDropped(assistantText, cleaned)) {
+      if (CleanerTextGuard.textRewriteDropsProtectedMarkup(
+            assistantText,
+            cleaned,
+          ) ||
+          CleanerTextGuard.lumiaoocDropped(assistantText, cleaned)) {
         debugPrint(
           '[PostCleaner] skipped: rewrite dropped protected markup '
           '(HTML/XML tags or fenced code blocks present in original but '
@@ -211,54 +222,19 @@ class PostCleanerService {
     }
   }
 
-  /// Returns true if [original] had inline HTML/XML tags or fenced code blocks
-  /// and [edited] no longer has any. Used as a pre-application guard for the
-  /// cleaner result: if the rewrite flattened formatting the prompt told the
-  /// cleaner to preserve, we keep the original.
-  ///
-  /// - Inline HTML/XML tags: matches `</?[a-zA-Z][^>]*>` (a `<` followed by an
-  ///   optional `/` and a letter — excludes our `==...==` markdown markers
-  ///   and inline `code` single backticks).
-  /// - Fenced code blocks: matches the triple-backtick fence ```` ``` ````.
-  ///
-  /// Presence-only check — does NOT verify the *same* tags/fences survive,
-  /// only that *some* survive. Structural preservation is the cleaner
-  /// prompt's responsibility; this guard only catches the catastrophic case
-  /// of the cleaner stripping ALL formatting.
+  // ── Backward-compat static facades ──────────────────────────────────────
+  // Tests call PostCleanerService.buildCleanerPrompt / buildAuditPrompt /
+  // parseAuditJson / textRewriteDropsProtectedMarkup / lumiaoocDropped
+  // directly. These facades delegate to the extracted specialist classes so
+  // tests keep working without import changes.
+
   @visibleForTesting
-  static bool textRewriteDropsProtectedMarkup(String original, String edited) {
-    final originalHasTags = _hasHtmlOrXmlTag(original);
-    final originalHasFences = _hasFencedBlock(original);
-    if (!originalHasTags && !originalHasFences) return false;
-    if (originalHasTags && !_hasHtmlOrXmlTag(edited)) return true;
-    if (originalHasFences && !_hasFencedBlock(edited)) return true;
-    return false;
-  }
+  static bool textRewriteDropsProtectedMarkup(String original, String edited) =>
+      CleanerTextGuard.textRewriteDropsProtectedMarkup(original, edited);
 
-  static bool _hasHtmlOrXmlTag(String text) {
-    return RegExp(r'</?[a-zA-Z][^>]*>').hasMatch(text);
-  }
-
-  static bool _hasFencedBlock(String text) {
-    return text.contains('```');
-  }
-
-  /// True if [original] contained a meta-OOC block (e.g. `<lumiaooc>`,
-  /// `<oocnote>`, `<metaooc>`, or any tag whose name contains "ooc") and
-  /// [edited] no longer has any. The meta-OOC block is meta-commentary
-  /// addressed to the user outside the roleplay — it is NOT prose to be
-  /// cleaned. The cleaner is instructed to preserve it verbatim; this guard
-  /// catches the case where the cleaner stripped it anyway. The detection is
-  /// generalized: any `<...ooc...>` tag (case-insensitive) counts, so custom
-  /// meta-personas with custom wrappers are preserved too. See
-  /// docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part C.
   @visibleForTesting
-  static bool lumiaoocDropped(String original, String edited) {
-    final pattern = RegExp(r'<\w*ooc\w*>', caseSensitive: false);
-    if (!pattern.hasMatch(original)) return false;
-    if (pattern.hasMatch(edited)) return false;
-    return true;
-  }
+  static bool lumiaoocDropped(String original, String edited) =>
+      CleanerTextGuard.lumiaoocDropped(original, edited);
 
   static String _statusLabel(AgentOperationStatus status) {
     return switch (status) {
@@ -284,7 +260,7 @@ class PostCleanerService {
     String beautyBrief = '',
     String? beautyState,
   }) async {
-    final prompt = buildCleanerPrompt(
+    final prompt = CleanerPromptBuilder.buildCleanerPrompt(
       assistantText: assistantText,
       broadcastBlocks: broadcastBlocks,
       recentMessages: recentMessages,
@@ -340,13 +316,8 @@ class PostCleanerService {
     );
   }
 
-  /// Builds the POST-cleaner prompt. When [broadcastBlocks] are supplied the
-  /// user's own language + prose-quality rules (captured verbatim at Studio
-  /// build time) are injected and take precedence over the built-in defaults,
-  /// so the rewrite respects the preset's language and anti-cliché/anti-slop
-  /// rules instead of a hardcoded English-only list. When [recentMessages] are
-  /// supplied, the cleaner performs a conservative local continuity check
-  /// against the recent chat history. Public for testing.
+  /// Backward-compat facade — delegates to [CleanerPromptBuilder].
+  /// Tests call `PostCleanerService.buildCleanerPrompt` directly.
   @visibleForTesting
   static String buildCleanerPrompt({
     required String assistantText,
@@ -359,295 +330,19 @@ class PostCleanerService {
     String styleInstructions = '',
     String beautyBrief = '',
     String? beautyState,
-  }) {
-    final rules = broadcastBlocks
-        .map((b) => b.trim())
-        .where((b) => b.isNotEmpty)
-        .toList();
-
-    final buffer = StringBuffer()
-      ..writeln(
-        'You are a faithful prose editor for a roleplay story. Your job is to '
-        'clean up the following assistant response: remove clichés and common '
-        'AI-isms, smooth repetitive phrasings, and fix local continuity '
-        'errors — while PRESERVING the original voice, energy, imagery, and '
-        'emotional texture. The text you receive was written with intent; '
-        'your edits should refine it, not flatten it. Keep what is vivid, '
-        'specific, and alive; only strip what is generic, overused, or '
-        'contradictory.',
-      )
-      ..writeln();
-
-    // Recent chat history — authoritative for local scene state.
-    if (recentMessages.isNotEmpty) {
-      final history = _formatRecentMessages(recentMessages, maxCharsPerMessage);
-      if (history.isNotEmpty) {
-        buffer
-          ..writeln('RECENT CHAT HISTORY:')
-          ..writeln(history)
-          ..writeln();
-      }
-    }
-
-    // Character consistency notes from the auditor — explicit fix instructions.
-    // Only added when the auditor found concrete contradictions.
-    if (auditIssues != null && auditIssues.isNotEmpty) {
-      buffer
-        ..writeln('CHARACTER CONSISTENCY NOTES (from auditor — fix these):')
-        ..writeln(auditIssues.map((i) => '- $i').join('\n'))
-        ..writeln()
-        ..writeln(
-          'Apply minimal fixes for these issues while also cleaning style.',
-        )
-        ..writeln(
-          'Do not add new content to resolve them. Prefer rephrasing that '
-          'preserves the prose\'s voice; only delete or neutralize when '
-          'rephrasing would bloat the text.',
-        )
-        ..writeln();
-    }
-
-    // Authoritative style rules from the active preset.
-    if (rules.isNotEmpty) {
-      buffer
-        ..writeln(
-          'AUTHORITATIVE RULES (from the active preset — follow these exactly; '
-          'they OVERRIDE the generic guidance below, especially for output '
-          'language and formatting):',
-        )
-        ..writeln()
-        ..writeln(rules.join('\n\n---\n\n'))
-        ..writeln();
-    }
-
-    // Global prose-guardian style overrides (Marinara `banned`/`avoid`/
-    // `prefer` port). User-defined cross-chat style rules that supplement
-    // the preset's broadcastBlocks. Only added when at least one field is
-    // non-empty. The user sets these once globally (e.g. "never use the
-    // word 'ozone'", "avoid starting consecutive responses with dialogue",
-    // "prefer terse, hardboiled prose") and they apply to every chat.
-    final hasBanned = bannedWords.trim().isNotEmpty;
-    final hasAvoid = avoidInstructions.trim().isNotEmpty;
-    final hasStyle = styleInstructions.trim().isNotEmpty;
-    if (hasBanned || hasAvoid || hasStyle) {
-      buffer
-        ..writeln(
-          'GLOBAL STYLE OVERRIDES (user-defined cross-chat rules — apply '
-          'ALONGSIDE the authoritative rules above; do not contradict them):',
-        )
-        ..writeln();
-      if (hasBanned) {
-        buffer
-          ..writeln(
-            'BANNED WORDS (never use these, even if the original has them):',
-          )
-          ..writeln(bannedWords.trim())
-          ..writeln();
-      }
-      if (hasAvoid) {
-        buffer
-          ..writeln('AVOID (specific patterns to steer away from):')
-          ..writeln(avoidInstructions.trim())
-          ..writeln();
-      }
-      if (hasStyle) {
-        buffer
-          ..writeln('PREFER (style direction to lean into):')
-          ..writeln(styleInstructions.trim())
-          ..writeln();
-      }
-    }
-
-    buffer
-      ..writeln('Rules:')
-      ..writeln('- Keep the same meaning, events, and character voices.')
-      ..writeln(
-        '- PRESERVE vivid, original imagery and figurative language. '
-        'Metaphors, sensory details, and specific textures are NOT filler '
-        '— keep them.',
-      )
-      ..writeln(
-        '- Remove or rephrase ONLY overused AI-isms and clichés (e.g. "a '
-        'shiver ran down", "a dance of", "symphony of", "tapestry of", '
-        '"couldn\'t help but", "a mix of", "sent shivers", "palpable '
-        'tension"). Do NOT remove original metaphors or unique phrasings '
-        'just because they are figurative.',
-      )
-      ..writeln(
-        '- Remove redundant repetition of the SAME idea within a few '
-        'sentences — but do not compress distinct beats into one.',
-      )
-      ..writeln('- Do NOT add new content, events, or dialogue.')
-      ..writeln(
-        '- Do NOT change the POV, tense, or the output language. Preserve the '
-        'language and formatting required by the authoritative rules above.',
-      )
-      ..writeln(
-        '- Keep the same approximate length. Do not shorten the text by '
-        'removing imagery or descriptive passages — only by removing '
-        'genuine filler.',
-      )
-      ..writeln(
-        '- PRESERVE all inline HTML / formatting markup VERBATIM. This includes '
-        '<font color="...">, <i>, <b>, <em>, <strong>, <mark>, <sub>, <sup>, '
-        'and any other inline tags. These tags carry the user\'s styling '
-        '(colored thoughts, colored speech, emphasis) and are NOT markdown to '
-        'be stripped. Rewrite the prose INSIDE the tags if needed, but never '
-        'remove, move, or alter the tags themselves, and never collapse '
-        '<font><i>...</i></font> into plain text. If a sentence with colored '
-        'markup is rephrased, keep the tags around the rephrased text in the '
-        'same nesting order.',
-      )
-      ..writeln(
-        '- PRESERVE OOC (out-of-character) blocks VERBATIM. OOC blocks are '
-        'meta-commentary addressed to the user outside the roleplay — they '
-        'are NOT prose to be cleaned. They may be wrapped in `((...))`, '
-        '`[OOC: ...]`, `(OOC: ...)`, `((OOC: ...))`, or appear as clearly '
-        'meta lines (e.g. "((Ghost in the machine: ...))", narrator notes to '
-        'the user, system-style asides). Do not remove, rephrase, translate, '
-        'reformat, or alter OOC blocks in any way. Clean only the in-roleplay '
-        'prose around them. If the entire response is an OOC block, return it '
-        'unchanged.',
-      )
-      ..writeln(
-        '- PRESERVE meta-OOC blocks VERBATIM. A meta-OOC block is any tag '
-        'whose name contains "ooc" (e.g. `<lumiaooc>`, `<oocnote>`, '
-        '`<metaooc>`, `<sisterooc>`). It is meta-commentary from the '
-        'meta-persona to the user outside the roleplay — NOT narrative prose. '
-        'Do not rewrite, move, rephrase, translate, reformat, or delete it. '
-        'Clean only the in-roleplay prose around it. If the response contains '
-        'a meta-OOC block, keep it exactly as-is in the same position.',
-      )
-      ..writeln(
-        '- Return ONLY the cleaned text, no explanation. Inline HTML tags '
-        'described above are part of the content, not markdown fences — keep '
-        'them. OOC blocks are also part of the content — keep them verbatim. '
-        'Do not wrap the output in ``` fences.',
-      )
-      ..writeln();
-
-    // Continuity rules — only when history is available.
-    if (recentMessages.isNotEmpty) {
-      buffer
-        ..writeln('Continuity rules:')
-        ..writeln(
-          '- Before editing style, silently check the assistant response '
-          'against RECENT CHAT HISTORY.',
-        )
-        ..writeln(
-          '- Fix only clear local continuity contradictions that are directly '
-          'contradicted by the provided context: who said what, who is '
-          'present, current position, clothing, held objects, object '
-          'ownership, and recent actions.',
-        )
-        ..writeln('- If the context is ambiguous, keep the original wording.')
-        ..writeln('- Do not invent missing details.')
-        ..writeln(
-          '- Do not add new events, explanations, dialogue, memories, or '
-          'motivations.',
-        )
-        ..writeln(
-          '- Prefer minimal edits: fix the contradiction while keeping the '
-          'sentence vivid. Rephrase rather than delete when possible; only '
-          'shorten or neutralize when rephrasing would bloat the text.',
-        )
-        ..writeln(
-          '- If correcting a continuity issue requires adding a new '
-          'paragraph or scene event, do not fix it — only clean style.',
-        )
-        ..writeln();
-    }
-
-    // Beauty Shard — styling state owned by the cleaner (not the final agent).
-    // When a beauty brief is provided, the cleaner is responsible for applying
-    // speaker/thought colors and emitting the updated state marker.
-    if (beautyBrief.trim().isNotEmpty) {
-      buffer
-        ..writeln('BEAUTY SHARD (visual styling — you own this):')
-        ..writeln()
-        ..writeln('Beauty Shard brief:')
-        ..writeln(beautyBrief.trim())
-        ..writeln();
-      if (beautyState != null && beautyState.trim().isNotEmpty) {
-        buffer
-          ..writeln('Current styling state:')
-          ..writeln(beautyState.trim())
-          ..writeln();
-      }
-      buffer
-        ..writeln('Styling rules:')
-        ..writeln(
-          '- Apply the speaker colors from the styling state to ALL character '
-          'dialogue using <font color="#HEX">"text"</font> tags.',
-        )
-        ..writeln(
-          '- Apply the thought colors to inner thoughts using '
-          '<font color="#HEX"><i>text</i></font> tags.',
-        )
-        ..writeln(
-          '- Reuse existing colors for established speakers. Assign a new '
-          'color only for a speaker not yet in the state.',
-        )
-        ..writeln(
-          '- If the assistant text already has <font> color tags, verify they '
-          'match the styling state. Fix mismatches; do not remove correct tags.',
-        )
-        ..writeln(
-          '- Do NOT color narrative prose — only dialogue (in quotes) and '
-          'inner thoughts (in italics or marked as thought).',
-        )
-        ..writeln(
-          '- At the very END of your cleaned response, after all narrative '
-          'and HTML, emit exactly one marker with the updated state:',
-        )
-        ..writeln()
-        ..writeln('<glaze_beauty_state>')
-        ..writeln(
-          '{"speakers":{"Name":"#hex"},"thoughts":{"Name":"#hex"},'
-          '"palette":"dark|light","font":"sans-serif","bg":"#hex",'
-          '"art_style":"...","reserved":{"lumia_ooc":"#9370DB"}}',
-        )
-        ..writeln('</glaze_beauty_state>')
-        ..writeln()
-        ..writeln(
-          'The marker is parsed and stripped automatically — the user never '
-          'sees it. Do not put it inside an HTML artifact or a code block.',
-        )
-        ..writeln();
-    }
-
-    buffer
-      ..writeln()
-      ..writeln('Assistant response to clean:')
-      ..write(assistantText);
-
-    return buffer.toString();
-  }
-
-  /// Formats recent chat messages into a compact literal block for the cleaner
-  /// prompt. Each message is trimmed to [maxChars] characters to keep the
-  /// prompt within a reasonable token budget.
-  static const _kDefaultMaxMessageChars = 3000;
-
-  static String _formatRecentMessages(
-    List<ChatMessage> messages, [
-    int maxChars = _kDefaultMaxMessageChars,
-  ]) {
-    final buf = StringBuffer();
-    for (final m in messages) {
-      if (m.content.trim().isEmpty) continue;
-      final role = m.role == 'assistant' ? 'assistant' : 'user';
-      final idSuffix = m.id.isNotEmpty ? ' #${m.id}' : '';
-      var content = m.content;
-      if (content.length > maxChars) {
-        content = '${content.substring(0, maxChars)}…';
-      }
-      buf.writeln('[$role$idSuffix]');
-      buf.writeln(content);
-      buf.writeln();
-    }
-    return buf.toString().trimRight();
-  }
+  }) =>
+      CleanerPromptBuilder.buildCleanerPrompt(
+        assistantText: assistantText,
+        broadcastBlocks: broadcastBlocks,
+        recentMessages: recentMessages,
+        auditIssues: auditIssues,
+        maxCharsPerMessage: maxCharsPerMessage,
+        bannedWords: bannedWords,
+        avoidInstructions: avoidInstructions,
+        styleInstructions: styleInstructions,
+        beautyBrief: beautyBrief,
+        beautyState: beautyState,
+      );
 
   /// Applies the cleaned text to the session: appends a blue 'cleaned' agent
   /// swipe carrying [cleanedText] to the last assistant message via
@@ -751,7 +446,7 @@ class PostCleanerService {
     try {
       if (token.isCancelled) return null;
 
-      final prompt = buildAuditPrompt(
+      final prompt = AuditPromptBuilder.buildAuditPrompt(
         assistantText: assistantText,
         character: character,
         persona: persona,
@@ -782,7 +477,7 @@ class PostCleanerService {
         return const [];
       }
 
-      return parseAuditJson(text);
+      return AuditPromptBuilder.parseAuditJson(text);
     } on TimeoutException {
       return null;
     } catch (e) {
@@ -794,9 +489,8 @@ class PostCleanerService {
     }
   }
 
-  /// Builds the auditor prompt. The auditor checks the assistant response
-  /// against all provided context and returns a compact JSON list of
-  /// contradictions. Public for testing.
+  /// Backward-compat facade — delegates to [AuditPromptBuilder].
+  /// Tests call `PostCleanerService.buildAuditPrompt` directly.
   @visibleForTesting
   static String buildAuditPrompt({
     required String assistantText,
@@ -809,156 +503,25 @@ class PostCleanerService {
     String? entitiesContent,
     List<ChatMessage> recentMessages = const [],
     int maxCharsPerMessage = 3000,
-  }) {
-    final buffer = StringBuffer()
-      ..writeln(
-        'You are a continuity auditor for a roleplay story. Your job is to '
-        'find contradictions between the assistant response and the provided '
-        'context.',
-      )
-      ..writeln();
+  }) =>
+      AuditPromptBuilder.buildAuditPrompt(
+        assistantText: assistantText,
+        character: character,
+        persona: persona,
+        lorebooksContent: lorebooksContent,
+        memoryContent: memoryContent,
+        summaryContent: summaryContent,
+        arcContent: arcContent,
+        entitiesContent: entitiesContent,
+        recentMessages: recentMessages,
+        maxCharsPerMessage: maxCharsPerMessage,
+      );
 
-    // Character profile.
-    buffer.writeln('CHARACTER PROFILE:');
-    buffer.writeln('Name: ${character.name}');
-    final desc = character.description?.trim() ?? '';
-    if (desc.isNotEmpty) buffer.writeln('Description: $desc');
-    final pers = character.personality?.trim() ?? '';
-    if (pers.isNotEmpty) buffer.writeln('Personality: $pers');
-    final scen = character.scenario?.trim() ?? '';
-    if (scen.isNotEmpty) buffer.writeln('Scenario: $scen');
-    final phi = character.postHistoryInstructions?.trim() ?? '';
-    if (phi.isNotEmpty) buffer.writeln('Post-history instructions: $phi');
-    buffer.writeln();
-
-    // User persona.
-    if (persona != null) {
-      buffer.writeln('USER PERSONA:');
-      buffer.writeln('Name: ${persona.name}');
-      final pp = persona.prompt?.trim() ?? '';
-      if (pp.isNotEmpty) buffer.writeln('Description: $pp');
-      buffer.writeln();
-    }
-
-    // Lorebooks / world context.
-    final lore = lorebooksContent?.trim() ?? '';
-    if (lore.isNotEmpty) {
-      buffer
-        ..writeln('INJECTED WORLD/LORE CONTEXT:')
-        ..writeln(lore)
-        ..writeln();
-    }
-
-    // Memory context.
-    final mem = memoryContent?.trim() ?? '';
-    if (mem.isNotEmpty) {
-      buffer
-        ..writeln('INJECTED MEMORY CONTEXT:')
-        ..writeln(mem)
-        ..writeln();
-    }
-
-    // Summary.
-    final sum = summaryContent?.trim() ?? '';
-    if (sum.isNotEmpty) {
-      buffer
-        ..writeln('SUMMARY:')
-        ..writeln(sum)
-        ..writeln();
-    }
-
-    // Arcs.
-    final arcs = arcContent?.trim() ?? '';
-    if (arcs.isNotEmpty) {
-      buffer
-        ..writeln('ARCS:')
-        ..writeln(arcs)
-        ..writeln();
-    }
-
-    // Entities.
-    final ents = entitiesContent?.trim() ?? '';
-    if (ents.isNotEmpty) {
-      buffer
-        ..writeln('ENTITIES:')
-        ..writeln(ents)
-        ..writeln();
-    }
-
-    // Recent chat history.
-    if (recentMessages.isNotEmpty) {
-      final history = _formatRecentMessages(recentMessages, maxCharsPerMessage);
-      if (history.isNotEmpty) {
-        buffer
-          ..writeln('RECENT CHAT HISTORY:')
-          ..writeln(history)
-          ..writeln();
-      }
-    }
-
-    buffer
-      ..writeln('ASSISTANT RESPONSE TO AUDIT:')
-      ..writeln(assistantText)
-      ..writeln()
-      ..writeln('Instructions:')
-      ..writeln('- Check the response against ALL provided context.')
-      ..writeln(
-        '- Report ONLY direct contradictions: wrong names, wrong '
-        'relationships, wrong locations, personality conflicts, world-fact '
-        'errors, persona identity errors.',
-      )
-      ..writeln('- Do NOT report style issues, cliches, or prose quality.')
-      ..writeln(
-        '- Do NOT suggest fixes or rewrites. Only describe the contradiction.',
-      )
-      ..writeln('- If no contradictions found, return: {"ok": true}')
-      ..writeln(
-        '- If contradictions found, return: {"ok": false, "issues": ["...", "..."]}',
-      )
-      ..writeln()
-      ..writeln('Return ONLY the JSON, no other text.');
-
-    return buffer.toString();
-  }
-
-  /// Parses the auditor JSON response.
-  ///
-  /// - `{"ok": true}` → `[]`
-  /// - `{"ok": false, "issues": [...]}` → list of strings
-  /// - malformed / unparseable → `null` (skip audit)
+  /// Backward-compat facade — delegates to [AuditPromptBuilder].
+  /// Tests call `PostCleanerService.parseAuditJson` directly.
   @visibleForTesting
-  static List<String>? parseAuditJson(String raw) {
-    var text = raw.trim();
-    if (text.isEmpty) return null;
-
-    // Some models wrap JSON in ``` fences or prose. Extract the first
-    // balanced `{...}` block.
-    final start = text.indexOf('{');
-    if (start < 0) return null;
-    final end = text.lastIndexOf('}');
-    if (end <= start) return null;
-    text = text.substring(start, end + 1);
-
-    try {
-      final parsed = jsonDecode(text);
-      if (parsed is! Map<String, dynamic>) return null;
-      final ok = parsed['ok'];
-      if (ok == true) return const [];
-      if (ok == false) {
-        final issues = parsed['issues'];
-        if (issues is List) {
-          return issues
-              .whereType<String>()
-              .where((s) => s.trim().isNotEmpty)
-              .toList();
-        }
-        return null;
-      }
-      return null;
-    } catch (_) {
-      return null;
-    }
-  }
+  static List<String>? parseAuditJson(String raw) =>
+      AuditPromptBuilder.parseAuditJson(raw);
 }
 
 /// Result of a POST-cleaner run.

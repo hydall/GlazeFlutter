@@ -26,6 +26,8 @@ import '../pipeline_utils.dart';
 import 'ext_blocks_stage.dart';
 import 'ledger_stage.dart';
 import 'stage_context.dart';
+import 'fact_checker_runner.dart';
+import 'beauty_state_handler.dart';
 
 /// Stage 4: POST-cleaner trigger.
 ///
@@ -38,6 +40,7 @@ class CleanerStage {
   final StageContext ctx;
   final ExtBlocksStage extBlocks;
   final LedgerStage ledger;
+  late final FactCheckerRunner _factChecker = FactCheckerRunner(ctx);
 
   CleanerStage(this.ctx, {required this.extBlocks, required this.ledger});
 
@@ -180,23 +183,13 @@ class CleanerStage {
       var beautyBrief = '';
       String? beautyState;
       try {
-        for (final output in lastAssistant.studioOutputs) {
-          final agentId = (output['agentId'] ?? '').toString().toLowerCase();
-          final agentName =
-              (output['agentName'] ?? '').toString().toLowerCase();
-          final brief = (output['brief'] ?? '').toString();
-          if ((agentId == 'beauty' ||
-              agentName.contains('beauty shard') ||
-              agentName.contains('beauty')) &&
-              brief.trim().isNotEmpty) {
-            beautyBrief = brief;
-            break;
-          }
-        }
+        beautyBrief = BeautyStateHandler.extractBeautyBrief(lastAssistant);
         // Load current beauty state from session vars.
         final session = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (session != null) {
-          beautyState = session.sessionVars[beautyStateVarKey];
+          beautyState = BeautyStateHandler.extractBeautyState(
+            session.sessionVars,
+          );
         }
       } catch (e) {
         debugPrint(
@@ -417,7 +410,7 @@ class CleanerStage {
     if (auditFuture != null) {
       try {
         auditIssues = await auditFuture;
-        _recordFactCheckerOperation(
+        _factChecker.record(
           sessionId: sessionId,
           messageId: targetMessage.id,
           startedAtMs: auditStartedAt ?? DateTime.now().millisecondsSinceEpoch,
@@ -431,7 +424,7 @@ class CleanerStage {
       } catch (e) {
         debugPrint('[PostCleaner] audit await error=$e');
         auditIssues = null;
-        _recordFactCheckerOperation(
+        _factChecker.record(
           sessionId: sessionId,
           messageId: targetMessage.id,
           startedAtMs: auditStartedAt ?? DateTime.now().millisecondsSinceEpoch,
@@ -772,49 +765,6 @@ class CleanerStage {
         ),
       );
     }
-  }
-
-  void _recordFactCheckerOperation({
-    required String sessionId,
-    required String messageId,
-    required int startedAtMs,
-    required List<String>? issues,
-    String? error,
-    String? model,
-  }) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final status = error == null && issues != null
-        ? AgentOperationStatus.ok
-        : AgentOperationStatus.error;
-    ctx.ref.read(agentOperationsLogProvider.notifier).state = ctx.ref
-        .read(agentOperationsLogProvider)
-        .append(
-          AgentOperationRecord(
-            id: 'fact-checker-$messageId-${DateTime.now().microsecondsSinceEpoch}',
-            kind: AgentOperationKind.factChecker,
-            status: status,
-            sessionId: sessionId,
-            messageId: messageId,
-            attempts: [
-              AgentOperationAttempt(
-                attempt: 1,
-                statusCode: 0,
-                status: status.label,
-                error: status.isFailure ? (error ?? 'audit failed') : null,
-                startedAtMs: startedAtMs,
-                elapsedMs: now - startedAtMs,
-              ),
-            ],
-            totalElapsedMs: now - startedAtMs,
-            model: model,
-            summary: status.isOk
-                ? 'issues=${issues?.length ?? 0}'
-                : error ?? 'audit failed',
-            startedAtMs: startedAtMs,
-            finishedAtMs: now,
-            canRegenerate: status.isFailure,
-          ),
-        );
   }
 
   /// Re-run the POST-cleaner against an existing assistant message.
