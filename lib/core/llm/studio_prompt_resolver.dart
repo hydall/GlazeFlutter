@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../db/repositories/studio_preset_repo.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
 import 'studio_request_preset.dart';
@@ -11,11 +12,11 @@ import 'studio_request_preset.dart';
 /// The resolver caches the DB preset in memory (the preset rarely changes).
 /// Call [invalidate] when the user edits the preset to force a re-read.
 class StudioPromptResolver {
-  final Ref _ref;
+  final StudioPresetRepo _presetRepo;
   StudioPreset? _cached;
   bool _loaded = false;
 
-  StudioPromptResolver(this._ref);
+  StudioPromptResolver(this._presetRepo);
 
   /// Get all blocks for a section, ordered by `order`, enabled only.
   /// Falls back to hardcoded constants when the DB has no preset or the
@@ -58,7 +59,7 @@ class StudioPromptResolver {
 
   Future<StudioPreset?> _ensureLoaded() async {
     if (_loaded) return _cached;
-    _cached = await _ref.read(studioPresetRepoProvider).getDefault();
+    _cached = await _presetRepo.getDefault();
     _loaded = true;
     return _cached;
   }
@@ -92,5 +93,5 @@ class StudioPromptResolver {
 }
 
 final studioPromptResolverProvider = Provider<StudioPromptResolver>((ref) {
-  return StudioPromptResolver(ref);
+  return StudioPromptResolver(ref.read(studioPresetRepoProvider));
 });

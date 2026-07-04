@@ -1,9 +1,8 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/api_config.dart';
+import '../models/pipeline_settings.dart';
 import '../models/studio_config.dart';
-import '../state/pipeline_settings_provider.dart';
 import '../utils/error_format.dart';
 import 'agent_runner.dart';
 import 'prompt_builder.dart';
@@ -24,11 +23,17 @@ import 'tracker_batcher.dart';
 /// relevant adapter and returned as failed results when retries are exhausted;
 /// the final generator rethrows.
 class StudioAgentExecutor {
-  final Ref _ref;
+  final AgentRunner _runner;
   final StudioMessageBuilder _messageBuilder;
   final StudioBriefParser _briefParser;
+  final PipelineSettings Function() _readPipelineSettings;
 
-  StudioAgentExecutor(this._ref, this._messageBuilder, this._briefParser);
+  StudioAgentExecutor(
+    this._runner,
+    this._messageBuilder,
+    this._briefParser,
+    this._readPipelineSettings,
+  );
 
   /// Delegate the actual LLM call to [AgentRunner]. This method still
   /// builds the `messages` list (prompt assembly via [StudioMessageBuilder])
@@ -67,7 +72,7 @@ class StudioAgentExecutor {
         priorBriefs: const [],
         isFinalResponse: false,
       );
-      final runner = _ref.read(agentRunnerProvider);
+      final runner = _runner;
       final result = await runner.runAgent(
         agent: agent,
         messages: messages,
@@ -135,8 +140,7 @@ class StudioAgentExecutor {
         );
       }
       try {
-        final override = _ref
-            .read(pipelineSettingsProvider)
+        final override = _readPipelineSettings()
             .studioAgent.studioPostTrackerContextSize;
         final effectiveAgent = override > 0
             ? agent.copyWith(contextSize: override)
@@ -151,7 +155,7 @@ class StudioAgentExecutor {
           isFinalResponse: false,
           mainResponse: mainResponse,
         );
-        final runner = _ref.read(agentRunnerProvider);
+        final runner = _runner;
         final result = await runner.runAgent(
           agent: agent,
           messages: messages,
@@ -264,11 +268,10 @@ class StudioAgentExecutor {
       studioPreset: studioPreset,
       priorBriefs: priorBriefs,
       isFinalResponse: true,
-      finalContextOverride: _ref
-          .read(pipelineSettingsProvider)
+      finalContextOverride: _readPipelineSettings()
           .studioAgent.studioFinalContextSize,
     );
-    final runner = _ref.read(agentRunnerProvider);
+    final runner = _runner;
     final result = await runner.runAgent(
       agent: agent,
       messages: messages,

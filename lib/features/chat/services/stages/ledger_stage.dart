@@ -6,10 +6,12 @@ import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
 import '../../../../core/llm/studio_ledger_service.dart';
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/models/agent_operation_record.dart';
+import '../../../../core/models/api_config.dart';
 import '../../../../core/models/chat_message.dart';
 import '../../../../core/models/pipeline_settings.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../../../core/state/memory_agent_providers.dart';
+import '../../../settings/api_list_provider.dart';
 import '../../../../shared/widgets/glaze_toast.dart';
 import '../../state/agent_operations_log_provider.dart';
 import '../../state/post_gen_status_provider.dart';
@@ -113,7 +115,11 @@ class LedgerStage {
       // Resolve the Studio cleaner slot (fail-explicit).
       final AuxApiConfig ledgerConfig;
       try {
-        ledgerConfig = await StudioSlotResolver(ctx.ref).resolve(
+        await ctx.ref.read(apiListProvider.future);
+        final apiConfigs =
+            ctx.ref.read(apiListProvider).value ?? const <ApiConfig>[];
+        ledgerConfig = StudioSlotResolver.resolve(
+          apiConfigs: apiConfigs,
           apiConfigId: studioCleanerApiConfigId,
           errorLabel: 'studio-ledger',
           modelOverride: pipeline.cleaner.postCleanerModel,

@@ -1,9 +1,6 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../features/settings/api_list_provider.dart';
 import '../../models/api_config.dart';
+import '../../models/pipeline_settings.dart';
 import '../../models/studio_config.dart';
-import '../../state/db_provider.dart';
 import '../agent_runner.dart' show ResolvedAgentConfig;
 import '../studio_api_config_resolver.dart';
 
@@ -22,9 +19,20 @@ import '../studio_api_config_resolver.dart';
 ///   PipelineSettings.memoryBookApi.generationModel because that field belongs
 ///   to MemoryBook generation / agentic write-loop routing.
 class AgentConfigResolver {
-  final Ref _ref;
+  final Future<List<ApiConfig>> Function() _loadApiConfigs;
+  final ApiConfig? Function() _readActiveApiConfig;
+  final PipelineSettings Function() _readPipelineSettings;
+  final Future<String> Function(String sessionId) _readRunApiConfigId;
 
-  AgentConfigResolver(this._ref);
+  AgentConfigResolver({
+    required Future<List<ApiConfig>> Function() loadApiConfigs,
+    required ApiConfig? Function() readActiveApiConfig,
+    required PipelineSettings Function() readPipelineSettings,
+    required Future<String> Function(String sessionId) readRunApiConfigId,
+  })  : _loadApiConfigs = loadApiConfigs,
+        _readActiveApiConfig = readActiveApiConfig,
+        _readPipelineSettings = readPipelineSettings,
+        _readRunApiConfigId = readRunApiConfigId;
 
   Future<ResolvedAgentConfig> resolveAgentConfig(
     StudioAgent agent,
@@ -33,16 +41,15 @@ class AgentConfigResolver {
     bool isFinalResponse = false,
     String? apiConfigId,
   }) async {
-    await _ref.read(apiListProvider.future);
-    final apiConfigs = _ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    final apiConfigs = await _loadApiConfigs();
     final runApiConfigId = (apiConfigId != null && apiConfigId.isNotEmpty)
         ? apiConfigId
         : await _readRunApiConfigId(sessionId);
     final resolver = StudioApiConfigResolver(
       apiConfigs: apiConfigs,
-      activeConfig: _ref.read(activeApiConfigProvider),
+      activeConfig: _readActiveApiConfig(),
     );
-    final pipeline = _ref.read(pipelineSettingsProvider);
+    final pipeline = _readPipelineSettings();
     if (isFinalResponse) {
       return resolver
           .resolveAgentConfig(
@@ -111,12 +118,5 @@ class AgentConfigResolver {
           omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
           omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,
         );
-  }
-
-  Future<String> _readRunApiConfigId(String sessionId) async {
-    final config = await _ref
-        .read(studioConfigRepoProvider)
-        .getBySessionId(sessionId);
-    return config?.runApiConfigId ?? '';
   }
 }

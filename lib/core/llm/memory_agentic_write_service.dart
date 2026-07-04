@@ -2,13 +2,14 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../db/repositories/memory_book_repo.dart';
+import '../db/repositories/tracker_repo.dart';
+import '../db/repositories/tracker_snapshot_repo.dart';
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
 import '../models/tracker.dart';
-import '../state/db_provider.dart';
 import '../utils/id_generator.dart';
 import 'agentic_write_request_parser.dart';
 import 'memory_agentic_policy.dart';
@@ -25,13 +26,23 @@ import 'aux_llm_client.dart';
 /// Extracted from `MemoryAgenticService` to keep each service under 250 lines
 /// and focused on one responsibility (CODE_STYLE: one class = one job).
 class MemoryAgenticWriteService {
-  final Ref _ref;
   final AuxLlmClient _llm;
+  final MemoryBookRepo _bookRepo;
+  final TrackerRepo _trackerRepo;
+  final TrackerSnapshotRepo _snapshotRepo;
   late final AgenticWriteRequestParser _parser = AgenticWriteRequestParser(
     _llm,
   );
 
-  MemoryAgenticWriteService(this._ref) : _llm = AuxLlmClient(_ref);
+  MemoryAgenticWriteService({
+    required AuxLlmClient llm,
+    required MemoryBookRepo bookRepo,
+    required TrackerRepo trackerRepo,
+    required TrackerSnapshotRepo snapshotRepo,
+  })  : _llm = llm,
+        _bookRepo = bookRepo,
+        _trackerRepo = trackerRepo,
+        _snapshotRepo = snapshotRepo;
 
   /// Run the agentic write-loop after a turn is finalized.
   ///
@@ -69,8 +80,7 @@ class MemoryAgenticWriteService {
       // docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
       List<MemoryEntry> existingMemories = const [];
       try {
-        final book = await _ref
-            .read(memoryBookRepoProvider)
+        final book = await _bookRepo
             .getBySessionId(sessionId);
         if (book != null) {
           existingMemories = book.entries;
@@ -148,11 +158,9 @@ class MemoryAgenticWriteService {
       // merged state (pre-existing + newly written).
       if (!token.isCancelled && isStillCurrent?.call() != false) {
         try {
-          final updatedTrackers = await _ref
-              .read(trackerRepoProvider)
+          final updatedTrackers = await _trackerRepo
               .getBySessionId(sessionId);
-          await _ref
-              .read(trackerSnapshotRepoProvider)
+          await _snapshotRepo
               .upsertTrackers(
                 sessionId: sessionId,
                 messageId: messageId,
@@ -211,7 +219,7 @@ class MemoryAgenticWriteService {
   }) async {
     if (requests.isEmpty) return const TrackerWriteResult();
 
-    final repo = _ref.read(trackerRepoProvider);
+    final repo = _trackerRepo;
     var written = 0;
     var denied = 0;
     final errors = <String>[];
@@ -258,7 +266,7 @@ class MemoryAgenticWriteService {
   }) async {
     if (requests.isEmpty) return const MemoryWriteResult();
 
-    final repo = _ref.read(memoryBookRepoProvider);
+    final repo = _bookRepo;
     var written = 0;
     var denied = 0;
     final errors = <String>[];

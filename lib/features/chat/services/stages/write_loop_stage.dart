@@ -3,10 +3,12 @@ import 'package:flutter/foundation.dart';
 import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/models/agent_operation_record.dart';
+import '../../../../core/models/api_config.dart';
 import '../../../../core/models/chat_message.dart';
 import '../../../../core/models/pipeline_settings.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../../../core/state/memory_agent_providers.dart';
+import '../../../settings/api_list_provider.dart';
 import '../../state/agent_operations_log_provider.dart';
 import '../../state/post_gen_status_provider.dart';
 import '../pipeline_utils.dart';
@@ -133,7 +135,11 @@ class WriteLoopStage {
       // Resolve the Studio cleaner slot for the write-loop (fail-explicit).
       final AuxApiConfig writeLoopConfig;
       try {
-        writeLoopConfig = await StudioSlotResolver(ctx.ref).resolve(
+        await ctx.ref.read(apiListProvider.future);
+        final apiConfigs =
+            ctx.ref.read(apiListProvider).value ?? const <ApiConfig>[];
+        writeLoopConfig = StudioSlotResolver.resolve(
+          apiConfigs: apiConfigs,
           apiConfigId: studioCleanerApiConfigId,
           errorLabel: 'agentic write-loop',
           modelOverride: pipeline.cleaner.postCleanerModel,

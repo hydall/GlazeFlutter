@@ -10,12 +10,14 @@ import '../../../../core/llm/prompt_builder.dart' show PromptPayload;
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/llm/tokenizer.dart';
 import '../../../../core/models/agent_operation_record.dart';
+import '../../../../core/models/api_config.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/chat_message.dart';
 import '../../../../core/models/pipeline_settings.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../../../core/state/memory_agent_providers.dart';
 import '../../../../core/state/character_provider.dart';
+import '../../../settings/api_list_provider.dart';
 import '../../../chat_history/chat_history_provider.dart';
 import '../../chat_session_service.dart';
 import '../../state/agent_operations_log_provider.dart';
@@ -168,7 +170,11 @@ class CleanerStage {
       // Resolve the Studio cleaner slot (fail-explicit).
       final AuxApiConfig cleanerConfig;
       try {
-        cleanerConfig = await StudioSlotResolver(ctx.ref).resolve(
+        await ctx.ref.read(apiListProvider.future);
+        final apiConfigs =
+            ctx.ref.read(apiListProvider).value ?? const <ApiConfig>[];
+        cleanerConfig = StudioSlotResolver.resolve(
+          apiConfigs: apiConfigs,
           apiConfigId: studioCleanerApiConfigId,
           errorLabel: 'post-cleaner',
           modelOverride: pipeline.cleaner.postCleanerModel,
@@ -852,7 +858,11 @@ class CleanerStage {
     // Resolve the Studio cleaner slot (fail-explicit).
     final AuxApiConfig cleanerConfig;
     try {
-      cleanerConfig = await StudioSlotResolver(ctx.ref).resolve(
+      await ctx.ref.read(apiListProvider.future);
+      final apiConfigs =
+          ctx.ref.read(apiListProvider).value ?? const <ApiConfig>[];
+      cleanerConfig = StudioSlotResolver.resolve(
+        apiConfigs: apiConfigs,
         apiConfigId: studioCleanerApiConfigId,
         errorLabel: 'post-cleaner-rerun',
         modelOverride: pipeline.cleaner.postCleanerModel,

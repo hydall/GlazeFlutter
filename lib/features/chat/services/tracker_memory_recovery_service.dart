@@ -6,9 +6,11 @@ import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/studio/studio_stream_interceptor.dart';
 import '../../../core/llm/studio_slot_resolver.dart';
+import '../../../core/models/api_config.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
+import '../../../features/settings/api_list_provider.dart';
 import '../state/recovery_state_provider.dart';
 import 'generation_pipeline.dart' show extractRecentHistoryText;
 
@@ -185,11 +187,17 @@ class TrackerMemoryRecoveryService {
               .getLatestCommittedExcludingMessage(sessionId, target.id);
           final trackers = snapshot?.trackers ??
               await _ref.read(trackerRepoProvider).getBySessionId(sessionId);
-          final writeLoopConfig = await StudioSlotResolver(_ref).resolve(
-            apiConfigId: studioConfig.cleanerApiConfigId,
-            errorLabel: 'recovery write-loop',
-            modelOverride: pipeline.cleaner.postCleanerModel,
-          );
+          final writeLoopConfig = await () async {
+            await _ref.read(apiListProvider.future);
+            final apiConfigs =
+                _ref.read(apiListProvider).value ?? const <ApiConfig>[];
+            return StudioSlotResolver.resolve(
+              apiConfigs: apiConfigs,
+              apiConfigId: studioConfig.cleanerApiConfigId,
+              errorLabel: 'recovery write-loop',
+              modelOverride: pipeline.cleaner.postCleanerModel,
+            );
+          }();
           final res = await _ref.read(memoryAgenticWriteServiceProvider).runWriteLoop(
             sessionId: sessionId,
             settings: pipeline,

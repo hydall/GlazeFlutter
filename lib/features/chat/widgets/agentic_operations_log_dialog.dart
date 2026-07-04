@@ -394,7 +394,7 @@ class _LastTurnTabState extends ConsumerState<_LastTurnTab> {
           ref.read(apiListProvider).value ?? const <ApiConfig>[];
       final AuxApiConfig ledgerConfig;
       try {
-        ledgerConfig = StudioSlotResolver.resolveFromList(
+        ledgerConfig = StudioSlotResolver.resolve(
           apiConfigs: apiConfigs,
           apiConfigId: studioConfig?.cleanerApiConfigId ?? '',
           errorLabel: 'ledger-rerun',

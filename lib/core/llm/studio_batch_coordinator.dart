@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/api_config.dart';
 import '../models/studio_config.dart';
@@ -17,19 +16,21 @@ import 'tracker_batcher.dart';
 /// tracker failures to the Studio pipeline. Extracted from `MemoryStudioService`
 /// (plan §2.9).
 ///
-/// Deps: the shared [Ref] (for `trackerBatcherProvider` +
-/// `agentRunnerProvider`), the injected [StudioContextBucketizer],
-/// [StudioMessageBuilder], and [StudioAgentExecutor]. `_log` is injected as a
-/// callback so this specialist does not own the host's debug-print sink.
+/// Deps: the injected [TrackerBatcher], [AgentRunner],
+/// [StudioContextBucketizer], [StudioMessageBuilder], and
+/// [StudioAgentExecutor]. `_log` is injected as a callback so this specialist
+/// does not own the host's debug-print sink.
 class StudioBatchCoordinator {
-  final Ref _ref;
+  final TrackerBatcher _batcher;
+  final AgentRunner _runner;
   final StudioContextBucketizer _bucketizer;
   final StudioMessageBuilder _messageBuilder;
   final StudioAgentExecutor _executor;
   final void Function(String message) _log;
 
   StudioBatchCoordinator(
-    this._ref,
+    this._batcher,
+    this._runner,
     this._bucketizer,
     this._messageBuilder,
     this._executor,
@@ -83,7 +84,7 @@ class StudioBatchCoordinator {
       promptPayload,
       promptResult,
     );
-    final batcher = _ref.read(trackerBatcherProvider);
+    final batcher = _batcher;
     final systemPrompt = batcher.buildBatchSystemPrompt(
       group: group,
       sharedMessages: sharedMessages,
@@ -116,7 +117,7 @@ class StudioBatchCoordinator {
       temperature: group.batchTemperature,
       contextSize: batchContextSize,
     );
-    final runner = _ref.read(agentRunnerProvider);
+    final runner = _runner;
     List<TrackerBatchResult>? lastParsed;
     String? lastError;
     for (var attempt = 1; attempt <= 3; attempt++) {
@@ -192,7 +193,7 @@ class StudioBatchCoordinator {
     String? apiConfigId,
   }) async {
     if (agents.isEmpty) return const [];
-    final batcher = _ref.read(trackerBatcherProvider);
+    final batcher = _batcher;
     return batcher.settleWithConcurrencyLimit(
       items: agents,
       limit: 2,

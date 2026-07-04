@@ -1,7 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/settings/api_list_provider.dart';
 import '../models/api_config.dart';
 import 'aux_llm_client.dart';
 
@@ -14,17 +12,17 @@ import 'aux_llm_client.dart';
 ///
 /// Usage:
 /// ```dart
-/// final resolver = StudioSlotResolver(ref);
-/// final config = await resolver.resolve(
+/// await ref.read(apiListProvider.future);
+/// final apiConfigs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
+/// final config = StudioSlotResolver.resolve(
+///   apiConfigs: apiConfigs,
 ///   apiConfigId: studioConfig.cleanerApiConfigId,
 ///   errorLabel: 'post-cleaner',
 ///   modelOverride: pipeline.cleaner.postCleanerModel,
 /// );
 /// ```
 class StudioSlotResolver {
-  final Ref _ref;
-
-  StudioSlotResolver(this._ref);
+  StudioSlotResolver._();
 
   /// Resolves [apiConfigId] to an [AuxApiConfig]. Throws if the id is empty
   /// or not found.
@@ -32,26 +30,7 @@ class StudioSlotResolver {
   /// [modelOverride] — when non-empty, replaces the config's model. Used for
   /// per-service model overrides (e.g. `postCleanerModel`,
   /// `studioLedgerModel`).
-  Future<AuxApiConfig> resolve({
-    required String apiConfigId,
-    String errorLabel = 'studio-slot',
-    String modelOverride = '',
-  }) async {
-    await _ref.read(apiListProvider.future);
-    final apiConfigs =
-        _ref.read(apiListProvider).value ?? const <ApiConfig>[];
-    return resolveFromList(
-      apiConfigs: apiConfigs,
-      apiConfigId: apiConfigId,
-      errorLabel: errorLabel,
-      modelOverride: modelOverride,
-    );
-  }
-
-  /// Stateless resolve from a pre-loaded API config list. Use from widget
-  /// contexts where a `WidgetRef` is available but a `Ref` is not — load
-  /// `apiListProvider` via the `WidgetRef` first, then call this.
-  static AuxApiConfig resolveFromList({
+  static AuxApiConfig resolve({
     required List<ApiConfig> apiConfigs,
     required String apiConfigId,
     String errorLabel = 'studio-slot',

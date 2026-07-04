@@ -2,17 +2,16 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../db/repositories/chat_repo.dart';
+import '../db/repositories/tracker_snapshot_repo.dart';
 import '../models/agent_operation_record.dart';
 import '../models/chat_message.dart';
 import '../models/character.dart';
 import '../models/persona.dart';
 import '../models/pipeline_settings.dart';
-import '../state/db_provider.dart';
 import '../utils/think_tags.dart';
 import '../../features/chat/chat_session_service.dart';
-import '../../features/chat_history/chat_history_provider.dart';
 import 'aux_llm_client.dart';
 import 'aux_retry_runner.dart';
 import 'beauty_state_parser.dart';
@@ -38,10 +37,20 @@ export 'cleaner/cleaner_text_guard.dart' show CleanerTextGuard;
 /// [ChatRepo.appendAgentSwipe] for the atomic DB update.
 /// Falls back to the original text on any error.
 class PostCleanerService {
-  final Ref _ref;
   final AuxLlmClient _llm;
+  final ChatRepo _chatRepo;
+  final TrackerSnapshotRepo _snapshotRepo;
+  final void Function() _invalidateChatHistory;
 
-  PostCleanerService(this._ref) : _llm = AuxLlmClient(_ref);
+  PostCleanerService({
+    required AuxLlmClient llm,
+    required ChatRepo chatRepo,
+    required TrackerSnapshotRepo snapshotRepo,
+    required void Function() invalidateChatHistory,
+  })  : _llm = llm,
+        _chatRepo = chatRepo,
+        _snapshotRepo = snapshotRepo,
+        _invalidateChatHistory = invalidateChatHistory;
 
   /// Run the POST-cleaner on the last assistant message.
   ///
@@ -364,7 +373,7 @@ class PostCleanerService {
     String? genTime,
     int? tokens,
   }) async {
-    final chatRepo = _ref.read(chatRepoProvider);
+    final chatRepo = _chatRepo;
     final updated = await chatRepo.appendAgentSwipe(
       sessionId: sessionId,
       messageId: messageId,
@@ -380,7 +389,7 @@ class PostCleanerService {
     if (session != null) {
       ChatSessionService.updateCache(session);
     }
-    _ref.invalidate(chatHistoryProvider);
+    _invalidateChatHistory();
 
     // Clone the parent agent-swipe's tracker snapshot into the new 'cleaned'
     // anchor. The cleaner rewrites prose — tracker state is unchanged, so the
@@ -391,7 +400,7 @@ class PostCleanerService {
       final msg = session?.messages.where((m) => m.id == messageId).firstOrNull;
       if (msg == null || msg.agentSwipeId <= 0) return;
       final parentAgentSwipeId = msg.agentSwipeId - 1;
-      final snapshotRepo = _ref.read(trackerSnapshotRepoProvider);
+      final snapshotRepo = _snapshotRepo;
       final parent = await snapshotRepo.getByAnchor(
         sessionId: sessionId,
         messageId: messageId,

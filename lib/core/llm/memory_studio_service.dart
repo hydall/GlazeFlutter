@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/api_config.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
+import 'agent_runner.dart';
 import 'prompt_builder.dart';
 import 'studio_activation_gate.dart';
 import 'studio_agent_executor.dart';
@@ -18,6 +19,7 @@ import 'studio_context_bucketizer.dart';
 import 'studio_message_builder.dart';
 import 'studio_prompt_text.dart';
 import 'studio_stage_brief.dart';
+import 'tracker_batcher.dart';
 import 'studio/studio_tracker_phase_runner.dart';
 import 'studio/studio_tracker_result_mapper.dart';
 
@@ -36,6 +38,8 @@ class MemoryStudioService {
   final Ref _ref;
   final StudioPromptText _promptText = const StudioPromptText();
   final StudioContextBucketizer _bucketizer = const StudioContextBucketizer();
+  late final AgentRunner _runner = _ref.read(agentRunnerProvider);
+  late final TrackerBatcher _batcher = _ref.read(trackerBatcherProvider);
   late final StudioBriefParser _briefParser = StudioBriefParser(_log);
   late final StudioBriefDeduper _briefDeduper = StudioBriefDeduper(
     _briefParser,
@@ -47,12 +51,14 @@ class MemoryStudioService {
     _briefDeduper,
   );
   late final StudioAgentExecutor _executor = StudioAgentExecutor(
-    _ref,
+    _runner,
     _messageBuilder,
     _briefParser,
+    () => _ref.read(pipelineSettingsProvider),
   );
   late final StudioBatchCoordinator _batchCoordinator = StudioBatchCoordinator(
-    _ref,
+    _batcher,
+    _runner,
     _bucketizer,
     _messageBuilder,
     _executor,
@@ -63,12 +69,14 @@ class MemoryStudioService {
     _briefCache,
   );
   late final StudioTrackerPhaseRunner _phaseRunner = StudioTrackerPhaseRunner(
-    ref: _ref,
+    presetRepo: _ref.read(studioPresetRepoProvider),
+    batcher: _batcher,
     briefCache: _briefCache,
     briefParser: _briefParser,
     batchCoordinator: _batchCoordinator,
     executor: _executor,
     resultMapper: _resultMapper,
+    readPipelineSettings: () => _ref.read(pipelineSettingsProvider),
     log: _log,
   );
 

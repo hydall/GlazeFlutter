@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../state/db_provider.dart';
+import '../../db/repositories/studio_preset_repo.dart';
+import '../../models/api_config.dart';
+import '../../models/pipeline_settings.dart';
+import '../../models/studio_config.dart';
 import '../prompt_builder.dart';
 import '../studio_activation_gate.dart';
 import '../studio_agent_executor.dart';
@@ -12,8 +14,6 @@ import '../studio_brief_cache.dart';
 import '../studio_brief_parser.dart';
 import '../studio_stage_brief.dart';
 import '../tracker_batcher.dart';
-import '../../models/api_config.dart';
-import '../../models/studio_config.dart';
 import 'studio_tracker_result_mapper.dart';
 
 /// Result of the shared pre-gen tracker phase. Both [MemoryStudioService.runTrackerCycle]
@@ -46,39 +46,43 @@ class PreGenPhaseResult {
 /// Extracted from `MemoryStudioService` (plan Phase 5a) to eliminate ~180 lines
 /// of duplication between `runTrackerCycle` and `runTrackersOnly`.
 ///
-/// Deps via constructor (no `Ref` method reads inside — all repos/batcher are
-/// injected). The `Ref` is still needed to read the providers; Phase 9 will
-/// sweep it into explicit callback params.
+/// Deps via constructor (no `Ref` — all repos/batcher are injected).
 class StudioTrackerPhaseRunner {
-  final Ref _ref;
+  final StudioPresetRepo _presetRepo;
+  final TrackerBatcher _batcher;
   final StudioBriefCache _briefCache;
   final StudioBriefParser _briefParser;
   final StudioBatchCoordinator _batchCoordinator;
   final StudioAgentExecutor _executor;
   final StudioTrackerResultMapper _resultMapper;
+  final PipelineSettings Function() _readPipelineSettings;
   final void Function(String message) _log;
 
   StudioTrackerPhaseRunner({
-    required Ref ref,
+    required StudioPresetRepo presetRepo,
+    required TrackerBatcher batcher,
     required StudioBriefCache briefCache,
     required StudioBriefParser briefParser,
     required StudioBatchCoordinator batchCoordinator,
     required StudioAgentExecutor executor,
     required StudioTrackerResultMapper resultMapper,
+    required PipelineSettings Function() readPipelineSettings,
     required void Function(String message) log,
-  })  : _ref = ref,
+  })  : _presetRepo = presetRepo,
+        _batcher = batcher,
         _briefCache = briefCache,
         _briefParser = briefParser,
         _batchCoordinator = batchCoordinator,
         _executor = executor,
         _resultMapper = resultMapper,
+        _readPipelineSettings = readPipelineSettings,
         _log = log;
   /// Resolves the DB Studio preset for [config]. Returns the preset or an
   /// error string if no preset is found.
   Future<({StudioPreset? preset, String? error})> resolvePreset(
     StudioConfig config,
   ) async {
-    final presetRepo = _ref.read(studioPresetRepoProvider);
+    final presetRepo = _presetRepo;
     final presetById = await presetRepo.getById(config.studioPresetId);
     if (presetById != null) {
       return (preset: presetById, error: null);
@@ -168,7 +172,7 @@ class StudioTrackerPhaseRunner {
         }
       }
 
-      final batcher = _ref.read(trackerBatcherProvider);
+      final batcher = _batcher;
       final grouping = await batcher.groupAgents(
         agents: fetchTrackers,
         apiConfig: apiConfig,
@@ -176,8 +180,7 @@ class StudioTrackerPhaseRunner {
         apiConfigId: config.cheapApiConfigId,
       );
 
-      final trackerContextOverride = _ref
-          .read(pipelineSettingsProvider)
+      final trackerContextOverride = _readPipelineSettings()
           .studioAgent.studioTrackerContextSize;
       final fetchedResults = await batcher.runPhase(
         batchGroups: grouping.batchGroups,

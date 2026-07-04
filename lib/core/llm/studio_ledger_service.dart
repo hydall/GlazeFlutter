@@ -2,14 +2,13 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/tracker_repo.dart';
+import '../db/repositories/tracker_snapshot_repo.dart';
 import '../models/agent_operation_record.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
-import '../state/db_provider.dart';
 import 'aux_llm_client.dart';
 import 'ledger/durable_fact_writer.dart';
 import 'ledger/ledger_op_applier.dart';
@@ -85,21 +84,30 @@ class LedgerRunResult {
 ///
 /// Constructor-injected [Ref] for accessing repos/providers.
 class StudioLedgerService {
-  final Ref _ref;
   final AuxLlmClient _llm;
+  final TrackerRepo _trackerRepo;
+  final MemoryBookRepo _bookRepo;
+  final TrackerSnapshotRepo _snapshotRepo;
   final StudioLedgerExportParser _parser;
   final StudioLedgerPrompt _promptBuilder;
   final LedgerOpApplier _opApplier;
   final DurableFactWriter _factWriter;
   final VisibleLedgerStore _ledgerStore;
 
-  StudioLedgerService(this._ref)
-    : _llm = AuxLlmClient(_ref),
-      _parser = const StudioLedgerExportParser(),
-      _promptBuilder = const StudioLedgerPrompt(),
-      _opApplier = const LedgerOpApplier(),
-      _factWriter = const DurableFactWriter(),
-      _ledgerStore = const VisibleLedgerStore();
+  StudioLedgerService({
+    required AuxLlmClient llm,
+    required TrackerRepo trackerRepo,
+    required MemoryBookRepo bookRepo,
+    required TrackerSnapshotRepo snapshotRepo,
+  })  : _llm = llm,
+        _trackerRepo = trackerRepo,
+        _bookRepo = bookRepo,
+        _snapshotRepo = snapshotRepo,
+        _parser = const StudioLedgerExportParser(),
+        _promptBuilder = const StudioLedgerPrompt(),
+        _opApplier = const LedgerOpApplier(),
+        _factWriter = const DurableFactWriter(),
+        _ledgerStore = const VisibleLedgerStore();
 
   /// Run the Studio Ledger for [sessionId] on [finalAssistantText].
   ///
@@ -143,11 +151,8 @@ class StudioLedgerService {
       }
 
       // ── 2. Load context for prompt (current trackers, recent memory) ────
-      final trackerRepo = _ref.read(trackerRepoProvider);
-      final bookRepo = _ref.read(memoryBookRepoProvider);
-
-      final currentTrackers = await trackerRepo.getBySessionId(sessionId);
-      final book = await bookRepo.getBySessionId(sessionId);
+      final currentTrackers = await _trackerRepo.getBySessionId(sessionId);
+      final book = await _bookRepo.getBySessionId(sessionId);
       final recentEntries =
           book?.entries.where((e) => e.status == 'active').take(20).toList() ??
           const <MemoryEntry>[];
@@ -232,7 +237,7 @@ class StudioLedgerService {
           swipeId: swipeId,
           agentSwipeId: agentSwipeId,
           visibleLedger: parseResult.visibleLedger,
-          trackerRepo: trackerRepo,
+          trackerRepo: _trackerRepo,
         );
         if (_isNoWriteLedgerOutput(parseResult)) {
           return LedgerRunResult(
@@ -270,7 +275,7 @@ class StudioLedgerService {
             messageId: messageId,
             swipeId: swipeId,
             agentSwipeId: agentSwipeId,
-            trackerRepo: trackerRepo,
+            trackerRepo: _trackerRepo,
           );
           opsApplied++;
         } catch (e) {
@@ -292,7 +297,7 @@ class StudioLedgerService {
           sessionId: sessionId,
           messageId: messageId,
           facts: export.durableFacts,
-          bookRepo: bookRepo,
+          bookRepo: _bookRepo,
         );
         debugPrint(
           '[StudioLedger] wrote $durableFactsWritten durable facts '
@@ -307,7 +312,7 @@ class StudioLedgerService {
         swipeId: swipeId,
         agentSwipeId: agentSwipeId,
         visibleLedger: parseResult.visibleLedger,
-        trackerRepo: trackerRepo,
+        trackerRepo: _trackerRepo,
       );
 
       // ── 9. Snapshot post-ledger tracker state for rollback/swipe safety ──
@@ -316,10 +321,8 @@ class StudioLedgerService {
       // capture an immutable snapshot at the assistant output anchor.
       if (token.isCancelled == false && isStillCurrent?.call() != false) {
         try {
-          final updatedTrackers = await trackerRepo.getBySessionId(sessionId);
-          await _ref
-              .read(trackerSnapshotRepoProvider)
-              .upsertTrackers(
+          final updatedTrackers = await _trackerRepo.getBySessionId(sessionId);
+          await _snapshotRepo.upsertTrackers(
                 sessionId: sessionId,
                 messageId: messageId,
                 swipeId: swipeId,

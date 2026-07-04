@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'db_provider.dart';
+import '../../features/chat_history/chat_history_provider.dart';
+import '../../features/settings/api_list_provider.dart';
+import '../llm/aux_llm_client.dart';
 import '../llm/memory_graph_builder.dart';
 import '../llm/memory_provenance.dart';
 import '../llm/memory_cadence_service.dart';
@@ -11,6 +13,8 @@ import '../llm/memory_dedup_service.dart';
 import '../llm/memory_studio_service.dart';
 import '../llm/post_cleaner_service.dart';
 import '../llm/studio_ledger_service.dart';
+import '../models/api_config.dart';
+import 'db_provider.dart';
 import 'memory_settings_provider.dart';
 
 /// Provider for the entity graph builder.
@@ -55,7 +59,12 @@ final memoryAgenticServiceProvider = Provider<MemoryAgenticService>((ref) {
 final memoryAgenticWriteServiceProvider = Provider<MemoryAgenticWriteService>((
   ref,
 ) {
-  return MemoryAgenticWriteService(ref);
+  return MemoryAgenticWriteService(
+    llm: AuxLlmClient(ref),
+    bookRepo: ref.read(memoryBookRepoProvider),
+    trackerRepo: ref.read(trackerRepoProvider),
+    snapshotRepo: ref.read(trackerSnapshotRepoProvider),
+  );
 });
 
 /// Studio Mode pipeline service. Tracker-around-generator model.
@@ -66,7 +75,12 @@ final memoryStudioServiceProvider = Provider<MemoryStudioService>((ref) {
 /// POST-cleaner service (Stage 4). Rewrites the final assistant message
 /// to remove clichés and repetition. Fire-and-forget after generation.
 final postCleanerServiceProvider = Provider<PostCleanerService>((ref) {
-  return PostCleanerService(ref);
+  return PostCleanerService(
+    llm: AuxLlmClient(ref),
+    chatRepo: ref.read(chatRepoProvider),
+    snapshotRepo: ref.read(trackerSnapshotRepoProvider),
+    invalidateChatHistory: () => ref.invalidate(chatHistoryProvider),
+  );
 });
 
 /// Studio Ledger service (Stage 5). Runs after the POST-cleaner to extract
@@ -74,12 +88,26 @@ final postCleanerServiceProvider = Provider<PostCleanerService>((ref) {
 /// durable MemoryBook facts from the final assistant response.
 /// See docs/plans/STUDIO_LEDGER_MEMORY.md.
 final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
-  return StudioLedgerService(ref);
+  return StudioLedgerService(
+    llm: AuxLlmClient(ref),
+    trackerRepo: ref.read(trackerRepoProvider),
+    bookRepo: ref.read(memoryBookRepoProvider),
+    snapshotRepo: ref.read(trackerSnapshotRepoProvider),
+  );
 });
 
 /// Memory dedup service. Cosine pre-filter + batch LLM call to merge/drop/keep
 /// near-duplicate memory entries. Runs on-demand (UI button) or automatically
 /// after generation (delayed, fire-and-forget).
 final memoryDedupServiceProvider = Provider<MemoryDedupService>((ref) {
-  return MemoryDedupService(ref);
+  return MemoryDedupService(
+    llm: AuxLlmClient(ref),
+    embeddingRepo: ref.read(embeddingRepoProvider),
+    bookRepo: ref.read(memoryBookRepoProvider),
+    loadApiConfigs: () async {
+      await ref.read(apiListProvider.future);
+      return ref.read(apiListProvider).value ?? const <ApiConfig>[];
+    },
+    activeApiConfig: () => ref.read(activeApiConfigProvider),
+  );
 });
