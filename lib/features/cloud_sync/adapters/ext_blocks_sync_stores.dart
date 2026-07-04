@@ -280,34 +280,34 @@ class MemoryGraphSyncStore implements SyncMemoryGraphStore {
   Future<List<String>> getAllSessionIds() async {
     final ids = <String>{};
     final catalog = await _db.customSelect(
-      "SELECT DISTINCT chatSessionId FROM memory_catalog_rows",
+      "SELECT DISTINCT chat_session_id FROM memory_catalog_rows",
     ).get();
     for (final r in catalog) {
-      ids.add(r.read<String>('chatSessionId'));
+      ids.add(r.read<String>('chat_session_id'));
     }
     final entities = await _db.customSelect(
-      "SELECT DISTINCT chatSessionId FROM memory_entity_rows",
+      "SELECT DISTINCT chat_session_id FROM memory_entity_rows",
     ).get();
     for (final r in entities) {
-      ids.add(r.read<String>('chatSessionId'));
+      ids.add(r.read<String>('chat_session_id'));
     }
     final salience = await _db.customSelect(
-      "SELECT DISTINCT chatSessionId FROM memory_salience_rows",
+      "SELECT DISTINCT chat_session_id FROM memory_salience_rows",
     ).get();
     for (final r in salience) {
-      ids.add(r.read<String>('chatSessionId'));
+      ids.add(r.read<String>('chat_session_id'));
     }
     final cadence = await _db.customSelect(
-      "SELECT DISTINCT chatSessionId FROM memory_cadence_rows",
+      "SELECT DISTINCT chat_session_id FROM memory_cadence_rows",
     ).get();
     for (final r in cadence) {
-      ids.add(r.read<String>('chatSessionId'));
+      ids.add(r.read<String>('chat_session_id'));
     }
     final consolidation = await _db.customSelect(
-      "SELECT DISTINCT chatSessionId FROM memory_consolidation_rows",
+      "SELECT DISTINCT chat_session_id FROM memory_consolidation_rows",
     ).get();
     for (final r in consolidation) {
-      ids.add(r.read<String>('chatSessionId'));
+      ids.add(r.read<String>('chat_session_id'));
     }
     return ids.toList();
   }
