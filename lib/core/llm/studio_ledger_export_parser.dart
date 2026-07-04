@@ -162,6 +162,11 @@ class StudioLedgerExportParser {
 
   /// Extract the inner text of `<[tag]>…</[tag]>` from [source].
   /// Returns an empty string when not found.
+  ///
+  /// When the opening tag is found but the closing tag is missing (common when
+  /// the LLM response is truncated by max_tokens), returns everything after
+  /// the opening tag to the end of the source — the downstream JSON repair +
+  /// brace extraction can still recover a partial export.
   String _extractBlock(String source, String tag) {
     final open = '<$tag>';
     final close = '</$tag>';
@@ -169,7 +174,10 @@ class StudioLedgerExportParser {
     if (start < 0) return '';
     final contentStart = start + open.length;
     final end = source.indexOf(close, contentStart);
-    if (end < 0) return '';
+    if (end < 0) {
+      // Truncated response — return everything after the opening tag.
+      return source.substring(contentStart).trim();
+    }
     return source.substring(contentStart, end).trim();
   }
 

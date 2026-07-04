@@ -183,7 +183,7 @@ class StudioLedgerService {
       // ── 4. Call LLM ─────────────────────────────────────────────────────
       final maxTokens = settings.ledger.studioLedgerMaxTokens > 0
           ? settings.ledger.studioLedgerMaxTokens
-          : 2000;
+          : 15000;
       final temperature = settings.ledger.studioLedgerTemperature >= 0
           ? settings.ledger.studioLedgerTemperature
           : 0.2;
