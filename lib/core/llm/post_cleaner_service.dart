@@ -616,7 +616,7 @@ class PostCleanerService {
   /// - `['issue 1', ...]` — list of specific contradictions.
   /// - `null` — audit call failed, JSON unparseable, or was aborted. Caller
   ///   should skip audit notes and run the cleaner as Phase 1.
-  Future<List<String>?> runCharacterAudit({
+  Future<AuditResult> runCharacterAudit({
     required String assistantText,
     required Character character,
     Persona? persona,
@@ -629,14 +629,27 @@ class PostCleanerService {
     required PipelineSettings settings,
     required AuxApiConfig config,
     CancelToken? cancelToken,
+    List<StudioPresetBlock> cleanerBlocks = const [],
+    String? beautyState,
   }) async {
-    if (assistantText.trim().isEmpty) return const [];
+    if (assistantText.trim().isEmpty) {
+      return const AuditResult(issues: []);
+    }
 
     final token = cancelToken ?? CancelToken();
-    if (token.isCancelled) return null;
+    if (token.isCancelled) return const AuditResult(issues: null);
 
     try {
-      if (token.isCancelled) return null;
+      if (token.isCancelled) return const AuditResult(issues: null);
+
+      // Extract cleaner_audit block content from preset if available.
+      String auditBlockContent = '';
+      for (final b in cleanerBlocks) {
+        if (b.id == 'cleaner_audit' && b.enabled) {
+          auditBlockContent = b.content;
+          break;
+        }
+      }
 
       final prompt = AuditPromptBuilder.buildAuditPrompt(
         assistantText: assistantText,
@@ -649,35 +662,39 @@ class PostCleanerService {
         entitiesContent: entitiesContent,
         recentMessages: recentMessages,
         maxCharsPerMessage: settings.cleaner.postCleanerMaxCharsPerMessage,
+        beautyState: beautyState,
+        auditBlockContent: auditBlockContent,
       );
 
       // Auditor: cheap, JSON-only, low temperature, small token budget.
+      // Bump maxTokens when preset-driven (Beauty Shard needs room).
+      final maxTokens = auditBlockContent.isNotEmpty ? 2048 : 1024;
       final outcome = await _llm.callOnceWithLog(
         config: config,
         prompt: prompt,
-        maxTokens: 1024,
+        maxTokens: maxTokens,
         temperature: 0.0,
         timeoutMs: _llm.resolveCleanerTimeout(settings),
         cancelToken: token,
       );
 
-      if (token.isCancelled) return null;
+      if (token.isCancelled) return const AuditResult(issues: null);
 
       final text = outcome.text;
       if (text == null || text.trim().isEmpty) {
-        if (!outcome.isOk) return null;
-        return const [];
+        if (!outcome.isOk) return const AuditResult(issues: null);
+        return const AuditResult(issues: []);
       }
 
-      return AuditPromptBuilder.parseAuditJson(text);
+      return AuditPromptBuilder.parseAuditResult(text);
     } on TimeoutException {
-      return null;
+      return const AuditResult(issues: null);
     } catch (e) {
       if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
-        return null;
+        return const AuditResult(issues: null);
       }
       debugPrint('[PostCleanerAudit] error: $e');
-      return null;
+      return const AuditResult(issues: null);
     }
   }
 
