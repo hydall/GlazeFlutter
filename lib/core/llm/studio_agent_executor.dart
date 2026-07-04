@@ -19,7 +19,7 @@ import 'tracker_batcher.dart';
 /// Each adapter assembles the agent's message list via the injected
 /// [StudioMessageBuilder], invokes [AgentRunner.runAgent], and adapts the
 /// result type to the pipeline-internal [StudioStageBrief] / [TrackerBatchResult]
-/// / [StudioFinalRunResult] shapes. Tracker failures are retried by the
+/// / [AgentRunResult] shapes. Tracker failures are retried by the
 /// relevant adapter and returned as failed results when retries are exhausted;
 /// the final generator rethrows.
 class StudioAgentExecutor {
@@ -247,7 +247,7 @@ class StudioAgentExecutor {
     );
   }
 
-  Future<StudioFinalRunResult> runFinalGenerator({
+  Future<AgentRunResult> runFinalGenerator({
     required StudioAgent agent,
     required PromptResult promptResult,
     required PromptPayload promptPayload,
@@ -282,26 +282,6 @@ class StudioAgentExecutor {
       apiConfigId: apiConfigId,
       onFinalResponseUpdate: onFinalResponseUpdate,
     );
-    return StudioFinalRunResult(
-      text: result.text,
-      reasoning: result.reasoning,
-      rawResponseJson: result.rawResponseJson,
-    );
+    return result;
   }
-}
-
-/// Final-generator run result returned by [AgentRunner.runAgent] for the
-/// final agent, adapted back to the pipeline-level shape used by
-/// [StudioPipelineResult]. Public so the executor's host can read its
-/// fields after the run.
-class StudioFinalRunResult {
-  final String text;
-  final String reasoning;
-  final String? rawResponseJson;
-
-  const StudioFinalRunResult({
-    required this.text,
-    this.reasoning = '',
-    this.rawResponseJson,
-  });
 }

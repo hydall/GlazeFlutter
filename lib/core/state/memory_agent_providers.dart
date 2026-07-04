@@ -60,7 +60,7 @@ final memoryAgenticWriteServiceProvider = Provider<MemoryAgenticWriteService>((
   ref,
 ) {
   return MemoryAgenticWriteService(
-    llm: AuxLlmClient(ref),
+    llm: const AuxLlmClient(),
     bookRepo: ref.read(memoryBookRepoProvider),
     trackerRepo: ref.read(trackerRepoProvider),
     snapshotRepo: ref.read(trackerSnapshotRepoProvider),
@@ -76,7 +76,7 @@ final memoryStudioServiceProvider = Provider<MemoryStudioService>((ref) {
 /// to remove clichés and repetition. Fire-and-forget after generation.
 final postCleanerServiceProvider = Provider<PostCleanerService>((ref) {
   return PostCleanerService(
-    llm: AuxLlmClient(ref),
+    llm: const AuxLlmClient(),
     chatRepo: ref.read(chatRepoProvider),
     snapshotRepo: ref.read(trackerSnapshotRepoProvider),
     invalidateChatHistory: () => ref.invalidate(chatHistoryProvider),
@@ -89,7 +89,7 @@ final postCleanerServiceProvider = Provider<PostCleanerService>((ref) {
 /// See docs/plans/STUDIO_LEDGER_MEMORY.md.
 final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
   return StudioLedgerService(
-    llm: AuxLlmClient(ref),
+    llm: const AuxLlmClient(),
     trackerRepo: ref.read(trackerRepoProvider),
     bookRepo: ref.read(memoryBookRepoProvider),
     snapshotRepo: ref.read(trackerSnapshotRepoProvider),
@@ -101,7 +101,7 @@ final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
 /// after generation (delayed, fire-and-forget).
 final memoryDedupServiceProvider = Provider<MemoryDedupService>((ref) {
   return MemoryDedupService(
-    llm: AuxLlmClient(ref),
+    llm: const AuxLlmClient(),
     embeddingRepo: ref.read(embeddingRepoProvider),
     bookRepo: ref.read(memoryBookRepoProvider),
     loadApiConfigs: () async {

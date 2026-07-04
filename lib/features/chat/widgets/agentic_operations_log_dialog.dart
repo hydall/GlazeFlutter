@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/agent_operation_record.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../state/agent_operations_log_provider.dart';
 import 'agentic_operations_tab.dart';
 import 'agentic_last_turn_tab.dart';
 import 'agentic_tracker_values_tab.dart';

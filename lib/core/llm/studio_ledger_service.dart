@@ -82,7 +82,7 @@ class LedgerRunResult {
 ///   5. Apply ops to [TrackerRepo].
 ///   6. Write durable facts to [MemoryBookRepo].
 ///
-/// Constructor-injected [Ref] for accessing repos/providers.
+/// Constructor-injected deps (no `Ref` — all repos/client are injected).
 class StudioLedgerService {
   final AuxLlmClient _llm;
   final TrackerRepo _trackerRepo;

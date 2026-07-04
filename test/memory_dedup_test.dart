@@ -106,7 +106,7 @@ void main() {
       expect(decision.action, 'merge');
       expect(decision.mergedContent, 'Combined content');
       expect(decision.mergedTitle, 'Combined title');
-      expect(decision.mergedKeys?.length, 2);
+      expect(decision.mergedKeys.length, 2);
     });
 
     test('drop decision has no merged fields', () {

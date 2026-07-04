@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/agent_operation_record.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../state/agent_operations_log_provider.dart';
 import 'agentic_operations_log_dialog.dart' show AgenticSessionScope, OperationTile;
