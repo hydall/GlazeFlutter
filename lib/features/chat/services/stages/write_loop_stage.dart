@@ -61,9 +61,8 @@ class WriteLoopStage {
       if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
       if (book == null) return;
 
-      // Cadence (plan §Model Cadence). The run mode controls when the
-      // write-loop runs: 'every_turn' (legacy), 'conditional', 'every_n'
-      // (uses [runAgenticEveryN]), 'manual' (skipped), 'disabled' (skipped).
+      // Cadence: the write-loop runs every 5 assistant turns (hardcoded).
+      // Studio-only — without Studio config, trackers don't update.
       final assistantTurnCount = messages
           .where((m) => m.role == 'assistant' && !m.isTyping)
           .length;

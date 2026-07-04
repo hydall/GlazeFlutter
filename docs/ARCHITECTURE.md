@@ -524,11 +524,10 @@ LLM to synthesize a shard. `collectBroadcastBlocks` surfaces cross-cutting
 rules (output language, prose guards) for the POST-cleaner;
 `computePresetHash` detects preset changes.
 
-Manual editing: `studio_menu_dialog.dart` exposes a "Build Studio" button
-(auto decompose), a per-tracker prompt-shard editor (multi-line TextField),
-and a per-tracker "Regenerate instruction" button
-(`StudioDecompositionService.regenerateAgentInstruction`, single-agent,
-deterministic bucketing). Edits persist via `studioConfigRepo.upsert`.
+Manual editing: `studio_settings_sheet.dart` exposes a "Edit Preset Blocks"
+button (opens `StudioPresetEditorSheet`), and a per-slot settings dialog
+for model parameters (temperature, topP, reasoning, etc.). Edits persist
+via `studioConfigRepo.upsert`.
 
 ### Nested swipes (agentSwipes)
 

@@ -263,10 +263,9 @@ class MemoryAgenticWriteService {
     var denied = 0;
     final errors = <String>[];
 
-    // Three write paths (patch #4 + follow-up):
-    // - requireApproval=true → ALL requests become MemoryDrafts in
-    //   pendingDrafts for manual user review (Marinara
-    //   agentWriteApprovalRequired analog). Append-only updates to
+    // Three write paths:
+    // - requireApproval=true (hardcoded) → ALL requests become MemoryDrafts
+    //   in pendingDrafts for manual user review. Append-only updates to
     //   existing entries are also deferred: the newFacts are written as
     //   a draft whose content is the appended text, NOT merged into the
     //   existing entry until the user approves. See

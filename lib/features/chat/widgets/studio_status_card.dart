@@ -187,7 +187,7 @@ class _StudioStatusCardState extends ConsumerState<StudioStatusCard> {
     if (cleanerState.factCheckEnabled) {
       return '4/4 - Cleaning';
     }
-    return '3/3 - Cleaning';
+    return '3/4 - Cleaning';
   }
 
   void _scheduleAutoDismiss() {

@@ -99,7 +99,7 @@ Migration history:
 - v42: added Studio `profileId` / `profileName` for reusable session-bound profiles
 - v43: added Studio `builderPromptTemplate` override for editable Studio rebuild prompts
 - v44: added Studio `maxFinalHistoryMessages` INTEGER DEFAULT 15 — caps trailing chat messages sent to the final Studio generator (0 = unlimited); Studio trackers receive their own `StudioAgent.contextSize` (default 5, hard-cap 200) instead — see INV-ST1/INV-ST2 in `docs/INVARIANTS.md`
-- v45: added `tracker_rows` table — lightweight key-value trackers written by the post-turn write-loop and Studio trackers (e.g. 'mood: happy', 'inventory: chip in pocket'). Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades alongside `memory_book_rows`. Read live by `agentic_operations_log_dialog.dart` "Tracker values" tab and `studio_menu_dialog.dart` (current tracker value preview)
+- v45: added `tracker_rows` table — lightweight key-value trackers written by the post-turn write-loop and Studio trackers (e.g. 'mood: happy', 'inventory: chip in pocket'). Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades alongside `memory_book_rows`. Read live by `agentic_operations_log_dialog.dart` "Tracker values" tab.
 - v46: added `studio_config_rows.routing_mode` TEXT DEFAULT `'verbatim'` — controls how preset blocks become agent instructions (`verbatim` = blocks concatenated дословно, no LLM call; `compiled` = legacy LLM digest). The decomposition service (`studio_decomposition_service.dart`) was restored after Phase 2: `decompose()` produces `StudioAgent`s (trackers + one final generator) that slot into `runTrackerCycle`; `routing_mode = 'compiled'` triggers the LLM builder, `'verbatim'` concatenates blocks directly.
 - v50: added `tracker_snapshots` table — per-agent-swipe immutable snapshots of all trackers (mirrors Marinara-Engine's `game_state_snapshots`). Composite PK `{sessionId, messageId, swipeId, agentSwipeId}`; columns `trackersJson` (JSON array of `Tracker.toJson`), `committed` (0/1), `createdAt` (epoch seconds). Three indexes on `(sessionId, committed, createdAt)` for fast `getLatestCommitted` lookups. The `TrackerSnapshotRepo` (299 lines) owns all access; `tracker_rows` is kept as the write-loop's internal mutable store (LLM upserts into it, then a snapshot is taken).
 - v51: data migration — aggregates `tracker_rows` per session into a baseline snapshot at the sentinel anchor `(messageId='', committed=1)`. Legacy sessions that had `tracker_rows` but no snapshots get a one-time baseline so the snapshot-first read path (Phase 3) finds data immediately. The sentinel anchor is never dropped by `deleteForMessage` (only by `deleteBySessionId` / `deleteByCharacterId`).
@@ -339,7 +339,7 @@ cleaned sub-swipe inherits the parent's tracker state.
 
 ### Read path (snapshot-first)
 
-The 3 call sites (`generation_pipeline.dart`, `studio_menu_dialog.dart`,
+The 3 call sites (`prompt_payload_builder.dart`, `write_loop_stage.dart`,
 `agentic_operations_log_dialog.dart`) call `getLatestCommitted` /
 `getLatest` and fall back to `trackerRepoProvider.getBySessionId` when no
 snapshot exists (legacy sessions that haven't been re-saved since Phase 1).
