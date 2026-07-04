@@ -407,7 +407,7 @@ class PostCleanerService {
       customReplacements['{{beautyBrief}}'] = '';
     }
 
-    final skipBlockIds = <String>{};
+    final skipBlockIds = <String>{'cleaner_audit'};
     if (beautyBrief.trim().isEmpty) {
       skipBlockIds.add('cleaner_beauty');
     }
