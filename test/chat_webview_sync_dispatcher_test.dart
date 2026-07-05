@@ -91,6 +91,7 @@ ChatWebViewWidgetFields _fields({
   sessionId: 's1',
   isGenerating: isGenerating,
   isGeneratingImage: false,
+  isPostGenRunning: false,
   regenTargetId: null,
   greetingTotal: 0,
   messages: messages,

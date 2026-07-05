@@ -14,7 +14,6 @@ import '../models/tracker.dart';
 import 'aux_llm_client.dart';
 import 'ledger/durable_fact_writer.dart';
 import 'ledger/ledger_op_applier.dart';
-import 'ledger/visible_ledger_store.dart';
 import 'macro_engine.dart';
 import 'studio/studio_aux_prompt_assembler.dart';
 import 'studio_ledger_export_parser.dart';
@@ -22,7 +21,6 @@ import 'studio_ledger_prompt.dart';
 
 export 'ledger/durable_fact_writer.dart';
 export 'ledger/ledger_op_applier.dart';
-export 'ledger/visible_ledger_store.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // StudioLedgerService
@@ -108,7 +106,6 @@ class StudioLedgerService {
   final StudioLedgerPrompt _promptBuilder;
   final LedgerOpApplier _opApplier;
   final DurableFactWriter _factWriter;
-  final VisibleLedgerStore _ledgerStore;
 
   StudioLedgerService({
     required this._llm,
@@ -118,8 +115,7 @@ class StudioLedgerService {
   })  : _parser = const StudioLedgerExportParser(),
         _promptBuilder = const StudioLedgerPrompt(),
         _opApplier = const LedgerOpApplier(),
-        _factWriter = const DurableFactWriter(),
-        _ledgerStore = const VisibleLedgerStore();
+        _factWriter = const DurableFactWriter();
 
   /// Run the Studio Ledger for [sessionId] on [finalAssistantText].
   ///
@@ -260,15 +256,6 @@ class StudioLedgerService {
       );
 
       if (!parseResult.hasExport) {
-        // Store visible ledger as diagnostics even when export is invalid.
-        await _ledgerStore.storeVisibleLedger(
-          sessionId: sessionId,
-          messageId: messageId,
-          swipeId: swipeId,
-          agentSwipeId: agentSwipeId,
-          visibleLedger: parseResult.visibleLedger,
-          trackerRepo: _trackerRepo,
-        );
         if (_isNoWriteLedgerOutput(parseResult)) {
           return LedgerRunResult(
             status: 'ok',
@@ -335,17 +322,7 @@ class StudioLedgerService {
         );
       }
 
-      // ── 8. Store visible ledger as internal diagnostics ─────────────────
-      await _ledgerStore.storeVisibleLedger(
-        sessionId: sessionId,
-        messageId: messageId,
-        swipeId: swipeId,
-        agentSwipeId: agentSwipeId,
-        visibleLedger: parseResult.visibleLedger,
-        trackerRepo: _trackerRepo,
-      );
-
-      // ── 9. Snapshot post-ledger tracker state for rollback/swipe safety ──
+      // ── 8. Snapshot post-ledger tracker state for rollback/swipe safety ──
       // The mutable tracker_rows table is only the live working store. Prompt
       // reads use committed tracker_snapshots, so every ledger write must also
       // capture an immutable snapshot at the assistant output anchor.

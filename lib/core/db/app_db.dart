@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-   int get schemaVersion => 58;
+   int get schemaVersion => 59;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1010,6 +1010,26 @@ class AppDatabase extends _$AppDatabase {
         } catch (e) {
           debugPrint(
             'Migration 58 (lumiaooc deterministic color) failed: $e',
+          );
+        }
+      }
+      if (from < 59) {
+        // Purge raw ledger diagnostic rows (_ledger:$messageId) from
+        // tracker_rows. These were append-only raw LLM outputs that grew
+        // unbounded and were never read back by the prompt path or the UI
+        // (the Agentic Ops dialog uses AgentOperationRecord, not tracker_rows).
+        // Keeping them bloated tracker_rows and every snapshot copy.
+        // _ledger_diag:* rows (run/skip reason, single upsert) are preserved.
+        try {
+          await customStatement(
+            "DELETE FROM tracker_rows "
+            "WHERE scope = 'ledger_diagnostic' "
+            "AND name LIKE '_ledger:%' "
+            "AND name NOT LIKE '_ledger_diag:%'",
+          );
+        } catch (e) {
+          debugPrint(
+            'Migration 59 (purge ledger diagnostic rows) failed: $e',
           );
         }
       }

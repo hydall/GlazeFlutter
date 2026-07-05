@@ -1,7 +1,6 @@
 /// Builds provenance strings for Studio Ledger tracker writes.
 ///
-/// Shared by [LedgerOpApplier] (per-op provenance with evidence) and
-/// [VisibleLedgerStore] (diagnostic provenance without evidence).
+/// Shared by [LedgerOpApplier] (per-op provenance with evidence).
 String buildLedgerProvenance({
   required String messageId,
   required int swipeId,
