@@ -62,7 +62,7 @@ class GenerationDispatcher {
       return TriggerBusy(busyKind: 'memory_draft', mode: mode);
     }
 
-    if (current.isGenerating) {
+    if (current.isGenerating || current.isPostGenRunning) {
       return TriggerBusy(busyKind: 'chat', mode: mode);
     }
 
@@ -91,7 +91,7 @@ class GenerationDispatcher {
     final ref = _ref!;
     final current = ref.read(chatProvider(charId)).value;
     if (current == null || current.session == null) return null;
-    if (current.isGenerating) return null;
+    if (current.isGenerating || current.isPostGenRunning) return null;
     if (ref.read(memoryActiveDraftsProvider).contains(current.session!.id)) {
       return null;
     }

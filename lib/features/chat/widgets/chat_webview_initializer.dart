@@ -46,6 +46,7 @@ class ChatWebViewInitInput {
     required this.isSelectionMode,
     required this.isGenerating,
     required this.isGeneratingImage,
+    this.isPostGenRunning = false,
   });
 
   final String charId;
@@ -79,6 +80,7 @@ class ChatWebViewInitInput {
   final bool isSelectionMode;
   final bool isGenerating;
   final bool isGeneratingImage;
+  final bool isPostGenRunning;
 }
 
 /// One-time bridge initialisation sequence: regex context → identity →
@@ -170,7 +172,8 @@ class ChatWebViewInitializer {
     }
     await bridge.setSelectionMode(input.isSelectionMode);
     await bridge.scrollToBottom();
-    final initialAnyGen = input.isGenerating || input.isGeneratingImage;
+    final initialAnyGen =
+        input.isGenerating || input.isGeneratingImage || input.isPostGenRunning;
     bridge.isGenerating = initialAnyGen;
     unawaited(
       bridge.evalJs(

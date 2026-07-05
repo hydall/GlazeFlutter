@@ -115,11 +115,17 @@ class AbortHandler {
     clearStudioCycle();
 
     final current = _getState().value;
-    if (current != null && current.isGenerating) {
+    if (current != null &&
+        (current.isGenerating || current.isPostGenRunning)) {
       final restorationSnapshot = _restorationMessage;
       final abortGenId = _activeGenId;
-      // Phase 1: unblock UI immediately.
-      _setState(AsyncData(current.copyWith(isGenerating: false, isGeneratingImage: false)));
+      // Phase 1: unblock UI immediately. Clear both the streaming flag and
+      // the post-gen flag so gates re-open and the Stop button reverts.
+      _setState(AsyncData(current.copyWith(
+        isGenerating: false,
+        isGeneratingImage: false,
+        isPostGenRunning: false,
+      )));
 
       // Phase 2: heavier restore/persist work is deferred to avoid first-abort jank.
       // Guard: if a new generation started (genId bumped again), skip restoration

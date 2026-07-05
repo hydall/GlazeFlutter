@@ -846,18 +846,14 @@ class CleanerStage {
         refreshedMessages = refreshed.messages;
         ChatSessionService.updateCache(refreshed);
         final current = ctx.getState().value;
-        if (current != null &&
-            current.session?.id == sessionId &&
-            (!current.isGenerating || ctx.abortHandler.isCurrentGen(genId))) {
+        // isGenerating is already false here (flipped off in the pipeline
+        // before the coordinator starts), so the guard reduces to the
+        // session-id check. We do NOT flip isGenerating or isPostGenRunning
+        // here — the pipeline owns those transitions (it clears
+        // isPostGenRunning after Future.wait(postGenFutures) settles).
+        if (current != null && current.session?.id == sessionId) {
           ctx.setState(
-            AsyncData(
-              current.copyWith(
-                session: refreshed,
-                isGenerating: ctx.abortHandler.isCurrentGen(genId)
-                    ? false
-                    : current.isGenerating,
-              ),
-            ),
+            AsyncData(current.copyWith(session: refreshed)),
           );
         }
         ctx.ref.invalidate(chatHistoryProvider);
