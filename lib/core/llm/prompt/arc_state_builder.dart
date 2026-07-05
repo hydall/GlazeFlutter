@@ -12,6 +12,23 @@ String latestUserTextFromHistory(List<ChatMessage> history) {
   return '';
 }
 
+/// Extracts the latest assistant-role message text from [history] for entity
+/// mention detection. Returns empty string when history has no assistant
+/// message.
+///
+/// Including the assistant message prevents the mention filter from dropping
+/// NPC canon when the user refers to a character indirectly (e.g. "белобрысая
+/// нетраннерша" — the user's text alone won't match "Lucy", but the assistant's
+/// last response likely names her).
+String latestAssistantTextFromHistory(List<ChatMessage> history) {
+  for (final m in history.reversed) {
+    if (m.role == 'assistant' && !m.isHidden && !m.isTyping) {
+      return m.content;
+    }
+  }
+  return '';
+}
+
 /// Builds compact `<arc_state>` block for the `{{arc}}` macro from Studio
 /// Canon `arc:*` tracker rows.
 ///
@@ -26,6 +43,7 @@ String latestUserTextFromHistory(List<ChatMessage> history) {
 String? buildArcContent(
   List<Tracker> ledgerRows, {
   String latestUserText = '',
+  String latestAssistantText = '',
 }) {
   // Collect arc:id.field → value
   final arcFields = <String, Map<String, String>>{};
@@ -41,7 +59,8 @@ String? buildArcContent(
   }
   if (arcFields.isEmpty) return null;
 
-  final lowerContext = latestUserText.toLowerCase();
+  final combinedText = '$latestUserText\n$latestAssistantText';
+  final lowerContext = combinedText.toLowerCase();
 
   final completed = <String>[];
   final active = <String>[];

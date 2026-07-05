@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/memory_book.dart';
+import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -36,6 +37,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   late final MemoryBookController _ctrl;
   Timer? _elapsedTimer;
   bool _hideUnselectedMemories = false;
+  Map<String, String> _embeddingStatuses = {};
 
   @override
   void initState() {
@@ -46,7 +48,30 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
   Future<void> _load() async {
     await _ctrl.load();
-    if (mounted) setState(() {});
+    if (mounted) {
+      unawaited(_loadEmbeddingStatuses());
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadEmbeddingStatuses() async {
+    final repo = ref.read(embeddingRepoProvider);
+    final book = _ctrl.book;
+    if (book == null) return;
+    final statuses = <String, String>{};
+    for (final entry in book.entries) {
+      final record = await repo.getByEntryId(entry.id);
+      if (record == null) {
+        statuses[entry.id] = 'none';
+      } else if (record.errorJson != null) {
+        statuses[entry.id] = 'error';
+      } else if (repo.hasUsableVectors(record)) {
+        statuses[entry.id] = 'indexed';
+      } else {
+        statuses[entry.id] = 'none';
+      }
+    }
+    if (mounted) setState(() => _embeddingStatuses = statuses);
   }
 
   @override
@@ -97,24 +122,18 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     final isGenerating = _ctrl.isGenerating;
 
     // Split drafts by source. Agent-sourced drafts (source == 'agentic') go
-    // to "Agent memories" tab; studio-ledger drafts (source == 'studio_ledger')
-    // go to "LLM studio memories" tab; everything else is a bulk scan draft.
+    // to "Agent memories" tab; everything else is a bulk scan draft.
     final scanDrafts = pendingDrafts
         .where((d) => d.source != 'agentic' && d.source != 'studio_ledger')
         .toList();
     final agentDrafts = pendingDrafts
         .where((d) => d.source == 'agentic')
         .toList();
-    final studioDrafts = pendingDrafts
-        .where((d) => d.source == 'studio_ledger')
-        .toList();
     // Approved entries are also source-aware: entries promoted from agent
-    // drafts keep `source == 'agentic'`, studio ledger entries have
-    // `source == 'studio_ledger'`, everything else is curated/manual.
+    // drafts keep `source == 'agentic'`, everything else is curated/manual.
+    // Studio Ledger entries (`source == 'studio_ledger'`) are legacy and
+    // excluded from the UI — they were removed from the injection pipeline.
     final agentEntries = entries.where((e) => e.source == 'agentic').toList();
-    final studioEntries = entries
-        .where((e) => e.source == 'studio_ledger')
-        .toList();
     final curatedEntries = entries
         .where((e) => e.source != 'agentic' && e.source != 'studio_ledger')
         .toList();
@@ -140,10 +159,9 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
     final filteredCurated = curatedEntries.where(filterFn).toList();
     final filteredAgent = agentEntries.where(filterFn).toList();
-    final filteredStudio = studioEntries.where(filterFn).toList();
 
     return DefaultTabController(
-      length: 4,
+      length: 3,
       child: Column(
         children: [
           // ── Static header (overview + status + actions) ──
@@ -190,9 +208,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                   ],
                 ),
               ),
-              Tab(
-                text: 'LLM (${(studioDrafts.length + filteredStudio.length)})',
-              ),
             ],
             tabAlignment: TabAlignment.fill,
           ),
@@ -203,7 +218,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                 _buildApprovedTab(filteredCurated),
                 _buildScanDraftsTab(scanDrafts),
                 _buildAgentMemoriesTab(agentDrafts, filteredAgent),
-                _buildStudioMemoriesTab(studioDrafts, filteredStudio),
               ],
             ),
           ),
@@ -302,59 +316,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               ),
               const SizedBox(height: 8),
               ...agentEntries.map((entry) => _buildEntryCard(entry)),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// "LLM studio memories" tab: pending studio-ledger drafts + approved
-  /// studio-ledger entries. Both share the `source == 'studio_ledger'`
-  /// marker, keeping them separate from agent memories (write-loop) and
-  /// curated/scan entries.
-  Widget _buildStudioMemoriesTab(
-    List<MemoryDraft> studioDrafts,
-    List<MemoryEntry> studioEntries,
-  ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (studioDrafts.isEmpty && studioEntries.isEmpty)
-            Text(
-              'No LLM studio memories yet.',
-              style: TextStyle(
-                fontSize: 13,
-                color: context.cs.onSurfaceVariant,
-              ),
-            )
-          else ...[
-            if (studioDrafts.isNotEmpty) ...[
-              Text(
-                'Pending drafts',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: context.cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...studioDrafts.map((draft) => _buildDraftCard(draft)),
-              const SizedBox(height: 12),
-            ],
-            if (studioEntries.isNotEmpty) ...[
-              Text(
-                'Approved',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: context.cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...studioEntries.map((entry) => _buildEntryCard(entry)),
             ],
           ],
         ],
@@ -1137,18 +1098,49 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
   Widget _entryStatusBadge(MemoryEntry entry) {
     final isActive = entry.status == 'active';
+    final embStatus = _embeddingStatuses[entry.id];
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (embStatus == 'indexed')
+          _badge('idx', Colors.cyan)
+        else if (embStatus == 'error')
+          _badge('!', Colors.orange)
+        else if (embStatus == 'none')
+          _badge('○', Colors.grey),
+        const SizedBox(width: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: (isActive ? Colors.green : Colors.orange).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            isActive ? 'ACTIVE' : 'REBUILD',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.green : Colors.orange,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _badge(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: (isActive ? Colors.green : Colors.orange).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        isActive ? 'ACTIVE' : 'REBUILD',
+        label,
         style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: isActive ? Colors.green : Colors.orange,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
         ),
       ),
     );

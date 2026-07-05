@@ -15,11 +15,16 @@ class DurableFactWriter {
 
   /// Write [facts] to [bookRepo] for [sessionId] with dedup by title+content
   /// hash. Returns count of facts actually written.
+  ///
+  /// [onEntryWritten] is called for each newly written entry — the caller
+  /// can use this to trigger embedding indexing without coupling this
+  /// writer to the embedding service.
   Future<int> writeDurableFacts({
     required String sessionId,
     required String messageId,
     required List<LedgerDurableFact> facts,
     required MemoryBookRepo bookRepo,
+    void Function(MemoryEntry entry)? onEntryWritten,
   }) async {
     if (facts.isEmpty) return 0;
     var written = 0;
@@ -63,6 +68,10 @@ class DurableFactWriter {
 
     if (toAdd.isNotEmpty) {
       await bookRepo.appendApprovedEntries(sessionId, toAdd);
+      // Trigger embedding indexing for each newly written entry.
+      for (final entry in toAdd) {
+        onEntryWritten?.call(entry);
+      }
     }
 
     return written;

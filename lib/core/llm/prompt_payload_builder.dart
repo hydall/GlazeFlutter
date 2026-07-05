@@ -325,10 +325,11 @@ class PromptPayloadBuilder {
             .loadEffectiveLedgerTrackers(sessionId);
         if (ledgerTrackers.isNotEmpty) {
           studioSessionStateContent = compileStudioSessionState(
-            ledgerTrackers,
-            sessionId,
-            latestUserText: latestUserTextFromHistory(history),
-          );
+              ledgerTrackers,
+              sessionId,
+              latestUserText: latestUserTextFromHistory(history),
+              latestAssistantText: latestAssistantTextFromHistory(history),
+            );
         }
       } catch (e) {
         debugPrint('[PromptBuilder] studio_session_state load failed: $e');
@@ -353,6 +354,7 @@ class PromptPayloadBuilder {
         arcContent = buildArcContent(
           allLedger,
           latestUserText: latestUserTextFromHistory(history),
+          latestAssistantText: latestAssistantTextFromHistory(history),
         );
       } catch (_) {}
       try {
@@ -462,6 +464,7 @@ class PromptPayloadBuilder {
             ledgerTrackers,
             session.id,
             latestUserText: latestUserTextFromHistory(history),
+            latestAssistantText: latestAssistantTextFromHistory(history),
           );
         }
       } catch (e) {
@@ -477,6 +480,7 @@ class PromptPayloadBuilder {
         arcContent = buildArcContent(
           allLedger,
           latestUserText: latestUserTextFromHistory(history),
+          latestAssistantText: latestAssistantTextFromHistory(history),
         );
       } catch (_) {}
       try {

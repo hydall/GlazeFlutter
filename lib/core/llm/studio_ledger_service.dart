@@ -12,14 +12,12 @@ import '../models/pipeline_settings.dart';
 import '../models/studio_config.dart';
 import '../models/tracker.dart';
 import 'aux_llm_client.dart';
-import 'ledger/durable_fact_writer.dart';
 import 'ledger/ledger_op_applier.dart';
 import 'macro_engine.dart';
 import 'studio/studio_aux_prompt_assembler.dart';
 import 'studio_ledger_export_parser.dart';
 import 'studio_ledger_prompt.dart';
 
-export 'ledger/durable_fact_writer.dart';
 export 'ledger/ledger_op_applier.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,20 +34,16 @@ export 'ledger/ledger_op_applier.dart';
 //   4. Studio Ledger runs on final cleaned text. ← this service
 //   5. Visible ledger stored as internal diagnostics.
 //   6. Export parsed and validated.
-//   7. Durable facts written to MemoryBook.
-//   8. Entity/relationship/arc/world/scene state written to tracker namespace.
+//   7. Entity/relationship/arc/world/scene state written to tracker namespace.
+//   8. Snapshot of tracker state saved for rollback/swipe safety.
 // Ledger must not run on pre-cleaner text. Manual user InfBlocks do not delay
 // canon state writes. User InfBlocks are auxiliary evidence only — the ledger
 // can read them but must not promote their contents to canon unless supported
 // by the final assistant text, visible accepted chat, or existing canon.
-//   1. Assistant response saved.
-//   2. POST-cleaner runs if enabled.
-//   3. User auto InfBlocks run if configured.
-//   4. Studio Ledger runs on final cleaned text. ← this service
-//   5. Visible ledger stored as internal diagnostics.
-//   6. Export parsed and validated.
-//   7. Durable facts written to MemoryBook.
-//   8. Entity/relationship/arc/world/scene state written to tracker namespace.
+//
+// Durable facts (path B to MemoryBook) were removed — Studio Ledger canon
+// lives exclusively in tracker_rows → <studio_session_state>. MemoryBook
+// is reserved for manual-scan and agentic-write-loop entries only.
 //
 // Failure behaviour:
 //   - Ledger failure MUST NOT fail chat generation.
@@ -64,7 +58,6 @@ class LedgerRunResult {
   status; // 'ok' | 'skipped' | 'disabled' | 'timeout' | 'error' | 'aborted'
   final String? visibleLedger;
   final int opsApplied;
-  final int durableFactsWritten;
   final String? error;
   final int elapsedMs;
   final List<AgentOperationAttempt> attempts;
@@ -74,7 +67,6 @@ class LedgerRunResult {
     required this.status,
     this.visibleLedger,
     this.opsApplied = 0,
-    this.durableFactsWritten = 0,
     this.error,
     this.elapsedMs = 0,
     this.attempts = const [],
@@ -94,7 +86,7 @@ class LedgerRunResult {
 ///   3. Call LLM (via [AuxLlmClient]).
 ///   4. Parse + validate (via [StudioLedgerExportParser]).
 ///   5. Apply ops to [TrackerRepo].
-///   6. Write durable facts to [MemoryBookRepo].
+///   6. Snapshot tracker state for rollback safety.
 ///
 /// Constructor-injected deps (no `Ref` — all repos/client are injected).
 class StudioLedgerService {
@@ -105,7 +97,6 @@ class StudioLedgerService {
   final StudioLedgerExportParser _parser;
   final StudioLedgerPrompt _promptBuilder;
   final LedgerOpApplier _opApplier;
-  final DurableFactWriter _factWriter;
 
   StudioLedgerService({
     required this._llm,
@@ -114,8 +105,7 @@ class StudioLedgerService {
     required this._snapshotRepo,
   })  : _parser = const StudioLedgerExportParser(),
         _promptBuilder = const StudioLedgerPrompt(),
-        _opApplier = const LedgerOpApplier(),
-        _factWriter = const DurableFactWriter();
+        _opApplier = const LedgerOpApplier();
 
   /// Run the Studio Ledger for [sessionId] on [finalAssistantText].
   ///
@@ -305,24 +295,7 @@ class StudioLedgerService {
         'session=$sessionId',
       );
 
-      // ── 7. Write durable facts to MemoryBook ───────────────────────────
-      var durableFactsWritten = 0;
-      if (export.durableFacts.isNotEmpty &&
-          token.isCancelled == false &&
-          isStillCurrent?.call() != false) {
-        durableFactsWritten = await _factWriter.writeDurableFacts(
-          sessionId: sessionId,
-          messageId: messageId,
-          facts: export.durableFacts,
-          bookRepo: _bookRepo,
-        );
-        debugPrint(
-          '[StudioLedger] wrote $durableFactsWritten durable facts '
-          'session=$sessionId',
-        );
-      }
-
-      // ── 8. Snapshot post-ledger tracker state for rollback/swipe safety ──
+      // ── 7. Snapshot post-ledger tracker state for rollback/swipe safety ──
       // The mutable tracker_rows table is only the live working store. Prompt
       // reads use committed tracker_snapshots, so every ledger write must also
       // capture an immutable snapshot at the assistant output anchor.
@@ -344,7 +317,7 @@ class StudioLedgerService {
       sw.stop();
       debugPrint(
         '[StudioLedger] done session=$sessionId '
-        'ops=$opsApplied facts=$durableFactsWritten '
+        'ops=$opsApplied '
         'elapsedMs=${sw.elapsedMilliseconds}',
       );
 
@@ -352,7 +325,6 @@ class StudioLedgerService {
         status: 'ok',
         visibleLedger: parseResult.visibleLedger,
         opsApplied: opsApplied,
-        durableFactsWritten: durableFactsWritten,
         elapsedMs: sw.elapsedMilliseconds,
         attempts: outcome.attempts,
         model: config.model,
