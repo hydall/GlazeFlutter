@@ -320,6 +320,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
     return DrawerPanelScaffold(
       disableEffects: widget.disableEffects,
       loading: repliesAsync.isLoading && replies.isEmpty,
+      onDismiss: widget.onClose,
       header: QuickRepliesHeader(
         editing: _editing,
         onToggleEditing: _toggleEditing,

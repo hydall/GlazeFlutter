@@ -901,6 +901,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     return DrawerPanelScaffold(
       disableEffects: batterySaver || widget.disableEffects,
       loading: _loading,
+      onDismiss: widget.onClose,
       header: MagicDrawerHeader(
         editing: _editing,
         onToggleEditing: _toggleEditing,
