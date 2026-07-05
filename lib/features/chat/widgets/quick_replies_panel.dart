@@ -208,6 +208,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
             icon: r.isContinueAction
                 ? Icons.keyboard_double_arrow_right
                 : Icons.bolt,
+            category: MagicDrawerCategory.session,
           ),
           status: _previewText(r),
         ),
@@ -217,6 +218,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
             id: '__add__',
             label: 'action_add'.tr(),
             icon: Icons.add,
+            category: MagicDrawerCategory.session,
           ),
           isAddButton: true,
         ),
