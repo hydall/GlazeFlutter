@@ -118,7 +118,7 @@ async function handleWebhook(req, env) {
     (dev.username ? "@" + dev.username : "dev");
 
   const ts = Date.now();
-  const msg = { from: "dev", devId: String(dev.id), devName, text, ts };
+  const msg = { fromDev: true, devId: String(dev.id), devName, text, ts };
   const key = `msg:${userId}:${ts}:${Math.random().toString(36).slice(2, 6)}`;
   await env.CHAT.put(key, JSON.stringify(msg), { expirationTtl: MSG_TTL });
 

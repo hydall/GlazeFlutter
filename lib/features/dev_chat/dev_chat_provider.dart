@@ -83,7 +83,9 @@ class DevChatController extends AsyncNotifier<DevChatState> {
     try {
       final userId = await _store.userId();
       final since = await _store.since();
-      final result = await _service.poll(userId: userId, since: since);
+      final offset = DevChatConfig.sinceSafetyMargin.inMilliseconds;
+      final safeSince = since > offset ? since - offset : 0;
+      final result = await _service.poll(userId: userId, since: safeSince);
       if (result.messages.isEmpty) {
         await _store.setSince(result.now);
         return;

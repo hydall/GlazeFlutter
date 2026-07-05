@@ -23,6 +23,11 @@ class DevChatConfig {
   /// How often the screen polls for developer replies while it is open.
   static const Duration pollInterval = Duration(seconds: 4);
 
+  /// Safety margin subtracted from the [since] cursor to account for
+  /// Cloudflare KV eventual consistency and concurrent webhook writes.
+  /// Without this, messages written between polls can be permanently skipped.
+  static const Duration sinceSafetyMargin = Duration(seconds: 60);
+
   // SharedPreferences keys.
   static const String kUserId = 'devChat.userId';
   static const String kNick = 'devChat.nick';
