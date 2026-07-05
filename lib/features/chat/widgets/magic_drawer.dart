@@ -57,9 +57,11 @@ class MagicDrawerPanel extends ConsumerStatefulWidget {
   final String charId;
   final bool disableEffects;
 
-  /// Called when the drawer wants to dismiss itself (e.g. after the user picks
-  /// an item that opens another screen). The host owns visibility, so we ask
-  /// it to hide us instead of popping a route.
+  /// Called when the drawer wants to dismiss itself: on a swipe-down of the
+  /// drag handle, or before a picked item performs real navigation away from
+  /// the chat (e.g. character edit -> go route). Sheets and dialogs open on
+  /// top of the panel and leave it open underneath. The host owns visibility,
+  /// so we ask it to hide us instead of popping a route.
   final VoidCallback? onClose;
 
   /// Scroll the chat webview to a message id (used by Ledger diagnostics
@@ -416,74 +418,61 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         await _showSessionsSheet();
         return;
       case 'char-card':
-        widget.onClose?.call();
-        if (mounted) {
-          final result = await showModalBottomSheet<String>(
-            context: context,
-            isScrollControlled: true,
-            useRootNavigator: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => CharacterDetailScreen(charId: widget.charId),
-          );
-          if (result != null && result.isNotEmpty && mounted) {
-            context.go(result);
-          }
+        final result = await showModalBottomSheet<String>(
+          context: context,
+          isScrollControlled: true,
+          useRootNavigator: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => CharacterDetailScreen(charId: widget.charId),
+        );
+        if (result != null && result.isNotEmpty && mounted) {
+          // Real navigation away from the chat - close the panel first.
+          widget.onClose?.call();
+          context.go(result);
         }
         return;
       case 'lorebooks':
-        widget.onClose?.call();
-        if (mounted) {
-          await showModalBottomSheet<void>(
-            context: context,
-            useRootNavigator: true,
-            backgroundColor: Colors.transparent,
-            barrierColor: Colors.black54,
-            isScrollControlled: true,
-            builder: (_) => const LorebookListScreen(),
-          );
-        }
+        await showModalBottomSheet<void>(
+          context: context,
+          useRootNavigator: true,
+          backgroundColor: Colors.transparent,
+          barrierColor: Colors.black54,
+          isScrollControlled: true,
+          builder: (_) => const LorebookListScreen(),
+        );
         return;
       case 'memory-books':
         await _showMemoryBooks();
         return;
       case 'regex':
-        widget.onClose?.call();
-        if (mounted) {
-          await showModalBottomSheet<void>(
-            context: context,
-            useRootNavigator: true,
-            backgroundColor: Colors.transparent,
-            barrierColor: Colors.black54,
-            isScrollControlled: true,
-            builder: (_) => const RegexSheet(),
-          );
-        }
+        await showModalBottomSheet<void>(
+          context: context,
+          useRootNavigator: true,
+          backgroundColor: Colors.transparent,
+          barrierColor: Colors.black54,
+          isScrollControlled: true,
+          builder: (_) => const RegexSheet(),
+        );
         return;
       case 'api':
-        widget.onClose?.call();
-        if (mounted) {
-          await showModalBottomSheet<void>(
-            context: context,
-            useRootNavigator: true,
-            backgroundColor: Colors.transparent,
-            barrierColor: Colors.black54,
-            isScrollControlled: true,
-            builder: (_) => const ApiSettingsScreen(),
-          );
-        }
+        await showModalBottomSheet<void>(
+          context: context,
+          useRootNavigator: true,
+          backgroundColor: Colors.transparent,
+          barrierColor: Colors.black54,
+          isScrollControlled: true,
+          builder: (_) => const ApiSettingsScreen(),
+        );
         return;
       case 'presets':
-        widget.onClose?.call();
-        if (mounted) {
-          await showModalBottomSheet<void>(
-            context: context,
-            useRootNavigator: true,
-            backgroundColor: Colors.transparent,
-            barrierColor: Colors.black54,
-            isScrollControlled: true,
-            builder: (_) => PresetListScreen(charId: widget.charId),
-          );
-        }
+        await showModalBottomSheet<void>(
+          context: context,
+          useRootNavigator: true,
+          backgroundColor: Colors.transparent,
+          barrierColor: Colors.black54,
+          isScrollControlled: true,
+          builder: (_) => PresetListScreen(charId: widget.charId),
+        );
         return;
       case 'preview':
         showPromptPreviewScreen(context, widget.charId);
@@ -492,47 +481,37 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         showLorebookCoverageSheet(context, ref, widget.charId);
         return;
       case 'personas':
-        widget.onClose?.call();
-        if (mounted) {
-          await showModalBottomSheet<void>(
-            context: context,
-            useRootNavigator: true,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => const PersonaListScreen(),
-          );
-        }
+        await showModalBottomSheet<void>(
+          context: context,
+          useRootNavigator: true,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => const PersonaListScreen(),
+        );
         return;
       case 'image-gen':
-        widget.onClose?.call();
-        if (mounted) {
-          await showModalBottomSheet<void>(
-            context: context,
-            useRootNavigator: true,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => const ImageGenSheet(),
-          );
-        }
+        await showModalBottomSheet<void>(
+          context: context,
+          useRootNavigator: true,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => const ImageGenSheet(),
+        );
         return;
       case 'authors-note':
         await showAuthorsNoteSheet(context, widget.charId);
         return;
       case 'glossary':
-        widget.onClose?.call();
-        if (mounted) await GlossarySheet.show(context);
+        await GlossarySheet.show(context);
         return;
       case 'ext-blocks':
-        widget.onClose?.call();
-        if (mounted) await _showExtBlocksSheet();
+        await _showExtBlocksSheet();
         return;
       case 'studio':
-        widget.onClose?.call();
-        if (mounted) await _showStudioMenu();
+        await _showStudioMenu();
         return;
       case 'agent-ops':
-        widget.onClose?.call();
-        if (mounted) await _showAgentOpsLog();
+        await _showAgentOpsLog();
         return;
     }
   }
