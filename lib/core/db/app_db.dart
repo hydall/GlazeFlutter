@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-   int get schemaVersion => 57;
+   int get schemaVersion => 58;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -967,6 +967,52 @@ class AppDatabase extends _$AppDatabase {
           debugPrint('Migration 57 (cleaner_beauty reorder) failed: $e');
         }
       }
+      if (from < 58) {
+        // Move lumiaooc coloring out of the LLM cleaner prompt into
+        // deterministic code (wrapLumiaOocColors in beauty_state_parser).
+        // Force-update the cleaner_beauty and final_lumia_ooc blocks from
+        // the current seed so existing DBs drop the old lumiaooc coloring
+        // rule and the `reserved.lumia_ooc` JSON-shape field. Existing user
+        // customizations to other blocks are preserved.
+        try {
+          final row = await customSelect(
+            'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
+            variables: [Variable.withString('default')],
+          ).getSingleOrNull();
+          if (row != null) {
+            final blocksJson = row.read<String>('blocks_json');
+            final blocks = (jsonDecode(blocksJson) as List<dynamic>)
+                .cast<Map<String, dynamic>>();
+            final seedBlocks = studioPresetSeedBlocks();
+            final seedById = {
+              for (final b in seedBlocks) b['id'] as String: b,
+            };
+            var changed = false;
+            for (var i = 0; i < blocks.length; i++) {
+              final id = blocks[i]['id'] as String?;
+              if (id == 'cleaner_beauty' || id == 'final_lumia_ooc') {
+                final seed = seedById[id];
+                if (seed != null) {
+                  blocks[i] = seed;
+                  changed = true;
+                }
+              }
+            }
+            if (changed) {
+              await customStatement(
+                'UPDATE studio_preset_rows SET blocks_json = ?, '
+                "updated_at = CAST(strftime('%s','now') AS INTEGER) "
+                'WHERE preset_id = ?',
+                [jsonEncode(blocks), 'default'],
+              );
+            }
+          }
+        } catch (e) {
+          debugPrint(
+            'Migration 58 (lumiaooc deterministic color) failed: $e',
+          );
+        }
+      }
     },
   );
 }
@@ -1404,7 +1450,7 @@ PREFER
       'kind': 'instruction',
       'role': 'system',
       'content':
-          'BEAUTY SHARD (visual styling — you own this):\n\nBeauty Shard brief:\n{{beautyBrief}}\n\nCurrent styling state:\n{{getvar::glaze_beauty_state}}\n\nStyling rules:\n- Apply the speaker colors from the styling state to ALL character dialogue using <font color="#HEX">"text"</font> tags.\n- Apply the thought colors to inner thoughts using <font color="#HEX"><i>text</i></font> tags.\n- Reuse existing colors for established speakers. Assign a new color only for a speaker not yet in the state.\n- If the assistant text already has <font> color tags, verify they match the styling state. Fix mismatches; do not remove correct tags.\n- Do NOT color narrative prose — only dialogue (in quotes) and inner thoughts (in italics or marked as thought).\n- If the styling state has a reserved lumia_ooc color, wrap the text inside <lumiaooc>...</lumiaooc> blocks with <font color="#HEX">text</font> using that color. If the text is already wrapped in a <font> tag, leave it unchanged. Do not alter the <lumiaooc> wrapper, the text content, or the block position — only add the color tag if missing.\n- At the very END of your cleaned response, after all narrative and HTML, emit exactly one marker with the updated state:\n\n<glaze_beauty_state>\n{"speakers":{"Name":"#hex"},"thoughts":{"Name":"#hex"},"palette":"dark|light","font":"sans-serif","bg":"#hex","art_style":"...","reserved":{"lumia_ooc":"#9370DB"}}\n</glaze_beauty_state>\n\nThe marker is parsed and stripped automatically — the user never sees it. Do not put it inside an HTML artifact or a code block.',
+          'BEAUTY SHARD (visual styling — you own this):\n\nBeauty Shard brief:\n{{beautyBrief}}\n\nCurrent styling state:\n{{getvar::glaze_beauty_state}}\n\nStyling rules:\n- Apply the speaker colors from the styling state to ALL character dialogue using <font color="#HEX">"text"</font> tags.\n- Apply the thought colors to inner thoughts using <font color="#HEX"><i>text</i></font> tags.\n- Reuse existing colors for established speakers. Assign a new color only for a speaker not yet in the state.\n- If the assistant text already has <font> color tags, verify they match the styling state. Fix mismatches; do not remove correct tags.\n- Do NOT color narrative prose — only dialogue (in quotes) and inner thoughts (in italics or marked as thought).\n- Do NOT color or alter <lumiaooc>...</lumiaooc> blocks — they are colored deterministically in code.\n- At the very END of your cleaned response, after all narrative and HTML, emit exactly one marker with the updated state:\n\n<glaze_beauty_state>\n{"speakers":{"Name":"#hex"},"thoughts":{"Name":"#hex"},"palette":"dark|light","font":"sans-serif","bg":"#hex","art_style":"..."}\n</glaze_beauty_state>\n\nThe marker is parsed and stripped automatically — the user never sees it. Do not put it inside an HTML artifact or a code block.',
       'enabled': true,
       'order': 99,
       'section': 'cleaner',
@@ -1462,7 +1508,7 @@ PREFER
       'kind': 'instruction',
       'role': 'system',
       'content':
-          'You are a build-time Beauty Extractor for a Studio multi-agent roleplay pipeline. You are NOT roleplaying and you are NOT routing every block. Your only job is to identify reusable visual styling settings that should be owned by the Beauty Shard tracker.\n\nSELECT a block as beauty ONLY when its primary purpose is reusable presentation state, such as:\n- global HTML/CSS style defaults\n- palette / color scheme\n- background color, main text color, font family\n- per-speaker dialogue colors or thought colors\n- gradients, text shadows, glow/highlight/mark styles, typography defaults\n- rules like "reuse colors for the same speaker" or "keep the same font/style"\n\nDO NOT SELECT blocks whose primary purpose is semantic behavior or a concrete artifact, even if they contain colors:\n- Lumia/OOC/meta-persona behavior, periodic OOC rules, wrappers like <lumiaooc>\n- trackers, stats panels, relationship metrics, cycle/pregnancy, hidden ledgers\n- infoblocks/general_stats/secondary_infoblock/topbar/infoboard\n- image generation, [IMG:GEN], data-iig-instruction, comics/illustration/image prompts\n- concrete HTML widgets/windows: phone screens, taxi-call menus, terminals, HUDs, scrolls, cards, maps, buttons, carousels, page flips, scene objects\n\nReserved-color rule:\n- If a semantic block (for example Lumia/OOC) contains a reserved color, DO NOT select that block as beauty.\n- Instead, copy only the reserved color into reserved_style_notes / normalized_style_contract.reserved so Beauty Shard knows not to reuse it for speakers.\n- If unsure whether a color is global style or semantic widget/persona color, leave the block unselected and optionally add a conservative reserved note.\n\nOutput STRICT JSON only, no markdown fences, no prose, in this exact shape:\n{\n  "beauty_block_ids": ["<block id whose primary purpose is reusable style>"],\n  "reserved_style_notes": [\n    {"source_block_id":"<id>","key":"lumia_ooc","value":"#9370DB","note":"reserved for Lumia/OOC; do not assign to speakers"}\n  ],\n  "normalized_style_contract": {\n    "palette":"dark|light|unknown",\n    "background":"#hex or empty",\n    "text":"#hex or empty",\n    "font":"font-family or empty",\n    "speaker_colors":"rule summary",\n    "reserved":{"key":"value"}\n  }\n}\n\nPreset blocks:\n{{blockLines}}',
+          'You are a build-time Beauty Extractor for a Studio multi-agent roleplay pipeline. You are NOT roleplaying and you are NOT routing every block. Your only job is to identify reusable visual styling settings that should be owned by the Beauty Shard tracker.\n\nSELECT a block as beauty ONLY when its primary purpose is reusable presentation state, such as:\n- global HTML/CSS style defaults\n- palette / color scheme\n- background color, main text color, font family\n- per-speaker dialogue colors or thought colors\n- gradients, text shadows, glow/highlight/mark styles, typography defaults\n- rules like "reuse colors for the same speaker" or "keep the same font/style"\n\nDO NOT SELECT blocks whose primary purpose is semantic behavior or a concrete artifact, even if they contain colors:\n- Lumia/OOC/meta-persona behavior, periodic OOC rules, wrappers like <lumiaooc>\n- trackers, stats panels, relationship metrics, cycle/pregnancy, hidden ledgers\n- infoblocks/general_stats/secondary_infoblock/topbar/infoboard\n- image generation, [IMG:GEN], data-iig-instruction, comics/illustration/image prompts\n- concrete HTML widgets/windows: phone screens, taxi-call menus, terminals, HUDs, scrolls, cards, maps, buttons, carousels, page flips, scene objects\n\nOutput STRICT JSON only, no markdown fences, no prose, in this exact shape:\n{\n  "beauty_block_ids": ["<block id whose primary purpose is reusable style>"],\n  "normalized_style_contract": {\n    "palette":"dark|light|unknown",\n    "background":"#hex or empty",\n    "text":"#hex or empty",\n    "font":"font-family or empty",\n    "speaker_colors":"rule summary"\n  }\n}\n\nPreset blocks:\n{{blockLines}}',
       'enabled': true,
       'order': 2,
       'section': 'build',

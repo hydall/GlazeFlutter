@@ -528,6 +528,9 @@ class CleanerStage {
         if (markerIdx >= 0) {
           displayText = displayText.substring(0, markerIdx).trimRight();
         }
+        // Deterministically wrap Lumia OOC blocks so the color is visible
+        // during streaming, not only after the cleaner finalizes.
+        displayText = wrapLumiaOocColors(displayText);
         ctx.ref.read(streamingStateProvider(ctx.charId).notifier).state =
             StreamingState(text: displayText, targetMessageId: targetMessage.id);
         if (text.length >= _lastStreamedText.length) {

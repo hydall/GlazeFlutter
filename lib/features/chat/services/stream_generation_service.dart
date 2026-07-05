@@ -335,9 +335,10 @@ class StreamGenerationService {
           studioResult.response,
           pendingSessionVars,
         );
+        final wrappedStudioText = wrapLumiaOocColors(beautyApplied.text);
         final finalState = _writer
             .writeAssistant(
-              text: beautyApplied.text,
+              text: wrappedStudioText,
               reasoning: studioResult.reasoning.isNotEmpty
                   ? studioResult.reasoning
                   : null,
@@ -496,7 +497,7 @@ class StreamGenerationService {
             finalText,
             pendingSessionVars,
           );
-          finalText = beautyApplied.text;
+          finalText = wrapLumiaOocColors(beautyApplied.text);
           pendingSessionVars = beautyApplied.vars;
 
           final isAllReasoning =

@@ -133,4 +133,99 @@ void main() {
       expect(beautyStateVarKey, 'glaze_beauty_state');
     });
   });
+
+  group('lumiaOocColor', () {
+    test('is the hardcoded Lumia signature purple', () {
+      expect(lumiaOocColor, '#9370DB');
+    });
+  });
+
+  group('wrapLumiaOocColors', () {
+    test('wraps a bare <lumiaooc> block in the signature color', () {
+      const text = '<lumiaooc>\n\nHello from Lumia.\n\n</lumiaooc>';
+      final wrapped = wrapLumiaOocColors(text);
+      expect(
+        wrapped,
+        '<lumiaooc><font color="#9370DB">\n\nHello from Lumia.\n\n</font></lumiaooc>',
+      );
+    });
+
+    test('idempotent — already wrapped block is left unchanged', () {
+      const text =
+          '<lumiaooc><font color="#9370DB">\nLumia note.\n</font></lumiaooc>';
+      expect(wrapLumiaOocColors(text), text);
+    });
+
+    test('idempotent — a different existing <font> color is preserved', () {
+      const text =
+          '<lumiaooc><font color="#FF0000">Red Lumia?</font></lumiaooc>';
+      expect(wrapLumiaOocColors(text), text);
+    });
+
+    test('wraps multiple blocks independently', () {
+      const text = 'intro\n<lumiaooc>A</lumiaooc>\nmid\n<lumiaooc>B</lumiaooc>';
+      final wrapped = wrapLumiaOocColors(text);
+      expect(
+        wrapped,
+        'intro\n'
+        '<lumiaooc><font color="#9370DB">A</font></lumiaooc>\n'
+        'mid\n'
+        '<lumiaooc><font color="#9370DB">B</font></lumiaooc>',
+      );
+    });
+
+    test('case-insensitive — <LumiaOOC> is wrapped', () {
+      const text = '<LumiaOOC>note</LumiaOOC>';
+      final wrapped = wrapLumiaOocColors(text);
+      expect(
+        wrapped,
+        '<LumiaOOC><font color="#9370DB">note</font></LumiaOOC>',
+      );
+    });
+
+    test('preserves inner newlines and whitespace', () {
+      const text = '<lumiaooc>\n  line one\n  line two\n</lumiaooc>';
+      final wrapped = wrapLumiaOocColors(text);
+      expect(
+        wrapped,
+        '<lumiaooc><font color="#9370DB">\n  line one\n  line two\n</font></lumiaooc>',
+      );
+    });
+
+    test('text without any lumiaooc block is returned untouched', () {
+      const text = 'Just narrative and "dialogue". No OOC here.';
+      expect(wrapLumiaOocColors(text), text);
+    });
+
+    test('does not depend on beauty-state JSON', () {
+      // No marker, no state — the wrap still applies.
+      const text = 'prose\n<lumiaooc>Lumia speaks.</lumiaooc>';
+      final wrapped = wrapLumiaOocColors(text);
+      expect(
+        wrapped,
+        'prose\n<lumiaooc><font color="#9370DB">Lumia speaks.</font></lumiaooc>',
+      );
+    });
+
+    test('empty inner content is still wrapped (no crash)', () {
+      const text = '<lumiaooc></lumiaooc>';
+      final wrapped = wrapLumiaOocColors(text);
+      expect(
+        wrapped,
+        '<lumiaooc><font color="#9370DB"></font></lumiaooc>',
+      );
+    });
+
+    test('narrative around the block is preserved verbatim', () {
+      const text =
+          'Before block.\n<lumiaooc>note</lumiaooc>\nAfter block.';
+      final wrapped = wrapLumiaOocColors(text);
+      expect(
+        wrapped,
+        'Before block.\n'
+        '<lumiaooc><font color="#9370DB">note</font></lumiaooc>\n'
+        'After block.',
+      );
+    });
+  });
 }
