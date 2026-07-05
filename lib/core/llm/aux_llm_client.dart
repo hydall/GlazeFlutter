@@ -52,20 +52,42 @@ class AuxApiConfig {
 class AuxLlmClient {
   const AuxLlmClient();
 
+  /// Resolves the post-cleaner timeout from settings.
+  ///
+  /// Uses the user-configured `postCleanerTimeoutMs` when set (> 0); otherwise
+  /// falls back to an explicit 60000 ms default. The old silent fallback to
+  /// `memoryPipeline.auxTimeoutMs` (a hidden field with no UI) was removed so
+  /// the actual timeout is always visible and predictable.
   int resolveCleanerTimeout(PipelineSettings settings) {
     return settings.cleaner.postCleanerTimeoutMs > 0
         ? settings.cleaner.postCleanerTimeoutMs
-        : settings.memoryPipeline.auxTimeoutMs;
+        : 60000;
   }
 
   /// Resolves the ledger LLM timeout from settings.
+  ///
+  /// Resolution order:
+  /// 1. `studioLedgerTimeoutMs` (> 0, with seconds→ms normalization for legacy
+  ///    values < 1000).
+  /// 2. `postCleanerTimeoutMs` (> 0) — the ledger shares the cleaner slot's
+  ///    model/endpoint, so the user's cleaner-timeout setting also protects the
+  ///    ledger call. The ledger has no dedicated UI timeout field.
+  /// 3. Explicit 60000 ms default (same as the cleaner).
+  ///
+  /// The old silent fallback to `memoryPipeline.auxTimeoutMs` (a hidden field
+  /// with no UI) was removed so the timeout the user sets for the cleaner also
+  /// applies to the ledger.
   int resolveLedgerTimeout(PipelineSettings settings) {
     final configured = settings.ledger.studioLedgerTimeoutMs;
-    if (configured <= 0) return settings.memoryPipeline.auxTimeoutMs;
-    // Early UI builds edited this value as seconds while the field name stores
-    // milliseconds. Treat small persisted values as seconds to avoid accidental
-    // sub-second Ledger timeouts (for example, 180 should mean 180s).
-    return configured < 1000 ? configured * 1000 : configured;
+    if (configured > 0) {
+      // Early UI builds edited this value as seconds while the field name stores
+      // milliseconds. Treat small persisted values as seconds to avoid
+      // accidental sub-second Ledger timeouts (for example, 180 → 180000).
+      return configured < 1000 ? configured * 1000 : configured;
+    }
+    final cleanerTimeout = settings.cleaner.postCleanerTimeoutMs;
+    if (cleanerTimeout > 0) return cleanerTimeout;
+    return 60000;
   }
 
   /// Makes a single non-streaming LLM call and returns the raw text response.

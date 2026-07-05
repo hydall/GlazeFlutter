@@ -244,22 +244,30 @@ Hold mode (Marinara) is not implemented.
 #### Swipe-first cleaner lifecycle (UX phase) ✅ ENFORCED
 
 `generation_pipeline._runPostCleaner` pre-creates an empty `'cleaned'`
-swipe at cleaner start and finalizes it based on the outcome:
+swipe at cleaner start and finalizes it based on the outcome. The cascade
+checks partial text BEFORE `skipped`/fallback, so a timeout or skip with
+streamed text never loses what the user saw live:
 - `wasCleaned==true` → `updateAgentSwipeContent` fills it with the cleaned
   text + `genTime` (cleaner elapsed) + `tokens` (estimateTokens).
-- `wasCleaned==false` AND `_lastStreamedText` non-empty → keep the partial
-  (truncated) text in the swipe (ops log marks `partialSaved`).
-- `wasCleaned==false` AND nothing streamed → `removeAgentSwipe` reverts
-  active to the parent `'final'`.
+- `wasCleaned==false` AND `_lastStreamedText` non-empty → save the partial
+  (truncated) text into the swipe (ops log marks `partialSaved`). Covers
+  `timeout`, `skipped`, and any other non-ok status that produced stream
+  chunks before failing.
+- `wasCleaned==false` AND nothing streamed AND `status=='skipped'` →
+  `removeAgentSwipe` reverts active to the parent `'final'`.
+- `wasCleaned==false` AND nothing streamed (other) → `removeAgentSwipe`
+  reverts to the parent `'final'`.
 - Abort mid-cleaner → `removeAgentSwipe` (no partial save on abort).
-- Hard pipeline failure → best-effort `removeAgentSwipe` in the catch
-  block; pre-create failure → fall back to the legacy `applyCleanedText`
-  append path.
+- Hard pipeline failure (`catch`) → best-effort finalize: save partial if
+  `_lastStreamedText` is non-empty, otherwise `removeAgentSwipe`. Skipped
+  when the cascade already committed (`_finalized==true`).
+- `finally` → best-effort `removeAgentSwipe` when no path finalized
+  (`_finalized==false`), so a stale empty `'cleaned'` bubble never lingers.
 
 `GenerationPipeline._lastStreamedText` /
-`_preCreatedCleanerSwipeId` / `_preCreatedMessageId` are instance fields,
-reset in the `_runPostCleaner` finally block so state never leaks across
-runs.
+`_preCreatedCleanerSwipeId` / `_preCreatedMessageId` / `_finalized` are
+instance fields, reset in the `_runPostCleaner` finally block so state
+never leaks across runs.
 
 ### INV-ST5: Tracker failure aborts Studio after two retries ✅ ENFORCED
 

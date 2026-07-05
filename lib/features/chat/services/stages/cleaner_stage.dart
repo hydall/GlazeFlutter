@@ -4,7 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
+import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig, AuxLlmClient;
 import '../../../../core/llm/beauty_state_parser.dart';
 import '../../../../core/llm/macro_engine.dart';
 import '../../../../core/llm/prompt_builder.dart' show PromptPayload;
@@ -76,6 +76,13 @@ class CleanerStage {
   /// abort a running cleaner via `cleanerCancelTokenProvider` (Stop button
   /// in the PostCleanerStatusCard). `null` when no cleaner is in flight.
   CancelToken? _cleanerCancelToken;
+
+  /// True after a cascade branch (or the catch block) has committed the
+  /// pre-created swipe — saved cleaned/partial text or removed it. The catch
+  /// and finally blocks check this to avoid double-removing an
+  /// already-finalized swipe and to best-effort clean up when no branch ran.
+  /// Reset in the finally block.
+  bool _finalized = false;
 
   /// Auto post-generation cleaner trigger. Staleness guard: checks
   /// `abortHandler.isCurrentGen(genId)` before applying the cleaned text.
@@ -263,26 +270,37 @@ class CleanerStage {
             const StreamingState();
         ctx.ref.read(postCleanerStateProvider.notifier).state =
             const PostCleanerState.idle();
-        // Best-effort cleanup of the pre-created swipe on a hard pipeline
-        // failure (e.g. runCleaner threw before returning). Revert to final.
-        if (_preCreatedCleanerSwipeId >= 0) {
+        // Best-effort finalize the pre-created swipe on a hard pipeline
+        // failure (e.g. runCleaner threw before returning). If the cascade
+        // already committed (_finalized), skip to avoid double-removing.
+        if (!_finalized && _preCreatedCleanerSwipeId >= 0) {
           try {
-            final removed = await ctx.ref
-                .read(chatRepoProvider)
-                .removeAgentSwipe(
-                  sessionId: sessionId,
-                  messageId: _preCreatedMessageId ?? '',
-                  agentSwipeId: _preCreatedCleanerSwipeId,
-                );
-            if (removed) {
-              final reverted = await ctx.ref
-                  .read(chatRepoProvider)
-                  .getById(sessionId);
-              if (reverted != null) {
-                ChatSessionService.updateCache(reverted);
-                ctx.ref.invalidate(chatHistoryProvider);
-              }
+            if (_lastStreamedText.trim().isNotEmpty) {
+              // Save partial text the user saw live before the throw.
+              await ctx.ref.read(chatRepoProvider).updateAgentSwipeContent(
+                sessionId: sessionId,
+                messageId: _preCreatedMessageId ?? '',
+                agentSwipeId: _preCreatedCleanerSwipeId,
+                content: _lastStreamedText,
+                genTime: '0.0s',
+                tokens: estimateTokens(_lastStreamedText),
+              );
+            } else {
+              // No partial text — revert to the parent 'final'.
+              await ctx.ref.read(chatRepoProvider).removeAgentSwipe(
+                sessionId: sessionId,
+                messageId: _preCreatedMessageId ?? '',
+                agentSwipeId: _preCreatedCleanerSwipeId,
+              );
             }
+            final reverted = await ctx.ref
+                .read(chatRepoProvider)
+                .getById(sessionId);
+            if (reverted != null) {
+              ChatSessionService.updateCache(reverted);
+              ctx.ref.invalidate(chatHistoryProvider);
+            }
+            _finalized = true;
           } catch (_) {
             // swallow — already in an error path
           }
@@ -297,6 +315,28 @@ class CleanerStage {
       _auditCancelToken = null;
       _cleanerCancelToken = null;
       ctx.ref.read(cleanerCancelTokenProvider.notifier).state = null;
+      // Best-effort: if no branch and no catch path finalized the swipe
+      // (e.g. an error escaped both), remove it to avoid a stale empty
+      // 'cleaned' bubble lingering in the UI.
+      if (!_finalized && _preCreatedCleanerSwipeId >= 0 && ctx.ref.mounted) {
+        try {
+          await ctx.ref.read(chatRepoProvider).removeAgentSwipe(
+            sessionId: sessionId,
+            messageId: _preCreatedMessageId ?? '',
+            agentSwipeId: _preCreatedCleanerSwipeId,
+          );
+          final reverted = await ctx.ref.read(chatRepoProvider).getById(
+            sessionId,
+          );
+          if (reverted != null) {
+            ChatSessionService.updateCache(reverted);
+            ctx.ref.invalidate(chatHistoryProvider);
+          }
+        } catch (_) {
+          // swallow — already in a cleanup path
+        }
+      }
+      _finalized = false;
       _lastStreamedText = '';
       _preCreatedCleanerSwipeId = -1;
       _preCreatedMessageId = null;
@@ -331,10 +371,11 @@ class CleanerStage {
     bool abortCheck() =>
         ctx.ref.mounted && (isManualRerun || ctx.abortHandler.isCurrentGen(genId));
 
+    final cleanerTimeout = const AuxLlmClient().resolveCleanerTimeout(pipeline);
     debugPrint(
       '[PostCleaner] starting session=$sessionId '
       'model=${cleanerConfig.model} '
-      'timeoutMs=${pipeline.cleaner.postCleanerTimeoutMs > 0 ? pipeline.cleaner.postCleanerTimeoutMs : pipeline.memoryPipeline.auxTimeoutMs} '
+      'timeoutMs=$cleanerTimeout '
       'textChars=${assistantText.length} '
       'broadcastBlocks=${broadcastBlocks.length} '
       'historyMessages=${recentMessages.length} '
@@ -551,6 +592,7 @@ class CleanerStage {
               );
         } catch (_) {}
       }
+      _finalized = true;
       ctx.ref.read(postCleanerStateProvider.notifier).state =
           const PostCleanerState.idle();
       return;
@@ -657,6 +699,7 @@ class CleanerStage {
         cleanedAgentSwipeId =
             postFallbackMsg?.agentSwipeId ?? cleanedAgentSwipeId;
       }
+      _finalized = true;
       // Launch extension blocks bound to the NEW cleaned swipe.
       if (character != null && ctx.ref.mounted) {
         final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
@@ -676,24 +719,7 @@ class CleanerStage {
           agentSwipeId: _preCreatedCleanerSwipeId,
         );
       }
-      if (character != null && ctx.ref.mounted) {
-        final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
-        if (refreshed != null) {
-          await extBlocks.launchForSwipe(
-            session: refreshed,
-            character: character,
-            agentSwipeId: -1,
-          );
-        }
-      }
-    } else if (result.status == 'skipped') {
-      if (_preCreatedCleanerSwipeId >= 0) {
-        await chatRepo.removeAgentSwipe(
-          sessionId: sessionId,
-          messageId: targetMessage.id,
-          agentSwipeId: _preCreatedCleanerSwipeId,
-        );
-      }
+      _finalized = true;
       if (character != null && ctx.ref.mounted) {
         final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {
@@ -705,6 +731,11 @@ class CleanerStage {
         }
       }
     } else if (_lastStreamedText.trim().isNotEmpty) {
+      // Partial save: the cleaner timed out or was skipped mid-stream but
+      // produced partial text the user already saw live. Save it into the
+      // pre-created swipe instead of discarding it. This branch is checked
+      // BEFORE the `skipped`/fallback branches so a timeout/skip with partial
+      // text never loses what was streamed.
       if (_preCreatedCleanerSwipeId >= 0) {
         await chatRepo.updateAgentSwipeContent(
           sessionId: sessionId,
@@ -723,6 +754,7 @@ class CleanerStage {
           tokens: estimateTokens(_lastStreamedText),
         );
       }
+      _finalized = true;
       if (character != null && ctx.ref.mounted) {
         final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {
@@ -735,12 +767,32 @@ class CleanerStage {
           );
         }
       }
+    } else if (result.status == 'skipped') {
+      if (_preCreatedCleanerSwipeId >= 0) {
+        await chatRepo.removeAgentSwipe(
+          sessionId: sessionId,
+          messageId: targetMessage.id,
+          agentSwipeId: _preCreatedCleanerSwipeId,
+        );
+      }
+      _finalized = true;
+      if (character != null && ctx.ref.mounted) {
+        final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await extBlocks.launchForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: -1,
+          );
+        }
+      }
     } else if (_preCreatedCleanerSwipeId >= 0) {
       await chatRepo.removeAgentSwipe(
         sessionId: sessionId,
         messageId: targetMessage.id,
         agentSwipeId: _preCreatedCleanerSwipeId,
       );
+      _finalized = true;
       if (character != null && ctx.ref.mounted) {
         final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {
