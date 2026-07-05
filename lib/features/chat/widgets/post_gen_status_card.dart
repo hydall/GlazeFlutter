@@ -15,6 +15,7 @@ class PostGenStatusCard extends ConsumerStatefulWidget {
 
 class _PostGenStatusCardState extends ConsumerState<PostGenStatusCard> {
   PostGenTaskPhase? _lastSeenPhase;
+  PostGenTask? _lastSeenTask;
 
   @override
   Widget build(BuildContext context) {
@@ -26,8 +27,14 @@ class _PostGenStatusCardState extends ConsumerState<PostGenStatusCard> {
       return const SizedBox.shrink();
     }
 
-    if (_lastSeenPhase != state.phase) {
+    // Detect transitions: when either the phase or the task changes we
+    // may need to (re)schedule the auto-dismiss.  Without tracking the
+    // task, completing a second post-gen task (e.g. Ledger after
+    // Write-loop) while the card still shows the first task's `done`
+    // phase would skip the dismiss timer — the "Ledger ok" card stuck.
+    if (_lastSeenPhase != state.phase || _lastSeenTask != state.task) {
       _lastSeenPhase = state.phase;
+      _lastSeenTask = state.task;
       if (state.phase == PostGenTaskPhase.done ||
           state.phase == PostGenTaskPhase.error) {
         _scheduleAutoDismiss();
