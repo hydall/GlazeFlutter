@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -188,24 +189,88 @@ const String _captureUserScript = r'''
     };
     const pressEnter = (el) => {
       for (const type of ['keydown', 'keypress', 'keyup']) {
-        el.dispatchEvent(new KeyboardEvent(type, {
-          key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
-          bubbles: true, cancelable: true,
-        }));
+        const ev = new KeyboardEvent(type, {
+          key: 'Enter', code: 'Enter', bubbles: true, cancelable: true,
+        });
+        // The KeyboardEvent constructor ignores keyCode/which (they stay 0), but
+        // legacy "send on Enter" handlers often gate on e.keyCode/e.which === 13.
+        // Force them so a synthetic Enter can still trigger a send.
+        try {
+          Object.defineProperty(ev, 'keyCode', { get: () => 13 });
+          Object.defineProperty(ev, 'which', { get: () => 13 });
+        } catch (e) {}
+        el.dispatchEvent(ev);
       }
+    };
+    // Whether a button is a live, clickable "send" control (not a stop/cancel).
+    // aria-label stays English across UI locales (confirmed on a Polish client),
+    // so it's the reliable signal; the hashed `_sendButton_…` class is a backup.
+    const isSendBtn = (b) => {
+      if (!b || b.offsetParent === null || b.disabled) return false;
+      const label = (b.getAttribute('aria-label') || '').toLowerCase();
+      if (label.indexOf('stop') >= 0 || label.indexOf('cancel') >= 0) return false;
+      return true;
+    };
+    // Locate the composer's send button. JanitorAI's composer no longer submits
+    // on a bare Enter in every layout (the text just sits unsent), so we click
+    // its send button: `<button aria-label="Send" class="_sendButton_…">` (not a
+    // submit, not inside a <form>). Fall back to the last live button in the
+    // container holding the input.
+    const findSendButton = (input) => {
+      const cands = document.querySelectorAll(
+        'button[aria-label*="send" i], ' +
+        'button[class*="sendButton" i], ' +
+        'button[type="submit"]');
+      for (let i = 0; i < cands.length; i++) {
+        if (isSendBtn(cands[i])) return cands[i];
+      }
+      const scope = input.closest('form') || input.parentElement;
+      if (scope) {
+        const btns = Array.prototype.slice
+          .call(scope.querySelectorAll('button')).filter(isSendBtn);
+        if (btns.length) return btns[btns.length - 1];
+      }
+      return null;
+    };
+    // A visible stop/cancel button means a previous send is still streaming (or
+    // hanging against the unreachable dummy proxy), which disables the composer.
+    const findStopButton = () => {
+      const btns = document.querySelectorAll(
+        'button[aria-label*="stop" i], button[aria-label*="cancel" i]');
+      for (let i = 0; i < btns.length; i++) {
+        if (btns[i].offsetParent !== null && !btns[i].disabled) return btns[i];
+      }
+      return null;
     };
     window.__glazeSend = async (text) => {
       const el = findInput();
       if (!el) return { ok: false, reason: 'no-input' };
+      // 1) Abort any leftover generation from a previous send — it may still be
+      //    streaming / hanging against the unreachable dummy proxy, which keeps
+      //    the composer disabled so the next message can't go out. We already
+      //    captured the generateAlpha payload (it fires BEFORE the proxy POST),
+      //    so aborting the dead-proxy call is safe.
+      const abortDeadline = Date.now() + 15000;
+      while (Date.now() < abortDeadline) {
+        const stop = findStopButton();
+        if (!stop) break;
+        stop.click();
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      // 2) Type the message into the now-idle composer.
       el.focus();
       setReactValue(el, text);
-      await new Promise((r) => setTimeout(r, 150));
-      const btn = document.querySelector(
-        'button[type="submit"]:not([disabled]), ' +
-        'form button[aria-label*="send" i]:not([disabled]), ' +
-        'button[aria-label*="send" i]:not([disabled])');
+      // 3) Poll for the enabled send button (it enables a few frames after React
+      //    ingests the value) and click it.
+      let btn = null;
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 200));
+        btn = findSendButton(el);
+        if (btn) break;
+      }
       if (btn) { btn.click(); } else { pressEnter(el); }
-      return { ok: true };
+      return { ok: true, sent: btn ? 'click' : 'enter' };
     };
   })();
 ''';
@@ -247,14 +312,28 @@ class JanitorWebViewProxy {
   /// assembled prompt) BEFORE the client ever POSTs to the proxy, so the proxy
   /// never needs to answer. Fixed id so a crashed run never leaves duplicates.
   static const String _dummyPresetId = 'a1b2c3d4-0000-4000-8000-000000000001';
-  static const Map<String, dynamic> _dummyPreset = {
-    'apiKey': 'x',
-    'apiUrl': 'http://127.0.0.1:9/v1/chat/completions',
-    'id': _dummyPresetId,
-    'jailbreakPrompt': '',
-    'model': 'gpt-4o',
-    'name': 'glaze-lorebook-extractor (auto)',
-  };
+
+  /// Builds the throwaway proxy preset with a **random name and port** (the port
+  /// always above 8000). The id stays fixed (see [_dummyPresetId]) so dedup /
+  /// crash-cleanup still works, but the name/port are randomised each run so the
+  /// injected preset isn't fingerprintable by a constant string or port.
+  static Map<String, dynamic> _buildDummyPreset() {
+    final rand = Random();
+    final port = 8001 + rand.nextInt(57000); // 8001..65000
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final name = List.generate(
+      12,
+      (_) => alphabet[rand.nextInt(alphabet.length)],
+    ).join();
+    return {
+      'apiKey': 'x',
+      'apiUrl': 'http://127.0.0.1:$port/v1/chat/completions',
+      'id': _dummyPresetId,
+      'jailbreakPrompt': '',
+      'model': 'gpt-4o',
+      'name': name,
+    };
+  }
 
   HeadlessInAppWebView? _webView;
   InAppWebViewController? _controller;
@@ -403,6 +482,19 @@ class JanitorWebViewProxy {
         );
         await _awaitLoad();
         await _waitForClearance();
+
+        // JanitorAI caches the selected proxy preset in its client store, so the
+        // dummy preset switched in by _enterExtractionMode() above may not take
+        // effect on the first chat load — the captured `/generateAlpha` would
+        // then run against the previous (e.g. JLLM) preset and lose its wrappers.
+        // Reload the chat page once to force the new preset to take effect before
+        // triggering. The AT_DOCUMENT_START capture hook re-injects on reload.
+        phase('reloading for preset');
+        _loadStop = Completer<void>();
+        await controller.reload();
+        await _awaitLoad();
+        await _waitForClearance();
+
         // Give the React chat app time to hydrate before driving the input.
         await Future<void>.delayed(const Duration(milliseconds: 2500));
 
@@ -465,18 +557,20 @@ class JanitorWebViewProxy {
 
       final next =
           jsonDecode(jsonEncode(original)) as Map<String, dynamic>;
+      final dummyPreset = _buildDummyPreset();
       final presets = (next['proxyConfigurations'] is List)
           ? List<dynamic>.from(next['proxyConfigurations'] as List)
           : <dynamic>[];
-      if (!presets.any((p) => p is Map && p['id'] == _dummyPresetId)) {
-        presets.add(Map<String, dynamic>.from(_dummyPreset));
-      }
+      // Drop any stale copy from a crashed run, then add a freshly-randomised
+      // one (so the random name/port actually take effect each run).
+      presets.removeWhere((p) => p is Map && p['id'] == _dummyPresetId);
+      presets.add(dummyPreset);
       next['proxyConfigurations'] = presets;
       next['selectedProxyConfigId'] = _dummyPresetId;
       next['api'] = 'openai';
       next['open_ai_mode'] = 'proxy';
-      next['open_ai_reverse_proxy'] = _dummyPreset['apiUrl'];
-      next['openAiModel'] = _dummyPreset['model'];
+      next['open_ai_reverse_proxy'] = dummyPreset['apiUrl'];
+      next['openAiModel'] = dummyPreset['model'];
       next['generation_settings'] = {
         ...(next['generation_settings'] is Map
             ? Map<String, dynamic>.from(next['generation_settings'] as Map)
