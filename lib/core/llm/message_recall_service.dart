@@ -17,10 +17,14 @@ import 'vector_math.dart';
 /// `<recalled_messages>...</recalled_messages>` and adds the block to
 /// `PromptPayload`.
 ///
-/// ADR: see docs/plans/PLAN_MEMORY_CONTINUITY.md §2.1 — if mobile latency
-/// or binary size becomes prohibitive, this service can be feature-flagged
-/// off per-chat (`enableMessageRecall`) or dropped entirely. MemoryBook +
-/// chat history within the context window already covers ~80% of cases.
+/// ADR: if mobile latency or binary size becomes prohibitive, this service can
+/// be feature-flagged off per-chat (`enableMessageRecall`, default off on
+/// mobile), the embedder binary can be lazy-loaded only on first request, or
+/// Recall can be dropped entirely — MemoryBook + chat history within the
+/// context window already covers ~80% of cases. Marinara itself keeps Recall
+/// parallel to Lorebook + Summary as insurance against lossy compression;
+/// without it, agent-filtered "unimportant" details are unrecoverable when
+/// they later matter.
 class MessageRecallService {
   final EmbeddingRepo _repo;
   final EmbeddingService _embeddingService;

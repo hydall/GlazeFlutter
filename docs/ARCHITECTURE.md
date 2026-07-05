@@ -41,7 +41,7 @@ lib/
 │   ├── constants/
 │   │   └── image_gen_patterns.dart     # IMG-tag regex constants
 │   ├── db/
-│   │   ├── app_db.dart                 # AppDatabase singleton (18 tables, schema v42)
+│   │   ├── app_db.dart                 # AppDatabase singleton (18 tables, schema v58)
 │   │   ├── tables.dart                 # Drift table class definitions
 │   │   └── repositories/              # One repo per table (CRUD only)
 │   │       ├── api_config_repo.dart
@@ -868,7 +868,9 @@ not oversights:
 
 2. **Local embedder fallback** (Marinara: ONNX MiniLM / llama.cpp sidecar) —
    we require a configured embedding endpoint. Defer: 23MB ONNX binary in
-   Flutter mobile builds is expensive (see `docs/plans/PLAN_MEMORY_CONTINUITY.md`).
+   Flutter mobile builds is expensive; if mobile latency/binary size becomes
+   prohibitive, `runMemoryRecall` can be feature-flagged per-chat (default off
+   on mobile) or dropped entirely — MemoryBook + context window covers ~80%.
 
 3. **Agent batching by provider+model** (Marinara: XML-delimited `<result>`
    blocks) — our single JSON call is simpler. Defer: no per-agent model
@@ -892,7 +894,11 @@ not oversights:
    current cap works.
 
 8. **Per-day/per-week characterMemories bucketing** — CANCELLED. Doesn't fit
-   roleplay. See `docs/plans/PLAN_MEMORY_CONTINUITY.md`.
+   roleplay: roleplay chats are paused between sessions (the in-fiction
+   timeline does not advance with wall-clock time), so bucketing memories by
+   real-world day/week is meaningless. MemoryBook's chronological append-only
+   structure already handles long conversations. Marinara uses day/week only
+   for its "Conversation" mode (Discord-style DMs), not for roleplay.
 
 ---
 
@@ -900,7 +906,7 @@ not oversights:
 
 **File:** `lib/core/db/app_db.dart` + `lib/core/db/repositories/`
 
-### Tables (22 total, schema v51)
+### Tables (22 total, schema v58)
 
 | Table | Repo | Notes |
 |-------|------|-------|

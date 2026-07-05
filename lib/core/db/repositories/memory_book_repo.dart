@@ -169,7 +169,12 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
   /// with [entryId] exists in the book (caller may fall back to creating
   /// a new entry via [appendApprovedEntries]).
   ///
-  /// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #4) and §2.2.
+  /// Rationale: append-only + LLM-sees-existing prevents duplicates idempotently
+  /// at regen (the LLM recognizes existing entries for the same messageId and
+  /// only appends newFacts). No `deleteForMessage` at regen — deleting would
+  /// also discard legitimate append-only facts other agents wrote for the same
+  /// messageId (Marinara deliberately does NOT delete; it replays with a
+  /// historical slice instead).
   Future<bool> appendFactsToEntry({
     required String sessionId,
     required String entryId,
@@ -185,8 +190,8 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
       if (idx < 0) return;
       final entry = existing.entries[idx];
       // Locked entries are user-protected — agent cannot modify them.
-      // Mirrors Marinara's `locked` flag. See
-      // docs/plans/PLAN_MEMORY_CONTINUITY.md §2.4.
+      // Mirrors Marinara's `locked` flag: user-toggled protection so the
+      // agentic write-loop cannot rewrite manually-curated facts.
       if (entry.locked) return;
       didAppend = true;
       final appendedContent = entry.content.isEmpty

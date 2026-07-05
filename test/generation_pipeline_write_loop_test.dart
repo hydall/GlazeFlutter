@@ -103,8 +103,10 @@ void main() {
     // NEW (patch #4 follow-up): historical replay — at regen, slice
     // messages up to AND INCLUDING the regen target so the write-loop
     // sees the same context the original turn saw. Mirrors Marinara's
-    // `buildHistoricalLorebookKeeperContext`. See
-    // docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2.
+    // `buildHistoricalLorebookKeeperContext`. Rationale: at regen, replay
+    // against the historical slice so the write-loop sees the same context the
+    // original turn saw — append-only + LLM-sees-existing prevents duplicates
+    // idempotently, and the replay ensures parity with the original entries.
     test('upToMessageId truncates messages after the target (inclusive)', () {
       final messages = List.generate(
         20,

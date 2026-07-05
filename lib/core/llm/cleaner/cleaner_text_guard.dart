@@ -44,7 +44,9 @@ class CleanerTextGuard {
   /// preserve it verbatim; this guard catches the case where the cleaner
   /// stripped it anyway. The detection is generalized: any `<...ooc...>` tag
   /// (case-insensitive) counts, so custom meta-personas with custom wrappers
-  /// are preserved too. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §Part C.
+  /// are preserved too. Rationale: `<lumiaooc>` is meta-OOC commentary, not
+  /// prose — the cleaner is instructed to preserve it verbatim, and this guard
+  /// catches the case where it stripped it anyway (reject the rewrite).
   static bool lumiaoocDropped(String original, String edited) {
     final pattern = RegExp(r'<\w*ooc\w*>', caseSensitive: false);
     if (!pattern.hasMatch(original)) return false;

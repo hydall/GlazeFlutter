@@ -17,8 +17,13 @@ import 'stage_context.dart';
 /// generation and injects top-K chunks as `<recalled_messages>` in the
 /// prompt.
 ///
-/// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3) and §2.1 (ADR:
-/// mobile escape hatch if latency / binary size becomes prohibitive).
+/// Rationale (patch #3): chunk=5 messages → EmbeddingRepo with
+/// `sourceType='chat_message'` → cosine ≥ 0.25, top-K=8 → `<recalled_messages>`.
+/// Lossless backstop for the lossy MemoryBook compression. ADR: if mobile
+/// latency / binary size becomes prohibitive, feature-flag `runMemoryRecall`
+/// per-chat (default off on mobile), lazy-load the embedder binary on first
+/// request, or drop Recall entirely — MemoryBook + context window already
+/// covers ~80% of cases.
 ///
 /// Staleness guard: aborts early if a newer generation has started. The
 /// underlying [ChatMessageEmbeddingService] wraps all errors in try/catch

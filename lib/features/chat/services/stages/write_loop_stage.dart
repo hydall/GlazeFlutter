@@ -117,7 +117,9 @@ class WriteLoopStage {
         // target so the write-loop sees the same context the original turn
         // saw, not the current post-regen state. Without this, regen
         // would produce different entries than the original turn.
-        // See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2.
+        // Rationale: historical replay (Marinara `buildHistoricalLorebookKeeperContext`
+        // analog) — append-only + LLM-sees-existing prevents duplicates
+        // idempotently, and the replay ensures regen sees the same context.
         upToMessageId: regenTargetId,
       );
 

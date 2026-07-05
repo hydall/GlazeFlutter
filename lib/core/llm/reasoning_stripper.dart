@@ -1,8 +1,8 @@
 /// Pure static helpers that strip chain-of-thought / `<think>` reasoning
 /// directives from text. Extracted from the two near-identical regex sets that
 /// previously lived in `AgentRunner` (message-level) and
-/// `StudioDecompositionService` (prompt-shard-level) — see
-/// `docs/PLAN_STUDIO_REFACTOR.md` §1.2.
+/// `StudioDecompositionService` (prompt-shard-level). The two near-identical
+/// regex sets were consolidated into this single helper.
 ///
 /// The two operations are intentionally kept separate because they differ:
 /// - [stripMessageReasoning] also rewrites literal `<think>` / `</think>` tags

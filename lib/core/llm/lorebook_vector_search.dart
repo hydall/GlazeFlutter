@@ -78,7 +78,9 @@ class LorebookVectorSearch {
     // activate via keyword scan; this fallback activates them via cosine
     // similarity against the current chat text. Threshold is lower (default
     // 0.3) and topK is smaller (default 3) to avoid flooding the prompt.
-    // See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    // Rationale: keyless entries cannot activate via keyword scan; this
+    // semantic fallback activates them via cosine similarity (Marinara
+    // supplementary system 4 analog).
     final fallbackEntries = <(LorebookEntry, String)>[];
     for (final lb in activeLorebooks) {
       for (final entry in lb.entries) {
@@ -200,7 +202,9 @@ class LorebookVectorSearch {
     // Lower threshold (default 0.3) and smaller topK (default 3). Only run
     // against the focused query — the fallback query is for broader recall
     // on the main pool and would over-activate keyless entries.
-    // See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    // Rationale: only the focused query is used for the fallback pool — the
+    // fallback query is for broader recall on the main pool and would
+    // over-activate keyless entries.
     final fallbackThreshold = settings.fallbackThreshold;
     final fallbackTopK = settings.fallbackTopK;
     final fallbackResults = <String, double>{};

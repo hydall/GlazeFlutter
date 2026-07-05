@@ -31,7 +31,19 @@ export 'ledger/visible_ledger_store.dart';
 // POST-cleaner when enabled). Maintains compact continuity state so long-
 // running chats do not reset NPCs to card baseline.
 //
-// Pipeline placement (PLAN_STUDIO_LEDGER_MEMORY.md §Pipeline Placement):
+// Pipeline placement: after final assistant text is settled —
+//   1. Assistant response saved.
+//   2. POST-cleaner runs if enabled.
+//   3. User auto InfBlocks run if configured.
+//   4. Studio Ledger runs on final cleaned text. ← this service
+//   5. Visible ledger stored as internal diagnostics.
+//   6. Export parsed and validated.
+//   7. Durable facts written to MemoryBook.
+//   8. Entity/relationship/arc/world/scene state written to tracker namespace.
+// Ledger must not run on pre-cleaner text. Manual user InfBlocks do not delay
+// canon state writes. User InfBlocks are auxiliary evidence only — the ledger
+// can read them but must not promote their contents to canon unless supported
+// by the final assistant text, visible accepted chat, or existing canon.
 //   1. Assistant response saved.
 //   2. POST-cleaner runs if enabled.
 //   3. User auto InfBlocks run if configured.

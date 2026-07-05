@@ -59,8 +59,11 @@ import 'dart:convert';
 ///
 /// Consolidated from the former `MemoryStudioService._extractJsonObject`
 /// (fence-aware) and `StudioBlockRouter._extractJsonObject` (brace-only) —
-/// see `docs/PLAN_STUDIO_REFACTOR.md` §1.3. The fence-aware behavior is a
-/// superset of the brace-only one for both call sites.
+/// Consolidated from three former copies:
+/// `MemoryStudioService._extractJsonObject` (fence-aware),
+/// `StudioBlockRouter._extractJsonObject` (brace-only), and
+/// `StudioDecompositionService` (fence-stripping variant). The fence-aware
+/// behavior is a superset of the brace-only one for both call sites.
 String? extractJsonObject(String text) {
   var trimmed = text.trim();
   final fenced = RegExp(

@@ -25,7 +25,10 @@ class MemoryEmbeddingService {
     // entries that should only activate via keyword, never via semantic
     // similarity. Drop any existing embedding row too so the entry is
     // fully invisible to vector search. Mirrors Marinara's
-    // `excludeFromVectorization` flag. See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    // `excludeFromVectorization` flag. Rationale: spoiler entries or entries
+    // that should only activate via keyword are excluded from the embedding
+    // pipeline entirely — the existing embedding row is also deleted so the
+    // entry is fully invisible to vector search (Marinara analog).
     if (entry.excludeFromVectorization) {
       await _repo.deleteByEntryId(entry.id);
       return;

@@ -116,7 +116,12 @@ class StudioContextBucketizer {
     // final responder only via that agent's brief, not via the raw preset).
     // What remains is the true context: char_card, char_personality,
     // user_persona, scenario, example_dialogue, authors_note + the mandatory
-    // fallback. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md.
+    // fallback. Rationale: when Studio is enabled, filter from staticContext
+    // any message whose backing preset block is a reasoning/CoT template (the
+    // multi-agent pipeline IS the externalized reasoning) or was already routed
+    // into some agent's promptShard (duplicated). What remains is true context:
+    // char_card, char_personality, user_persona, scenario, example_dialogue,
+    // authors_note + the mandatory fallback.
     if (studioConfig != null) {
       final dropNames = _collectStaticContextDropNames(
         promptPayload.preset,
@@ -269,7 +274,12 @@ class StudioContextBucketizer {
   /// bucketizer message carries `blockName` (display name) and `blockId`
   /// (normalized id), and routed names are display names, so we compare both
   /// case-insensitively and also include the backing preset block ids for
-  /// robustness. See docs/plans/PLAN_STUDIO_PROMPT_FILTERING.md §1.
+  /// robustness. Rationale: the drop-set is reasoning/CoT blocks (dropped by
+  /// the pipeline — multi-agent IS the reasoning) + every block already routed
+  /// into some agent's shard (duplicated). Jailbreak-style blocks that the LLM
+  /// router misroutes are a routing-quality concern, not papered over by leaking
+  /// them through staticContext — the keyword fallback defaults to `final` as a
+  /// safety net.
   Set<String> _collectStaticContextDropNames(
     Preset? preset,
     StudioConfig config,

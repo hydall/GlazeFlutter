@@ -77,8 +77,9 @@ class MemoryAgenticWriteService {
       // NEW (patch #4): pass existing MemoryBook entries to the LLM so it
       // can avoid duplicates and write append-only newFacts to existing
       // entries instead of rewriting them. Mirrors Marinara's
-      // `<existing_entries>` prompt block. See
-      // docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+      // `<existing_entries>` prompt block. Rationale (patch #4): surfacing
+      // existing entries to the LLM prevents duplicates and enables append-only
+      // updates instead of rewrites (Marinara `<existing_entries>` analog).
       List<MemoryEntry> existingMemories = const [];
       try {
         final book = await _bookRepo
@@ -279,8 +280,9 @@ class MemoryAgenticWriteService {
     //   in pendingDrafts for manual user review. Append-only updates to
     //   existing entries are also deferred: the newFacts are written as
     //   a draft whose content is the appended text, NOT merged into the
-    //   existing entry until the user approves. See
-    //   docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    //   existing entry until the user approves. Rationale: the
+    //   `agentWriteApprovalRequired` per-chat gate defers even append-only
+    //   updates to pendingDrafts for manual review (Marinara analog).
     // - existingEntryId empty → CREATE a new MemoryEntry (kind='agent',
     //   source='agentic') and batch-append via appendApprovedEntries.
     // - existingEntryId non-empty → APPEND-only newFacts to the existing

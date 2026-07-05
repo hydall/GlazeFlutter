@@ -51,7 +51,9 @@ void main() {
     // Agentic entries (source:'agentic') are written by the agent write-loop.
     // They must NOT suppress a fresh manual scan over the same range —
     // otherwise the manual planner could never re-summarize what the agent
-    // touched. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+    // touched. Rationale (patch #1): agentic entries (source:'agentic') must
+    // NOT suppress a fresh manual scan — only manual entries (source:'scan_chat'
+    // / kind:'curated') block. Pending drafts block (anti-dup-segment).
     final plan = MemoryDraftPlanner.plan(
       book: const MemoryBook(
         id: 'book',

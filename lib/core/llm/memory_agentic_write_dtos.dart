@@ -41,7 +41,10 @@ class TrackerWriteRequest {
 ///   repo. Title/keys from this request are merged into the existing
 ///   entry's keys (case-insensitive dedup). The existing entry is NOT
 ///   rewritten — only appended to (Marinara append-only newFacts
-///   semantics). See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+///   semantics). Rationale (patch #4): append-only newFacts to existing entries
+///   prevents fact loss at regen — the LLM sees existing entries via
+///   `<existing_memory_entries>` and appends rather than rewriting (Marinara
+///   append-only analog).
 class MemoryWriteRequest {
   final String title;
   final String content;

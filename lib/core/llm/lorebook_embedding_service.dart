@@ -43,7 +43,11 @@ class LorebookEmbeddingService {
     //     fallback path in LorebookVectorSearch can activate them via
     //     cosine similarity. Excluded entries (excludeFromVectorization)
     //     are dropped from both pools and their existing embeddings are
-    //     purged. See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    //     purged. Rationale: excludeFromVectorization is a user opt-out for
+    //     spoiler entries or entries that should only activate via keyword,
+    //     never via semantic similarity (Marinara analog). Semantic fallback
+    //     for keyless entries was added so they can activate via cosine
+    //     instead of being dead weight.
     final excluded = entries
         .where((e) => e.excludeFromVectorization && e.enabled && !e.constant)
         .toList();

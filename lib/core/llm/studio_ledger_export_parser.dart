@@ -12,7 +12,12 @@ import '../models/studio_ledger_export.dart';
 // Studio Ledger LLM response (which also contains a <studio_ledger> visible
 // block). Returns null when the block is absent, malformed, or wholly invalid.
 //
-// Validation rules (from PLAN_STUDIO_LEDGER_MEMORY.md Validation section):
+// Validation rules: ledger output is treated as untrusted model output until
+// parsed and validated. Reject unknown operations, unknown namespace prefixes,
+// overlong values (trim deterministically), malformed JSON, future facts,
+// completion of user actions/choices/threats/plans/offers without evidence in
+// accepted chat. Skip locked fields. Ignore empty exports. Quarantine bad
+// exports as diagnostics only.
 //   - Reject unknown op codes.
 //   - Reject unknown namespace prefixes.
 //   - Reject overlong values (exceeds kLedgerMaxValueChars).

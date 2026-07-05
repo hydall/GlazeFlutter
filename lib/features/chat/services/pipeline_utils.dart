@@ -17,8 +17,11 @@ String extractRecentHistoryText(
   /// so the agentic write-loop replays against the historical slice that
   /// existed when the original turn was generated, not the current
   /// (post-regen) state. Mirrors Marinara's
-  /// `buildHistoricalLorebookKeeperContext`. See
-  /// docs/plans/PLAN_MEMORY_CONTINUITY.md §2.2 (follow-up).
+  /// `buildHistoricalLorebookKeeperContext`. Rationale (follow-up): at regen,
+  /// replay the write-loop against the historical slice that existed when the
+  /// original turn was generated, not the current post-regen state. Append-only
+  /// + LLM-sees-existing already prevent duplicates idempotently; this replay
+  /// further ensures regen produces the same entries as the original turn.
   String? upToMessageId,
 }) {
   // Truncate to the historical slice first if requested.
