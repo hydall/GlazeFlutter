@@ -159,6 +159,14 @@ class GenerationPipeline {
       if (regenOutcome != null) {
         // INV-EG1: extensions + image tags must run after successful regen too.
         if (regenSucceeded && result.session != null) {
+          // Flip isGenerating off (streaming window ended) but mark
+          // isPostGenRunning so the Stop button stays pressable and new
+          // generations stay blocked through the post-gen window.
+          ctx.setState(AsyncData(result.copyWith(
+            isGenerating: false,
+            isPostGenRunning: true,
+            regenTargetId: null,
+          )));
           await _postGenCoordinator.run(
             result: result.copyWith(isGenerating: false, regenTargetId: null),
             genId: genId,
@@ -167,6 +175,15 @@ class GenerationPipeline {
             notifService: notifService,
             regenTargetId: regenTargetId,
           );
+          // Post-gen finished — clear isPostGenRunning (unless a newer
+          // generation has taken over, in which case leave its state
+          // untouched).
+          if (ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId)) {
+            final after = ctx.getState().value;
+            if (after != null && after.isPostGenRunning) {
+              ctx.setState(AsyncData(after.copyWith(isPostGenRunning: false)));
+            }
+          }
         }
         return regenOutcome;
       }
@@ -191,16 +208,35 @@ class GenerationPipeline {
           AsyncData(
             ChatState(
               session: restoredSession,
-              isGenerating: false,
+              isGenerating: true,
               error: result.error,
             ),
           ),
         );
       } else {
-        ctx.setState(AsyncData(result));
+        // Streaming window still active — keep isGenerating true so the
+        // streaming overlay stays visible until clearStreaming() runs
+        // below. isPostGenRunning is set in the next setState (before the
+        // coordinator starts).
+        ctx.setState(AsyncData(result.copyWith(isGenerating: true)));
         ctx.abortHandler.restorationMessage = null;
       }
       ctx.abortHandler.clearStreaming();
+
+      // Streaming window ended — flip isGenerating off so the persisted
+      // assistant message is appended to the WebView DOM (message sync
+      // gates on isGenerating). Set isPostGenRunning so the Stop button
+      // stays pressable and new generations stay blocked through the
+      // post-gen window (cleaner, ledger, ext blocks, write-loop).
+      if (ctx.ref.mounted) {
+        final pre = ctx.getState().value;
+        if (pre != null && pre.session?.id == result.session?.id) {
+          ctx.setState(AsyncData(pre.copyWith(
+            isGenerating: false,
+            isPostGenRunning: true,
+          )));
+        }
+      }
 
       // Post-generation tasks: sync + notification, then (in order)
       // cleaner → image tags → write-loop, with embed + auto-drafts in
@@ -213,6 +249,15 @@ class GenerationPipeline {
         notifService: notifService,
         regenTargetId: regenTargetId,
       );
+      // Post-gen finished — clear isPostGenRunning (unless a newer
+      // generation has taken over, in which case leave its state
+      // untouched).
+      if (ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId)) {
+        final after = ctx.getState().value;
+        if (after != null && after.isPostGenRunning) {
+          ctx.setState(AsyncData(after.copyWith(isPostGenRunning: false)));
+        }
+      }
 
       return GenerationOutcome(
         state: ctx.getState().value ?? result,
@@ -244,7 +289,8 @@ class GenerationPipeline {
       return;
     }
     final current = ctx.getState().value;
-    if (current != null && current.isGenerating) {
+    if (current != null &&
+        (current.isGenerating || current.isPostGenRunning)) {
       final restoration = ctx.abortHandler.restorationMessage;
       if (restoration != null) {
         final msgs = <ChatMessage>[
@@ -267,13 +313,18 @@ class GenerationPipeline {
             current.copyWith(
               session: restored ?? current.session,
               isGenerating: false,
+              isPostGenRunning: false,
               error: e.toString(),
             ),
           ),
         );
       } else {
         ctx.setState(
-          AsyncData(current.copyWith(isGenerating: false, error: e.toString())),
+          AsyncData(current.copyWith(
+            isGenerating: false,
+            isPostGenRunning: false,
+            error: e.toString(),
+          )),
         );
       }
       ctx.abortHandler.restorationMessage = null;

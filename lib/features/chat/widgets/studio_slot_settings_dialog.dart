@@ -239,6 +239,32 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
     }
   }
 
+  /// Slot-specific timeout label showing the fallback default (in seconds)
+  /// that applies when the field is left at 0. The defaults mirror the
+  /// hardcoded fallbacks in `AgentRunner.effectiveTimeoutMs` (final 90 s,
+  /// trackers 60 s) and `AuxLlmClient.resolveCleanerTimeout` (cleaner 60 s).
+  String get _timeoutLabel {
+    switch (widget.slot) {
+      case StudioSlot.finalGenerator:
+        return 'Timeout seconds (0 = 90s default)';
+      case StudioSlot.tracker:
+        return 'Timeout seconds (0 = 60s default)';
+      case StudioSlot.cleaner:
+        return 'Timeout seconds (0 = 60s default)';
+    }
+  }
+
+  String get _timeoutHint {
+    switch (widget.slot) {
+      case StudioSlot.finalGenerator:
+        return '90';
+      case StudioSlot.tracker:
+        return '60';
+      case StudioSlot.cleaner:
+        return '60';
+    }
+  }
+
   String _reasoningEffortLabel(String effort) {
     return switch (effort) {
       'auto' => 'Auto',
@@ -332,9 +358,9 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                     keyboardType: TextInputType.number,
                   ),
                   MenuFieldItem(
-                    label: 'Timeout seconds (0 = default)',
+                    label: _timeoutLabel,
                     controller: _timeoutCtrl,
-                    placeholder: '0',
+                    placeholder: _timeoutHint,
                     keyboardType: TextInputType.number,
                   ),
                 ],

@@ -645,7 +645,8 @@ PromptResult _assembleMessages({
   // the LLM sees committed entity/relationship/arc/world state overriding
   // character-card baseline. Placed before recalled_messages so it has
   // higher authority in the context window.
-  // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Prompt Injection.
+  // Rationale: canon state is injected as hidden/system prompt only, never as
+  // a chat message. It overrides character-card baseline when conflicting.
   if (payload.studioSessionStateContent != null &&
       payload.studioSessionStateContent!.isNotEmpty) {
     injectStudioSessionStateBlock(

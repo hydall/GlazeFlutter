@@ -5,6 +5,12 @@ class ChatState {
   final ChatSession? session;
   final bool isGenerating;
   final bool isGeneratingImage;
+  /// True while post-generation stages (cleaner, ledger, ext-blocks,
+  /// write-loop, image tags) are running. Decoupled from [isGenerating]
+  /// (which marks the streaming window) so the message-sync layer can
+  /// settle the persisted assistant message into the DOM while the Stop
+  /// button stays pressable through the post-gen window.
+  final bool isPostGenRunning;
   final String? error;
   final String? lastRawResponse;
   final DateTime? generationStartTime;
@@ -26,6 +32,7 @@ class ChatState {
     this.session,
     this.isGenerating = false,
     this.isGeneratingImage = false,
+    this.isPostGenRunning = false,
     this.error,
     this.lastRawResponse,
     this.generationStartTime,
@@ -51,6 +58,7 @@ class ChatState {
     ChatSession? session,
     bool? isGenerating,
     bool? isGeneratingImage,
+    bool? isPostGenRunning,
     Object? error = _unset,
     String? lastRawResponse,
     DateTime? generationStartTime,
@@ -63,6 +71,7 @@ class ChatState {
       session: session ?? this.session,
       isGenerating: isGenerating ?? this.isGenerating,
       isGeneratingImage: isGeneratingImage ?? this.isGeneratingImage,
+      isPostGenRunning: isPostGenRunning ?? this.isPostGenRunning,
       error: error == _unset ? this.error : error as String?,
       lastRawResponse: lastRawResponse ?? this.lastRawResponse,
       generationStartTime: generationStartTime ?? this.generationStartTime,

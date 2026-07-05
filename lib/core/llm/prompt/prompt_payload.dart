@@ -64,7 +64,9 @@ class PromptPayload {
   /// chat-message chunks semantically closest to the current user message,
   /// returned by [MessageRecallService]. Injected into the prompt as a
   /// `<recalled_messages>` system block before the first user/assistant
-  /// message. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3).
+  /// message. Rationale (patch #3): chunk=5 messages → EmbeddingRepo with
+  /// `sourceType='chat_message'` → cosine ≥ 0.25, top-K=8 — lossless backstop
+  /// for the lossy MemoryBook compression (Marinara memory-recall analog).
   final String? recalledMessagesContent;
 
   /// Structured recalled chunks with source message ids. When present, this is
@@ -95,7 +97,10 @@ class PromptPayload {
   /// Marinara's `chatSummaryFingerprint` (djb2 on compiled summary). We
   /// hash the MemoryBook injection content (MemoryBook is our summary
   /// equivalent). Empty when no memory content was injected.
-  /// See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.3.
+  /// Rationale: GlazeFlutter has no separate Chat Summary system — MemoryBook
+  /// IS our summary (chronologically ordered entries with messageIds linkage).
+  /// The fingerprint detects "memory changed since last turn" for prompt-cache
+  /// invalidation (Marinara chatSummaryFingerprint / djb2 analog).
   final String memoryInjectionFingerprint;
 
   const PromptPayload({

@@ -199,7 +199,9 @@ class PromptPayloadBuilder {
       // ChatMessageEmbeddingService after each generation. Lossless
       // backstop for the lossy MemoryBook compression. Empty / no-op when
       // embeddingConfig.endpoint is empty or no chunks exist yet.
-      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+      // Rationale (patch #3): raw-message recall is a lossless backstop for
+      // the lossy MemoryBook compression — chunk=5 messages → cosine search →
+      // `<recalled_messages>` injection (Marinara memory-recall analog).
       final recallFuture = _ref
           .read(messageRecallServiceProvider)
           .recall(
@@ -292,7 +294,11 @@ class PromptPayloadBuilder {
       // id+content hash is sufficient for cache invalidation — any
       // change to the selected entries' content (append-only newFacts,
       // user edits, agent writes) changes the fingerprint.
-      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.3.
+      // Rationale: MemoryBook IS our summary (no separate Chat Summary system).
+      // The fingerprint (djb2-style hash of id:content pairs) detects "memory
+      // changed since last turn" for prompt-cache invalidation — any change
+      // to selected entries' content changes the fingerprint (Marinara
+      // chatSummaryFingerprint analog).
       final fingerprintBase = memorySelection.entries.isNotEmpty
           ? memorySelection.entries
                 .map((e) => '${e.id}:${e.content}')
@@ -307,7 +313,11 @@ class PromptPayloadBuilder {
     // Load committed Studio Ledger canon state from tracker_rows and compile
     // the <studio_session_state> injection block. Loaded whenever Studio Ledger
     // is enabled, regardless of memoryMode. Falls back to null on any error.
-    // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Prompt Injection.
+    // Rationale: inject committed canon state (entity/relationship/arc/world)
+    // as hidden/system prompt so the LLM sees session canon overriding
+    // character-card baseline. Priority-based budget: manual overrides/locks
+    // and conflict-preventing canon overrides are never trimmed before raw
+    // recall or optional InfBlocks.
     String? studioSessionStateContent;
     if (sessionId != null) {
       try {
@@ -329,7 +339,11 @@ class PromptPayloadBuilder {
     // Falls back to null when Studio Ledger has not written any arc state yet
     // (e.g. memoryMode=fast or first turn). Does NOT use the old
     // memory_consolidation_rows — those are disconnected from Studio Canon.
-    // See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §{{arc}} Macro.
+    // Rationale: {{arc}} renders selected arc:* state from Studio Canon (not
+    // the old consolidation rows). Selection: arcs linked to entities/topics
+    // mentioned in the latest user message, arcs that override card hooks,
+    // prefer active arcs and completed arcs with do_not_reopen=true. Omit
+    // unrelated completed arcs unless needed to prevent card-baseline regression.
     String? arcContent;
     String? entitiesContent;
     if (memorySettings.memoryMode != 'fast' && sessionId != null) {

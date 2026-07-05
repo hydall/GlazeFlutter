@@ -10,8 +10,7 @@ import '../../models/tracker.dart';
 /// live `canon_override:*` and `canon_lock:*` rows are user-owned and can be
 /// newer than the snapshot, so they always win.
 ///
-/// See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md and docs/rules/database.md
-/// (INV-TS3: snapshot-first read path).
+/// See docs/rules/database.md (INV-TS3: snapshot-first read path).
 class LedgerTrackerLoader {
   final Ref _ref;
 

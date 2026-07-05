@@ -93,16 +93,16 @@ class PostCleanerService {
 
     final token = cancelToken ?? CancelToken();
     if (token.isCancelled) {
-      return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
+      return PostCleanerResult(status: 'aborted', cleanedText: wrapLumiaOocColors(assistantText));
     }
 
     if (assistantText.trim().isEmpty) {
-      return PostCleanerResult(status: 'ok', cleanedText: assistantText);
+      return PostCleanerResult(status: 'ok', cleanedText: wrapLumiaOocColors(assistantText));
     }
 
     try {
       if (token.isCancelled) {
-        return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
+        return PostCleanerResult(status: 'aborted', cleanedText: wrapLumiaOocColors(assistantText));
       }
 
       final outcome = await _askLlmForCleanedText(
@@ -123,7 +123,7 @@ class PostCleanerService {
       if (token.isCancelled) {
         return PostCleanerResult(
           status: 'aborted',
-          cleanedText: assistantText,
+          cleanedText: wrapLumiaOocColors(assistantText),
           attempts: outcome.attempts,
           totalElapsedMs: outcome.totalElapsedMs,
         );
@@ -138,7 +138,7 @@ class PostCleanerService {
         if (!outcome.isOk) {
           return PostCleanerResult(
             status: _statusLabel(outcome.status),
-            cleanedText: assistantText,
+            cleanedText: wrapLumiaOocColors(assistantText),
             error: outcome.attempts.isNotEmpty
                 ? outcome.attempts.last.error
                 : null,
@@ -149,7 +149,7 @@ class PostCleanerService {
         }
         return PostCleanerResult(
           status: 'ok',
-          cleanedText: assistantText,
+          cleanedText: wrapLumiaOocColors(assistantText),
           attempts: outcome.attempts,
           totalElapsedMs: outcome.totalElapsedMs,
           model: config.model,
@@ -165,7 +165,7 @@ class PostCleanerService {
         );
         return PostCleanerResult(
           status: 'skipped',
-          cleanedText: assistantText,
+          cleanedText: wrapLumiaOocColors(assistantText),
           attempts: outcome.attempts,
           totalElapsedMs: outcome.totalElapsedMs,
           model: config.model,
@@ -197,7 +197,7 @@ class PostCleanerService {
         );
         return PostCleanerResult(
           status: 'skipped',
-          cleanedText: assistantText,
+          cleanedText: wrapLumiaOocColors(assistantText),
           attempts: outcome.attempts,
           totalElapsedMs: outcome.totalElapsedMs,
           model: config.model,
@@ -208,7 +208,10 @@ class PostCleanerService {
       // extract the updated state JSON. The marker is parsed here (not in
       // the pipeline) so the caller receives already-clean text + state.
       final beautyParsed = parseBeautyState(cleaned);
-      final finalCleanedText = beautyParsed.cleanedText;
+      // Deterministically wrap <lumiaooc> blocks in Lumia's signature color.
+      // The cleaner LLM no longer owns this rule (it frequently forgot it);
+      // see wrapLumiaOocColors docs.
+      final finalCleanedText = wrapLumiaOocColors(beautyParsed.cleanedText);
 
       return PostCleanerResult(
         status: 'ok',
@@ -222,15 +225,15 @@ class PostCleanerService {
         beautyMarkerFound: beautyParsed.markerFound,
       );
     } on TimeoutException {
-      return PostCleanerResult(status: 'timeout', cleanedText: assistantText);
+      return PostCleanerResult(status: 'timeout', cleanedText: wrapLumiaOocColors(assistantText));
     } catch (e) {
       if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
-        return PostCleanerResult(status: 'aborted', cleanedText: assistantText);
+        return PostCleanerResult(status: 'aborted', cleanedText: wrapLumiaOocColors(assistantText));
       }
       debugPrint('[PostCleaner] error: $e');
       return PostCleanerResult(
         status: 'error',
-        cleanedText: assistantText,
+        cleanedText: wrapLumiaOocColors(assistantText),
         error: '$e',
       );
     }

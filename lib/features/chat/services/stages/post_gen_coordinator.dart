@@ -177,11 +177,11 @@ class PostGenCoordinator {
     }
 
     // Track all post-gen tasks and release the foreground hold when
-    // they all complete (success or failure).
-    unawaited(
-      Future.wait(postGenFutures).whenComplete(() {
-        notifService.onPostGenFinished();
-      }),
-    );
+    // they all complete (success or failure). Returned future resolves
+    // after every post-gen task settles so the caller can keep
+    // `isGenerating` true for the whole post-gen window.
+    await Future.wait(postGenFutures).whenComplete(() {
+      notifService.onPostGenFinished();
+    });
   }
 }

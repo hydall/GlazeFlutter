@@ -51,7 +51,9 @@ class AgenticWriteRequestParser {
     // prompt lean (mirrors Marinara's `<existing_entries>` block, which
     // also omits full content). Locked entries are marked with `[locked]`
     // so the LLM knows not to propose updates to them (Marinara analog).
-    // See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 and §2.4.
+    // Rationale: showing existing entries lets the LLM avoid duplicates and
+    // append-only newFacts (patch #4). Locked entries are marked so the LLM
+    // knows not to propose updates (Marinara `locked` flag analog).
     final existingBlock = existingMemories.isEmpty
         ? '(no existing memory entries)'
         : existingMemories

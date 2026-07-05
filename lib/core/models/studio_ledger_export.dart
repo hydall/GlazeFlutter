@@ -11,7 +11,11 @@ part 'studio_ledger_export.g.dart';
 // produces a structured "ops" patch list and optional human-readable sections
 // (sceneState, entities, arcState, durableFacts) for diagnostics.
 //
-// See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Suggested Ledger Output.
+// See docs/rules/database.md for the tracker namespace schema.
+// The export produces a structured "ops" patch list (authoritative for state
+// writes) and optional human-readable sections (sceneState, entities, arcState,
+// durableFacts) for diagnostics. Persistence prefers validated patch operations
+// so the model cannot accidentally rewrite or drop the whole state tree.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Allowed op codes in the patch list.

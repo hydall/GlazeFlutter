@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
@@ -53,6 +54,7 @@ class LedgerStage {
     required ChatMessage targetMessage,
     bool isManualRerun = false,
     AuxApiConfig? resolvedConfig,
+    CancelToken? cancelToken,
   }) async {
     if (!ctx.ref.mounted) return;
 
@@ -200,6 +202,7 @@ class LedgerStage {
         agentSwipeId: targetMessage.agentSwipeId,
         forceEnabled: true,
         isStillCurrent: isCurrent,
+        cancelToken: cancelToken,
         ledgerBlocks: studioPreset?.blocks ?? const [],
         macroCtx: ledgerMacroCtx,
       );

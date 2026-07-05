@@ -50,6 +50,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final List<ChatMessage> messages;
   final bool isGenerating;
   final bool isGeneratingImage;
+  final bool isPostGenRunning;
   final double bottomInset;
   final double topInset;
   final String? searchQuery;
@@ -116,6 +117,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     required this.messages,
     required this.isGenerating,
     this.isGeneratingImage = false,
+    this.isPostGenRunning = false,
     this.bottomInset = 0,
     this.topInset = 0,
     this.searchQuery,
@@ -360,6 +362,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           isSelectionMode: widget.isSelectionMode,
           isGenerating: widget.isGenerating,
           isGeneratingImage: widget.isGeneratingImage,
+          isPostGenRunning: widget.isPostGenRunning,
         ),
         onReady: () => _ready = true,
         onSyncExtBlockPanels: _syncExtBlockPanels,
@@ -677,6 +680,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       sessionId: w.sessionId,
       isGenerating: w.isGenerating,
       isGeneratingImage: w.isGeneratingImage,
+      isPostGenRunning: w.isPostGenRunning,
       regenTargetId: w.regenTargetId,
       greetingTotal: w.greetingTotal,
       messages: w.messages,

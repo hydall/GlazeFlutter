@@ -38,8 +38,11 @@ abstract class LorebookEntry with _$LorebookEntry {
     /// never activates it. Useful for spoiler entries or entries that
     /// should only activate via explicit keyword match, never via
     /// semantic similarity. Mirrors Marinara's `excludeFromVectorization`
-    /// flag. See docs/plans/PLAN_MEMORY_CONTINUITY.md §4 (Vector embeddings
-    /// on MemoryBook entries — semantic activation without keys).
+    /// flag. Rationale: spoiler entries or entries that should only activate
+    /// via keyword are excluded from the embedding pipeline entirely — the
+    /// semantic-fallback path in `LorebookVectorSearch` never activates them
+    /// either (Marinara analog). Semantic activation for keyless entries was
+    /// added so they can activate via cosine instead of being dead weight.
     @Default(false) bool excludeFromVectorization,
   }) = _LorebookEntry;
 
@@ -98,7 +101,10 @@ abstract class LorebookGlobalSettings with _$LorebookGlobalSettings {
     /// the current chat text. Threshold is lower than `vectorThreshold`
     /// (default 0.3, Marinara-matching) and top-K is smaller (default 3)
     /// to avoid flooding the prompt with weakly-similar entries.
-    /// See docs/plans/PLAN_MEMORY_CONTINUITY.md §4.
+    /// Rationale: keyless entries (no keys AND no secondaryKeys) cannot
+    /// activate via keyword scan; this fallback activates them via cosine
+    /// similarity against the current chat text (Marinara supplementary
+    /// system 4 analog).
     @Default(0.3) double fallbackThreshold,
     @Default(3) int fallbackTopK,
   }) = _LorebookGlobalSettings;

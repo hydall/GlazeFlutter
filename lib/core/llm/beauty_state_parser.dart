@@ -12,6 +12,13 @@ const beautyStateTag = 'glaze_beauty_state';
 /// `{{getvar::glaze_beauty_state}}`.
 const beautyStateVarKey = 'glaze_beauty_state';
 
+/// Hardcoded color for the Lumia OOC meta-weaver's `<lumiaooc>` blocks.
+/// Applied deterministically in code (see [wrapLumiaOocColors]) so the
+/// cleaner LLM no longer has to color it itself — the prompt rules and the
+/// `reserved.lumia_ooc` JSON field were removed to avoid the model forgetting
+/// to wrap the block.
+const lumiaOocColor = '#9370DB';
+
 final RegExp _beautyStateRegex = RegExp(
   '<$beautyStateTag>([\\s\\S]*?)</$beautyStateTag>',
   caseSensitive: false,
@@ -121,4 +128,51 @@ BeautyStateResult applyBeautyState(
           beautyStateVarKey: parsed.stateJson!,
         };
   return BeautyStateResult(text: parsed.cleanedText, vars: vars);
+}
+
+/// Matches `<lumiaooc>...</lumiaooc>` blocks (case-insensitive, multiline).
+final RegExp _lumiaOocBlockRegex = RegExp(
+  r'<lumiaooc>([\s\S]*?)</lumiaooc>',
+  caseSensitive: false,
+);
+
+/// Detects an existing `<font color="...">` tag at the start of the inner
+/// content, so we do not double-wrap an already-colored block.
+final RegExp _leadingFontTagRegex = RegExp(
+  r'^\s*<font\s+color=',
+  caseSensitive: false,
+);
+
+/// Deterministically wraps the text inside every `<lumiaooc>...</lumiaooc>`
+/// block in [lumiaOocColor], unless it is already wrapped in a `<font>` tag.
+///
+/// This replaces the previous LLM-driven coloring rule that lived in the
+/// `cleaner_beauty` preset block and the fallback cleaner prompt. The cleaner
+/// model frequently forgot to apply the color, leaving Lumia's OOC note
+/// uncolored. Because Lumia never appears mid-narrative (only inside her own
+/// OOC wrapper), a deterministic post-processing pass is sufficient and
+/// idempotent.
+///
+/// Pure & synchronous — safe to call from any isolate / test. Preserves the
+/// `<lumiaooc>` wrapper, the block position, and inner whitespace/newlines.
+String wrapLumiaOocColors(String text) {
+  if (!text.toLowerCase().contains('<lumiaooc>')) return text;
+  return text.replaceAllMapped(_lumiaOocBlockRegex, (m) {
+    final inner = m.group(1) ?? '';
+    // Already wrapped in a <font color="..."> tag — leave unchanged.
+    if (_leadingFontTagRegex.hasMatch(inner)) {
+      return m.group(0)!;
+    }
+    // Preserve the original wrapper tag casing (e.g. <LumiaOOC>) so the
+    // output matches what the model emitted.
+    final full = m.group(0)!;
+    final openEnd = full.indexOf('>');
+    final closeStart = full.lastIndexOf('</');
+    if (openEnd < 0 || closeStart < 0 || closeStart <= openEnd) {
+      return '<lumiaooc><font color="$lumiaOocColor">$inner</font></lumiaooc>';
+    }
+    final openTag = full.substring(0, openEnd + 1);
+    final closeTag = full.substring(closeStart);
+    return '$openTag<font color="$lumiaOocColor">$inner</font>$closeTag';
+  });
 }

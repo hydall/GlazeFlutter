@@ -420,7 +420,9 @@ final memoryEmbeddingServiceProvider = Provider<MemoryEmbeddingService>((ref) {
 });
 
 // NEW (patch #3 — memory continuity): chat-message embedding + recall.
-// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+// Rationale: raw-message recall is a lossless backstop for the lossy MemoryBook
+// compression — chunk=5 messages → embeddings → cosine search →
+// `<recalled_messages>` injection (Marinara memory-recall.ts analog).
 final chatMessageEmbeddingServiceProvider =
     Provider<ChatMessageEmbeddingService>((ref) {
       return ChatMessageEmbeddingService(

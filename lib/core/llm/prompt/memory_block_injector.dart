@@ -63,7 +63,8 @@ void injectMemoryBlock(
 /// Injects the `<recalled_messages>` system block before the first history
 /// message (and before the memory block, since this is called first). The
 /// raw chunks are the lossless backstop for the lossy MemoryBook compression.
-/// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+/// Rationale (patch #3): top-K semantically closest message chunks injected
+/// before the first history message (Marinara memory-recall analog).
 void injectRecalledMessagesBlock(
   List<PromptMessage> messages,
   List<StaticBlock> attributionBlocks,
@@ -88,7 +89,11 @@ void injectRecalledMessagesBlock(
 /// message so the LLM sees committed entity/relationship/arc/world canon state
 /// overriding character-card baseline. Placed before recalled_messages to give
 /// it higher context-window authority.
-/// See docs/plans/PLAN_STUDIO_LEDGER_MEMORY.md §Prompt Injection.
+/// Rationale: Studio prompt assembly injects committed canon state as
+/// hidden/system prompt context only — never as a chat message. Priority:
+/// latest ledger > entity state > relationship state > arc state (for card
+/// hooks it overrides) > world/scene state > MemoryBook chunks > raw recalled
+/// messages. Manual overrides/locks are never trimmed before raw recall.
 void injectStudioSessionStateBlock(
   List<PromptMessage> messages,
   List<StaticBlock> attributionBlocks,

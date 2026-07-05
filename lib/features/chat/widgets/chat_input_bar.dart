@@ -33,6 +33,10 @@ class ChatInputBar extends ConsumerStatefulWidget {
   final void Function(String text, String? guidance)? onSendWithGuidance;
   final bool isGenerating;
   final bool isGeneratingImage;
+  /// True while post-generation stages (cleaner, ledger, write-loop, etc.)
+  /// are running. Keeps the Stop button pressable through the post-gen
+  /// window without gating the message sync (which keys on [isGenerating]).
+  final bool isPostGenRunning;
   final VoidCallback? onStop;
   final VoidCallback? onMagicDrawer;
   final void Function(String text, String? guidanceText, String imageDataUrl)?
@@ -80,6 +84,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
     this.onSendWithGuidance,
     required this.isGenerating,
     this.isGeneratingImage = false,
+    this.isPostGenRunning = false,
     this.onStop,
     this.onMagicDrawer,
     this.onSendWithImage,
@@ -430,7 +435,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         _controller.text.trim().isNotEmpty ||
         (_guidanceMode && _guidanceController.text.trim().isNotEmpty) ||
         _attachedImageDataUrl != null;
-    final isGenerating = widget.isGenerating || widget.isGeneratingImage;
+    final isGenerating =
+        widget.isGenerating || widget.isGeneratingImage || widget.isPostGenRunning;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,

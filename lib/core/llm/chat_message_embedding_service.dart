@@ -21,8 +21,15 @@ import 'embedding_service.dart';
 /// and return top-K raw message chunks as a lossless backstop for the
 /// lossy MemoryBook compression.
 ///
-/// See docs/plans/PLAN_MEMORY_CONTINUITY.md §1 (patch #3) and §2.1 (ADR:
-/// mobile escape hatch if latency / binary size becomes prohibitive).
+/// Rationale (patch #3): chunk=5 messages → EmbeddingRepo with
+/// `sourceType='chat_message'`, cosine ≥ 0.25, top-K=8, injected as
+/// `<recalled_messages>`. Fire-and-forget after each generation.
+/// ADR: if mobile latency / binary size becomes prohibitive, feature-flag
+/// `runMemoryRecall` per-chat (default off on mobile), lazy-load the embedder
+/// binary on first request, or drop Recall entirely — MemoryBook + context
+/// window already covers ~80% of cases. Marinara itself keeps Recall parallel
+/// to Lorebook + Summary as insurance against lossy compression; without it,
+/// agent-filtered "unimportant" details are unrecoverable when they later matter.
 class ChatMessageEmbeddingService {
   final EmbeddingRepo _repo;
   final EmbeddingService _embeddingService;

@@ -213,8 +213,8 @@ void main() {
         () async {
       // A locked entry cannot be modified by the agentic write-loop.
       // appendFactsToEntry must skip it and return false (the entry exists
-      // but was not updated). Mirrors Marinara's `locked` flag.
-      // See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.4.
+      // but was not updated). Mirrors Marinara's `locked` flag: user-toggled
+      // protection so the agentic write-loop cannot rewrite manually-curated facts.
       final book = MemoryBook(
         id: 'memorybook_s7',
         sessionId: 's7',

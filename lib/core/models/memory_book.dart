@@ -71,7 +71,11 @@ abstract class MemoryEntry with _$MemoryEntry {
     /// so the LLM knows not to propose updates to it. Mirrors Marinara's
     /// `locked` flag on lorebook entries. User-toggled via the MemoryBook
     /// UI to protect manually-curated facts from being rewritten by the
-    /// agent. See docs/plans/PLAN_MEMORY_CONTINUITY.md §2.4.
+    /// agent. Rationale: user-toggled protection so the agentic write-loop
+    /// cannot rewrite manually-curated facts. `appendFactsToEntry` skips it
+    /// and the parser marks it `[locked]` in the `<existing_memory_entries>`
+    /// prompt block so the LLM knows not to propose updates (Marinara `locked`
+    /// flag analog).
     @Default(false) bool locked,
 
     /// When true, this entry is excluded from the embedding pipeline —
@@ -79,8 +83,11 @@ abstract class MemoryEntry with _$MemoryEntry {
     /// memory vector search do not surface it. Useful for spoiler entries
     /// or entries that should only activate via explicit keyword match,
     /// never via semantic similarity. Mirrors Marinara's
-    /// `excludeFromVectorization` flag. See docs/plans/PLAN_MEMORY_CONTINUITY.md
-    /// §4 (out-of-scope → now in-scope).
+    /// `excludeFromVectorization` flag. Rationale: spoiler entries or entries
+    /// that should only activate via keyword are excluded from the embedding
+    /// pipeline entirely — `MemoryEmbeddingService` skips them and
+    /// `MessageRecallService` / memory vector search do not surface them
+    /// (Marinara analog).
     @Default(false) bool excludeFromVectorization,
   }) = _MemoryEntry;
 

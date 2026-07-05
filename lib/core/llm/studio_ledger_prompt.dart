@@ -7,7 +7,14 @@ import '../models/tracker.dart';
 // Builds the prompt for the Studio Ledger LLM call.
 // Pure, stateless — all inputs are passed explicitly.
 //
-// Based on PLAN_STUDIO_LEDGER_MEMORY.md §Suggested Prompt For Ledger.
+// Based on the Studio Ledger prompt contract: the ledger is an internal
+// continuity/state extractor that maintains session-canon facts for future
+// generations. It does NOT write story prose. It preserves prior state unless
+// contradicted, promotes only durable facts, distinguishes event states
+// (planned/suggested/threatened/attempted/completed/failed/cancelled/unknown),
+// and never converts threats/plans/questions/offers/pending choices into
+// completed facts. Returns <studio_ledger> + <glaze_memory_export> JSON,
+// preferring patch ops in `ops` for persistence.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Builds the non-streaming prompt sent to the Studio Ledger model.

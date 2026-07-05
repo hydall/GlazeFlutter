@@ -38,7 +38,11 @@ class MemoryDraftPlanner {
     // segment. Agentic entries (`source:'agentic'`) are written by the agent
     // write-loop and must NOT suppress a fresh manual scan over the same
     // message range — otherwise the manual planner can never re-summarize a
-    // range the agent already touched. See docs/plans/PLAN_MEMORY_CONTINUITY.md §1.
+    // range the agent already touched. Rationale (patch #1): agentic entries
+    // (source:'agentic') must NOT suppress a fresh manual scan over the same
+    // message range — otherwise the manual planner can never re-summarize a
+    // range the agent already touched. Only manual entries (source:'scan_chat'
+    // / kind:'curated') block. Pending drafts block (anti-dup-segment).
     final coveredIds = <String>{};
     for (final entry in book.entries) {
       if (entry.source == 'agentic') continue;

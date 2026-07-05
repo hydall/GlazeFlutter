@@ -957,6 +957,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                     charId: widget.charId,
                     isGenerating: widget.state.isGenerating,
                     isGeneratingImage: widget.state.isGeneratingImage,
+                    isPostGenRunning: widget.state.isPostGenRunning,
                     regenTargetId: widget.state.regenTargetId,
                     bottomInset: messageListBottom,
                     topInset: effectiveTopInset,
@@ -1227,7 +1228,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                           chatProvider(widget.charId).notifier,
                         );
                         if (widget.state.isGeneratingImage &&
-                            !widget.state.isGenerating) {
+                            !widget.state.isGenerating &&
+                            !widget.state.isPostGenRunning) {
                           notifier.abortImageGeneration();
                         } else {
                           notifier.abortGeneration();
@@ -1556,9 +1558,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                     isGenerating: widget.state.isGenerating,
                                     isGeneratingImage:
                                         widget.state.isGeneratingImage,
+                                    isPostGenRunning:
+                                        widget.state.isPostGenRunning,
                                     onStop:
                                         (widget.state.isGenerating ||
-                                            widget.state.isGeneratingImage)
+                                            widget.state.isGeneratingImage ||
+                                            widget.state.isPostGenRunning)
                                         ? () {
                                             final notifier = ref.read(
                                               chatProvider(
@@ -1568,7 +1573,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                             if (widget
                                                     .state
                                                     .isGeneratingImage &&
-                                                !widget.state.isGenerating) {
+                                                !widget.state.isGenerating &&
+                                                !widget.state.isPostGenRunning) {
                                               notifier.abortImageGeneration();
                                             } else {
                                               notifier.abortGeneration();

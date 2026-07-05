@@ -240,7 +240,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
   }) async {
     if (!ref.mounted) return;
     final current = state.value;
-    if (current == null || current.isGenerating) return;
+    if (current == null || current.isGenerating || current.isPostGenRunning) {
+      return;
+    }
     if (_isMemoryDraftActive(current)) return;
 
     final userMsg = ChatMessage(
@@ -324,11 +326,14 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
     if (!ref.mounted) return;
-    if (state.value?.isGenerating == true) {
+    if (state.value?.isGenerating == true || state.value?.isPostGenRunning == true) {
       abortGeneration();
     }
     final current = state.value;
-    if (current == null || current.session == null || current.isGenerating) {
+    if (current == null ||
+        current.session == null ||
+        current.isGenerating ||
+        current.isPostGenRunning) {
       return;
     }
     if (_isMemoryDraftActive(current)) return;
@@ -431,7 +436,10 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
   Future<void> continueMessage() async {
     if (!ref.mounted) return;
     final current = state.value;
-    if (current == null || current.session == null || current.isGenerating) {
+    if (current == null ||
+        current.session == null ||
+        current.isGenerating ||
+        current.isPostGenRunning) {
       return;
     }
     if (_isMemoryDraftActive(current)) return;
@@ -551,7 +559,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
   Future<void> rerunCleaner(String messageId) async {
     if (!ref.mounted) return;
     final current = state.value;
-    if (current == null || current.isGenerating) return;
+    if (current == null || current.isGenerating || current.isPostGenRunning) {
+      return;
+    }
     final sessionId = current.session?.id;
     if (sessionId == null) return;
     final pipeline = GenerationPipeline(

@@ -336,21 +336,27 @@ class ChatWebViewSyncDispatcher {
     required ChatWebViewWidgetFields old,
     required ChatWebViewWidgetFields current,
   }) {
-    if (current.isGenerating == bridge.isGenerating &&
+    // The JS side gets a combined "anything in flight" flag so the
+    // GenTimer / header hide-on-scroll stay active through the post-gen
+    // window (cleaner, ledger, write-loop) even though the streaming
+    // window (isGenerating) has already ended.
+    final jsGenerating =
+        current.isGenerating || current.isPostGenRunning;
+    if (jsGenerating == bridge.isGenerating &&
         current.isGeneratingImage == bridge.isGeneratingImage) {
       return;
     }
-    bridge.isGenerating = current.isGenerating;
+    bridge.isGenerating = jsGenerating;
     bridge.isGeneratingImage = current.isGeneratingImage;
     bridge.evalJs(
-      'if (window.bridge) { window.bridge.setGenerating(${current.isGenerating}); window.bridge.isGeneratingImage = ${current.isGeneratingImage}; }',
+      'if (window.bridge) { window.bridge.setGenerating($jsGenerating); window.bridge.isGeneratingImage = ${current.isGeneratingImage}; }',
     );
-    final anyGenerating = current.isGenerating || current.isGeneratingImage;
+    final anyGenerating = jsGenerating || current.isGeneratingImage;
     if (!anyGenerating && current.messages.isNotEmpty) {
       bridge.setLastMessage(
         lastUserMessageId(current.messages) ?? current.messages.last.id,
       );
-    } else if (current.isGenerating) {
+    } else if (jsGenerating) {
       bridge.setLastMessage(null);
     }
   }
@@ -446,6 +452,7 @@ class ChatWebViewWidgetFields {
     required this.sessionId,
     required this.isGenerating,
     required this.isGeneratingImage,
+    required this.isPostGenRunning,
     required this.regenTargetId,
     required this.greetingTotal,
     required this.messages,
@@ -496,6 +503,7 @@ class ChatWebViewWidgetFields {
   final String? sessionId;
   final bool isGenerating;
   final bool isGeneratingImage;
+  final bool isPostGenRunning;
   final String? regenTargetId;
   final int greetingTotal;
   final List<ChatMessage> messages;

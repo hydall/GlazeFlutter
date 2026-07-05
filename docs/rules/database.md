@@ -69,7 +69,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **51**
+Current version: **58**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -103,6 +103,13 @@ Migration history:
 - v46: added `studio_config_rows.routing_mode` TEXT DEFAULT `'verbatim'` — controls how preset blocks become agent instructions (`verbatim` = blocks concatenated дословно, no LLM call; `compiled` = legacy LLM digest). The decomposition service (`studio_decomposition_service.dart`) was restored after Phase 2: `decompose()` produces `StudioAgent`s (trackers + one final generator) that slot into `runTrackerCycle`; `routing_mode = 'compiled'` triggers the LLM builder, `'verbatim'` concatenates blocks directly.
 - v50: added `tracker_snapshots` table — per-agent-swipe immutable snapshots of all trackers (mirrors Marinara-Engine's `game_state_snapshots`). Composite PK `{sessionId, messageId, swipeId, agentSwipeId}`; columns `trackersJson` (JSON array of `Tracker.toJson`), `committed` (0/1), `createdAt` (epoch seconds). Three indexes on `(sessionId, committed, createdAt)` for fast `getLatestCommitted` lookups. The `TrackerSnapshotRepo` (299 lines) owns all access; `tracker_rows` is kept as the write-loop's internal mutable store (LLM upserts into it, then a snapshot is taken).
 - v51: data migration — aggregates `tracker_rows` per session into a baseline snapshot at the sentinel anchor `(messageId='', committed=1)`. Legacy sessions that had `tracker_rows` but no snapshots get a one-time baseline so the snapshot-first read path (Phase 3) finds data immediately. The sentinel anchor is never dropped by `deleteForMessage` (only by `deleteBySessionId` / `deleteByCharacterId`).
+- v52: dropped `pipeline_settings_rows` — pipeline settings moved to a singleton in SharedPreferences (key `pipelineSettings`), per-session overrides abandoned. SharedPreferences payload unaffected.
+- v53: added `info_blocks.agentSwipeId` INTEGER DEFAULT -1 — binds ext blocks to the blue cleaned sub-swipe so blocks launched after the POST-cleaner target the cleaned text. -1 = "no agent swipe" (legacy blocks, match by `(messageId, swipeId)` only).
+- v54: added `studio_preset_rows` table — all hardcoded Studio prompts (controller ontology, runtime envelope, final brief, cleaner/ledger/write-loop prompts, beauty shard, extractors, block router, brief parser, shard synthesizers) migrate to a DB table so the user can edit them without code changes. Seeded with the current hardcoded values via a single INSERT. See `docs/PLAN_STUDIO_PRESET_DB.md`.
+- v55: Studio config overhaul — added `studio_preset_id`, `expensive_api_config_id`, `cheap_api_config_id`, `cleaner_api_config_id`; dropped `source_preset_id`, `source_preset_hash`, `routing_mode`, `agent_studio_preset_id`, `final_studio_preset_id`, `studio_preset_overrides_json`, `builder_prompt_template`, `selected_block_ids_json`, `selected_block_ids_initialized`, `build_api_config_id`, `build_model_override`. Unbinds Studio from user presets, switches to 3 API config slots + `studioPresetId`.
+- v56: data migration — adds the `cleaner_beauty` block and updates `writeloop_system` with anti-duplicate rules in the existing `default` studio preset. Missing seed blocks are appended; `writeloop_system` is force-updated from seed. Existing user customizations to other blocks are preserved.
+- v57: data migration — moves `cleaner_beauty` to the end of the cleaner section (`order` 99) so the LLM sees styling instructions last among preset blocks (recency effect).
+- v58: data migration — `<lumiaooc>` coloring moved out of the LLM cleaner prompt into deterministic code (`wrapLumiaOocColors` in `beauty_state_parser.dart`). Force-updates the `cleaner_beauty` and `final_lumia_ooc` blocks in the existing `default` preset from the updated seed so the old lumiaooc coloring rule and the `reserved.lumia_ooc` JSON-shape field are dropped. Existing user customizations to other blocks are preserved.
 
 ---
 
