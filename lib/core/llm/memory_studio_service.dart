@@ -114,6 +114,7 @@ class MemoryStudioService {
     required String sessionId,
     CancelToken? cancelToken,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
+    void Function()? onFinalStart,
   }) async {
     final token = cancelToken ?? CancelToken();
     if (token.isCancelled) {
@@ -148,6 +149,11 @@ class MemoryStudioService {
 
     final generatorPromptResult = finalPromptResult ?? promptResult;
     final generatorPromptPayload = finalPromptPayload ?? promptPayload;
+    // Notify the caller that the final generator is about to start — before
+    // the first token arrives. Lets the UI switch from "trackers running" to
+    // "main responder generating" immediately, so a long first-byte latency
+    // does not leave the user staring at a stale tracker-phase indicator.
+    onFinalStart?.call();
     final agentResult = await _executor.runFinalGenerator(
       agent: finalAgent,
       promptResult: generatorPromptResult,

@@ -167,6 +167,14 @@ class GenerationPipeline {
             notifService: notifService,
             regenTargetId: regenTargetId,
           );
+          // Post-gen finished — flip isGenerating off (unless a newer
+          // generation has taken over).
+          if (ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId)) {
+            final after = ctx.getState().value;
+            if (after != null && after.isGenerating) {
+              ctx.setState(AsyncData(after.copyWith(isGenerating: false)));
+            }
+          }
         }
         return regenOutcome;
       }
@@ -191,13 +199,16 @@ class GenerationPipeline {
           AsyncData(
             ChatState(
               session: restoredSession,
-              isGenerating: false,
+              isGenerating: true,
               error: result.error,
             ),
           ),
         );
       } else {
-        ctx.setState(AsyncData(result));
+        // Keep isGenerating true through the post-gen window (cleaner,
+        // fact-checker, ledger, ext blocks, image tags, write-loop) so the
+        // Stop button stays available until everything settles.
+        ctx.setState(AsyncData(result.copyWith(isGenerating: true)));
         ctx.abortHandler.restorationMessage = null;
       }
       ctx.abortHandler.clearStreaming();
@@ -213,6 +224,14 @@ class GenerationPipeline {
         notifService: notifService,
         regenTargetId: regenTargetId,
       );
+      // Post-gen finished — flip isGenerating off (unless a newer generation
+      // has taken over, in which case leave its state untouched).
+      if (ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId)) {
+        final after = ctx.getState().value;
+        if (after != null && after.isGenerating) {
+          ctx.setState(AsyncData(after.copyWith(isGenerating: false)));
+        }
+      }
 
       return GenerationOutcome(
         state: ctx.getState().value ?? result,

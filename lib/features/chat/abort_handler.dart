@@ -8,6 +8,11 @@ import '../../core/services/generation_notification_service.dart';
 import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import 'chat_provider.dart' show streamingStateProvider;
+import 'state/post_cleaner_state_provider.dart'
+    show
+        PostCleanerState,
+        cleanerCancelTokenProvider,
+        postCleanerStateProvider;
 import 'state/studio_cycle_state_provider.dart';
 import 'chat_session_service.dart';
 import 'chat_state.dart';
@@ -97,6 +102,15 @@ class AbortHandler {
     _cancelToken = null;
     _imgGenCancelToken?.cancel();
     _imgGenCancelToken = null;
+    // Cancel any in-flight post-gen work (cleaner, fact-checker, ledger).
+    // The ledger shares the cleaner's CancelToken, so one cancel covers both.
+    final cleanerToken = _ref.read(cleanerCancelTokenProvider);
+    if (cleanerToken != null && !cleanerToken.isCancelled) {
+      cleanerToken.cancel('User aborted post-gen');
+    }
+    _ref.read(cleanerCancelTokenProvider.notifier).state = null;
+    _ref.read(postCleanerStateProvider.notifier).state =
+        const PostCleanerState.idle();
     clearStreaming();
     clearStudioCycle();
 

@@ -834,6 +834,7 @@ class CleanerStage {
           targetMessage: ledgerTargetMessage ?? targetMessage,
           isManualRerun: isManualRerun,
           resolvedConfig: cleanerConfig,
+          cancelToken: _cleanerCancelToken,
         ),
       );
     }

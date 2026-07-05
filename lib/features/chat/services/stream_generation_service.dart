@@ -241,13 +241,32 @@ class StreamGenerationService {
           apiConfig: apiConfig,
           sessionId: session.id,
           cancelToken: cancelToken,
+          onFinalStart: () {
+            if (_isAborted()) return;
+            final cur = _ref.read(studioCycleStateProvider);
+            if (cur.phase == StudioCyclePhase.running) {
+              finalStartTime ??= DateTime.now();
+              _ref
+                  .read(studioCycleStateProvider.notifier)
+                  .state = StudioCycleState.writingFinal(
+                sessionId: session.id,
+                totalAgents: cur.totalAgents,
+                completedAgents: cur.completedAgents,
+                failedAgents: cur.failedAgents,
+                failedAgentNames: cur.failedAgentNames,
+              );
+            }
+          },
           onFinalResponseUpdate: (text, reasoning) {
             if (_isAborted()) return;
             latestStudioText = text;
             latestStudioReasoning = reasoning;
+            // Phase transition is handled by onFinalStart above; here we only
+            // push the streaming text to the UI. Guard against the rare case
+            // where onFinalStart was not wired (e.g. older callers) so the
+            // indicator still flips once tokens arrive.
             final cur = _ref.read(studioCycleStateProvider);
             if (cur.phase == StudioCyclePhase.running) {
-              finalStartTime ??= DateTime.now();
               _ref
                   .read(studioCycleStateProvider.notifier)
                   .state = StudioCycleState.writingFinal(
