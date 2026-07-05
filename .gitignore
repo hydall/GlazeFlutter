@@ -187,6 +187,9 @@ fix_apply.txt
 fix_dry.txt
 pubget.txt
 
+# Browser-Claude chat output (patches / PR drafts, not committed as-is)
+docs/chatoutput/
+
 # OpenCode local config
 opencode.json
 opencode.jsonc
