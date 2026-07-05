@@ -119,10 +119,14 @@ $existingBlock
 $jsonSuffix''';
     }
 
+    final maxTokens = (settings.memoryBookApi.generationMaxTokens != null &&
+            settings.memoryBookApi.generationMaxTokens! > 0)
+        ? settings.memoryBookApi.generationMaxTokens!
+        : 25000;
     final outcome = await _llm.callOnceWithLog(
       config: config,
       prompt: prompt,
-      maxTokens: 1000,
+      maxTokens: maxTokens,
       temperature: 0.2,
       timeoutMs: settings.memoryPipeline.auxTimeoutMs,
       cancelToken: cancelToken,
@@ -149,7 +153,7 @@ $jsonSuffix''';
       final retryOutcome = await _llm.callOnceWithLog(
         config: config,
         prompt: retryPrompt,
-        maxTokens: 1000,
+        maxTokens: maxTokens,
         temperature: 0.2,
         timeoutMs: settings.memoryPipeline.auxTimeoutMs,
         cancelToken: cancelToken,

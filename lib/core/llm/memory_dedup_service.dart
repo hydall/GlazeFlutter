@@ -154,10 +154,14 @@ class MemoryDedupService {
       }
 
       final prompt = _buildBatchPrompt(candidatePairs);
+      final maxTokens = (settings.memoryBookApi.generationMaxTokens != null &&
+              settings.memoryBookApi.generationMaxTokens! > 0)
+          ? settings.memoryBookApi.generationMaxTokens!
+          : 25000;
       final outcome = await _llm.callOnceWithLog(
         config: config,
         prompt: prompt,
-        maxTokens: 2000,
+        maxTokens: maxTokens,
         temperature: 0.1,
         timeoutMs: settings.memoryPipeline.auxTimeoutMs,
         cancelToken: cancelToken,

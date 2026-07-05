@@ -65,7 +65,7 @@ class MemoryDraftGenerator {
 
     final maxTokens = (pipeline.memoryBookApi.generationMaxTokens != null && pipeline.memoryBookApi.generationMaxTokens! > 0)
         ? pipeline.memoryBookApi.generationMaxTokens!
-        : 2000;
+        : 25000;
     final temperature = pipeline.memoryBookApi.generationTemperature ?? 0.4;
 
     final completer = Completer<String>();
