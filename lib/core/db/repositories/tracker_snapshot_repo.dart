@@ -44,7 +44,10 @@ class TrackerSnapshotRepo {
             swipeId: snapshot.swipeId,
             agentSwipeId: snapshot.agentSwipeId,
             trackersJson: jsonEncode(
-              snapshot.trackers.map((t) => t.toJson()).toList(),
+              snapshot.trackers
+                  .where((t) => t.scope != 'ledger_diagnostic')
+                  .map((t) => t.toJson())
+                  .toList(),
             ),
             committed: snapshot.committed ? 1 : 0,
             createdAt: now,
