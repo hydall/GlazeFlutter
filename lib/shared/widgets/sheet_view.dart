@@ -131,6 +131,13 @@ class _SheetViewState extends ConsumerState<SheetView>
   final _headerKey = GlobalKey();
   double _headerH = 0;
 
+  /// Wraps the scrollable body so its Element (and any focused TextField's
+  /// FocusNode) survives the [SoftEdgeBlur] wrapper being added/removed when
+  /// [_interacting] toggles. Without this, tapping a field in a collapsed sheet
+  /// starts the keyboard-open snap animation, which drops SoftEdgeBlur, rebuilds
+  /// the subtree from scratch, and dismisses the keyboard before it opens (iOS).
+  final _bodyKey = GlobalKey();
+
   double _dragStartY = 0;
   double _dragStartH = 0;
 
@@ -645,6 +652,15 @@ class _SheetViewState extends ConsumerState<SheetView>
     double bottomInset,
     bool isKeyboardOpen,
   ) {
+    // Keep the scroll body under a stable GlobalKey so that when the
+    // SoftEdgeBlur wrapper is added/removed (on _interacting toggles) Flutter
+    // reparents this Element instead of rebuilding it. That preserves a focused
+    // TextField's FocusNode — otherwise the keyboard-open snap animation would
+    // rebuild the subtree and dismiss the keyboard before it opens (iOS).
+    final body = KeyedSubtree(
+      key: _bodyKey,
+      child: _buildScrollConfig(context, topPad, bottomInset, isKeyboardOpen),
+    );
     return (_hasHeader &&
             !_interacting &&
             !(ref.watch(appSettingsProvider).value?.batterySaver ?? false))
@@ -664,14 +680,9 @@ class _SheetViewState extends ConsumerState<SheetView>
                 ],
               ),
             ],
-            child: _buildScrollConfig(
-              context,
-              topPad,
-              bottomInset,
-              isKeyboardOpen,
-            ),
+            child: body,
           )
-        : _buildScrollConfig(context, topPad, bottomInset, isKeyboardOpen);
+        : body;
   }
 
   Widget _buildScrollConfig(
