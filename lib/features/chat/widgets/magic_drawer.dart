@@ -272,18 +272,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           ),
         )
         .toList();
-    if (_editing && _canAddMore) {
-      list.add(
-        MagicDrawerCardItem(
-          def: MagicDrawerItemDef(
-            id: 'add-btn',
-            label: 'btn_add'.tr(),
-            icon: Icons.add,
-          ),
-          isAddButton: true,
-        ),
-      );
-    }
     return list;
   }
 
@@ -828,12 +816,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
                 runSpacing: 8,
                 children: List.generate(items.length, (index) {
                   final item = items[index];
-                  if (item.isAddButton) {
-                    return SizedBox(
-                      width: itemWidth,
-                      child: AddMagicCard(onTap: _showAddItemSheet),
-                    );
-                  }
                   final card = MagicCard(
                     item: item,
                     editing: _editing,
@@ -905,6 +887,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       header: MagicDrawerHeader(
         editing: _editing,
         onToggleEditing: _toggleEditing,
+        onAdd: _canAddMore ? _showAddItemSheet : null,
       ),
       content: scrollable,
     );

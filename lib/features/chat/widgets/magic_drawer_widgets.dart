@@ -8,10 +8,15 @@ class MagicDrawerHeader extends StatelessWidget {
   final bool editing;
   final VoidCallback onToggleEditing;
 
+  /// Opens the "Add Action" sheet. Null when every item is already placed,
+  /// in which case the button is hidden.
+  final VoidCallback? onAdd;
+
   const MagicDrawerHeader({
     super.key,
     required this.editing,
     required this.onToggleEditing,
+    this.onAdd,
   });
 
   @override
@@ -31,6 +36,23 @@ class MagicDrawerHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (onAdd != null) ...[
+            GestureDetector(
+              onTap: onAdd,
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Icon(Icons.add, size: 18, color: context.cs.onSurface),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           GestureDetector(
             onTap: onToggleEditing,
             child: AnimatedContainer(
