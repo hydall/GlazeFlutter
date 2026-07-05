@@ -17,6 +17,7 @@ import '../catalog/widgets/janitor_extract_sheet.dart';
 import '../catalog/widgets/janitor_login_sheet.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
+import '../dev_chat/dev_chat_provider.dart';
 import 'update_dialog.dart';
 import '../../core/services/update_check_service.dart';
 
@@ -39,6 +40,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
   Widget build(BuildContext context) {
     final navHeight = ref.watch(navHeightProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0;
+    final devChatHidden = ref.watch(devChatHiddenProvider).value ?? false;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -49,9 +51,36 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
               bottom: navHeight + 20,
             ),
             children: [
+                if (!devChatHidden)
+                  MenuGroup(
+                    header: 'menu_dev_chat_header'.tr(),
+                    items: [
+                      MenuItem(
+                        icon: Icons.support_agent_outlined,
+                        label: 'menu_dev_chat'.tr(),
+                        subtitle: 'menu_dev_chat_hint'.tr(),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.visibility_off_outlined),
+                          tooltip: 'menu_dev_chat_hide'.tr(),
+                          onPressed: () => ref
+                              .read(devChatHiddenProvider.notifier)
+                              .set(true),
+                        ),
+                        onTap: () => context.push('/dev-chat'),
+                      ),
+                    ],
+                  ),
                 MenuGroup(
                   header: 'section_settings'.tr(),
                   items: [
+                    if (devChatHidden)
+                      MenuSwitchItem(
+                        label: 'menu_dev_chat_show'.tr(),
+                        value: false,
+                        onChanged: (_) => ref
+                            .read(devChatHiddenProvider.notifier)
+                            .set(false),
+                      ),
                     MenuItem(
                       icon: Icons.settings_outlined,
                       label: 'menu_app_settings'.tr(),
