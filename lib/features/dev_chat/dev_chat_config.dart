@@ -21,7 +21,7 @@ class DevChatConfig {
   static bool get isConfigured => baseUrl.isNotEmpty;
 
   /// How often the screen polls for developer replies while it is open.
-  static const Duration pollInterval = Duration(seconds: 4);
+  static const Duration pollInterval = Duration(seconds: 2);
 
   /// Safety margin subtracted from the [since] cursor to account for
   /// Cloudflare KV eventual consistency and concurrent webhook writes.

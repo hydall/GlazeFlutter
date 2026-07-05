@@ -99,9 +99,9 @@ class DevChatController extends AsyncNotifier<DevChatState> {
       }
       final merged = [...current.messages, ...incoming]
         ..sort((a, b) => a.ts.compareTo(b.ts));
+      state = AsyncData(current.copyWith(messages: merged));
       await _store.saveMessages(merged);
       await _store.setSince(result.now);
-      state = AsyncData(current.copyWith(messages: merged));
     } catch (_) {
       // Transient network error — keep the cursor, retry on the next tick.
     }
@@ -131,8 +131,8 @@ class DevChatController extends AsyncNotifier<DevChatState> {
     } catch (_) {
       messages = _mark(messages, msg.id, DevMsgStatus.failed);
     }
-    await _store.saveMessages(messages);
     state = AsyncData((state.value ?? current).copyWith(messages: messages));
+    await _store.saveMessages(messages);
   }
 
   /// Retries a previously failed message by resending its text.
