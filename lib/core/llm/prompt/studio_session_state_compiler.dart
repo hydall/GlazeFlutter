@@ -8,10 +8,12 @@ String? kCompileStudioSessionStateForTest(
   List<Tracker> trackers,
   String sessionId, {
   String latestUserText = '',
+  String latestAssistantText = '',
 }) => compileStudioSessionState(
   trackers,
   sessionId,
   latestUserText: latestUserText,
+  latestAssistantText: latestAssistantText,
 );
 
 /// Compile ledger tracker rows into a `<studio_session_state>` system block.
@@ -46,6 +48,7 @@ String? compileStudioSessionState(
   List<Tracker> trackers,
   String sessionId, {
   String latestUserText = '',
+  String latestAssistantText = '',
 }) {
   // Build a name→value map with override support. Keys:
   //   npc:Name.field, relationship:A:B.field, arc:id.field, world:key, scene.key
@@ -121,23 +124,73 @@ String? compileStudioSessionState(
   }
 
   // ── Mentioned-entity filtering (plan §Prompt Injection Test 8) ──────────
-  // When latestUserText is non-empty, filter npc/rel/arc to entities whose
-  // name/title/id is mentioned. World, scene, and arcs with do_not_reopen
-  // are always included regardless (card-baseline guard).
-  final lowerCtx = latestUserText.toLowerCase();
-  final filterByMention = lowerCtx.isNotEmpty;
+  // When latestUserText or latestAssistantText is non-empty, filter npc/rel/
+  // arc to entities whose name/title/id is mentioned in either message.
+  // World, scene, and arcs with do_not_reopen are always included regardless
+  // (card-baseline guard).
+  //
+  // Additionally, any NPC listed in scene.present_entities is always included
+  // — they are physically in the scene and their canon state is needed even
+  // when the user referred to them indirectly ("белобрысая нетраннерша").
+  final combinedText = '$latestUserText\n$latestAssistantText';
+  final lowerCtx = combinedText.toLowerCase();
+  final filterByMention = combinedText.trim().isNotEmpty;
+
+  // Build a set of present-entity names for the bypass.
+  final presentNames = <String>{};
+  if (presentEntities != null) {
+    for (final n in presentEntities.split(RegExp(r'[;,\n]+'))) {
+      final trimmed = n.trim().toLowerCase();
+      if (trimmed.isNotEmpty) presentNames.add(trimmed);
+    }
+  }
+
+  // Build a name → location-keywords map from npc:Name.location tracker
+  // values. This lets the filter match when the user mentions a location
+  // ("захожу в посмертие") and an NPC is canonically at that location
+  // (npc:Клэр.location: Посмертие → "посмертие" in context → Клэр included).
+  //
+  // Only the `location` field is used — other canon fields (mood, relationship)
+  // could create false positives (e.g. an NPC at "home" whose mood field
+  // coincidentally contains a word from the user's message).
+  final npcLocationKeywords = <String, List<String>>{};
+  for (final entry in npcMap.entries) {
+    final loc = entry.value['location'];
+    if (loc == null || loc.trim().isEmpty) continue;
+    final keywords = loc
+        .toLowerCase()
+        .split(RegExp(r'[\s,;]+'))
+        .where((w) => w.length >= 4)
+        .toList();
+    if (keywords.isNotEmpty) {
+      npcLocationKeywords[entry.key.toLowerCase()] = keywords;
+    }
+  }
 
   // Helper: true when [name] tokens appear in the lower-cased context.
   bool mentioned(String name) {
     if (!filterByMention) return true;
     final lower = name.toLowerCase();
+    // Present-entity bypass: always include NPCs physically in the scene.
+    if (presentNames.contains(lower)) return true;
     // Direct substring match.
     if (lowerCtx.contains(lower)) return true;
     // Partial match: any word ≥ 4 chars of the name appears.
-    return lower
+    if (lower
         .split(RegExp(r'[\s:]+'))
         .where((w) => w.length >= 4)
-        .any(lowerCtx.contains);
+        .any(lowerCtx.contains)) {
+      return true;
+    }
+    // Location-keyword match: NPC is canonically at a location whose name
+    // appears in the context. Closes the "зашёл в локацию" gap — the user
+    // enters a location and all NPCs canonically present there get their
+    // canon injected without an extra LLM call.
+    final locKeywords = npcLocationKeywords[lower];
+    if (locKeywords != null && locKeywords.any(lowerCtx.contains)) {
+      return true;
+    }
+    return false;
   }
 
   final filteredNpc = filterByMention

@@ -203,7 +203,7 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
             sessionId,
             '_ledger_diag:studio_ledger',
             'turn=${target.id} • manual rerun, ${result.status} '
-                '(ops=${result.opsApplied}, facts=${result.durableFactsWritten})'
+                '(ops=${result.opsApplied})'
                 '${result.error == null ? '' : ': ${result.error}'}',
             scope: 'ledger_diagnostic',
             provenance:
@@ -216,7 +216,7 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
         GlazeToast.show(
           context,
           result.status == 'ok'
-              ? 'Studio Ledger rerun ok: ops=${result.opsApplied}, facts=${result.durableFactsWritten}'
+              ? 'Studio Ledger rerun ok: ops=${result.opsApplied}'
               : 'Studio Ledger rerun failed: ${result.error ?? result.status}',
           isError: result.status != 'ok',
           duration: 4000,
@@ -268,7 +268,7 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
             totalElapsedMs: result.elapsedMs,
             model: result.model,
             summary: status.isOk
-                ? 'manual rerun: ops=${result.opsApplied}, facts=${result.durableFactsWritten}'
+                ? 'manual rerun: ops=${result.opsApplied}'
                 : result.error ?? result.status,
             startedAtMs: result.attempts.isNotEmpty
                 ? result.attempts.first.startedAtMs

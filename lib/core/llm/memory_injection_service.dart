@@ -181,7 +181,12 @@ class MemoryInjectionService {
     }
 
     final activeEntries = book.entries
-        .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
+        .where(
+          (e) =>
+              e.status == 'active' &&
+              e.content.trim().isNotEmpty &&
+              e.source != 'studio_ledger',
+        )
         .toList();
     if (activeEntries.isEmpty) return finish(const MemorySelection());
 

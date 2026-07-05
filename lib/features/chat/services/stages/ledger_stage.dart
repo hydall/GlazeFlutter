@@ -25,9 +25,9 @@ import 'stage_context.dart';
 /// Stage 7: Studio Ledger trigger.
 ///
 /// Fire-and-forget — does not block generation or user interaction.
-/// Extracts entity/relationship/arc/world state and durable MemoryBook facts
-/// from the final assistant response and persists them via
-/// [StudioLedgerService]. Only runs when Studio is enabled.
+/// Extracts entity/relationship/arc/world state from the final assistant
+/// response and persists it to tracker_rows via [StudioLedgerService].
+/// Only runs when Studio is enabled.
 class LedgerStage {
   final StageContext ctx;
 
@@ -212,7 +212,7 @@ class LedgerStage {
         targetMessage: targetMessage,
         reason:
             'ran, ${result.status} '
-            '(ops=${result.opsApplied}, facts=${result.durableFactsWritten})'
+            '(ops=${result.opsApplied})'
             '${result.error == null ? '' : ': ${result.error}'}',
       );
 
@@ -224,7 +224,7 @@ class LedgerStage {
 
       if (ctx.ref.mounted) {
         final detail =
-            'Ledger ${result.status} (ops=${result.opsApplied}, facts=${result.durableFactsWritten})';
+            'Ledger ${result.status} (ops=${result.opsApplied})';
         ctx.ref.read(postGenStatusProvider.notifier).state =
             result.status == 'ok'
                 ? PostGenStatusState.done(
@@ -251,7 +251,6 @@ class LedgerStage {
       debugPrint(
         '[StudioLedger] result session=$sessionId status=${result.status} '
         'opsApplied=${result.opsApplied} '
-        'factsWritten=${result.durableFactsWritten} '
         'elapsedMs=${result.elapsedMs} '
         'error=${result.error ?? "none"}',
       );
@@ -368,7 +367,7 @@ class LedgerStage {
             totalElapsedMs: result.elapsedMs,
             model: result.model,
             summary: status.isOk
-                ? 'ops=${result.opsApplied}, facts=${result.durableFactsWritten}'
+                ? 'ops=${result.opsApplied}'
                 : result.error ?? result.status,
             startedAtMs: startedAt,
             finishedAtMs: finishedAt,
