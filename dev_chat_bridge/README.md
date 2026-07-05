@@ -10,6 +10,11 @@ real name, id, and avatar back to the app.
 
 ## One-time setup
 
+> **Fast path:** do the Telegram side (steps 1–2 below) once, then run
+> `powershell -ExecutionPolicy Bypass -File deploy.ps1` from this folder — it
+> automates steps 3–4 (KV, secrets, deploy, webhook) and writes
+> `dart_defines.json` for the app. The manual steps below are the reference.
+
 ### 1. Create (or reuse) the bot
 1. New bot: [@BotFather](https://t.me/BotFather) → `/newbot` → copy the **token**.
    **Reusing an existing send-only bot** (e.g. one that only posts workflow
