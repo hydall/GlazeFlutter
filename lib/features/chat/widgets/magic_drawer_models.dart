@@ -7,15 +7,21 @@ import '../../../core/models/lorebook.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/models/preset.dart';
 
+/// Logical grouping of drawer items. Used only for sectioning the
+/// "Add Action" sheet - the grid itself stays freely orderable.
+enum MagicDrawerCategory { session, library, config, tools }
+
 class MagicDrawerItemDef {
   final String id;
   final String label;
   final IconData icon;
+  final MagicDrawerCategory category;
 
   const MagicDrawerItemDef({
     required this.id,
     required this.label,
     required this.icon,
+    required this.category,
   });
 }
 

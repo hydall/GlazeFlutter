@@ -87,79 +87,109 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       id: 'context',
       label: 'label_tokenizer'.tr(),
       icon: Icons.segment,
+      category: MagicDrawerCategory.tools,
     ),
     MagicDrawerItemDef(
       id: 'summary',
       label: 'summary_title'.tr(),
       icon: Icons.subject,
+      category: MagicDrawerCategory.session,
     ),
     MagicDrawerItemDef(
       id: 'sessions',
       label: 'history_title'.tr(),
       icon: Icons.history,
+      category: MagicDrawerCategory.session,
     ),
     MagicDrawerItemDef(
       id: 'char-card',
       label: 'menu_characters'.tr(),
       icon: Icons.account_box,
+      category: MagicDrawerCategory.library,
     ),
     MagicDrawerItemDef(
       id: 'lorebooks',
       label: 'label_lorebooks'.tr(),
       icon: Icons.library_books,
+      category: MagicDrawerCategory.library,
     ),
     MagicDrawerItemDef(
       id: 'memory-books',
       label: 'magic_memory_books'.tr(),
       icon: Icons.add_box,
+      category: MagicDrawerCategory.session,
     ),
-    MagicDrawerItemDef(id: 'regex', label: 'menu_regex'.tr(), icon: Icons.code),
-    MagicDrawerItemDef(id: 'api', label: 'tab_api'.tr(), icon: Icons.cloud),
+    MagicDrawerItemDef(
+      id: 'regex',
+      label: 'menu_regex'.tr(),
+      icon: Icons.code,
+      category: MagicDrawerCategory.config,
+    ),
+    MagicDrawerItemDef(
+      id: 'api',
+      label: 'tab_api'.tr(),
+      icon: Icons.cloud,
+      category: MagicDrawerCategory.config,
+    ),
     MagicDrawerItemDef(
       id: 'presets',
       label: 'tab_presets'.tr(),
       icon: Icons.description,
+      category: MagicDrawerCategory.config,
     ),
     MagicDrawerItemDef(
       id: 'preview',
       label: 'magic_request_preview'.tr(),
       icon: Icons.visibility,
+      category: MagicDrawerCategory.tools,
     ),
-    MagicDrawerItemDef(id: 'coverage', label: 'Coverage', icon: Icons.search),
+    MagicDrawerItemDef(
+      id: 'coverage',
+      label: 'Coverage',
+      icon: Icons.search,
+      category: MagicDrawerCategory.tools,
+    ),
     MagicDrawerItemDef(
       id: 'personas',
       label: 'menu_personas'.tr(),
       icon: Icons.manage_accounts,
+      category: MagicDrawerCategory.library,
     ),
     MagicDrawerItemDef(
       id: 'image-gen',
       label: 'imggen_title'.tr(),
       icon: Icons.image,
+      category: MagicDrawerCategory.tools,
     ),
     MagicDrawerItemDef(
       id: 'authors-note',
       label: 'magic_authors_notes'.tr(),
       icon: Icons.edit_note,
+      category: MagicDrawerCategory.session,
     ),
     MagicDrawerItemDef(
       id: 'glossary',
       label: 'menu_glossary'.tr(),
       icon: Icons.menu_book,
+      category: MagicDrawerCategory.library,
     ),
     MagicDrawerItemDef(
       id: 'ext-blocks',
       label: 'Ext Blocks',
       icon: Icons.extension_outlined,
+      category: MagicDrawerCategory.config,
     ),
     MagicDrawerItemDef(
       id: 'studio',
       label: 'menu_studio'.tr(),
       icon: Icons.movie_filter_outlined,
+      category: MagicDrawerCategory.tools,
     ),
     MagicDrawerItemDef(
       id: 'agent-ops',
       label: 'Agentic Ops',
       icon: Icons.smart_toy_outlined,
+      category: MagicDrawerCategory.tools,
     ),
   ];
 
@@ -385,15 +415,10 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     await GlazeBottomSheet.show<MagicDrawerItemDef>(
       context,
       title: 'Add Action',
-      items: available
-          .map(
-            (item) => BottomSheetItem(
-              icon: item.icon,
-              label: item.label,
-              onTap: () => Navigator.of(context).pop(item),
-            ),
-          )
-          .toList(),
+      child: MagicDrawerAddList(
+        items: available,
+        onSelect: (item) => Navigator.of(context).pop(item),
+      ),
     ).then((selected) async {
       if (selected == null || !mounted) return;
       setState(() {

@@ -296,3 +296,87 @@ class AddMagicCard extends StatelessWidget {
     );
   }
 }
+
+/// Sectioned list of available (hidden) drawer items for the
+/// "Add Action" sheet. Grouping lives only here - the grid itself
+/// stays freely orderable by the user.
+class MagicDrawerAddList extends StatelessWidget {
+  final List<MagicDrawerItemDef> items;
+  final ValueChanged<MagicDrawerItemDef> onSelect;
+
+  const MagicDrawerAddList({
+    super.key,
+    required this.items,
+    required this.onSelect,
+  });
+
+  // TODO(l10n): localize section labels alongside 'Coverage'/'Ext Blocks'.
+  static String _categoryLabel(MagicDrawerCategory category) =>
+      switch (category) {
+        MagicDrawerCategory.session => 'Session',
+        MagicDrawerCategory.library => 'Library',
+        MagicDrawerCategory.config => 'Configuration',
+        MagicDrawerCategory.tools => 'Diagnostics & Tools',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[];
+    for (final category in MagicDrawerCategory.values) {
+      final sectionItems =
+          items.where((item) => item.category == category).toList();
+      if (sectionItems.isEmpty) continue;
+      children.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+          child: Text(
+            _categoryLabel(category).toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: context.cs.onSurfaceVariant.withValues(alpha: 0.8),
+            ),
+          ),
+        ),
+      );
+      children.addAll(
+        sectionItems.map(
+          (item) => InkWell(
+            onTap: () => onSelect(item),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 12,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    item.icon,
+                    size: 20,
+                    color: context.cs.onSurface.withValues(alpha: 0.85),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      item.label,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: context.cs.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+  }
+}
