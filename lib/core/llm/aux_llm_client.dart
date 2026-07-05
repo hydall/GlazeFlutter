@@ -367,6 +367,19 @@ class AuxLlmClient {
         onError: (error) {
           guard.dispose();
           if (!completer.isCompleted) {
+            // Flush any partially-accumulated text to the chunk callback so
+            // callers that rely on the onChunk side-channel (e.g. the cleaner's
+            // _lastStreamedText partial-save) can recover content that arrived
+            // before the connection broke. Without this, a mid-stream close
+            // after real content deltas would lose them silently.
+            final partial = accumulated.toString();
+            if (partial.isNotEmpty && onChunk != null) {
+              try {
+                onChunk(partial);
+              } catch (_) {
+                // Callback errors must not mask the real transport error.
+              }
+            }
             completer.completeError(error);
           }
         },

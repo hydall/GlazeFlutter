@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -51,11 +52,14 @@ class AuxRetryPolicy {
   });
 
   /// Whether an exception should trigger a retry (given the attempt number).
-  /// Retries 5xx server errors and timeouts only; 4xx and other errors fail
+  /// Retries 5xx server errors, timeouts, and transient connection errors
+  /// (connection closed mid-stream, socket reset); 4xx and other errors fail
   /// fast.
   bool shouldRetry(Object error, int attempt) {
     if (attempt >= maxAttempts - 1) return false;
     if (error is TimeoutException) return retryOnTimeout;
+    if (error is HttpException) return true; // connection closed mid-stream
+    if (error is SocketException) return true; // TCP reset / refused
     if (error is DioException) {
       final code = error.response?.statusCode ?? 0;
       if (code >= 500 && code < 600) return true;
@@ -190,6 +194,9 @@ class AuxRetryRunner {
 
   static AgentOperationStatus _statusFor(Object error) {
     if (error is TimeoutException) return AgentOperationStatus.timeout;
+    if (error is HttpException || error is SocketException) {
+      return AgentOperationStatus.error;
+    }
     if (error is DioException) {
       if (CancelToken.isCancel(error)) return AgentOperationStatus.aborted;
       final code = error.response?.statusCode ?? 0;
@@ -204,6 +211,10 @@ class AuxRetryRunner {
     String statusLabel = 'error';
     if (e is TimeoutException) {
       statusLabel = 'timeout';
+    } else if (e is HttpException) {
+      statusLabel = 'connection_closed';
+    } else if (e is SocketException) {
+      statusLabel = 'socket_error';
     } else if (e is DioException) {
       code = e.response?.statusCode ?? 0;
       if (CancelToken.isCancel(e)) {
