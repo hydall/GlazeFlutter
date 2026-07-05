@@ -252,51 +252,6 @@ class _MagicCardState extends State<MagicCard> {
   }
 }
 
-class AddMagicCard extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const AddMagicCard({super.key, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-              decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.add,
-                  size: 20,
-                  color: context.cs.onSurface.withValues(alpha: 0.6),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Add',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: context.cs.onSurface,
-                      height: 1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ),
-    );
-  }
-}
-
 /// Sectioned list of available (hidden) drawer items for the
 /// "Add Action" sheet. Grouping lives only here - the grid itself
 /// stays freely orderable by the user.
@@ -377,6 +332,51 @@ class MagicDrawerAddList extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: children,
+    );
+  }
+}
+
+class AddMagicCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const AddMagicCard({super.key, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.add,
+                  size: 20,
+                  color: context.cs.onSurface.withValues(alpha: 0.6),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Add',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: context.cs.onSurface,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ),
     );
   }
 }

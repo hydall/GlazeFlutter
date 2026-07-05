@@ -532,3 +532,54 @@ class _BarChartPainter extends CustomPainter {
     return false;
   }
 }
+
+/// Compact action row shown at the top of the Tokenizer body when it is
+/// embedded inside the Prompt Inspector (replaces the SheetView action slot).
+class TokenizerEmbeddedToolbar extends StatelessWidget {
+  final bool showSettings;
+  final VoidCallback onToggleSettings;
+  final VoidCallback? onRefresh;
+
+  const TokenizerEmbeddedToolbar({
+    required this.showSettings,
+    required this.onToggleSettings,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+      child: Row(
+        children: [
+          Text(
+            showSettings ? 'Context Settings' : 'Context',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+              showSettings ? Icons.close : Icons.tune,
+              size: 20,
+              color: showSettings ? context.cs.primary : context.cs.onSurface,
+            ),
+            tooltip: showSettings ? 'Close settings' : 'Context Settings',
+            onPressed: onToggleSettings,
+          ),
+          if (!showSettings)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.refresh, size: 20),
+              tooltip: 'Recalculate',
+              onPressed: onRefresh,
+            ),
+        ],
+      ),
+    );
+  }
+}

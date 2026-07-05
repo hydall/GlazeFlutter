@@ -17,7 +17,16 @@ import 'tokenizer_widgets.dart';
 
 class TokenizerSheet extends ConsumerStatefulWidget {
   final String charId;
-  const TokenizerSheet({super.key, required this.charId});
+
+  /// When true, render only the body content (no SheetView chrome) for
+  /// embedding inside the Prompt Inspector's tabbed shell.
+  final bool embedded;
+
+  const TokenizerSheet({
+    super.key,
+    required this.charId,
+    this.embedded = false,
+  });
 
   @override
   ConsumerState<TokenizerSheet> createState() => _TokenizerSheetState();
@@ -188,6 +197,41 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     final historyFill = bd?.historyFillPercent ?? 0.0;
     final nearLimit = historyFill >= _historyFillThreshold;
 
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : bd == null
+        ? Center(
+            child: Text(
+              'No data',
+              style: TextStyle(color: context.cs.onSurfaceVariant),
+            ),
+          )
+        : _showSettings
+        ? _buildSettings()
+        : _buildMainView(
+            bd,
+            contextSize,
+            used,
+            remaining,
+            usedPercent,
+            historyFill,
+            nearLimit,
+          );
+
+    if (widget.embedded) {
+      return Column(
+        children: [
+          TokenizerEmbeddedToolbar(
+            showSettings: _showSettings,
+            onToggleSettings: () =>
+                setState(() => _showSettings = !_showSettings),
+            onRefresh: _loading ? null : _calculate,
+          ),
+          Expanded(child: body),
+        ],
+      );
+    }
+
     return SheetView(
       title: _showSettings ? 'Context Settings' : 'Context',
       showBack: true,
@@ -204,26 +248,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
                 onPressed: _loading ? () {} : _calculate,
               ),
             ],
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : bd == null
-          ? Center(
-              child: Text(
-                'No data',
-                style: TextStyle(color: context.cs.onSurfaceVariant),
-              ),
-            )
-          : _showSettings
-          ? _buildSettings()
-          : _buildMainView(
-              bd,
-              contextSize,
-              used,
-              remaining,
-              usedPercent,
-              historyFill,
-              nearLimit,
-            ),
+      body: body,
     );
   }
 
@@ -408,12 +433,3 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   }
 }
 
-void showTokenizerSheet(BuildContext context, String charId) {
-  showModalBottomSheet<void>(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => TokenizerSheet(charId: charId),
-  );
-}

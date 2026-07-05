@@ -12,6 +12,20 @@ class MagicDrawerLayoutService {
 
   MagicDrawerLayoutService(this._ref);
 
+  /// Legacy item ids merged into the unified Prompt Inspector. Saved layouts
+  /// from before the merge still reference these; map them to 'inspector'
+  /// (deduped) so the card survives the upgrade instead of vanishing.
+  static const _legacyToInspector = {'context', 'preview', 'coverage'};
+
+  List<String> _migrateIds(List<String> ids) {
+    final out = <String>[];
+    for (final id in ids) {
+      final mapped = _legacyToInspector.contains(id) ? 'inspector' : id;
+      if (!out.contains(mapped)) out.add(mapped);
+    }
+    return out;
+  }
+
   Future<({List<String> itemIds, Set<String> deletedIds})> loadLayout(
     List<MagicDrawerItemDef> allItems,
   ) async {
@@ -19,17 +33,27 @@ class MagicDrawerLayoutService {
     final savedOrder = prefs.getStringList(itemsKey);
     final savedDeleted = prefs.getStringList(deletedItemsKey) ?? const [];
 
+    // Inspector is treated as deleted only if every legacy id was deleted.
+    final legacyDeleted = savedDeleted
+        .where((id) => _legacyToInspector.contains(id))
+        .toSet();
+    final allLegacyDeleted =
+        legacyDeleted.length == _legacyToInspector.length;
+
     final deletedIds = savedDeleted
+        .where((id) => !_legacyToInspector.contains(id))
         .where((id) => allItems.any((item) => item.id == id))
         .toSet();
+    if (allLegacyDeleted) deletedIds.add('inspector');
 
     final defaultIds = allItems.map((item) => item.id).toList();
     if (savedOrder == null || savedOrder.isEmpty) {
       return (itemIds: List<String>.from(defaultIds), deletedIds: deletedIds);
     }
 
+    final migrated = _migrateIds(savedOrder);
     final filteredSaved =
-        savedOrder.where((id) => allItems.any((item) => item.id == id)).toList();
+        migrated.where((id) => allItems.any((item) => item.id == id)).toList();
     final missing = defaultIds
         .where((id) => !filteredSaved.contains(id) && !deletedIds.contains(id))
         .toList();

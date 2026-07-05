@@ -35,17 +35,15 @@ import '../../settings/api_settings_screen.dart';
 import 'authors_note_sheet.dart';
 import 'agentic_operations_log_dialog.dart';
 import 'drawer_panel_scaffold.dart';
-import 'lorebook_coverage_sheet.dart';
 import 'magic_drawer_models.dart';
 import '../services/magic_drawer_layout_service.dart';
 import '../services/magic_drawer_stats_service.dart';
 import 'magic_drawer_widgets.dart';
 import 'memory_books_sheet.dart';
 import 'studio_settings_sheet.dart';
-import 'prompt_preview_screen.dart';
+import 'prompt_inspector_sheet.dart';
 import 'summary_sheet.dart';
 import '../state/token_breakdown_cache.dart';
-import 'tokenizer_sheet.dart';
 import '../../glossary/glossary_sheet.dart';
 import '../../extensions/models/extension_preset.dart';
 import '../../extensions/models/extensions_settings.dart';
@@ -84,9 +82,9 @@ class MagicDrawerPanel extends ConsumerStatefulWidget {
 class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   static final _allItems = <MagicDrawerItemDef>[
     MagicDrawerItemDef(
-      id: 'context',
-      label: 'label_tokenizer'.tr(),
-      icon: Icons.segment,
+      id: 'inspector',
+      label: 'Prompt Inspector',
+      icon: Icons.travel_explore,
       category: MagicDrawerCategory.tools,
     ),
     MagicDrawerItemDef(
@@ -136,18 +134,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       label: 'tab_presets'.tr(),
       icon: Icons.description,
       category: MagicDrawerCategory.config,
-    ),
-    MagicDrawerItemDef(
-      id: 'preview',
-      label: 'magic_request_preview'.tr(),
-      icon: Icons.visibility,
-      category: MagicDrawerCategory.tools,
-    ),
-    MagicDrawerItemDef(
-      id: 'coverage',
-      label: 'Coverage',
-      icon: Icons.search,
-      category: MagicDrawerCategory.tools,
     ),
     MagicDrawerItemDef(
       id: 'personas',
@@ -315,7 +301,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     List<ExtensionPreset> extPresets,
   ) {
     return switch (id) {
-      'context' =>
+      'inspector' =>
         _stats.promptTokens > 0 && _stats.contextSize > 0
             ? '${_stats.promptTokens}/${_stats.contextSize} tokens'
             : _loadingTokens && _stats.approximateHistoryTokens > 0
@@ -345,18 +331,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             : _stats.presetTokens > 0
             ? '${_stats.activePreset!.name} • ${_stats.presetTokens} tokens'
             : _stats.activePreset!.name,
-      'preview' =>
-        _stats.promptTokens > 0
-            ? '${_stats.promptTokens} tokens'
-            : _loadingTokens && _stats.approximateHistoryTokens > 0
-            ? '~${_stats.approximateHistoryTokens} tokens'
-            : _loadingTokens
-            ? 'Calculating...'
-            : null,
-      'coverage' =>
-        _stats.lorebookEntryCount > 0
-            ? '${_stats.lorebookEntryCount} entries'
-            : null,
       'personas' => _stats.activePersona?.name ?? 'label_default'.tr(),
       'image-gen' => _stats.imageGenEnabled ? 'on'.tr() : 'off'.tr(),
       'authors-note' =>
@@ -433,8 +407,8 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     if (_editing) return;
 
     switch (item.id) {
-      case 'context':
-        showTokenizerSheet(context, widget.charId);
+      case 'inspector':
+        showPromptInspectorSheet(context, widget.charId);
         return;
       case 'summary':
         await showSummarySheet(context, widget.charId);
@@ -498,12 +472,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           isScrollControlled: true,
           builder: (_) => PresetListScreen(charId: widget.charId),
         );
-        return;
-      case 'preview':
-        showPromptPreviewScreen(context, widget.charId);
-        return;
-      case 'coverage':
-        showLorebookCoverageSheet(context, ref, widget.charId);
         return;
       case 'personas':
         await showModalBottomSheet<void>(

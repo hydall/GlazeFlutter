@@ -27,7 +27,16 @@ import '../state/cached_token_breakdown.dart';
 
 class PromptPreviewScreen extends ConsumerStatefulWidget {
   final String charId;
-  const PromptPreviewScreen({super.key, required this.charId});
+
+  /// When true, render only the body content (no SheetView chrome) for
+  /// embedding inside the Prompt Inspector's tabbed shell.
+  final bool embedded;
+
+  const PromptPreviewScreen({
+    super.key,
+    required this.charId,
+    this.embedded = false,
+  });
 
   @override
   ConsumerState<PromptPreviewScreen> createState() =>
@@ -95,6 +104,62 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         _build();
       }
     });
+    if (widget.embedded) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+            child: Row(
+              children: [
+                Text(
+                  'magic_request_preview'.tr(),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: context.cs.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
+                if (_previewTabIndex == 1) ...[
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      Icons.copy,
+                      size: 20,
+                      color: context.cs.primary,
+                    ),
+                    tooltip: 'action_copy'.tr(),
+                    onPressed: _copyContent,
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                _SegmentedToggle(
+                  isRaw: _previewTabIndex == 1,
+                  onChanged: (isRaw) =>
+                      setState(() => _previewTabIndex = isRaw ? 1 : 0),
+                ),
+              ],
+            ),
+          ),
+          GlazeTabBar(
+            tabs: [
+              GlazeTabItem(
+                label: 'tab_request'.tr(),
+                icon: Icons.upload_rounded,
+              ),
+              GlazeTabItem(
+                label: 'tab_response'.tr(),
+                icon: Icons.download_rounded,
+              ),
+            ],
+            activeIndex: _dataTabIndex,
+            onChanged: (i) => setState(() => _dataTabIndex = i),
+          ),
+          Expanded(child: _buildBody()),
+        ],
+      );
+    }
+
     return SheetView(
       titleWidget: Row(
         children: [
@@ -867,12 +932,3 @@ class _SegmentedToggle extends StatelessWidget {
   }
 }
 
-void showPromptPreviewScreen(BuildContext context, String charId) {
-  showModalBottomSheet<void>(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => PromptPreviewScreen(charId: charId),
-  );
-}

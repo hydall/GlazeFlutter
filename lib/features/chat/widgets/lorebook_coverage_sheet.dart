@@ -13,29 +13,25 @@ import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
 
-void showLorebookCoverageSheet(
-  BuildContext context,
-  WidgetRef ref,
-  String charId,
-) {
-  showModalBottomSheet<void>(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => _CoveragePanel(charId: charId),
-  );
-}
 
-class _CoveragePanel extends ConsumerStatefulWidget {
+class CoveragePanel extends ConsumerStatefulWidget {
   final String charId;
-  const _CoveragePanel({required this.charId});
+
+  /// When true, render only the body (no SheetView chrome) for embedding
+  /// inside the Prompt Inspector's tabbed shell.
+  final bool embedded;
+
+  const CoveragePanel({
+    super.key,
+    required this.charId,
+    this.embedded = false,
+  });
 
   @override
-  ConsumerState<_CoveragePanel> createState() => _CoveragePanelState();
+  ConsumerState<CoveragePanel> createState() => _CoveragePanelState();
 }
 
-class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
+class _CoveragePanelState extends ConsumerState<CoveragePanel> {
   CoverageResult? _result;
   bool _loading = true;
   _FilterMode _filter = _FilterMode.activated;
@@ -134,16 +130,7 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
 
   @override
   Widget build(BuildContext context) {
-    return SheetView(
-      title: 'Lorebook Coverage',
-      actions: [
-        SheetViewAction(
-          icon: const Icon(Icons.refresh, size: 20),
-          onPressed: _load,
-          tooltip: 'Refresh',
-        ),
-      ],
-      body: _loading
+    final body = _loading
           ? const Center(child: CircularProgressIndicator())
           : _result == null
           ? Center(
@@ -172,7 +159,48 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
                   ),
                 ),
               ],
+            );
+
+    if (widget.embedded) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+            child: Row(
+              children: [
+                Text(
+                  'Lorebook Coverage',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: context.cs.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.refresh, size: 20),
+                  tooltip: 'Refresh',
+                  onPressed: _loading ? null : _load,
+                ),
+              ],
             ),
+          ),
+          Expanded(child: body),
+        ],
+      );
+    }
+
+    return SheetView(
+      title: 'Lorebook Coverage',
+      actions: [
+        SheetViewAction(
+          icon: const Icon(Icons.refresh, size: 20),
+          onPressed: _load,
+          tooltip: 'Refresh',
+        ),
+      ],
+      body: body,
     );
   }
 
