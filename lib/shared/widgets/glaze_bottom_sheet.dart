@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:soft_edge_blur/soft_edge_blur.dart';
 
 import '../../core/platform/haptics.dart';
 import '../theme/app_colors.dart';
 import '../../features/settings/app_settings_provider.dart';
 import 'glass_surface.dart';
+import 'top_edge_blur.dart';
 
 // ── Data models ───────────────────────────────────────────────────────────────
 
@@ -187,12 +187,10 @@ class GlazeBottomSheetFrame extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cap = maxHeight ??
-        MediaQuery.of(context).size.height * maxHeightFactor;
+    final cap =
+        maxHeight ?? MediaQuery.of(context).size.height * maxHeightFactor;
     return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: cap,
-      ),
+      constraints: BoxConstraints(maxHeight: cap),
       child: GlassSurface(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(top: BorderSide(color: context.cs.outlineVariant)),
@@ -201,10 +199,7 @@ class GlazeBottomSheetFrame extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (showHandle) _HandleBar(),
-            Flexible(
-              fit: FlexFit.loose,
-              child: child,
-            ),
+            Flexible(fit: FlexFit.loose, child: child),
           ],
         ),
       ),
@@ -302,8 +297,9 @@ class _GlazeBottomSheetContentState
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final batterySaver =
-        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
+    final batterySaver = ref.watch(
+      appSettingsProvider.select((s) => s.value?.batterySaver ?? false),
+    );
 
     _measureHeader();
 
@@ -316,133 +312,70 @@ class _GlazeBottomSheetContentState
         border: Border(top: BorderSide(color: context.cs.outlineVariant)),
         child: Stack(
           children: [
-            (!batterySaver)
-                ? SoftEdgeBlur(
-                    edges: [
-                      EdgeBlur(
-                        type: EdgeType.topEdge,
-                        size: _headerH + 8,
-                        sigma: 24,
-                        tintColor: context.cs.surface.withValues(alpha: 0.4),
-                        controlPoints: [
-                          ControlPoint(
-                            position: 0.5,
-                            type: ControlPointType.visible,
-                          ),
-                          ControlPoint(
-                            position: 1.0,
-                            type: ControlPointType.transparent,
-                          ),
-                        ],
-                      ),
-                    ],
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        top: _headerH,
-                        bottom: bottomInset + 10,
-                      ),
-                      child: RawScrollbar(
-                        controller: _scrollController,
-                        thumbColor: Colors.white.withValues(alpha: 0.15),
-                        radius: const Radius.circular(3),
-                        thickness: 4,
-                        padding: const EdgeInsets.only(right: 3),
-                        child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(
-                            context,
-                          ).copyWith(scrollbars: false),
-                          child: SingleChildScrollView(
-                            controller: _scrollController,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(height: 4),
-                                if (widget.child != null) widget.child!,
-                                if (widget.bigInfo != null)
-                                  _BigInfo(info: widget.bigInfo!),
-                                if (widget.items != null &&
-                                    widget.items!.isNotEmpty)
-                                  _ItemsList(
-                                    items: widget.items!,
-                                    scrollToIndex: widget.scrollToIndex,
-                                    scrollTargetKey: _scrollTargetKey,
-                                  ),
-                                if (widget.itemsAsCards != null &&
-                                    widget.itemsAsCards!.isNotEmpty)
-                                  _ItemsCardList(items: widget.itemsAsCards!),
-                                if (widget.sessionItems != null &&
-                                    widget.sessionItems!.isNotEmpty)
-                                  GlazeSessionList(items: widget.sessionItems!),
-                                if (widget.cardItems != null &&
-                                    widget.cardItems!.isNotEmpty)
-                                  _CardList(items: widget.cardItems!),
-                                if (widget.input != null)
-                                  _InputSection(
-                                    input: widget.input!,
-                                    controller: _inputController,
-                                    focusNode: _inputFocus,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                : Padding(
-                    padding: EdgeInsets.only(
-                      top: _headerH,
-                      bottom: bottomInset + 10,
-                    ),
-                    child: RawScrollbar(
+            TopEdgeBlur(
+              enabled: !batterySaver,
+              height: _headerH + 8,
+              sigma: 24,
+              tintColor: context.cs.surface.withValues(alpha: 0.4),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  top: _headerH,
+                  bottom: bottomInset + 10,
+                ),
+                child: RawScrollbar(
+                  controller: _scrollController,
+                  thumbColor: Colors.white.withValues(alpha: 0.15),
+                  radius: const Radius.circular(3),
+                  thickness: 4,
+                  padding: const EdgeInsets.only(right: 3),
+                  child: ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(
+                      context,
+                    ).copyWith(scrollbars: false),
+                    child: SingleChildScrollView(
                       controller: _scrollController,
-                      thumbColor: Colors.white.withValues(alpha: 0.15),
-                      radius: const Radius.circular(3),
-                      thickness: 4,
-                      padding: const EdgeInsets.only(right: 3),
-                      child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(
-                          context,
-                        ).copyWith(scrollbars: false),
-                        child: SingleChildScrollView(
-                          controller: _scrollController,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const SizedBox(height: 4),
-                              if (widget.child != null) widget.child!,
-                              if (widget.bigInfo != null)
-                                _BigInfo(info: widget.bigInfo!),
-                              if (widget.items != null &&
-                                  widget.items!.isNotEmpty)
-                                _ItemsList(
-                                  items: widget.items!,
-                                  scrollToIndex: widget.scrollToIndex,
-                                  scrollTargetKey: _scrollTargetKey,
-                                ),
-                              if (widget.itemsAsCards != null &&
-                                  widget.itemsAsCards!.isNotEmpty)
-                                _ItemsCardList(items: widget.itemsAsCards!),
-                              if (widget.sessionItems != null &&
-                                  widget.sessionItems!.isNotEmpty)
-                                GlazeSessionList(items: widget.sessionItems!),
-                              if (widget.cardItems != null &&
-                                  widget.cardItems!.isNotEmpty)
-                                _CardList(items: widget.cardItems!),
-                              if (widget.input != null)
-                                _InputSection(
-                                  input: widget.input!,
-                                  controller: _inputController,
-                                  focusNode: _inputFocus,
-                                ),
-                            ],
-                          ),
+                      // Isolates the sheet content in its own layer so a
+                      // scroll only shifts the layer instead of re-recording
+                      // every row each frame.
+                      child: RepaintBoundary(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(height: 4),
+                            if (widget.child != null) widget.child!,
+                            if (widget.bigInfo != null)
+                              _BigInfo(info: widget.bigInfo!),
+                            if (widget.items != null &&
+                                widget.items!.isNotEmpty)
+                              _ItemsList(
+                                items: widget.items!,
+                                scrollToIndex: widget.scrollToIndex,
+                                scrollTargetKey: _scrollTargetKey,
+                              ),
+                            if (widget.itemsAsCards != null &&
+                                widget.itemsAsCards!.isNotEmpty)
+                              _ItemsCardList(items: widget.itemsAsCards!),
+                            if (widget.sessionItems != null &&
+                                widget.sessionItems!.isNotEmpty)
+                              GlazeSessionList(items: widget.sessionItems!),
+                            if (widget.cardItems != null &&
+                                widget.cardItems!.isNotEmpty)
+                              _CardList(items: widget.cardItems!),
+                            if (widget.input != null)
+                              _InputSection(
+                                input: widget.input!,
+                                controller: _inputController,
+                                focusNode: _inputFocus,
+                              ),
+                          ],
                         ),
                       ),
                     ),
                   ),
+                ),
+              ),
+            ),
 
             Positioned(
               top: 0,

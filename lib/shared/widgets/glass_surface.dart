@@ -46,9 +46,12 @@ class GlassSurface extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final preset = ref.watch(themeProvider).activePreset;
-    final batterySaver =
-        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
+    // select() so the (many) glass surfaces on screen only rebuild when the
+    // values they actually paint with change, not on every settings write.
+    final preset = ref.watch(themeProvider.select((t) => t.activePreset));
+    final batterySaver = ref.watch(
+      appSettingsProvider.select((s) => s.value?.batterySaver ?? false),
+    );
     return _build(context, preset, batterySaver);
   }
 

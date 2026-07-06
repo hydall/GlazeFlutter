@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:soft_edge_blur/soft_edge_blur.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/top_edge_blur.dart';
 
 /// Shared shell for bottom slide-up panels (Magic Drawer, Quick Replies).
 /// Provides background, drag handle, top soft-edge blur, header slot,
@@ -41,29 +41,13 @@ class DrawerPanelScaffold extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(
-            child: disableEffects
-                ? content
-                : SoftEdgeBlur(
-                    edges: [
-                      EdgeBlur(
-                        type: EdgeType.topEdge,
-                        size: 68,
-                        sigma: 24,
-                        tintColor: context.cs.surface.withValues(alpha: 0.4),
-                        controlPoints: [
-                          ControlPoint(
-                            position: 0.5,
-                            type: ControlPointType.visible,
-                          ),
-                          ControlPoint(
-                            position: 1.0,
-                            type: ControlPointType.transparent,
-                          ),
-                        ],
-                      ),
-                    ],
-                    child: content,
-                  ),
+            child: TopEdgeBlur(
+              enabled: !disableEffects,
+              height: 68,
+              sigma: 24,
+              tintColor: context.cs.surface.withValues(alpha: 0.4),
+              child: content,
+            ),
           ),
           Positioned(
             top: 0,
