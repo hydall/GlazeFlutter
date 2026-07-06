@@ -52,6 +52,7 @@ export class Bridge {
     if ('charAvatarUrl' in opts) this._charAvatarUrl = opts.charAvatarUrl || null;
     if ('personaAvatarUrl' in opts) this._personaAvatarUrl = opts.personaAvatarUrl || null;
     this._refreshIdentityDom();
+    this._updateVnSprite();
   }
 
   _refreshIdentityDom() {
@@ -597,7 +598,50 @@ export class Bridge {
 
   _normalizeLayout(layout) {
     const raw = String(layout || '').trim().toLowerCase();
-    return (raw === 'bubble' || raw === 'bubbles') ? 'bubble' : 'default';
+    if (raw === 'bubble' || raw === 'bubbles') return 'bubble';
+    if (raw === 'vn' || raw === 'visual-novel' || raw === 'visual_novel' || raw === 'visualnovel') return 'vn';
+    return 'default';
+  }
+
+  /* Single place that swaps the layout-* classes on the container and all
+     rendered sections, keeps the body-level vn-mode flag + sprite in sync,
+     and re-pins the scroll: entering/leaving VN mode changes the container's
+     clientHeight, which would otherwise leave the list parked mid-history. */
+  _applyLayoutClasses(layout) {
+    const LAYOUTS = ['layout-default', 'layout-bubble', 'layout-vn'];
+    const container = document.getElementById('chat-container') || document.body;
+    const wasAtBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 5;
+    container.classList.remove(...LAYOUTS);
+    container.classList.add(`layout-${layout}`);
+    document.querySelectorAll('.message-section').forEach(el => {
+      el.classList.remove(...LAYOUTS);
+      el.classList.add(`layout-${layout}`);
+    });
+    document.body.classList.toggle('vn-mode', layout === 'vn');
+    this._updateVnSprite();
+    if (wasAtBottom) {
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight - container.clientHeight;
+      });
+    }
+  }
+
+  /* VN mode shows the active character's card image as a "sprite" above the
+     dialogue panel. Reuses the avatar URL already resolved by setIdentity. */
+  _updateVnSprite() {
+    const img = document.getElementById('vn-sprite-img');
+    if (!img) return;
+    const url = document.body.classList.contains('vn-mode')
+      ? (this._charAvatarUrl || '')
+      : '';
+    if (url) {
+      if (img.src !== url) img.src = url;
+      img.classList.add('visible');
+    } else {
+      img.classList.remove('visible');
+      img.removeAttribute('src');
+    }
   }
 
   applyTheme(themeJson) {
@@ -606,13 +650,7 @@ export class Bridge {
 
     for (const [key, value] of Object.entries(theme)) {
       if (key === 'chat-layout') {
-        const layout = this._normalizeLayout(value);
-        container.classList.remove('layout-bubble', 'layout-default');
-        container.classList.add(`layout-${layout}`);
-        document.querySelectorAll('.message-section').forEach(el => {
-          el.classList.remove('layout-bubble', 'layout-default');
-          el.classList.add(`layout-${layout}`);
-        });
+        this._applyLayoutClasses(this._normalizeLayout(value));
         continue;
       }
       document.documentElement.style.setProperty(`--${key}`, value);
@@ -680,14 +718,7 @@ export class Bridge {
   }
 
   applyLayout(layout) {
-    const normalized = this._normalizeLayout(layout);
-    const container = document.getElementById('chat-container') || document.body;
-    container.classList.remove('layout-bubble', 'layout-default');
-    container.classList.add(`layout-${normalized}`);
-    document.querySelectorAll('.message-section').forEach(el => {
-      el.classList.remove('layout-bubble', 'layout-default');
-      el.classList.add(`layout-${normalized}`);
-    });
+    this._applyLayoutClasses(this._normalizeLayout(layout));
   }
 
   setMessageSettings(json) {

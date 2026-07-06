@@ -148,6 +148,12 @@ class ChatBridgeController {
   String normalizeLayout(String? layout) {
     final raw = (layout ?? '').trim().toLowerCase();
     if (raw == 'bubble' || raw == 'bubbles') return 'bubble';
+    if (raw == 'vn' ||
+        raw == 'visual-novel' ||
+        raw == 'visual_novel' ||
+        raw == 'visualnovel') {
+      return 'vn';
+    }
     return 'default';
   }
 

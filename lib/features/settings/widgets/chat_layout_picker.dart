@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 
-/// Bottom sheet that lets the user pick the chat layout (`default` / `bubble`)
-/// via the visual [LayoutPreviewCard] thumbnails. Shared by the theme editor
-/// and the app interface settings.
+/// Bottom sheet that lets the user pick the chat layout
+/// (`default` / `bubble` / `vn`) via the visual [LayoutPreviewCard]
+/// thumbnails. Shared by the theme editor and the app interface settings.
 ///
 /// [current] is the active layout key; [onSelect] receives the chosen key
-/// (`'default'` or `'bubble'`). The sheet is popped before [onSelect] runs.
+/// (`'default'`, `'bubble'` or `'vn'`). The sheet is popped before
+/// [onSelect] runs.
 Future<void> showChatLayoutPicker(
   BuildContext context, {
   required String current,
@@ -44,6 +45,16 @@ Future<void> showChatLayoutPicker(
               isActive: current == 'bubble',
               onTap: () => choose('bubble'),
               child: const LayoutMiniPreview(layout: 'bubble'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: LayoutPreviewCard(
+              title: 'layout_vn'.tr(),
+              subtitle: 'layout_vn_desc'.tr(),
+              isActive: current == 'vn',
+              onTap: () => choose('vn'),
+              child: const LayoutMiniPreview(layout: 'vn'),
             ),
           ),
         ],
@@ -120,7 +131,7 @@ class LayoutPreviewCard extends StatelessWidget {
 }
 
 /// Schematic thumbnail of a chat layout (`default` = full-width left-aligned
-/// log; `bubble` = left/right bubbles).
+/// log; `bubble` = left/right bubbles; `vn` = sprite over a dialogue panel).
 class LayoutMiniPreview extends StatelessWidget {
   final String layout;
 
@@ -132,6 +143,7 @@ class LayoutMiniPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bubble = layout == 'bubble';
+    final vn = layout == 'vn';
     final surface = context.cs.surfaceContainerHighest.withValues(alpha: 0.55);
     final line = context.cs.outlineVariant.withValues(alpha: 0.8);
     final user = context.cs.primary.withValues(alpha: 0.85);
@@ -163,7 +175,53 @@ class LayoutMiniPreview extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          if (!bubble) ...[
+          if (vn) ...[
+            // Scene area: character "sprite" over the background.
+            Expanded(
+              child: Center(
+                child: Container(
+                  width: 46,
+                  height: 62,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.person_outline,
+                    size: 26,
+                    color: Colors.white.withValues(alpha: 0.4),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Dialogue panel pinned to the bottom.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      color: context.cs.primary.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  const _MiniTextLine(widthFactor: 0.92),
+                  const SizedBox(height: 4),
+                  const _MiniTextLine(widthFactor: 0.7),
+                ],
+              ),
+            ),
+          ] else if (!bubble) ...[
             const _MiniHeaderRow(),
             const SizedBox(height: 6),
             const _MiniTextLine(widthFactor: 0.82),

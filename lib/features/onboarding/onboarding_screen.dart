@@ -456,8 +456,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  /// Chat layout picker slide — inline `default` / `bubble` thumbnails reused
-  /// from the theme editor's layout picker.
+  /// Chat layout picker slide — inline `default` / `bubble` / `vn` thumbnails
+  /// reused from the theme editor's layout picker.
   Widget _buildLayoutSlide(_SlideData slide) {
     final currentLayout =
         ref.watch(themeProvider.select((s) => s.activePreset.chatLayout));
@@ -510,6 +510,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   isActive: currentLayout == 'bubble',
                   onTap: () => _setChatLayout('bubble'),
                   child: const LayoutMiniPreview(layout: 'bubble'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: LayoutPreviewCard(
+                  title: 'layout_vn'.tr(),
+                  subtitle: 'layout_vn_desc'.tr(),
+                  isActive: currentLayout == 'vn',
+                  onTap: () => _setChatLayout('vn'),
+                  child: const LayoutMiniPreview(layout: 'vn'),
                 ),
               ),
             ],
