@@ -1,7 +1,10 @@
+import 'dart:ui';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/features/chat/bridge/chat_bridge_controller.dart';
+import 'package:glaze_flutter/features/chat/bridge/chat_overlay_blur_region.dart';
 import 'package:glaze_flutter/features/chat/widgets/chat_webview_sync_dispatcher.dart';
 
 void main() {
@@ -34,6 +37,58 @@ void main() {
         expect(syncState.streamingSent, isFalse);
       },
     );
+
+    test('syncs overlay blur regions only when they change', () {
+      final dispatcher = ChatWebViewSyncDispatcher(
+        state: ChatWebViewSyncState(),
+      );
+      final bridge = _FakeBridge();
+      List<ChatOverlayBlurRegion> regions() => [
+        ChatOverlayBlurRegion(
+          id: 'header',
+          rect: const Rect.fromLTWH(16, 40, 300, 56),
+          radius: 20,
+        ),
+      ];
+      void dispatch(
+        ChatWebViewWidgetFields old,
+        ChatWebViewWidgetFields current,
+      ) {
+        dispatcher.dispatch(
+          bridge: bridge,
+          old: old,
+          current: current,
+          oldMessages: const [],
+          newMessages: const [],
+          streamingId: '__streaming__',
+          onSyncExtBlockPanels: () async {},
+          appendMessage: (_) async {},
+          buildStreamingPlaceholder: () => _assistant('__streaming__'),
+        );
+      }
+
+      // Equal-but-not-identical lists must NOT re-send.
+      dispatch(
+        _fields(isGenerating: false, messages: [], blurRegions: regions()),
+        _fields(isGenerating: false, messages: [], blurRegions: regions()),
+      );
+      expect(bridge.overlayBlurCalls, isEmpty);
+
+      // A moved region re-sends exactly once.
+      final moved = [
+        ChatOverlayBlurRegion(
+          id: 'header',
+          rect: const Rect.fromLTWH(16, 40, 300, 72),
+          radius: 20,
+        ),
+      ];
+      dispatch(
+        _fields(isGenerating: false, messages: [], blurRegions: regions()),
+        _fields(isGenerating: false, messages: [], blurRegions: moved),
+      );
+      expect(bridge.overlayBlurCalls, hasLength(1));
+      expect(bridge.overlayBlurCalls.single, moved);
+    });
   });
 }
 
@@ -46,7 +101,9 @@ ChatMessage _user(String id) =>
 ChatWebViewWidgetFields _fields({
   required bool isGenerating,
   required List<ChatMessage> messages,
+  List<ChatOverlayBlurRegion> blurRegions = const [],
 }) => ChatWebViewWidgetFields(
+  blurRegions: blurRegions,
   charId: 'c1',
   charName: 'Character',
   charColor: null,
@@ -104,6 +161,15 @@ class _FakeBridge implements ChatBridgeController {
 
   @override
   bool isGeneratingImage = false;
+
+  final List<List<ChatOverlayBlurRegion>> overlayBlurCalls = [];
+
+  @override
+  Future<void> setOverlayBlurRegions(
+    List<ChatOverlayBlurRegion> regions,
+  ) async {
+    overlayBlurCalls.add(regions);
+  }
 
   @override
   Future<void> evalJs(String _) async {}

@@ -1590,6 +1590,28 @@
 }
 
 /* ============================================================
+ * Overlay blur regions
+ * Fixed strips mirroring the Flutter glass overlays (header, input pill,
+ * input-row buttons). They backdrop-blur the messages scrolling underneath —
+ * Flutter's own BackdropFilter can't sample the platform view. Blur only:
+ * tint/noise/border stay on the Flutter side, and the page background stays
+ * transparent so the global Flutter background is untouched. Kept below the
+ * selection bar / loading screen (z-index 10000). Populated by
+ * bridge.setOverlayBlurRegions(); removed entirely in battery saver.
+ * ============================================================ */
+#overlay-blur-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+#overlay-blur-layer .overlay-blur-region {
+  position: absolute;
+  -webkit-backdrop-filter: blur(var(--element-blur, 12px));
+  backdrop-filter: blur(var(--element-blur, 12px));
+}
+
+/* ============================================================
  * Virtual list spacer
  * ============================================================ */
 .vl-spacer {

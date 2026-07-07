@@ -679,6 +679,59 @@ export class Bridge {
     container.style.paddingTop = px + 'px';
   }
 
+  /* ---------- Overlay blur regions (Flutter glass over the WebView) ----------
+   * Flutter's BackdropFilter cannot sample the platform view, so the header /
+   * input-bar glass widgets can't blur the messages scrolling under them.
+   * Flutter mirrors their rects here; each region becomes a fixed
+   * backdrop-filter strip that blurs the page content (the messages) while the
+   * global background stays on the Flutter side (the page is transparent, so
+   * there is nothing else to blur). No tint/noise — those stay in Flutter. */
+  setOverlayBlurRegions(regions) {
+    let parsed;
+    try {
+      parsed = typeof regions === 'string' ? JSON.parse(regions) : regions;
+    } catch (_) {
+      parsed = [];
+    }
+    this._overlayBlurRegions = Array.isArray(parsed) ? parsed : [];
+    this._renderOverlayBlurRegions();
+  }
+
+  _renderOverlayBlurRegions() {
+    const regions = this.batterySaver ? [] : (this._overlayBlurRegions || []);
+    let layer = document.getElementById('overlay-blur-layer');
+    if (regions.length === 0) {
+      if (layer) layer.remove();
+      return;
+    }
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.id = 'overlay-blur-layer';
+      document.body.appendChild(layer);
+    }
+    const seen = new Set();
+    for (const r of regions) {
+      if (!r || r.id == null) continue;
+      const id = String(r.id);
+      seen.add(id);
+      let el = layer.querySelector(`[data-region-id="${CSS.escape(id)}"]`);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'overlay-blur-region';
+        el.dataset.regionId = id;
+        layer.appendChild(el);
+      }
+      el.style.left = (r.x || 0) + 'px';
+      el.style.top = (r.y || 0) + 'px';
+      el.style.width = (r.w || 0) + 'px';
+      el.style.height = (r.h || 0) + 'px';
+      el.style.borderRadius = (r.r || 0) + 'px';
+    }
+    for (const el of Array.from(layer.children)) {
+      if (!seen.has(el.dataset.regionId)) el.remove();
+    }
+  }
+
   applyLayout(layout) {
     const normalized = this._normalizeLayout(layout);
     const container = document.getElementById('chat-container') || document.body;
@@ -701,6 +754,8 @@ export class Bridge {
     container.classList.toggle('hide-message-id', !!s.hideMessageId);
     container.classList.toggle('hide-gen-time', !!s.hideGenerationTime);
     container.classList.toggle('hide-token-count', !!s.hideTokenCount);
+    // Battery saver kills the overlay backdrop-filter strips too.
+    this._renderOverlayBlurRegions();
   }
 
   /* ---------- Inline edit (toggle into .msg-body) ---------- */

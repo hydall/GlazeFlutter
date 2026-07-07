@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -46,6 +47,8 @@ import 'chat_search_delegate.dart';
 import 'chat_state.dart';
 import 'state/chat_body_selectors.dart';
 import 'state/memory_activity_provider.dart';
+import 'bridge/chat_overlay_blur_region.dart';
+import 'widgets/chat_blur_region_tracker.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/magic_drawer.dart';
@@ -383,6 +386,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   virtualKeyboardSend: virtualKeyboardSend,
                   enterToSend: enterToSend,
                   targetMessageId: widget.targetMessageId,
+                  isHeaderHidden: _isHeaderHidden,
                 ),
                 if (awaitingTargetSession)
                   const Positioned.fill(
@@ -410,6 +414,10 @@ class _ChatBody extends ConsumerStatefulWidget {
   final bool enterToSend;
   final String? targetMessageId;
 
+  /// Mirrors the scaffold's hide-on-scroll header state so the header's
+  /// WebView blur region is dropped while the header is slid away.
+  final bool isHeaderHidden;
+
   const _ChatBody({
     required this.charId,
     required this.state,
@@ -420,6 +428,7 @@ class _ChatBody extends ConsumerStatefulWidget {
     this.virtualKeyboardSend = false,
     this.enterToSend = true,
     this.targetMessageId,
+    this.isHeaderHidden = false,
   });
 
   @override
@@ -447,10 +456,24 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   bool _showMemoryActivity = false;
   final GlobalKey<ChatWebViewWidgetState> _webViewStateKey = GlobalKey();
 
+  /// Rects of the glass overlays (header + input bar elements) measured in
+  /// WebView-local coordinates and mirrored into the WebView so the messages
+  /// scrolling underneath get blurred (Flutter's BackdropFilter cannot
+  /// sample the platform view — see [ChatOverlayBlurRegion]).
+  final ChatBlurRegionRegistry _blurRegistry = ChatBlurRegionRegistry();
+  List<ChatOverlayBlurRegion> _blurRegions = const [];
+  bool _blurMeasureScheduled = false;
+
+  /// `MediaQuery.padding.top` captured in build for the analytic header rect.
+  double _blurSafeTop = 0;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Re-measure when the input bar swaps tracked elements (e.g. entering
+    // search/selection mode) without this widget rebuilding.
+    _blurRegistry.addListener(_scheduleBlurMeasure);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkHeight());
     final targetId = widget.targetMessageId;
     if (targetId != null && targetId.isNotEmpty) {
@@ -778,7 +801,48 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _blurRegistry.dispose();
     super.dispose();
+  }
+
+  /// Coalesces measurement requests into one post-frame pass. Scheduled on
+  /// every build (keyboard/drawer animations move the input bar each frame)
+  /// and on registry changes.
+  void _scheduleBlurMeasure() {
+    if (_blurMeasureScheduled) return;
+    _blurMeasureScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _blurMeasureScheduled = false;
+      _measureBlurRegions();
+    });
+  }
+
+  void _measureBlurRegions() {
+    if (!mounted) return;
+    final box = _webViewStateKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final regions = <ChatOverlayBlurRegion>[
+      // The floating header is not a descendant (it lives in GlazeScaffold's
+      // stack), but its geometry is fixed: SafeArea + fromLTRB(16, 10, 16, 0)
+      // + 56px GlazeAppBar with radius 20 (glaze_scaffold.dart).
+      if (!widget.isHeaderHidden)
+        ChatOverlayBlurRegion(
+          id: 'header',
+          rect: Rect.fromLTWH(
+            16 - origin.dx,
+            _blurSafeTop + 10 - origin.dy,
+            box.size.width - 32,
+            56,
+          ),
+          radius: 20,
+        ),
+      ..._blurRegistry.measure(box),
+    ];
+    regions.sort((a, b) => a.id.compareTo(b.id));
+    if (!listEquals(regions, _blurRegions)) {
+      setState(() => _blurRegions = regions);
+    }
   }
 
   @override
@@ -837,6 +901,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final batterySaver = appSettings?.batterySaver ?? false;
     final safeBottom = MediaQuery.paddingOf(context).bottom;
     final messageListTop = MediaQuery.paddingOf(context).top + 10 + 56;
+    _blurSafeTop = MediaQuery.paddingOf(context).top;
 
     final bgBlur = preset.bgBlur > 0 ? preset.bgBlur : 0.0;
     final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
@@ -933,6 +998,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
             !isDesktopLayout(context) &&
             (widget.drawerCtrl.drawerOpen || progress > 0.001);
 
+        // The overlays move with every rebuild here (keyboard, drawer
+        // animation, input growth), so re-measure their rects post-frame.
+        _scheduleBlurMeasure();
+
         return Stack(
           children: [
             Positioned.fill(
@@ -961,6 +1030,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                     regenTargetId: widget.state.regenTargetId,
                     bottomInset: messageListBottom,
                     topInset: effectiveTopInset,
+                    blurRegions: (batterySaver || preset.elementBlur <= 0)
+                        ? const <ChatOverlayBlurRegion>[]
+                        : _blurRegions,
                     charName: character?.name,
                     charColor: character?.color,
                     personaName: effectivePersona?.name,
@@ -1430,176 +1502,186 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                     left: 0,
                     right: 0,
                     bottom: animatedBottomPanelInset,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        NotificationListener<SizeChangedLayoutNotification>(
-                          onNotification: (n) {
-                            WidgetsBinding.instance.addPostFrameCallback(
-                              (_) => _checkHeight(),
-                            );
-                            return true;
-                          },
-                          child: SizeChangedLayoutNotifier(
-                            child: Container(
-                              key: _inputBarKey,
-                              child: Builder(
-                                builder: (context) {
-                                  final allSelectedHidden = _selectionCtrl
-                                      .allSelectedHidden(widget.state.messages);
-                                  return ChatInputBar(
-                                    focusNode: widget.drawerCtrl.inputFocus,
-                                    initialDraft:
-                                        widget.state.session?.draft ?? '',
-                                    batterySaver:
-                                        appSettings?.batterySaver ?? false,
-                                    onDraftChanged: (text) {
-                                      ref
-                                          .read(
-                                            chatProvider(
-                                              widget.charId,
-                                            ).notifier,
-                                          )
-                                          .saveDraft(text);
-                                    },
-                                    showSearchControls:
-                                        widget.search.showSearch,
-                                    searchQuery: widget.search.searchQuery,
-                                    searchMatchCount: widget.search.matchCount,
-                                    searchCurrentIndex:
-                                        widget.search.searchCurrentIndex,
-                                    onSearchNext: widget.search.onSearchNext,
-                                    onSearchPrev: widget.search.onSearchPrev,
-                                    isEditingMessage: isEditingMessage,
-                                    isSelectionMode:
-                                        _selectionCtrl.isSelectionMode,
-                                    selectedCount: _selectionCtrl
-                                        .selectedMessageIds
-                                        .length,
-                                    allSelectedHidden: allSelectedHidden,
-                                    onCancelSelection: () {
-                                      setState(() {
-                                        _selectionCtrl.clearSelection();
-                                      });
-                                    },
-                                    onHideSelected: () async {
-                                      await _selectionCtrl.hideSelected(
-                                        ref,
-                                        widget.charId,
-                                        widget.state.messages,
-                                      );
-                                      if (mounted) setState(() {});
-                                    },
-                                    onDeleteSelected: () async {
-                                      await _selectionCtrl.deleteSelected(
-                                        ref,
-                                        widget.charId,
-                                        widget.state.messages,
-                                      );
-                                      if (mounted) setState(() {});
-                                    },
-                                    isDrawerOpen:
-                                        (widget.drawerCtrl.drawerOpen ||
-                                            widget
-                                                .drawerCtrl
-                                                .switchingToDrawer) &&
-                                        widget.drawerCtrl.activePanel ==
-                                            DrawerPanel.magic,
-                                    isQuickRepliesOpen:
-                                        (widget.drawerCtrl.drawerOpen ||
-                                            widget
-                                                .drawerCtrl
-                                                .switchingToDrawer) &&
-                                        widget.drawerCtrl.activePanel ==
-                                            DrawerPanel.quickReplies,
-                                    virtualKeyboardSend:
-                                        widget.virtualKeyboardSend,
-                                    enterToSend: widget.enterToSend,
-                                    canSend: () =>
-                                        _ensurePersonaSelected() &&
-                                        _ensureApiSelected(),
-                                    onSend: (text) {
-                                      if (text.trim().isEmpty) return;
-                                      ref
-                                          .read(
-                                            chatProvider(
-                                              widget.charId,
-                                            ).notifier,
-                                          )
-                                          .sendMessage(text);
-                                    },
-                                    onSendWithGuidance: (text, guidance) {
-                                      if (text.trim().isEmpty) return;
-                                      ref
-                                          .read(
-                                            chatProvider(
-                                              widget.charId,
-                                            ).notifier,
-                                          )
-                                          .sendMessage(
-                                            text,
-                                            guidanceText: guidance,
-                                          );
-                                    },
-                                    onSendWithImage:
-                                        (text, guidanceText, imageDataUrl) {
-                                          ref
-                                              .read(
-                                                chatProvider(
-                                                  widget.charId,
-                                                ).notifier,
-                                              )
-                                              .sendMessage(
-                                                text,
-                                                guidanceText: guidanceText,
-                                                imageDataUrl: imageDataUrl,
-                                              );
-                                        },
-                                    isGenerating: widget.state.isGenerating,
-                                    isGeneratingImage:
-                                        widget.state.isGeneratingImage,
-                                    isPostGenRunning:
-                                        widget.state.isPostGenRunning,
-                                    onStop:
-                                        (widget.state.isGenerating ||
-                                            widget.state.isGeneratingImage ||
-                                            widget.state.isPostGenRunning)
-                                        ? () {
-                                            final notifier = ref.read(
+                    child: ChatBlurRegionScope(
+                      registry: _blurRegistry,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          NotificationListener<SizeChangedLayoutNotification>(
+                            onNotification: (n) {
+                              WidgetsBinding.instance.addPostFrameCallback(
+                                (_) => _checkHeight(),
+                              );
+                              return true;
+                            },
+                            child: SizeChangedLayoutNotifier(
+                              child: Container(
+                                key: _inputBarKey,
+                                child: Builder(
+                                  builder: (context) {
+                                    final allSelectedHidden = _selectionCtrl
+                                        .allSelectedHidden(
+                                          widget.state.messages,
+                                        );
+                                    return ChatInputBar(
+                                      focusNode: widget.drawerCtrl.inputFocus,
+                                      initialDraft:
+                                          widget.state.session?.draft ?? '',
+                                      batterySaver:
+                                          appSettings?.batterySaver ?? false,
+                                      onDraftChanged: (text) {
+                                        ref
+                                            .read(
                                               chatProvider(
                                                 widget.charId,
                                               ).notifier,
+                                            )
+                                            .saveDraft(text);
+                                      },
+                                      showSearchControls:
+                                          widget.search.showSearch,
+                                      searchQuery: widget.search.searchQuery,
+                                      searchMatchCount:
+                                          widget.search.matchCount,
+                                      searchCurrentIndex:
+                                          widget.search.searchCurrentIndex,
+                                      onSearchNext: widget.search.onSearchNext,
+                                      onSearchPrev: widget.search.onSearchPrev,
+                                      isEditingMessage: isEditingMessage,
+                                      isSelectionMode:
+                                          _selectionCtrl.isSelectionMode,
+                                      selectedCount: _selectionCtrl
+                                          .selectedMessageIds
+                                          .length,
+                                      allSelectedHidden: allSelectedHidden,
+                                      onCancelSelection: () {
+                                        setState(() {
+                                          _selectionCtrl.clearSelection();
+                                        });
+                                      },
+                                      onHideSelected: () async {
+                                        await _selectionCtrl.hideSelected(
+                                          ref,
+                                          widget.charId,
+                                          widget.state.messages,
+                                        );
+                                        if (mounted) setState(() {});
+                                      },
+                                      onDeleteSelected: () async {
+                                        await _selectionCtrl.deleteSelected(
+                                          ref,
+                                          widget.charId,
+                                          widget.state.messages,
+                                        );
+                                        if (mounted) setState(() {});
+                                      },
+                                      isDrawerOpen:
+                                          (widget.drawerCtrl.drawerOpen ||
+                                              widget
+                                                  .drawerCtrl
+                                                  .switchingToDrawer) &&
+                                          widget.drawerCtrl.activePanel ==
+                                              DrawerPanel.magic,
+                                      isQuickRepliesOpen:
+                                          (widget.drawerCtrl.drawerOpen ||
+                                              widget
+                                                  .drawerCtrl
+                                                  .switchingToDrawer) &&
+                                          widget.drawerCtrl.activePanel ==
+                                              DrawerPanel.quickReplies,
+                                      virtualKeyboardSend:
+                                          widget.virtualKeyboardSend,
+                                      enterToSend: widget.enterToSend,
+                                      canSend: () =>
+                                          _ensurePersonaSelected() &&
+                                          _ensureApiSelected(),
+                                      onSend: (text) {
+                                        if (text.trim().isEmpty) return;
+                                        ref
+                                            .read(
+                                              chatProvider(
+                                                widget.charId,
+                                              ).notifier,
+                                            )
+                                            .sendMessage(text);
+                                      },
+                                      onSendWithGuidance: (text, guidance) {
+                                        if (text.trim().isEmpty) return;
+                                        ref
+                                            .read(
+                                              chatProvider(
+                                                widget.charId,
+                                              ).notifier,
+                                            )
+                                            .sendMessage(
+                                              text,
+                                              guidanceText: guidance,
                                             );
-                                            if (widget
-                                                    .state
-                                                    .isGeneratingImage &&
-                                                !widget.state.isGenerating &&
-                                                !widget.state.isPostGenRunning) {
-                                              notifier.abortImageGeneration();
-                                            } else {
-                                              notifier.abortGeneration();
+                                      },
+                                      onSendWithImage:
+                                          (text, guidanceText, imageDataUrl) {
+                                            ref
+                                                .read(
+                                                  chatProvider(
+                                                    widget.charId,
+                                                  ).notifier,
+                                                )
+                                                .sendMessage(
+                                                  text,
+                                                  guidanceText: guidanceText,
+                                                  imageDataUrl: imageDataUrl,
+                                                );
+                                          },
+                                      isGenerating: widget.state.isGenerating,
+                                      isGeneratingImage:
+                                          widget.state.isGeneratingImage,
+                                      isPostGenRunning:
+                                          widget.state.isPostGenRunning,
+                                      onStop:
+                                          (widget.state.isGenerating ||
+                                              widget.state.isGeneratingImage ||
+                                              widget.state.isPostGenRunning)
+                                          ? () {
+                                              final notifier = ref.read(
+                                                chatProvider(
+                                                  widget.charId,
+                                                ).notifier,
+                                              );
+                                              if (widget
+                                                      .state
+                                                      .isGeneratingImage &&
+                                                  !widget.state.isGenerating &&
+                                                  !widget
+                                                      .state
+                                                      .isPostGenRunning) {
+                                                notifier.abortImageGeneration();
+                                              } else {
+                                                notifier.abortGeneration();
+                                              }
                                             }
-                                          }
-                                        : null,
-                                    onMagicDrawer: () =>
-                                        widget.drawerCtrl.toggleDrawer(context),
-                                    onQuickReplies: () =>
-                                        widget.drawerCtrl.toggleDrawer(
-                                          context,
-                                          panel: DrawerPanel.quickReplies,
-                                        ),
-                                    onImpersonate: () => ref
-                                        .read(
-                                          chatProvider(widget.charId).notifier,
-                                        )
-                                        .regenerateLastAssistant(),
-                                  );
-                                },
+                                          : null,
+                                      onMagicDrawer: () => widget.drawerCtrl
+                                          .toggleDrawer(context),
+                                      onQuickReplies: () =>
+                                          widget.drawerCtrl.toggleDrawer(
+                                            context,
+                                            panel: DrawerPanel.quickReplies,
+                                          ),
+                                      onImpersonate: () => ref
+                                          .read(
+                                            chatProvider(
+                                              widget.charId,
+                                            ).notifier,
+                                          )
+                                          .regenerateLastAssistant(),
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],

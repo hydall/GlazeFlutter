@@ -13,6 +13,7 @@ import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/widgets/fullscreen_editor.dart';
 import '../../../shared/widgets/glass_surface.dart';
+import 'chat_blur_region_tracker.dart';
 
 Border _uiBorder(BuildContext context, ThemePreset preset) {
   final base = preset.borderParsed ?? context.cs.onSurface;
@@ -33,6 +34,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
   final void Function(String text, String? guidance)? onSendWithGuidance;
   final bool isGenerating;
   final bool isGeneratingImage;
+
   /// True while post-generation stages (cleaner, ledger, write-loop, etc.)
   /// are running. Keeps the Stop button pressable through the post-gen
   /// window without gating the message sync (which keys on [isGenerating]).
@@ -306,45 +308,53 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final uiBorder = _uiBorder(context, preset);
 
     if (widget.showSearchControls) {
-      final searchContent = GlassSurface(
-        borderRadius: BorderRadius.circular(28),
-        tint: context.cs.surface,
-        border: uiBorder,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
-          child: Row(
-            children: [
-              const SizedBox(width: 18),
-              Icon(Icons.search, size: 20, color: context.cs.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  widget.searchMatchCount > 0
-                      ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches'
-                      : 'search_no_results'.tr(),
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 16 * scale,
-                    letterSpacing: letterSpacing,
+      final searchContent = BlurRegionTracker(
+        id: 'input-pill',
+        radius: 28,
+        child: GlassSurface(
+          borderRadius: BorderRadius.circular(28),
+          tint: context.cs.surface,
+          border: uiBorder,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: Row(
+              children: [
+                const SizedBox(width: 18),
+                Icon(Icons.search, size: 20, color: context.cs.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    widget.searchMatchCount > 0
+                        ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches'
+                        : 'search_no_results'.tr(),
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 16 * scale,
+                      letterSpacing: letterSpacing,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              IconButton(
-                icon: Icon(Icons.keyboard_arrow_up, size: 24, color: textColor),
-                onPressed: widget.onSearchPrev,
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.keyboard_arrow_down,
-                  size: 24,
-                  color: textColor,
+                IconButton(
+                  icon: Icon(
+                    Icons.keyboard_arrow_up,
+                    size: 24,
+                    color: textColor,
+                  ),
+                  onPressed: widget.onSearchPrev,
                 ),
-                onPressed: widget.onSearchNext,
-              ),
-              const SizedBox(width: 8),
-            ],
+                IconButton(
+                  icon: Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 24,
+                    color: textColor,
+                  ),
+                  onPressed: widget.onSearchNext,
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
           ),
         ),
       );
@@ -363,57 +373,63 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     }
 
     if (widget.isSelectionMode) {
-      final selectionContent = GlassSurface(
-        borderRadius: BorderRadius.circular(28),
-        tint: context.cs.surface,
-        border: uiBorder,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
-          child: Row(
-            children: [
-              const SizedBox(width: 8),
-              _CircleBtn(
-                icon: Icons.close,
-                onTap: widget.onCancelSelection,
-                batterySaver: widget.batterySaver,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '${widget.selectedCount} ${'selected_count'.tr()}',
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 16 * scale,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: letterSpacing,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+      final selectionContent = BlurRegionTracker(
+        id: 'input-pill',
+        radius: 28,
+        child: GlassSurface(
+          borderRadius: BorderRadius.circular(28),
+          tint: context.cs.surface,
+          border: uiBorder,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: Row(
+              children: [
+                const SizedBox(width: 8),
+                _CircleBtn(
+                  icon: Icons.close,
+                  onTap: widget.onCancelSelection,
+                  batterySaver: widget.batterySaver,
                 ),
-              ),
-              _CircleBtn(
-                icon: widget.allSelectedHidden
-                    ? Icons.visibility
-                    : Icons.visibility_off,
-                onTap: widget.selectedCount > 0 ? widget.onHideSelected : null,
-                color: widget.selectedCount > 0
-                    ? context.cs.primary
-                    : secondaryColor.withValues(alpha: 0.5),
-                batterySaver: widget.batterySaver,
-              ),
-              const SizedBox(width: 8),
-              _CircleBtn(
-                icon: Icons.delete,
-                onTap: widget.selectedCount > 0
-                    ? widget.onDeleteSelected
-                    : null,
-                color: widget.selectedCount > 0
-                    ? Colors.redAccent
-                    : secondaryColor.withValues(alpha: 0.5),
-                batterySaver: widget.batterySaver,
-              ),
-              const SizedBox(width: 8),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '${widget.selectedCount} ${'selected_count'.tr()}',
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 16 * scale,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: letterSpacing,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                _CircleBtn(
+                  icon: widget.allSelectedHidden
+                      ? Icons.visibility
+                      : Icons.visibility_off,
+                  onTap: widget.selectedCount > 0
+                      ? widget.onHideSelected
+                      : null,
+                  color: widget.selectedCount > 0
+                      ? context.cs.primary
+                      : secondaryColor.withValues(alpha: 0.5),
+                  batterySaver: widget.batterySaver,
+                ),
+                const SizedBox(width: 8),
+                _CircleBtn(
+                  icon: Icons.delete,
+                  onTap: widget.selectedCount > 0
+                      ? widget.onDeleteSelected
+                      : null,
+                  color: widget.selectedCount > 0
+                      ? Colors.redAccent
+                      : secondaryColor.withValues(alpha: 0.5),
+                  batterySaver: widget.batterySaver,
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
           ),
         ),
       );
@@ -436,7 +452,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         (_guidanceMode && _guidanceController.text.trim().isNotEmpty) ||
         _attachedImageDataUrl != null;
     final isGenerating =
-        widget.isGenerating || widget.isGeneratingImage || widget.isPostGenRunning;
+        widget.isGenerating ||
+        widget.isGeneratingImage ||
+        widget.isPostGenRunning;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -514,55 +532,59 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               color: Colors.transparent,
               elevation: 0,
               borderRadius: BorderRadius.circular(28),
-              child: GlassSurface(
-                borderRadius: BorderRadius.circular(28),
-                tint: context.cs.surface,
-                border: _guidanceMode
-                    ? Border.all(
-                        color: Colors.orange.withValues(alpha: 0.3),
-                        width: preset.borderWidth.clamp(1.0, double.infinity),
-                      )
-                    : uiBorder,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 56),
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _effectiveFocusNode,
-                    readOnly: widget.isEditingMessage,
-                    canRequestFocus: !widget.isEditingMessage,
-                    enableInteractiveSelection: !widget.isEditingMessage,
-                    showCursor: !widget.isEditingMessage,
-                    maxLines: 5,
-                    minLines: 1,
-                    textCapitalization: TextCapitalization.sentences,
-                    textInputAction: widget.virtualKeyboardSend
-                        ? TextInputAction.send
-                        : TextInputAction.newline,
-                    onSubmitted: widget.virtualKeyboardSend
-                        ? (_) => _handleSend()
-                        : null,
-                    style: TextStyle(
-                      fontSize: 16 * scale,
-                      color: textColor,
-                      letterSpacing: letterSpacing,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: _guidanceMode
-                          ? 'chat_guidance_message_hint'.tr()
-                          : 'chat_placeholder'.tr(),
-                      hintStyle: TextStyle(
-                        color: secondaryColor,
+              child: BlurRegionTracker(
+                id: 'input-pill',
+                radius: 28,
+                child: GlassSurface(
+                  borderRadius: BorderRadius.circular(28),
+                  tint: context.cs.surface,
+                  border: _guidanceMode
+                      ? Border.all(
+                          color: Colors.orange.withValues(alpha: 0.3),
+                          width: preset.borderWidth.clamp(1.0, double.infinity),
+                        )
+                      : uiBorder,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 56),
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _effectiveFocusNode,
+                      readOnly: widget.isEditingMessage,
+                      canRequestFocus: !widget.isEditingMessage,
+                      enableInteractiveSelection: !widget.isEditingMessage,
+                      showCursor: !widget.isEditingMessage,
+                      maxLines: 5,
+                      minLines: 1,
+                      textCapitalization: TextCapitalization.sentences,
+                      textInputAction: widget.virtualKeyboardSend
+                          ? TextInputAction.send
+                          : TextInputAction.newline,
+                      onSubmitted: widget.virtualKeyboardSend
+                          ? (_) => _handleSend()
+                          : null,
+                      style: TextStyle(
                         fontSize: 16 * scale,
+                        color: textColor,
                         letterSpacing: letterSpacing,
                       ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 16,
+                      decoration: InputDecoration(
+                        hintText: _guidanceMode
+                            ? 'chat_guidance_message_hint'.tr()
+                            : 'chat_placeholder'.tr(),
+                        hintStyle: TextStyle(
+                          color: secondaryColor,
+                          fontSize: 16 * scale,
+                          letterSpacing: letterSpacing,
+                        ),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 16,
+                        ),
+                        filled: false,
                       ),
-                      filled: false,
                     ),
                   ),
                 ),
@@ -580,18 +602,21 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       onTap: widget.onMagicDrawer,
                       color: widget.isDrawerOpen ? Colors.amber : null,
                       batterySaver: widget.batterySaver,
+                      blurRegionId: 'btn-magic',
                     ),
                     const SizedBox(width: 8),
                     _CircleBtn(
                       icon: Icons.attach_file,
                       onTap: _pickImage,
                       batterySaver: widget.batterySaver,
+                      blurRegionId: 'btn-attach',
                     ),
                     const SizedBox(width: 8),
                     _CircleBtn(
                       icon: Icons.fullscreen,
                       onTap: _openFullscreenEditor,
                       batterySaver: widget.batterySaver,
+                      blurRegionId: 'btn-fullscreen',
                     ),
                     const SizedBox(width: 8),
                     _CircleBtn(
@@ -602,6 +627,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       }),
                       color: _guidanceMode ? Colors.orange : null,
                       batterySaver: widget.batterySaver,
+                      blurRegionId: 'btn-guidance',
                     ),
                     const SizedBox(width: 8),
                     _CircleBtn(
@@ -609,6 +635,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       onTap: widget.onQuickReplies,
                       color: widget.isQuickRepliesOpen ? Colors.amber : null,
                       batterySaver: widget.batterySaver,
+                      blurRegionId: 'btn-quick-replies',
                     ),
                   ],
                 ),
@@ -697,11 +724,18 @@ class _CircleBtn extends ConsumerStatefulWidget {
   final Color? color;
   final bool batterySaver;
 
+  /// When set, the button's rect is mirrored into the chat WebView as a
+  /// backdrop-blur region (see [BlurRegionTracker]). Only buttons that sit
+  /// directly over the WebView (the bottom row) need one; buttons nested
+  /// inside an already-tracked pill must leave it null.
+  final String? blurRegionId;
+
   const _CircleBtn({
     required this.icon,
     this.onTap,
     this.color,
     this.batterySaver = false,
+    this.blurRegionId,
   });
 
   @override
@@ -736,7 +770,7 @@ class _CircleBtnState extends ConsumerState<_CircleBtn>
   @override
   Widget build(BuildContext context) {
     final preset = ref.watch(themeProvider.select((s) => s.activePreset));
-    return GestureDetector(
+    final btn = GestureDetector(
       onTap: widget.onTap,
       onTapDown: (widget.onTap != null && !widget.batterySaver)
           ? (_) => _press.forward()
@@ -767,6 +801,9 @@ class _CircleBtnState extends ConsumerState<_CircleBtn>
         ),
       ),
     );
+    final regionId = widget.blurRegionId;
+    if (regionId == null) return btn;
+    return BlurRegionTracker(id: regionId, radius: 20, child: btn);
   }
 }
 

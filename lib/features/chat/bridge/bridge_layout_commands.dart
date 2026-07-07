@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'chat_bridge_controller.dart';
+import 'chat_overlay_blur_region.dart';
 
 /// Outgoing layout/UX commands: padding, search, edit, selection,
 /// message settings. These are WebView-level controls that don't
@@ -10,10 +11,7 @@ class LayoutBridgeCommands {
 
   LayoutBridgeCommands(this._host);
 
-  Future<void> setSearch({
-    required String query,
-    int activeIndex = -1,
-  }) {
+  Future<void> setSearch({required String query, int activeIndex = -1}) {
     return _host.evalJs(
       'window.bridge?.setSearch("${_host.escape(query)}", $activeIndex)',
     );
@@ -29,6 +27,14 @@ class LayoutBridgeCommands {
     return _host.evalJs(
       'window.bridge?.setTopPadding(${px.toStringAsFixed(1)})',
     );
+  }
+
+  /// Syncs the rects of Flutter glass overlays (header, input pill, ...) so
+  /// the WebView can blur the messages scrolling underneath them — Flutter's
+  /// own BackdropFilter cannot sample the platform view's pixels.
+  Future<void> setOverlayBlurRegions(List<ChatOverlayBlurRegion> regions) {
+    final json = chatOverlayBlurRegionsToJs(regions);
+    return _host.evalJs('window.bridge?.setOverlayBlurRegions($json)');
   }
 
   Future<void> startEdit(String messageId) {
