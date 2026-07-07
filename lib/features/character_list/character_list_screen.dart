@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -18,6 +17,7 @@ import '../../core/state/character_folder_provider.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
+import '../../shared/shell/header_scroll_hider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
@@ -79,6 +79,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   // grids attach via PrimaryScrollController), so tapping the active tab can
   // animate it back to the top.
   final ScrollController _listScrollController = ScrollController();
+  final HeaderScrollHider _headerScrollHider = HeaderScrollHider();
 
   @override
   void dispose() {
@@ -90,18 +91,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   }
 
   /// Hides the floating tabs row while scrolling down, reveals it scrolling up.
-  /// Mirrors the chat header's behaviour ([_onScrollDirection] there).
+  /// Uses [HeaderScrollHider], ported from the chat header's algorithm.
   bool _onScrollNotification(ScrollNotification n) {
-    if (n is UserScrollNotification && n.metrics.axis == Axis.vertical) {
-      final notifier = ref.read(
-        shellHeaderHiddenProvider(headerBranchIndex).notifier,
-      );
-      if (n.direction == ScrollDirection.reverse && !notifier.state) {
-        notifier.state = true;
-      } else if (n.direction == ScrollDirection.forward && notifier.state) {
-        notifier.state = false;
-      }
-    }
+    final notifier = ref.read(
+      shellHeaderHiddenProvider(headerBranchIndex).notifier,
+    );
+    _headerScrollHider.handle(n, (hidden) => notifier.state = hidden);
     return false;
   }
 
