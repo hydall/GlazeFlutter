@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-   int get schemaVersion => 61;
+   int get schemaVersion => 62;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1133,6 +1133,48 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       }
+      if (from < 62) {
+        // Force-update writeloop_system with IDENTITY REVEAL RULE.
+        // When a character's real name is revealed, write-loop must update
+        // existing tracker keys to the new name instead of creating duplicates.
+        try {
+          final presetRows = await customSelect(
+            'SELECT preset_id, blocks_json FROM studio_preset_rows',
+          ).get();
+          final seedBlocks = studioPresetSeedBlocks();
+          final seedById = {
+            for (final b in seedBlocks) b['id'] as String: b,
+          };
+          for (final row in presetRows) {
+            final presetId = row.read<String>('preset_id');
+            final blocksJson = row.read<String>('blocks_json');
+            final blocks = (jsonDecode(blocksJson) as List<dynamic>)
+                .cast<Map<String, dynamic>>();
+            var changed = false;
+            for (var i = 0; i < blocks.length; i++) {
+              final id = blocks[i]['id'] as String?;
+              if (id == 'writeloop_system') {
+                final seed = seedById['writeloop_system'];
+                if (seed != null) {
+                  blocks[i] = seed;
+                  changed = true;
+                }
+                break;
+              }
+            }
+            if (changed) {
+              await customStatement(
+                'UPDATE studio_preset_rows SET blocks_json = ? WHERE preset_id = ?',
+                [jsonEncode(blocks), presetId],
+              );
+            }
+          }
+        } catch (e) {
+          debugPrint(
+            'Migration 62 (identity reveal rule in writeloop_system) failed: $e',
+          );
+        }
+      }
     },
   );
 }
@@ -1674,7 +1716,7 @@ PREFER
       'kind': 'instruction',
       'role': 'system',
       'content':
-          'You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.\n\nRecent conversation:\n{{recentHistoryText}}\n\nCurrent trackers:\n{{trackersBlock}}\n\nExisting memory entries already in the MemoryBook:\n{{existingBlock}}\n\nDecide what to write. You have two tools:\n\n1. updateTracker — lightweight key-value state that persists across turns (mood, location, relationship status, inventory, ongoing promises).\n2. writeMemory — a pending memory draft for significant events, revelations, promises. These require user approval before becoming active.\n\nRules:\n- Only write trackers that CHANGED or are NEW. Don\'t repeat unchanged trackers.\n- Only create memory drafts for SIGNIFICANT events (not every turn).\n- If an event merely ADDS detail to an existing memory entry, write a memory request whose `existingEntryId` is the id of the existing entry and whose `content` contains only the NEW facts — do not restate or rewrite the existing entry. The pipeline will append your newFacts to the existing entry verbatim.\n- Do NOT create a new memory entry (no existingEntryId) that duplicates an existing entry\'s title/keys. Instead, write an append-only update with existingEntryId set.\n- If nothing is worth persisting, return: {"trackers": [], "memories": []}\n- Keep tracker values short (1-5 words). Write FACTS, not prose: "silent, suspicious" not "превратилась в молчаливого свидетеля". No adjectives, no metaphors, no literary register.\n- Memory content should be 1-3 sentences describing what happened and why it matters.\n\nANTI-DUPLICATE RULES (critical):\n- The Studio Ledger already maintains entity/relationship/arc/world/scene state in ledger-scope trackers with structured keys (npc:Name.field, relationship:A:B.field, world:location, scene.present_entities, etc.). Do NOT duplicate that information in chat-scope trackers.\n- Chat-scope trackers are ONLY for transient, per-turn state that the ledger does NOT cover: current mood, transient tension, immediate emotional beat. Do not write location, world, npc, relationship, or arc data as chat-scope trackers — the ledger owns those.\n- Use the SAME character name spelling as the ledger (match the existing tracker keys). Do not transliterate names (e.g. if the ledger uses "Danvi", do not write "Данви_mood" — use "mood:Danvi" or just "mood" with the value mentioning the character).\n- Before writing a tracker, check the Current trackers list above. If a ledger-scope tracker already covers the same information, do NOT write a chat-scope duplicate. Skip it.\n- A mood tracker should be a single "mood" entry with the current emotional state, not per-character mood entries.\n- A tension tracker should capture the immediate scene tension, not duplicate world:active_threats.',
+          'You are a memory agent for a roleplay conversation. After each turn, you decide what facts to persist so they survive context truncation.\n\nRecent conversation:\n{{recentHistoryText}}\n\nCurrent trackers:\n{{trackersBlock}}\n\nExisting memory entries already in the MemoryBook:\n{{existingBlock}}\n\nDecide what to write. You have two tools:\n\n1. updateTracker — lightweight key-value state that persists across turns (mood, location, relationship status, inventory, ongoing promises).\n2. writeMemory — a pending memory draft for significant events, revelations, promises. These require user approval before becoming active.\n\nRules:\n- Only write trackers that CHANGED or are NEW. Don\'t repeat unchanged trackers.\n- Only create memory drafts for SIGNIFICANT events (not every turn).\n- If an event merely ADDS detail to an existing memory entry, write a memory request whose `existingEntryId` is the id of the existing entry and whose `content` contains only the NEW facts — do not restate or rewrite the existing entry. The pipeline will append your newFacts to the existing entry verbatim.\n- Do NOT create a new memory entry (no existingEntryId) that duplicates an existing entry\'s title/keys. Instead, write an append-only update with existingEntryId set.\n- If nothing is worth persisting, return: {"trackers": [], "memories": []}\n- Keep tracker values short (1-5 words). Write FACTS, not prose: "silent, suspicious" not "превратилась в молчаливого свидетеля". No adjectives, no metaphors, no literary register.\n- Memory content should be 1-3 sentences describing what happened and why it matters.\n\nANTI-DUPLICATE RULES (critical):\n- The Studio Ledger already maintains entity/relationship/arc/world/scene state in ledger-scope trackers with structured keys (npc:Name.field, relationship:A:B.field, world:location, scene.present_entities, etc.). Do NOT duplicate that information in chat-scope trackers.\n- Chat-scope trackers are ONLY for transient, per-turn state that the ledger does NOT cover: current mood, transient tension, immediate emotional beat. Do not write location, world, npc, relationship, or arc data as chat-scope trackers — the ledger owns those.\n- Use the SAME character name spelling as the ledger (match the existing tracker keys). Do not transliterate names (e.g. if the ledger uses "Danvi", do not write "Данви_mood" — use "mood:Danvi" or just "mood" with the value mentioning the character).\n- Before writing a tracker, check the Current trackers list above. If a ledger-scope tracker already covers the same information, do NOT write a chat-scope duplicate. Skip it.\n- A mood tracker should be a single "mood" entry with the current emotional state, not per-character mood entries.\n- A tension tracker should capture the immediate scene tension, not duplicate world:active_threats.\n\nIDENTITY REVEAL RULE (critical):\n- When a character\'s real name is revealed (e.g. "Незнакомка в жёлтой куртке" is revealed to be "Люси"), UPDATE the existing tracker keys with the new name. Do NOT create duplicate npc: entries for the same character.\n- Set the old keys\' value to "→ new_name" (e.g. npc:Незнакомка_в_жёлтой_куртке.knowledge: → Люси) so the compiler and future agents know to follow the redirect.\n- Write the full updated state under the new name (npc:Люси.knowledge, npc:Люси.attitude_to_user, etc.).\n- Update scene.present_entities to use the revealed name.\n- Update relationship: entries that referenced the old name.',
       'enabled': true,
       'order': 0,
       'section': 'writeloop',
