@@ -170,23 +170,35 @@ class ChatWebViewSurface extends ConsumerWidget {
       children: [
         // Background behind the transparent WebView.
         Positioned.fill(child: _background(context)),
-        if (elementBlur > 0)
-          for (final region in blurRegions)
-            Positioned.fromRect(
-              rect: region.rect,
-              child: IgnorePointer(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(region.radius),
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(
-                      sigmaX: elementBlur,
-                      sigmaY: elementBlur,
+        // Blur sandwich for the global background — ALWAYS a single stable
+        // child, never a variable number of siblings: inserting/removing
+        // children BEFORE the InAppWebView shifts its index, and the keyless
+        // Stack reconciliation then disposes and recreates the platform view
+        // mid-load ("JS bridge did not initialize within 30s"). Region churn
+        // stays inside this nested Stack.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Stack(
+              children: [
+                if (elementBlur > 0)
+                  for (final region in blurRegions)
+                    Positioned.fromRect(
+                      rect: region.rect,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(region.radius),
+                        child: BackdropFilter(
+                          filter: ui.ImageFilter.blur(
+                            sigmaX: elementBlur,
+                            sigmaY: elementBlur,
+                          ),
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
                     ),
-                    child: const SizedBox.expand(),
-                  ),
-                ),
-              ),
+              ],
             ),
+          ),
+        ),
         Positioned.fill(
           child: IgnorePointer(
             ignoring: sessionSwitching,
