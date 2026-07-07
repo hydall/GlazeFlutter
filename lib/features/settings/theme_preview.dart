@@ -15,8 +15,7 @@ import '../chat/widgets/chat_input_bar.dart';
 
 /// Live preview of a theme preset, framed like the avatar card in
 /// generic_editor.dart:319. Intrinsic height; the message style follows the
-/// user's `chatLayout` setting (default = standard, no bubbles; bubble =
-/// bubbles; vn = visual-novel dialogue panel).
+/// user's `chatLayout` setting (default = standard, no bubbles; bubble = bubbles).
 class ThemeChatPreview extends ConsumerWidget {
   final ThemePreset preset;
   final Color borderColor;
@@ -44,6 +43,7 @@ class ThemeChatPreview extends ConsumerWidget {
       color: preset.accentColor,
     );
     final chatLayout = preset.chatLayout;
+    final isStandard = chatLayout == 'default';
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -59,7 +59,7 @@ class ThemeChatPreview extends ConsumerWidget {
             child: _PreviewChatScene(
               preset: preset,
               character: previewCharacter,
-              chatLayout: chatLayout,
+              isStandard: isStandard,
               chatFontFamily: chatFontFamily,
               chatFontSize: preset.chatFontSizeValue,
               chatLetterSpacing: preset.chatLetterSpacing,
@@ -96,7 +96,7 @@ class ThemeChatPreview extends ConsumerWidget {
 class _PreviewChatScene extends StatelessWidget {
   final ThemePreset preset;
   final Character character;
-  final String chatLayout;
+  final bool isStandard;
   final String? chatFontFamily;
   final double chatFontSize;
   final double chatLetterSpacing;
@@ -106,7 +106,7 @@ class _PreviewChatScene extends StatelessWidget {
   const _PreviewChatScene({
     required this.preset,
     required this.character,
-    required this.chatLayout,
+    required this.isStandard,
     required this.chatFontFamily,
     required this.chatFontSize,
     required this.chatLetterSpacing,
@@ -150,87 +150,7 @@ class _PreviewChatScene extends StatelessWidget {
           const SizedBox(height: 4),
           _PreviewDateSeparator(label: '24 March 2026'),
           const SizedBox(height: 4),
-          if (chatLayout == 'vn') ...[
-            const SizedBox(height: 8),
-            Center(
-              child: Container(
-                width: 72,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: cs.onSurface.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  Icons.person_outline,
-                  size: 36,
-                  color: cs.onSurface.withValues(alpha: 0.35),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: cs.outline.withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      character.name,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: cs.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    RichText(
-                      text: TextSpan(
-                        style: TextStyle(
-                          fontFamily: chatFontFamily,
-                          fontSize: chatFontSize,
-                          letterSpacing: chatLetterSpacing,
-                          height: 1.4,
-                          fontStyle: FontStyle.italic,
-                          color: colors.charItalic ?? cs.onSurface,
-                          fontWeight: preset.charMessageFontWeightValue,
-                          fontVariations: [
-                            FontVariation(
-                              'wght',
-                              preset.charMessageFontWeightValue.value
-                                  .toDouble(),
-                            ),
-                          ],
-                        ),
-                        children: [
-                          const TextSpan(
-                            text:
-                                'Rei watches in silence, waiting for an answer. ',
-                          ),
-                          TextSpan(
-                            text: '"Lost?"',
-                            style: const TextStyle(
-                              fontStyle: FontStyle.normal,
-                              fontWeight: FontWeight.w500,
-                              fontVariations: [FontVariation('wght', 500)],
-                            ).copyWith(color: colors.charQuote ?? cs.primary),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ] else if (chatLayout != 'bubble') ...[
+          if (isStandard) ...[
             _PreviewStandardMessage(
               character: character,
               isUser: false,

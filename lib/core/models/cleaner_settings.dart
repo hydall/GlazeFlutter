@@ -49,6 +49,12 @@ abstract class CleanerSettings with _$CleanerSettings {
     @Default(false) bool postCleanerOmitTopP,
     @Default(true) bool postCleanerOmitReasoning,
     @Default(true) bool postCleanerOmitReasoningEffort,
+    // ── Enable toggle ─────────────────────────────────────────────────────
+    // Master toggle for the post-cleaner rewrite + fact-checker. When false,
+    // both the cleaner LLM call and the audit pass are skipped on the auto
+    // path — ExtBlocks and Ledger still run on the original (un-cleaned)
+    // assistant text. Manual rerun always runs the cleaner regardless.
+    @Default(true) bool postCleanerEnabled,
   }) = _CleanerSettings;
 
   factory CleanerSettings.fromJson(Map<String, dynamic> json) =>

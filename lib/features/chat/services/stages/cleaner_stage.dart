@@ -371,6 +371,51 @@ class CleanerStage {
     bool abortCheck() =>
         ctx.ref.mounted && (isManualRerun || ctx.abortHandler.isCurrentGen(genId));
 
+    // ── Post-cleaner disabled toggle (AUTO path only) ───────────────────
+    // When postCleanerEnabled is false on the auto path, skip the cleaner
+    // LLM and the fact-checker entirely — launch ExtBlocks + Ledger on the
+    // raw assistant text. Manual rerun (genId < 0) always runs the cleaner
+    // regardless — the user explicitly asked for it via the rerun button.
+    //
+    // On manual rerun, suppress ExtBlocks/Ledger re-launch ONLY when the
+    // toggle was off — they already ran on the raw text during auto post-gen.
+    final skipPostGenOnRerun = isManualRerun && !pipeline.cleaner.postCleanerEnabled;
+
+    if (!pipeline.cleaner.postCleanerEnabled && !isManualRerun) {
+      debugPrint(
+        '[PostCleaner] skipping — postCleanerEnabled=false session=$sessionId',
+      );
+      ctx.ref.read(postCleanerStateProvider.notifier).state =
+          const PostCleanerState.idle();
+      // Launch ExtBlocks on the original swipe (-1 = no cleaned sub-swipe).
+      if (character != null && ctx.ref.mounted) {
+        final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+        if (refreshed != null) {
+          await extBlocks.launchForSwipe(
+            session: refreshed,
+            character: character,
+            agentSwipeId: -1,
+          );
+        }
+      }
+      // Run Ledger on the original assistant text.
+      if (ctx.ref.mounted) {
+        unawaited(
+          ledger.run(
+            sessionId: sessionId,
+            messages: recentMessages,
+            genId: genId,
+            finalAssistantText: assistantText,
+            targetMessage: targetMessage,
+            isManualRerun: isManualRerun,
+            resolvedConfig: cleanerConfig,
+            cancelToken: null,
+          ),
+        );
+      }
+      return;
+    }
+
     final cleanerTimeout = const AuxLlmClient().resolveCleanerTimeout(pipeline);
     debugPrint(
       '[PostCleaner] starting session=$sessionId '
@@ -384,7 +429,8 @@ class CleanerStage {
       'rerun=$isManualRerun',
     );
 
-    final factCheckEnabled = promptPayload != null;
+    final factCheckEnabled =
+        promptPayload != null && pipeline.cleaner.postCleanerEnabled;
 
     ctx.ref.read(postCleanerStateProvider.notifier).state = factCheckEnabled
         ? PostCleanerState.factChecking(
@@ -701,7 +747,9 @@ class CleanerStage {
       }
       _finalized = true;
       // Launch extension blocks bound to the NEW cleaned swipe.
-      if (character != null && ctx.ref.mounted) {
+      // Skip on manual rerun when both auto toggles were off — ExtBlocks
+      // already ran on the raw text during auto post-gen.
+      if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
         final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
@@ -720,7 +768,7 @@ class CleanerStage {
         );
       }
       _finalized = true;
-      if (character != null && ctx.ref.mounted) {
+      if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
         final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
@@ -755,7 +803,7 @@ class CleanerStage {
         );
       }
       _finalized = true;
-      if (character != null && ctx.ref.mounted) {
+      if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
         final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
@@ -776,7 +824,7 @@ class CleanerStage {
         );
       }
       _finalized = true;
-      if (character != null && ctx.ref.mounted) {
+      if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
         final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
@@ -793,7 +841,7 @@ class CleanerStage {
         agentSwipeId: _preCreatedCleanerSwipeId,
       );
       _finalized = true;
-      if (character != null && ctx.ref.mounted) {
+      if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
         final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
@@ -864,7 +912,9 @@ class CleanerStage {
     // canonical text. Runs on both auto and manual rerun — on manual rerun
     // the ledger inherits the cleaner's resolved config so it doesn't
     // re-resolve (and doesn't fall back to the active chat API).
-    if (ctx.ref.mounted) {
+    // Skip on manual rerun when both auto toggles were off — Ledger already
+    // ran on the raw text during auto post-gen.
+    if (ctx.ref.mounted && !skipPostGenOnRerun) {
       final ledgerText = selectStudioLedgerTextAfterCleaner(
         cleanerStatus: result.status,
         wasCleaned: result.wasCleaned,

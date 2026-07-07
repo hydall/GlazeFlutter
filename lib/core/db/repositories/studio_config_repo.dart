@@ -17,7 +17,20 @@ class StudioConfigRepo implements SyncStudioConfigStore {
     final row = await (db.select(
       db.studioConfigRows,
     )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
-    if (row == null) return null;
+    if (row == null) {
+      // No session-specific config — fall back to the first global profile
+      // so new sessions inherit Studio settings without a dialog prompt.
+      final profiles = await getProfiles();
+      if (profiles.isEmpty) return null;
+      final profile = profiles.first;
+      // Bind the session to the profile so future lookups are direct.
+      await _upsertRow(profile.copyWith(
+        sessionId: sessionId,
+        profileId: profile.profileId,
+        enabled: profile.enabled,
+      ));
+      return profile.copyWith(sessionId: sessionId);
+    }
     final binding = _rowToModel(row);
     final profileId = binding.profileId;
     if (profileId.isEmpty || profileId == binding.sessionId) {

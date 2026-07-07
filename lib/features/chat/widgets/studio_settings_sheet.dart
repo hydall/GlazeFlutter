@@ -75,7 +75,23 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     await ref.read(apiListProvider.future);
     final repo = ref.read(studioConfigRepoProvider);
     final presetRepo = ref.read(studioPresetRepoProvider);
-    final config = await repo.getBySessionId(widget.sessionId);
+    var config = await repo.getBySessionId(widget.sessionId);
+    // Studio is global — if no config exists at all, auto-create a default
+    // profile instead of showing an "Enable Studio" dialog.
+    if (config == null) {
+      final now = currentTimestampSeconds();
+      config = StudioConfig(
+        sessionId: widget.sessionId,
+        enabled: true,
+        agents: StudioControllerOntology.buildDefaultAgents(
+          sessionId: widget.sessionId,
+          now: now,
+        ),
+        createdAt: now,
+        updatedAt: now,
+      );
+      await repo.upsert(config);
+    }
     final presets = await presetRepo.getAll();
     if (!mounted) return;
     setState(() {
@@ -99,43 +115,7 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
         child: Center(child: CircularProgressIndicator()),
       );
     }
-    if (_config == null) {
-      return _buildNoConfig();
-    }
     return _buildBody();
-  }
-
-  Widget _buildNoConfig() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('No Studio configuration for this session.'),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: _createDefaultConfig,
-            icon: const Icon(Icons.auto_mode),
-            label: const Text('Enable Studio'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _createDefaultConfig() async {
-    final now = currentTimestampSeconds();
-    final config = StudioConfig(
-      sessionId: widget.sessionId,
-      enabled: true,
-      agents: StudioControllerOntology.buildDefaultAgents(
-        sessionId: widget.sessionId,
-        now: now,
-      ),
-      createdAt: now,
-      updatedAt: now,
-    );
-    await _save(config);
   }
 
   Widget _buildBody() {
@@ -214,6 +194,9 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
                 _save(config.copyWith(cleanerApiConfigId: apiConfigId)),
             onSettings: () => _openSlotSettings(slot: StudioSlot.cleaner),
           ),
+          const Divider(),
+          // ── Post-gen toggles ───────────────────────────────────────────
+          _buildPostGenToggles(pipeline),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.edit_note),
@@ -762,6 +745,37 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
         setState(() => _fetchingModelSlots.remove(modelCacheKey));
       }
     }
+  }
+
+  Widget _buildPostGenToggles(PipelineSettings pipeline) {
+    final cleaner = pipeline.cleaner;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Post-Gen', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Пост-клинер'),
+          subtitle: const Text(
+            'Факт-чекер + пост-клинер: аудит и перезапись ответа',
+          ),
+          value: cleaner.postCleanerEnabled,
+          onChanged: (v) => _savePipeline(
+            (p) => p.copyWith(
+              cleaner: p.cleaner.copyWith(postCleanerEnabled: v),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _savePipeline(
+    PipelineSettings Function(PipelineSettings) mutate,
+  ) async {
+    final pipeline = ref.read(pipelineSettingsProvider);
+    await ref.read(pipelineSettingsProvider.notifier).save(mutate(pipeline));
   }
 
   Widget _buildRecoverySection() {
