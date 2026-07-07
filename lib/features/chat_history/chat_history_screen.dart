@@ -1,8 +1,8 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/shell/header_scroll_hider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
 
@@ -28,6 +28,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
   final FocusNode _searchFocus = FocusNode();
   bool _searchExpanded = false;
   ShellHeaderRegistry? _registry;
+  final HeaderScrollHider _headerScrollHider = HeaderScrollHider();
 
   @override
   void initState() {
@@ -47,16 +48,11 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
   }
 
   /// Slides the shell header out of view while scrolling down the list and back
-  /// in while scrolling up — same behaviour as the character list / chat header.
+  /// in while scrolling up. Uses [HeaderScrollHider], ported from the chat
+  /// header's algorithm.
   bool _onScrollNotification(ScrollNotification n) {
-    if (n is UserScrollNotification && n.metrics.axis == Axis.vertical) {
-      final notifier = ref.read(shellHeaderHiddenProvider(0).notifier);
-      if (n.direction == ScrollDirection.reverse && !notifier.state) {
-        notifier.state = true;
-      } else if (n.direction == ScrollDirection.forward && notifier.state) {
-        notifier.state = false;
-      }
-    }
+    final notifier = ref.read(shellHeaderHiddenProvider(0).notifier);
+    _headerScrollHider.handle(n, (hidden) => notifier.state = hidden);
     return false;
   }
 
