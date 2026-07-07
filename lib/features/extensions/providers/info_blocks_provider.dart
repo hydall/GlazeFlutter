@@ -160,13 +160,27 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
 
   /// Returns all blocks for a specific message, sorted by order.
   /// When duplicates exist for the same preset block, keeps the newest row.
+  ///
+  /// Fallback: if no blocks match the exact [agentSwipeId], retries with
+  /// `agentSwipeId = -1` (legacy binding from the no-cleaner path). This
+  /// prevents blocks from disappearing after app restart when the message's
+  /// `agentSwipeId` (default 0 from freezed) doesn't match the block's
+  /// `agentSwipeId` (-1, set when post-cleaner was disabled/skipped).
   List<InfoBlock> getByMessageId(String messageId, {int swipeId = 0, int agentSwipeId = -1}) {
-    final blocks = state
+    var blocks = state
         .where((b) =>
             b.messageId == messageId &&
             b.swipeId == swipeId &&
             b.agentSwipeId == agentSwipeId)
         .toList();
+    if (blocks.isEmpty && agentSwipeId != -1) {
+      blocks = state
+          .where((b) =>
+              b.messageId == messageId &&
+              b.swipeId == swipeId &&
+              b.agentSwipeId == -1)
+          .toList();
+    }
     final byBlockId = <String, InfoBlock>{};
     for (final block in blocks) {
       final existing = byBlockId[block.blockId];
