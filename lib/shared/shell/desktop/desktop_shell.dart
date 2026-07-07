@@ -131,6 +131,16 @@ class _DesktopHeader extends ConsumerWidget {
       switchOutCurve: Curves.easeOutCubic,
       transitionBuilder: (child, animation) =>
           FadeTransition(opacity: animation, child: child),
+      // See _PersistentHeader in shell_screen.dart: default Alignment.center
+      // layout makes a shorter header snap up once the taller outgoing one
+      // (e.g. one with a segmented-control `below` row) is disposed.
+      layoutBuilder: (currentChild, previousChildren) => Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          ...previousChildren,
+          if (currentChild != null) currentChild,
+        ],
+      ),
       child: entry == null || entry.config.hidden
           ? const SizedBox.shrink(key: ValueKey('desktop-header-empty'))
           : KeyedSubtree(

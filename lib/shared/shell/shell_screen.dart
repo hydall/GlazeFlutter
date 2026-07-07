@@ -119,6 +119,20 @@ class _PersistentHeader extends ConsumerWidget {
       switchOutCurve: Curves.easeOutCubic,
       transitionBuilder: (child, animation) =>
           FadeTransition(opacity: animation, child: child),
+      // Default layoutBuilder stacks children with Alignment.center, so when
+      // the outgoing and incoming headers differ in height (e.g. a branch
+      // with a segmented-control `below` row vs. one without), the shorter
+      // header sits vertically centered against the taller one during the
+      // cross-fade, then snaps to the top the instant the taller child is
+      // disposed. Top-aligning keeps both children flush with the header's
+      // top edge throughout, so there's nothing to snap.
+      layoutBuilder: (currentChild, previousChildren) => Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          ...previousChildren,
+          if (currentChild != null) currentChild,
+        ],
+      ),
       child: entry == null || entry.config.hidden
           ? const SizedBox.shrink(key: ValueKey('shell-header-empty'))
           : KeyedSubtree(
