@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-   int get schemaVersion => 59;
+   int get schemaVersion => 60;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1030,6 +1030,53 @@ class AppDatabase extends _$AppDatabase {
         } catch (e) {
           debugPrint(
             'Migration 59 (purge ledger diagnostic rows) failed: $e',
+          );
+        }
+      }
+      if (from < 60) {
+        // Force-update continuity_task_universal and final_response_shape_contract
+        // in the default preset with SOURCE-MATERIAL KNOWLEDGE instructions.
+        // These blocks tell trackers not to mark unknown franchise lore as
+        // "не установлено" and tell the final writer that tracker silence ≠
+        // non-canon. Without this, tracker agents (Sonnet 5) who don't know
+        // franchise lore suppress the final model's (Gemini) own knowledge.
+        try {
+          final row = await customSelect(
+            'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
+            variables: [Variable.withString('default')],
+          ).getSingleOrNull();
+          if (row != null) {
+            final blocksJson = row.read<String>('blocks_json');
+            final blocks = (jsonDecode(blocksJson) as List<dynamic>)
+                .cast<Map<String, dynamic>>();
+            final seedBlocks = studioPresetSeedBlocks();
+            final seedById = {
+              for (final b in seedBlocks) b['id'] as String: b,
+            };
+            var changed = false;
+            for (var i = 0; i < blocks.length; i++) {
+              final id = blocks[i]['id'] as String?;
+              if (id == 'continuity_task_universal' ||
+                  id == 'final_response_shape_contract') {
+                final seed = seedById[id];
+                if (seed != null) {
+                  blocks[i] = seed;
+                  changed = true;
+                }
+              }
+            }
+            if (changed) {
+              await customStatement(
+                'UPDATE studio_preset_rows SET blocks_json = ?, '
+                "updated_at = CAST(strftime('%s','now') AS INTEGER) "
+                'WHERE preset_id = ?',
+                [jsonEncode(blocks), 'default'],
+              );
+            }
+          }
+        } catch (e) {
+          debugPrint(
+            'Migration 60 (source-material knowledge fix) failed: $e',
           );
         }
       }
