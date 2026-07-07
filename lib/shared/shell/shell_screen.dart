@@ -130,7 +130,7 @@ class _PersistentHeader extends ConsumerWidget {
         alignment: Alignment.topCenter,
         children: [
           ...previousChildren,
-          if (currentChild != null) currentChild,
+          ?currentChild,
         ],
       ),
       child: entry == null || entry.config.hidden
