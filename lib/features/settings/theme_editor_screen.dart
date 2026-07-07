@@ -1084,16 +1084,7 @@ class _LayoutPickerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = switch (value) {
-      'bubble' => Icons.chat_bubble_outline,
-      'vn' => Icons.auto_stories_outlined,
-      _ => Icons.view_stream_outlined,
-    };
-    final labelKey = switch (value) {
-      'bubble' => 'layout_bubble',
-      'vn' => 'layout_vn',
-      _ => 'layout_default',
-    };
+    final isBubble = value == 'bubble';
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1109,7 +1100,7 @@ class _LayoutPickerRow extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                icon,
+                isBubble ? Icons.chat_bubble_outline : Icons.view_stream_outlined,
                 size: 18,
                 color: context.cs.primary,
               ),
@@ -1128,7 +1119,7 @@ class _LayoutPickerRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      labelKey.tr(),
+                      isBubble ? 'layout_bubble'.tr() : 'layout_default'.tr(),
                       style: TextStyle(
                         fontSize: 12,
                         color: context.cs.onSurfaceVariant,

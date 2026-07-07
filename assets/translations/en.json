@@ -351,8 +351,6 @@
     "layout_bubble": "Bubbles",
     "layout_default_desc": "Classic chat log",
     "layout_bubble_desc": "Left and right bubbles",
-    "layout_vn": "Visual Novel",
-    "layout_vn_desc": "Dialogue box over the scene",
     "menu_custom_theme": "Theme Settings",
     "section_personality": "Personality",
     "section_dialogue": "Dialogue",

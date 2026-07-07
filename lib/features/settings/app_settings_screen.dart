@@ -232,11 +232,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             ),
             MenuItem(
               label: 'menu_chat_layout'.tr(),
-              value: switch (ref.watch(themeProvider).activePreset.chatLayout) {
-                'bubble' => 'layout_bubble'.tr(),
-                'vn' => 'layout_vn'.tr(),
-                _ => 'layout_default'.tr(),
-              },
+              value: ref.watch(themeProvider).activePreset.chatLayout == 'bubble'
+                  ? 'layout_bubble'.tr()
+                  : 'layout_default'.tr(),
               onTap: () => _showLayoutPicker(context, ref),
             ),
             MenuSwitchItem(
