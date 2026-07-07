@@ -4,11 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
+import 'core/debug/perf_debug.dart';
 
 final appRestartKey = GlobalKey();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  PerfDebug.installFrameLoggerIfEnabled();
   await EasyLocalization.ensureInitialized();
   try {
     await SystemChrome.setPreferredOrientations([

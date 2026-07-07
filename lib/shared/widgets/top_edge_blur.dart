@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../core/debug/perf_debug.dart';
+
 /// Gradient-masked blur across the top edge of [child].
 ///
 /// Renders the same effect as `package:soft_edge_blur` (of which this is a
@@ -45,7 +47,7 @@ class TopEdgeBlur extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRect(
       child: _TopEdgeBlurRenderWidget(
-        enabled: enabled && height > 0 && sigma > 0,
+        enabled: enabled && !PerfDebug.noEdgeBlur && height > 0 && sigma > 0,
         devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
         height: height,
         sigma: sigma,

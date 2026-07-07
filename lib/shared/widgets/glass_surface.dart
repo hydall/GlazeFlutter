@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/debug/perf_debug.dart';
 import '../../features/settings/app_settings_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_preset.dart';
@@ -57,7 +58,9 @@ class GlassSurface extends ConsumerWidget {
 
   Widget _build(BuildContext context, ThemePreset preset, bool batterySaver) {
     final alpha = batterySaver ? 1.0 : preset.elementOpacity.clamp(0.0, 1.0);
-    final blur = batterySaver ? 0.0 : preset.elementBlur;
+    final blur = (batterySaver || PerfDebug.noGlassBlur)
+        ? 0.0
+        : preset.elementBlur;
     final defaultBase = Theme.of(context).colorScheme.surfaceContainerHighest;
     final effectiveTint = tint;
     final fillColor = effectiveTint == null
@@ -84,7 +87,8 @@ class GlassSurface extends ConsumerWidget {
       ),
     );
 
-    final withNoise = !batterySaver && preset.noiseOpacity > 0
+    final withNoise =
+        !batterySaver && !PerfDebug.noNoise && preset.noiseOpacity > 0
         ? Stack(
             fit: StackFit.passthrough,
             children: [
@@ -111,12 +115,14 @@ class GlassSurface extends ConsumerWidget {
 
     final surface = ClipRRect(
       borderRadius: borderRadius,
-      // `.grouped` shares one backdrop blur pass with every other grouped
-      // filter under the nearest BackdropGroup (see GlazeBackground). If no
-      // group is in scope it degrades to a normal standalone BackdropFilter.
+      // Deliberately NOT `BackdropFilter.grouped`: grouped filters blur the
+      // backdrop as of the enclosing BackdropGroup — i.e. only the app
+      // background — so content scrolling under a glass header was ignored by
+      // the blur, and the effect vanished entirely inside the Android
+      // overscroll stretch transform.
       child: blur > 0
           ? RepaintBoundary(
-              child: BackdropFilter.grouped(
+              child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
                 child: withNoise,
               ),

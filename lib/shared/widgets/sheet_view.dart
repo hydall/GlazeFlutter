@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -569,17 +567,11 @@ class _SheetViewState extends ConsumerState<SheetView>
       _measureHeader();
     }
 
-    // The primary backdrop blur stays live even during the drag (CSS
-    // backdrop-filter parity). The frame cost is kept affordable by
-    // disabling the *second* blur pass (TopEdgeBlur) while interacting — see
-    // _buildBodyChild / _interacting — and by driving the animated height
-    // through _heightN so per-tick work is layout/paint only, not a rebuild.
-    final content = batterySaver
-        ? _sheetContent(context, bottomInset, batterySaver, opaque: true)
-        : BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: _sheetContent(context, bottomInset, batterySaver),
-          );
+    // Solid opaque background. The previous surface-alpha-0.8 +
+    // sigma-20 BackdropFilter variant cost a full-width backdrop blur on
+    // every frame the sheet moved or resized, and over dark themes the 20%
+    // show-through read as a solid fill anyway.
+    final content = _sheetContent(context, bottomInset, batterySaver, opaque: true);
 
     return ConstrainedBox(
       constraints: BoxConstraints(

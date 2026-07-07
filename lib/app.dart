@@ -35,6 +35,7 @@ import 'features/chat/widgets/chat_webview_preload.dart';
 import 'shared/widgets/app_launch_splash.dart';
 import 'shared/widgets/build_watermark.dart';
 import 'shared/widgets/glaze_toast.dart' show toastOverlayKey;
+import 'shared/widgets/stretch_overscroll.dart';
 
 class GlazeApp extends ConsumerStatefulWidget {
   final VoidCallback? restart;
@@ -267,6 +268,9 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
   }) {
     return MaterialApp.router(
       title: 'Glaze',
+      // Stretch overscroll without an offscreen layer, so glass surfaces
+      // inside scroll views keep their backdrop blur during the stretch.
+      scrollBehavior: const GlazeScrollBehavior(),
       theme: AppTheme.light(preset, fontFamily: uiFont, dynamicScheme: lightScheme),
       darkTheme: AppTheme.dark(preset, fontFamily: uiFont, dynamicScheme: darkScheme),
       themeMode: mode,
