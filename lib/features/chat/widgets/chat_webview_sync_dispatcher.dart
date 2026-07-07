@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../bridge/chat_bridge_controller.dart';
+import '../bridge/chat_overlay_blur_region.dart';
 import 'chat_message_sync.dart'
     show chatMessageListsIdentical, lastUserMessageId;
 
@@ -315,6 +316,12 @@ class ChatWebViewSyncDispatcher {
     if (current.topInset != old.topInset) {
       bridge.setTopPadding(current.topInset);
     }
+    if (!const ListEquality<ChatOverlayBlurRegion>().equals(
+      current.blurRegions,
+      old.blurRegions,
+    )) {
+      bridge.setOverlayBlurRegions(current.blurRegions);
+    }
   }
 
   /// Reconcile the WebView's generation flags against [current]
@@ -340,8 +347,7 @@ class ChatWebViewSyncDispatcher {
     // GenTimer / header hide-on-scroll stay active through the post-gen
     // window (cleaner, ledger, write-loop) even though the streaming
     // window (isGenerating) has already ended.
-    final jsGenerating =
-        current.isGenerating || current.isPostGenRunning;
+    final jsGenerating = current.isGenerating || current.isPostGenRunning;
     if (jsGenerating == bridge.isGenerating &&
         current.isGeneratingImage == bridge.isGeneratingImage) {
       return;
@@ -422,6 +428,7 @@ class ChatWebViewWidgetFields {
     required this.bgNoiseIntensity,
     required this.bottomInset,
     required this.topInset,
+    this.blurRegions = const [],
     required this.searchQuery,
     required this.searchCurrentIndex,
     required this.chatLayout,
@@ -473,6 +480,10 @@ class ChatWebViewWidgetFields {
   final double bgNoiseIntensity;
   final double bottomInset;
   final double topInset;
+
+  /// Rects of Flutter glass overlays (header, input pill, buttons) mirrored
+  /// into the WebView as backdrop-blur strips. WebView-local coordinates.
+  final List<ChatOverlayBlurRegion> blurRegions;
   final String? searchQuery;
   final int searchCurrentIndex;
   final String? chatLayout;

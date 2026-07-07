@@ -9,6 +9,7 @@ import '../../../core/state/persona_resolution.dart';
 import '../../../../shared/theme/theme_font_provider.dart';
 import '../../../../shared/theme/theme_preset.dart';
 import '../bridge/chat_bridge_controller.dart';
+import '../bridge/chat_overlay_blur_region.dart';
 import '../bridge/chat_webview_bridge_host.dart';
 import '../bridge/chat_webview_theme_builder.dart';
 import '../../../core/models/chat_message.dart';
@@ -53,6 +54,13 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final bool isPostGenRunning;
   final double bottomInset;
   final double topInset;
+
+  /// Rects of the Flutter glass overlays (header, input pill, buttons) in
+  /// WebView-local coordinates. Synced into the WebView (blurs the messages
+  /// scrolling underneath) and painted as a BackdropFilter sandwich below
+  /// the WebView (blurs the Flutter-side global background) — the widgets'
+  /// own BackdropFilter cannot sample the platform view or anything under it.
+  final List<ChatOverlayBlurRegion> blurRegions;
   final String? searchQuery;
   final int searchCurrentIndex;
   final String? chatLayout;
@@ -120,6 +128,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.isPostGenRunning = false,
     this.bottomInset = 0,
     this.topInset = 0,
+    this.blurRegions = const [],
     this.searchQuery,
     this.searchCurrentIndex = 0,
     this.chatLayout,
@@ -357,6 +366,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           memoryDrafts: widget.memoryDrafts,
           bottomInset: widget.bottomInset,
           topInset: widget.topInset,
+          blurRegions: widget.blurRegions,
           searchQuery: widget.searchQuery,
           searchCurrentIndex: widget.searchCurrentIndex,
           isSelectionMode: widget.isSelectionMode,
@@ -650,6 +660,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       bgNoiseIntensity: w.bgNoiseIntensity,
       bottomInset: w.bottomInset,
       topInset: w.topInset,
+      blurRegions: w.blurRegions,
       searchQuery: w.searchQuery,
       searchCurrentIndex: w.searchCurrentIndex,
       chatLayout: w.chatLayout,
@@ -826,6 +837,8 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       chatBgColor: widget.chatBgColor,
       chatBgAvatarPath: widget.charAvatarPath,
       bottomInset: widget.bottomInset,
+      blurRegions: widget.blurRegions,
+      elementBlur: widget.elementBlur,
       onBridgeReady: (ChatBridgeController b) => _bridge = b,
       onInitWebView: _initWebView,
     );

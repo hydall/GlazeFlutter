@@ -8,6 +8,7 @@ import '../../../core/state/active_regex_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/persona_resolution.dart';
 import '../bridge/chat_bridge_controller.dart';
+import '../bridge/chat_overlay_blur_region.dart';
 
 /// Snapshot of the [ChatWebViewWidget] fields needed by
 /// [ChatWebViewInitializer]. Pure data — no `BuildContext` or
@@ -41,6 +42,7 @@ class ChatWebViewInitInput {
     required this.memoryDrafts,
     required this.bottomInset,
     required this.topInset,
+    this.blurRegions = const [],
     required this.searchQuery,
     required this.searchCurrentIndex,
     required this.isSelectionMode,
@@ -75,6 +77,7 @@ class ChatWebViewInitInput {
   final List<dynamic> memoryDrafts;
   final double bottomInset;
   final double topInset;
+  final List<ChatOverlayBlurRegion> blurRegions;
   final String? searchQuery;
   final int searchCurrentIndex;
   final bool isSelectionMode;
@@ -163,6 +166,9 @@ class ChatWebViewInitializer {
     }
     if (input.topInset > 0) {
       await bridge.setTopPadding(input.topInset);
+    }
+    if (input.blurRegions.isNotEmpty) {
+      await bridge.setOverlayBlurRegions(input.blurRegions);
     }
     if (input.searchQuery != null && input.searchQuery!.isNotEmpty) {
       await bridge.setSearch(

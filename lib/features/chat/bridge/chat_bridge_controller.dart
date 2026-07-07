@@ -19,6 +19,7 @@ import 'bridge_theme_commands.dart';
 import 'bridge_identity_commands.dart';
 import 'bridge_layout_commands.dart';
 import 'bridge_memory_commands.dart';
+import 'chat_overlay_blur_region.dart';
 
 /// Bridge between the chat WebView (JS) and Flutter. Owns the shared
 /// state (current character, persona, layout, memory coverage, regex
@@ -221,6 +222,7 @@ class ChatBridgeController {
   void Function(String id, String direction)? onAgentSwipe;
   void Function(String id, int direction)? onChangeGreeting;
   void Function(String id, String mode)? onRegenerate;
+
   /// Called when the user taps the "Re-run cleaner" icon on an assistant
   /// message: re-runs POST-cleaner against that message's final (agentSwipes[0])
   /// text and appends a new 'cleaned' sub-swipe. Carries the message id.
@@ -579,6 +581,8 @@ class ChatBridgeController {
       layout.setSearch(query: query, activeIndex: activeIndex);
   Future<void> setBottomPadding(double px) => layout.setBottomPadding(px);
   Future<void> setTopPadding(double px) => layout.setTopPadding(px);
+  Future<void> setOverlayBlurRegions(List<ChatOverlayBlurRegion> regions) =>
+      layout.setOverlayBlurRegions(regions);
   Future<void> startEdit(String id) => layout.startEdit(id);
   Future<void> stopEdit(String id) => layout.stopEdit(id);
   Future<void> setMessageSettings({
