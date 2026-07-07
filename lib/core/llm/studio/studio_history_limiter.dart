@@ -7,9 +7,6 @@ class StudioHistoryLimiter {
   /// Hard cap on tracker context size (Marinara MAX_AGENT_CONTEXT_MESSAGES).
   static const maxTrackerContextSize = 200;
 
-  static const _trimMarker =
-      '\n\n[Trimmed to keep this agent request compact]\n\n';
-
   static final _htmlTagRegex = RegExp(r'</?[a-zA-Z][^>]*>');
   static final _multiNewlineRegex = RegExp(r'\n{3,}');
   static final _fontTagRegex = RegExp(r'</?font\b[^>]*>', caseSensitive: false);
@@ -45,8 +42,9 @@ class StudioHistoryLimiter {
   /// Trim trailing chat history for a tracker (intermediate agent).
   ///
   /// Returns the last [contextSize] messages (clamped to
-  /// `1..[maxTrackerContextSize]`), each truncated via [truncateAgentText]
-  /// and stripped of HTML via [stripHtmlTags].
+  /// `1..[maxTrackerContextSize]`), each stripped of HTML via [stripHtmlTags].
+  /// No per-message character cap — Sonnet's 200K context easily absorbs full
+  /// messages, and truncating the middle of a scene breaks continuity tracking.
   static List<PromptMessage> limitTrackerHistory(
     List<PromptMessage> history,
     int contextSize,
@@ -57,7 +55,7 @@ class StudioHistoryLimiter {
           .map(
             (m) => PromptMessage(
               role: m.role,
-              content: truncateAgentText(stripHtmlTags(m.content), 2000),
+              content: stripHtmlTags(m.content),
             ),
           )
           .toList();
@@ -67,25 +65,10 @@ class StudioHistoryLimiter {
         .map(
           (m) => PromptMessage(
             role: m.role,
-            content: truncateAgentText(stripHtmlTags(m.content), 2000),
+            content: stripHtmlTags(m.content),
           ),
         )
         .toList();
-  }
-
-  /// Port of Marinara `truncateAgentText`. If the text is longer than
-  /// [maxChars], keeps the head (40%) + a trim marker + the tail (60%),
-  /// preserving both the beginning and the end of the message. Character
-  /// counting uses `String.runes` for Unicode/emoji safety.
-  static String truncateAgentText(String text, int maxChars) {
-    if (text.length <= maxChars) return text;
-    final runes = text.runes.toList();
-    if (runes.length <= maxChars) return text;
-    final headCount = (maxChars * 0.4).round();
-    final tailCount = maxChars - headCount;
-    final head = String.fromCharCodes(runes.sublist(0, headCount));
-    final tail = String.fromCharCodes(runes.sublist(runes.length - tailCount));
-    return '$head$_trimMarker$tail';
   }
 
   /// Port of Marinara `stripHtmlTags`. Removes HTML/XML-like tags, collapses
