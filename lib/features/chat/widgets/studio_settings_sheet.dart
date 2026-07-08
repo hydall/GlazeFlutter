@@ -19,6 +19,7 @@ import '../../settings/api_list_provider.dart';
 import '../state/recovery_state_provider.dart';
 import '../services/tracker_memory_recovery_service.dart';
 import 'studio_preset_editor_sheet.dart';
+import 'studio_agents_sheet.dart';
 import 'studio_slot_settings_dialog.dart';
 
 /// Studio Settings as a bottom sheet. Single scrollable page.
@@ -198,6 +199,20 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
           // ── Post-gen toggles ───────────────────────────────────────────
           _buildPostGenToggles(pipeline),
           const Divider(),
+          ListTile(
+            leading: const Icon(Icons.smart_toy_outlined),
+            title: const Text('Agents'),
+            subtitle: const Text('Enable or disable individual Studio agents'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              final presetId = config.studioPresetId;
+              await GlazeBottomSheet.show<void>(
+                context,
+                title: 'Agents',
+                child: StudioAgentsSheet(presetId: presetId),
+              );
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.edit_note),
             title: const Text('Edit Preset Blocks'),

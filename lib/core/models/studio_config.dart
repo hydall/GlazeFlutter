@@ -89,6 +89,11 @@ abstract class StudioPreset with _$StudioPreset {
     required String id,
     @Default('') String name,
     @Default([]) List<StudioPresetBlock> blocks,
+    /// Per-agent on/off overrides keyed by controller spec id
+    /// (e.g. `'continuity'`, `'narrative'`, `'final'`).
+    /// An entry `false` disables the agent; `true` or absent = enabled.
+    /// Travel with the preset on import/export so agent toggles are portable.
+    @Default({}) Map<String, bool> agentEnabled,
     @Default(0) int updatedAt,
   }) = _StudioPreset;
 
