@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 import 'package:go_router/go_router.dart';
 
 import '../../core/utils/html_to_markdown.dart';
@@ -564,7 +563,7 @@ class _SessionTile extends ConsumerWidget {
         child: SizedBox.square(
           dimension: size,
           child: Image.file(
-            File(_thumbOrAvatar(info.avatarPath!)),
+            File(resolveGlazeThumbnailPath(info.avatarPath)!),
             fit: BoxFit.cover,
             errorBuilder: (ctx, e, st) => _defaultAvatar(context, size),
           ),
@@ -717,7 +716,7 @@ class _GroupHeader extends ConsumerWidget {
         child: SizedBox.square(
           dimension: 48,
           child: Image.file(
-            File(_thumbOrAvatar(info.avatarPath!)),
+            File(resolveGlazeThumbnailPath(info.avatarPath)!),
             fit: BoxFit.cover,
             errorBuilder: (ctx, e, st) => _defaultGroupAvatar(context, info),
           ),
@@ -794,15 +793,6 @@ class _GroupHeader extends ConsumerWidget {
       }
     });
   }
-}
-
-String _thumbOrAvatar(String avatarPath) {
-  final resolved = resolveGlazeFilePath(avatarPath) ?? avatarPath;
-  final name = p.basenameWithoutExtension(resolved);
-  final dir = p.dirname(p.dirname(resolved));
-  final thumb = p.join(dir, 'thumbnails', '$name.jpg');
-  if (File(thumb).existsSync()) return thumb;
-  return resolved;
 }
 
 String formatTimeAgo(int epochMs) {
