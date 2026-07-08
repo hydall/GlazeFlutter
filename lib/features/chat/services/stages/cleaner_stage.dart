@@ -399,18 +399,20 @@ class CleanerStage {
         }
       }
       // Run Ledger on the original assistant text.
+      // Awaited (not unawaited) so the foreground service hold acquired by
+      // PostGenCoordinator stays alive until the ledger LLM call finishes —
+      // otherwise the OS may suspend the app mid-request when the screen
+      // turns off.
       if (ctx.ref.mounted) {
-        unawaited(
-          ledger.run(
-            sessionId: sessionId,
-            messages: recentMessages,
-            genId: genId,
-            finalAssistantText: assistantText,
-            targetMessage: targetMessage,
-            isManualRerun: isManualRerun,
-            resolvedConfig: cleanerConfig,
-            cancelToken: null,
-          ),
+        await ledger.run(
+          sessionId: sessionId,
+          messages: recentMessages,
+          genId: genId,
+          finalAssistantText: assistantText,
+          targetMessage: targetMessage,
+          isManualRerun: isManualRerun,
+          resolvedConfig: cleanerConfig,
+          cancelToken: null,
         );
       }
       return;
@@ -914,6 +916,8 @@ class CleanerStage {
     // re-resolve (and doesn't fall back to the active chat API).
     // Skip on manual rerun when both auto toggles were off — Ledger already
     // ran on the raw text during auto post-gen.
+    // Awaited (not unawaited) so the foreground service hold acquired by
+    // PostGenCoordinator stays alive until the ledger LLM call finishes.
     if (ctx.ref.mounted && !skipPostGenOnRerun) {
       final ledgerText = selectStudioLedgerTextAfterCleaner(
         cleanerStatus: result.status,
@@ -926,17 +930,15 @@ class CleanerStage {
           ?.where((m) => m.id == targetMessage.id)
           .firstOrNull;
 
-      unawaited(
-        ledger.run(
-          sessionId: sessionId,
-          messages: refreshedMessages ?? recentMessages,
-          genId: genId,
-          finalAssistantText: ledgerText,
-          targetMessage: ledgerTargetMessage ?? targetMessage,
-          isManualRerun: isManualRerun,
-          resolvedConfig: cleanerConfig,
-          cancelToken: _cleanerCancelToken,
-        ),
+      await ledger.run(
+        sessionId: sessionId,
+        messages: refreshedMessages ?? recentMessages,
+        genId: genId,
+        finalAssistantText: ledgerText,
+        targetMessage: ledgerTargetMessage ?? targetMessage,
+        isManualRerun: isManualRerun,
+        resolvedConfig: cleanerConfig,
+        cancelToken: _cleanerCancelToken,
       );
     }
   }
