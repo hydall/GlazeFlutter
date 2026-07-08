@@ -48,14 +48,23 @@
               "id": "lucyna-kushinada-afterlife",
               "name": "Lucyna Kushinada | Afterlife",
               "fileName": "Lucyna Kushinada - Afterlife.png",
-              "hash": "b23a1e824890c1d5e33a6b9f90d4bef7d170eede5755aae7551bc6399f4244fc"
+              "hash": "7aa36dca5adb8cf529d8b185cac28fe953fba12f7330677173359e474388801a"
             },
             {
               "id": "blood-of-vanished-north-aetherion",
               "name": "Blood of Vanished North - Aetherion",
               "fileName": "Blood of vanished north - Aetherion.png",
               "hash": "d83d7b6814d4974456e6546b86b57b6dbcab91140b070e1b768cf73120508a9c",
-              "tags": ["OC", "Magical", "Multiple", "AnyPOV", "Smut", "Fluff", "isekai", "marblesideacademy"],
+              "tags": [
+                "OC",
+                "Magical",
+                "Multiple",
+                "AnyPOV",
+                "Smut",
+                "Fluff",
+                "isekai",
+                "marblesideacademy"
+              ],
               "creator": "https://janitorai.com/profiles/979329d1-6f23-4339-b248-65f35392a31b"
             }
           ]
