@@ -9,6 +9,7 @@ import '../models/studio_config.dart';
 import '../state/db_provider.dart';
 import 'agent_runner.dart';
 import 'prompt_builder.dart';
+import 'studio_controller_ontology.dart';
 import 'studio_activation_gate.dart';
 import 'studio_agent_executor.dart';
 import 'studio_batch_coordinator.dart';
@@ -92,7 +93,22 @@ class MemoryStudioService {
     if (!config.enabled) {
       return null;
     }
-    final enabledAgents = config.agents.where((a) => a.enabled).toList()
+
+    // Apply per-agent toggles from the Studio preset. A preset entry
+    // `false` overrides StudioAgent.enabled = true; `true` or absent
+    // preserves the agent's own enabled state.
+    final presetRepo = _ref.read(studioPresetRepoProvider);
+    final preset =
+        (await presetRepo.getById(config.studioPresetId)) ??
+        (await presetRepo.getDefault());
+    final agentEnabled = preset?.agentEnabled ?? const {};
+    final overridden = config.agents.map((a) {
+      final specId = StudioControllerOntology.specForAgent(a).id;
+      final presetToggle = agentEnabled[specId];
+      return presetToggle == false ? a.copyWith(enabled: false) : a;
+    }).toList();
+
+    final enabledAgents = overridden.where((a) => a.enabled).toList()
       ..sort((a, b) => a.order.compareTo(b.order));
     if (enabledAgents.isEmpty) {
       return null;
