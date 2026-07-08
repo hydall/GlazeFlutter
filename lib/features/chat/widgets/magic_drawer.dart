@@ -391,7 +391,8 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       title: 'Add Action',
       child: MagicDrawerAddList(
         items: available,
-        onSelect: (item) => Navigator.of(context).pop(item),
+        onSelect: (item) =>
+            Navigator.of(context, rootNavigator: true).pop(item),
       ),
     ).then((selected) async {
       if (selected == null || !mounted) return;
@@ -575,18 +576,18 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         BottomSheetItem(
           icon: Icons.add_circle_outline,
           label: 'action_new_session'.tr(),
-          onTap: () => Navigator.of(context).pop('new'),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('new'),
         ),
         BottomSheetItem(
           icon: Icons.file_download,
           label: 'Import Chat',
-          onTap: () => Navigator.of(context).pop('import'),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('import'),
         ),
       ],
     ).then((result) async {
       if (!mounted) return;
       if (result == 'new') {
-        Navigator.of(context).pop(); // Pops Sessions Sheet
+        Navigator.of(context, rootNavigator: true).pop(); // Pops Sessions Sheet
         await ref.read(chatProvider(widget.charId).notifier).newSession();
       } else if (result == 'import') {
         await _importChat();
@@ -602,18 +603,18 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         BottomSheetItem(
           icon: Icons.upload_file,
           label: 'action_export_chat'.tr(),
-          onTap: () => Navigator.of(context).pop('export'),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('export'),
         ),
         BottomSheetItem(
           icon: Icons.drive_file_rename_outline,
           label: 'action_rename'.tr(),
-          onTap: () => Navigator.of(context).pop('rename'),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('rename'),
         ),
         BottomSheetItem(
           icon: Icons.delete_outline,
           label: 'action_delete'.tr(),
           isDestructive: true,
-          onTap: () => Navigator.of(context).pop('delete'),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('delete'),
         ),
       ],
     ).then((result) async {
@@ -695,7 +696,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       final sessionIndex = saveResult.sessionIndex;
       if (count > 0 && sessionIndex != null) {
         // Pop the sessions sheet if import succeeds
-        Navigator.of(context).pop();
+        Navigator.of(context, rootNavigator: true).pop();
         context.go('/chat/${widget.charId}?session=$sessionIndex');
       }
       GlazeToast.show(
