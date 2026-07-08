@@ -50,12 +50,17 @@ class AnthropicChatTransport implements ChatTransport {
 
   final Dio _dio;
 
+  /// Number of automatic retries on HTTP 408 (Request Timeout) — common on
+  /// mobile networks where the upload is too slow for the provider.
+  static const int _maxRetries = 1;
+
   AnthropicChatTransport({Dio? dio})
     : _dio =
           dio ??
           Dio(
             BaseOptions(
               connectTimeout: const Duration(seconds: 30),
+              sendTimeout: const Duration(seconds: 60),
               receiveTimeout: const Duration(seconds: 180),
             ),
           );
@@ -84,33 +89,45 @@ class AnthropicChatTransport implements ChatTransport {
       return;
     }
 
-    try {
-      final built = buildRequest(request);
-      final url = buildMessagesUrl(request.endpoint);
-      if (request.stream) {
-        await _streamResponse(
-          url,
-          built.headers,
-          built.body,
-          prefill: built.prefill,
-          cancelToken: cancelToken,
-          onUpdate: onUpdate,
-          onComplete: onComplete,
-        );
-      } else {
-        await _oneShotResponse(
-          url,
-          built.headers,
-          built.body,
-          prefill: built.prefill,
-          cancelToken: cancelToken,
-          onComplete: onComplete,
-        );
+    for (var attempt = 0; attempt <= _maxRetries; attempt++) {
+      try {
+        final built = buildRequest(request);
+        final url = buildMessagesUrl(request.endpoint);
+        if (request.stream) {
+          await _streamResponse(
+            url,
+            built.headers,
+            built.body,
+            prefill: built.prefill,
+            cancelToken: cancelToken,
+            onUpdate: onUpdate,
+            onComplete: onComplete,
+          );
+        } else {
+          await _oneShotResponse(
+            url,
+            built.headers,
+            built.body,
+            prefill: built.prefill,
+            cancelToken: cancelToken,
+            onComplete: onComplete,
+          );
+        }
+        return; // success — no retry needed
+      } on DioException catch (e) {
+        if (attempt < _maxRetries &&
+            e.response?.statusCode == 408 &&
+            cancelToken?.isCancelled != true) {
+          debugPrint('[Anthropic] HTTP 408 on attempt ${attempt + 1}/$_maxRetries — retrying');
+          await Future<void>.delayed(const Duration(seconds: 1));
+          continue;
+        }
+        onError?.call(e);
+        return;
+      } catch (e) {
+        onError?.call(e);
+        return;
       }
-    } on DioException catch (e) {
-      onError?.call(e);
-    } catch (e) {
-      onError?.call(e);
     }
   }
 
