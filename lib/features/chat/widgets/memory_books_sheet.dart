@@ -102,7 +102,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     // RenderFlex collapses and only the drag handle shows. Pin the sheet to a
     // fraction of the screen so the tab content has a real height to lay out in.
     final screenH = MediaQuery.of(context).size.height;
-    return SizedBox(height: screenH * 0.82, child: _buildBody(context));
+    return SizedBox(height: screenH * 0.85, child: _buildBody(context));
   }
 
   Widget _buildBody(BuildContext context) {
@@ -162,66 +162,73 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
     return DefaultTabController(
       length: 3,
-      child: Column(
-        children: [
-          // ── Static header (overview + status + actions) ──
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildOverview(settings),
-                const SizedBox(height: 12),
-                _buildSearchTypeSelector(settings),
-                const SizedBox(height: 12),
-                _buildStatusSummary(
-                  activeCount,
-                  needsRebuildCount,
-                  pendingDrafts.length,
+      child: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
                 ),
-                const SizedBox(height: 12),
-                _buildActionButtons(),
-                if (draftsNeedingGen.isNotEmpty || isGenerating) ...[
-                  const SizedBox(height: 12),
-                  _buildBatchActions(draftsNeedingGen, isGenerating),
-                ],
-              ],
-            ),
-          ),
-          // ── Tab bar ──
-          TabBar(
-            tabs: [
-              Tab(
-                text: 'memory_books_tab_approved'.tr(
-                  args: [filteredCurated.length.toString()],
-                ),
-              ),
-              Tab(
-                text: 'memory_books_tab_scan_drafts'.tr(
-                  args: [scanDrafts.length.toString()],
-                ),
-              ),
-              Tab(
-                text: 'memory_books_tab_agent_memories'.tr(
-                  args: [
-                    (agentDrafts.length + filteredAgent.length).toString(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildOverview(settings),
+                    const SizedBox(height: 12),
+                    _buildSearchTypeSelector(settings),
+                    const SizedBox(height: 12),
+                    _buildStatusSummary(
+                      activeCount,
+                      needsRebuildCount,
+                      pendingDrafts.length,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildActionButtons(),
+                    if (draftsNeedingGen.isNotEmpty || isGenerating) ...[
+                      const SizedBox(height: 12),
+                      _buildBatchActions(draftsNeedingGen, isGenerating),
+                    ],
                   ],
                 ),
               ),
-            ],
-            tabAlignment: TabAlignment.fill,
-          ),
-          // ── Tab content ──
-          Expanded(
-            child: TabBarView(
-              children: [
-                _buildApprovedTab(filteredCurated),
-                _buildScanDraftsTab(scanDrafts),
-                _buildAgentMemoriesTab(agentDrafts, filteredAgent),
-              ],
             ),
-          ),
-        ],
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _PinnedTabBarDelegate(
+                TabBar(
+                  tabs: [
+                    Tab(
+                      text: 'memory_books_tab_approved'.tr(
+                        args: [filteredCurated.length.toString()],
+                      ),
+                    ),
+                    Tab(
+                      text: 'memory_books_tab_scan_drafts'.tr(
+                        args: [scanDrafts.length.toString()],
+                      ),
+                    ),
+                    Tab(
+                      text: 'memory_books_tab_agent_memories'.tr(
+                        args: [
+                          (agentDrafts.length + filteredAgent.length).toString(),
+                        ],
+                      ),
+                    ),
+                  ],
+                  tabAlignment: TabAlignment.fill,
+                ),
+              ),
+            ),
+          ];
+        },
+        body: TabBarView(
+          children: [
+            _buildApprovedTab(filteredCurated),
+            _buildScanDraftsTab(scanDrafts),
+            _buildAgentMemoriesTab(agentDrafts, filteredAgent),
+          ],
+        ),
       ),
     );
   }
@@ -1351,4 +1358,34 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     if (!mounted) return;
     GlazeToast.show(context, toastText);
   }
+}
+
+/// Pinned sliver header for the TabBar inside [MemoryBooksSheet]'s
+/// NestedScrollView. Keeps the tab bar visible while the header scrolls away.
+class _PinnedTabBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar tabBar;
+
+  _PinnedTabBarDelegate(this.tabBar);
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.95),
+      child: tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_PinnedTabBarDelegate oldDelegate) =>
+      tabBar != oldDelegate.tabBar;
 }

@@ -290,16 +290,21 @@ TokenBreakdown recomputeBreakdownWithMemory({
       .where((b) => b.id != 'memory')
       .toList(growable: false);
   final memoryTokens = estimateTokens(memoryContent);
-  return calculator
-      .calculate(
-        staticBlocks: filteredBlocks,
-        historyMessages: historyMessages,
-        lorebookReserveTokens: lorebookReserveTokens,
-        macroTokens: macroTokens,
-        memoryTokens: memoryTokens,
-        vectorLoreTokens: vectorLoreTokens,
-      )
-      .copyWithVisible(visibleMessageIds);
+  final recalculated = calculator.calculate(
+    staticBlocks: filteredBlocks,
+    historyMessages: historyMessages,
+    lorebookReserveTokens: lorebookReserveTokens,
+    macroTokens: macroTokens,
+    memoryTokens: memoryTokens,
+    vectorLoreTokens: vectorLoreTokens,
+  );
+  // For the non-Studio path, visibleMessageIds came from the initial
+  // breakdown (pre-memory cutoff) and is now stale — the recalculated
+  // breakdown has the correct, narrower window. Use it directly.
+  // For Studio, sourceWindowVisibleMessageIds is an explicit override
+  // that must be preserved.
+  if (visibleMessageIds.isEmpty) return recalculated;
+  return recalculated.copyWithVisible(visibleMessageIds);
 }
 
 /// Refilters the v2 memory selection against the visible window now that the
@@ -324,8 +329,13 @@ DeferredMemoryResult finalizeDeferredMemory({
 }) {
   var breakdown = baseBreakdown;
   final selection = payload.memorySelection!;
-  final visibleMessageIds = payload.sourceWindowVisibleMessageIds.isNotEmpty
-      ? payload.sourceWindowVisibleMessageIds
+  // sourceWindowVisibleMessageIds is the Studio explicit override.
+  // For non-Studio, use the base breakdown's visible window — this is
+  // already memory-aware because the caller pre-accounted for memory
+  // tokens in the initial calculate().
+  final sourceWindowVisibleMessageIds = payload.sourceWindowVisibleMessageIds;
+  final visibleMessageIds = sourceWindowVisibleMessageIds.isNotEmpty
+      ? sourceWindowVisibleMessageIds
       : breakdown.visibleMessageIds;
   final refiltered = refilterMemorySelection(
     selection,
@@ -399,7 +409,7 @@ DeferredMemoryResult finalizeDeferredMemory({
       vectorLoreTokens: vectorLoreTokens,
       memoryContent: memoryContent,
       memoryMacroContent: memoryMacroContent,
-      visibleMessageIds: visibleMessageIds,
+      visibleMessageIds: sourceWindowVisibleMessageIds,
     );
   } else if (refiltered.entries.isEmpty &&
       shouldInjectFactualContinuityGuard(payload)) {
@@ -421,7 +431,7 @@ DeferredMemoryResult finalizeDeferredMemory({
       vectorLoreTokens: vectorLoreTokens,
       memoryContent: guard,
       memoryMacroContent: '',
-      visibleMessageIds: visibleMessageIds,
+      visibleMessageIds: sourceWindowVisibleMessageIds,
     );
   }
 

@@ -679,12 +679,25 @@ PromptResult _assembleMessages({
   );
   var historyOnly = messages.where((m) => m.isHistory).toList();
 
+  // Pre-account for memory tokens so the initial history cutoff matches
+  // the post-memory-injection cutoff. Without this, the first calculate()
+  // uses memoryTokens=0, producing a wider visible window than the final
+  // breakdown — messages in that "phantom zone" get excluded from memory
+  // (sourceWindowExclusion) yet also dropped from history, so the model
+  // sees neither. We use the selection's totalTokens (actual sum of picked
+  // entries) as the estimate; excerpting may reduce this further, but the
+  // visible window stays conservative (fewer excluded messages is always
+  // safe — the model still sees them in history).
+  final estimatedMemoryTokens =
+      payload.memorySelection?.totalTokens ?? 0;
+
   var breakdown = calculator.calculate(
     staticBlocks: attributionBlocks,
     historyMessages: historyOnly,
     lorebookReserveTokens: lorebookReserve,
     macroTokens: macroTokens,
     vectorLoreTokens: vectorLoreTokens,
+    memoryTokens: estimatedMemoryTokens,
   );
 
   // Inject <recalled_messages> after the first cutoff calculation so raw
@@ -712,6 +725,7 @@ PromptResult _assembleMessages({
       lorebookReserveTokens: lorebookReserve,
       macroTokens: macroTokens,
       vectorLoreTokens: vectorLoreTokens,
+      memoryTokens: estimatedMemoryTokens,
     );
   }
   var finalMemorySelection = payload.memorySelection;
