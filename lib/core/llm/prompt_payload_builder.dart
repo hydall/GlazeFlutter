@@ -181,7 +181,7 @@ class PromptPayloadBuilder {
               character,
               chatId: session.id,
               cancelToken: cancelToken,
-            ).timeout(const Duration(seconds: 15), onTimeout: () => const [])
+            ).timeout(const Duration(seconds: 30), onTimeout: () => const [])
           : Future<List<LorebookEntry>>.value(const []);
 
       final memoryFuture = memoryService.buildCandidatesWithDiagnostics(
@@ -212,7 +212,7 @@ class PromptPayloadBuilder {
             shouldAbort: shouldAbort,
           )
           .timeout(
-            const Duration(seconds: 15),
+            const Duration(seconds: 30),
             onTimeout: () => const MessageRecallResult(),
           );
 

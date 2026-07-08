@@ -113,7 +113,7 @@ class MessageRecallService {
             config,
             cancelToken: cancelToken,
           )
-          .timeout(const Duration(seconds: 15), onTimeout: () => []);
+          .timeout(const Duration(seconds: 30), onTimeout: () => []);
       if (cancelToken?.isCancelled == true) {
         return const MessageRecallResult();
       }
