@@ -177,12 +177,17 @@ class GlowRippleOverlay extends StatefulWidget {
     super.key,
     required this.child,
     this.glowColor,
+    this.borderRadius,
     this.radiusFactor = 1.0,
     this.intensity = 0.15,
   });
 
   final Widget child;
   final Color? glowColor;
+
+  /// Clips the glow to the surface bounds so the ripple never bleeds past the
+  /// (rounded) edges. When null the glow is unclipped.
+  final BorderRadius? borderRadius;
 
   /// Scales the ripple's maximum radius (1.0 = full child extent). Lower values
   /// keep the glow tighter around the tap point.
@@ -207,6 +212,15 @@ class _GlowRippleOverlayState extends State<GlowRippleOverlay>
   @override
   Widget build(BuildContext context) {
     final color = widget.glowColor ?? context.cs.primary;
+    Widget overlay = buildRippleOverlay(
+      color,
+      const SizedBox.expand(),
+      radiusFactor: widget.radiusFactor,
+      intensity: widget.intensity,
+    );
+    if (widget.borderRadius != null) {
+      overlay = ClipRRect(borderRadius: widget.borderRadius!, child: overlay);
+    }
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _onPointerDown,
@@ -214,14 +228,7 @@ class _GlowRippleOverlayState extends State<GlowRippleOverlay>
         children: [
           widget.child,
           Positioned.fill(
-            child: IgnorePointer(
-              child: buildRippleOverlay(
-                color,
-                const SizedBox.expand(),
-                radiusFactor: widget.radiusFactor,
-                intensity: widget.intensity,
-              ),
-            ),
+            child: IgnorePointer(child: overlay),
           ),
         ],
       ),

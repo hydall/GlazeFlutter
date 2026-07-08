@@ -240,6 +240,7 @@ class GlazeAppBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return GlassSurface(
+      enableRipple: true,
       borderRadius: borderRadius,
       border: Border.all(color: context.cs.outlineVariant),
       child: SizedBox(
