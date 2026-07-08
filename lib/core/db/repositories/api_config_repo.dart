@@ -73,6 +73,7 @@ class ApiConfigRepo implements SyncApiConfigStore {
     cacheControlTtl: c.cacheControlTtl,
     cacheBreakpointMode: c.cacheBreakpointMode,
     sessionIdMode: c.sessionIdMode,
+    firstChunkTimeoutMs: c.firstChunkTimeoutMs,
   );
 
   ApiConfigsCompanion _toCompanion(ApiConfig m) => ApiConfigsCompanion(
@@ -109,5 +110,6 @@ class ApiConfigRepo implements SyncApiConfigStore {
     cacheControlTtl: Value(m.cacheControlTtl),
     cacheBreakpointMode: Value(m.cacheBreakpointMode),
     sessionIdMode: Value(m.sessionIdMode),
+    firstChunkTimeoutMs: Value(m.firstChunkTimeoutMs),
   );
 }

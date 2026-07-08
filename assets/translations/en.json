@@ -124,6 +124,7 @@
     "label_presence_penalty": "Presence Penalty",
     "label_max_tokens": "Max Output Tokens",
     "label_context_size": "Context Size",
+    "label_first_chunk_timeout": "First-chunk timeout (sec)",
     "label_stream": "Stream Response",
     "desc_stream": "Show response text as it is generated",
     "label_auto_hide_images": "Auto-hide images",

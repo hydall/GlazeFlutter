@@ -10,6 +10,7 @@ import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/studio/studio_stream_interceptor.dart';
 import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/beauty_state_parser.dart';
+import '../../../core/llm/idle_timeout_guard.dart';
 import '../../../core/llm/transport/chat_transport_request.dart';
 import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/utils/error_format.dart';
@@ -421,6 +422,18 @@ class StreamGenerationService {
 
       bool frameScheduled = false;
 
+      // Idle timeout: cancel the timer on the first chunk (text OR reasoning)
+      // so a long (but progressing) generation is never cut off. Mirrors
+      // AgentStreamRunner and AuxLlmClient patterns.
+      final idleTimeoutMs = apiConfig.firstChunkTimeoutMs > 0
+          ? apiConfig.firstChunkTimeoutMs
+          : 60000;
+      bool idleTimedOut = false;
+      final idleGuard = IdleTimeoutGuard(idleTimeoutMs, () {
+        idleTimedOut = true;
+        cancelToken.cancel('First-chunk timeout after ${idleTimeoutMs}ms');
+      });
+
       await transport.stream(
         request: ChatTransportRequest(
           endpoint: apiConfig.endpoint,
@@ -449,6 +462,9 @@ class StreamGenerationService {
         cancelToken: cancelToken,
         onUpdate: (delta, reasoningDelta) {
           if (_isAborted()) return;
+          if (delta.isNotEmpty || reasoningDelta?.isNotEmpty == true) {
+            idleGuard.cancel();
+          }
           accumulator.consumeDelta(delta, reasoningDelta: reasoningDelta);
           if (!frameScheduled) {
             frameScheduled = true;
@@ -468,6 +484,7 @@ class StreamGenerationService {
         },
         onComplete: (text, reasoning, {rawResponseJson}) {
           if (_isAborted()) return;
+          idleGuard.dispose();
           if (!apiConfig.stream &&
               accumulator.text.isEmpty &&
               accumulator.reasoning.isEmpty &&
@@ -568,6 +585,27 @@ class StreamGenerationService {
           }
         },
         onError: (error) {
+          idleGuard.dispose();
+          if (idleTimedOut) {
+            final msg = 'Нет ответа от модели за ${idleTimeoutMs ~/ 1000}с — '
+                'соединение прервано. Проверьте endpoint или увеличьте '
+                'таймаут в настройках API.';
+            if (regenTargetId != null && saveSession != null) {
+              finalState = _writer.writeRegenError(
+                errorText: msg,
+                saveSession: saveSession,
+                regenTargetId: regenTargetId,
+                visibleStartIndex: vsi,
+              );
+            } else {
+              finalState = _writer.writeError(
+                errorText: msg,
+                currentSession: session,
+                visibleStartIndex: vsi,
+              );
+            }
+            return;
+          }
           final isCancelled =
               (error is DioException &&
                   error.type == DioExceptionType.cancel) ||

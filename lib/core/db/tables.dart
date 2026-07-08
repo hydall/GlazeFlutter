@@ -443,6 +443,8 @@ class ApiConfigs extends Table {
       text().withDefault(const Constant('depth'))();
   TextColumn get sessionIdMode =>
       text().withDefault(const Constant('openrouter'))();
+  IntColumn get firstChunkTimeoutMs =>
+      integer().withDefault(const Constant(60000))();
 
   @override
   Set<Column> get primaryKey => {configId};

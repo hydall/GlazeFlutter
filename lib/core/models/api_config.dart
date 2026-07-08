@@ -39,6 +39,7 @@ abstract class ApiConfig with _$ApiConfig {
     @Default('off') String cacheControlTtl,
     @Default('depth') String cacheBreakpointMode,
     @Default('openrouter') String sessionIdMode,
+    @Default(60000) int firstChunkTimeoutMs,
   }) = _ApiConfig;
 
   factory ApiConfig.fromJson(Map<String, dynamic> json) =>
