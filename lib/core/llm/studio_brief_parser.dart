@@ -150,18 +150,80 @@ class StudioBriefParser {
       return null;
     }
     if (decoded is! Map) return null;
-    final focus = safeJsonStringList(decoded['focus']);
-    final constraints = safeJsonStringList(decoded['constraints']);
-    final avoid = safeJsonStringList(decoded['avoid']);
-    final options = safeJsonStringList(decoded['options']);
+
+    // Case-insensitive lookup — models send "Focus", "focus", "FOCUS".
+    final lowerMap = <String, dynamic>{};
+    for (final entry in decoded.entries) {
+      lowerMap[entry.key.toString().toLowerCase()] = entry.value;
+    }
+
+    final focus = <String>[];
+    final constraints = <String>[];
+    final avoid = <String>[];
+    final options = <String>[];
+
+    // 1. Pull canonical keys (focus / constraints / avoid / options).
+    focus.addAll(safeJsonStringList(lowerMap['focus']));
+    constraints.addAll(safeJsonStringList(lowerMap['constraints']));
+    avoid.addAll(safeJsonStringList(lowerMap['avoid']));
+    options.addAll(safeJsonStringList(lowerMap['options']));
+
+    // 2. Map semantic keys that controllers commonly emit instead of the
+    //    canonical four. Same mapping as _fieldBasedBrief (lines 98-130).
+    //    Values are prefixed with the key name ("key: value") so downstream
+    //    consumers see the same format as field-based briefs.
+    const focusKeys = {
+      'beat_type', 'tempo', 'scene_pressure', 'what_must_advance',
+      'active_characters',
+    };
+    const constraintKeys = {
+      'target_length', 'target_paragraphs', 'stop_point', 'speech_mode',
+      'who_can_speak', 'who_should_not_speak', 'voice_constraints',
+      'low_speech_reason',
+    };
+    const avoidKeys = {
+      'avoid_repeating',
+    };
+
+    void addTo(List<String> target, String key, List<String> values) {
+      for (final v in values) {
+        if (!target.any((e) => e.toLowerCase() == v.toLowerCase())) {
+          target.add(v);
+        }
+      }
+    }
+
+    for (final entry in lowerMap.entries) {
+      final key = entry.key;
+      if (key == 'focus' ||
+          key == 'constraints' ||
+          key == 'avoid' ||
+          key == 'options') {
+        continue; // already pulled above
+      }
+      // Use safePrefixedStringList so values starting with digits (e.g.
+      // "800-1400 words") survive cleanBriefItem's list-marker stripping.
+      final values = safePrefixedStringList(key, entry.value);
+      if (values.isEmpty) continue;
+      if (focusKeys.contains(key)) {
+        addTo(focus, key, values);
+      } else if (constraintKeys.contains(key)) {
+        addTo(constraints, key, values);
+      } else if (avoidKeys.contains(key)) {
+        addTo(avoid, key, values);
+      } else {
+        addTo(constraints, key, values);
+      }
+    }
+
     final all = [...focus, ...constraints, ...avoid, ...options];
     if (all.isEmpty) {
       _log(
         'brief typed-JSON all items rejected agent="${agent.name}" '
-        'focus=${(decoded['focus'] as List?)?.length ?? 0} '
-        'constraints=${(decoded['constraints'] as List?)?.length ?? 0} '
-        'avoid=${(decoded['avoid'] as List?)?.length ?? 0} '
-        'options=${(decoded['options'] as List?)?.length ?? 0}',
+        'focus=${focus.length} '
+        'constraints=${constraints.length} '
+        'avoid=${avoid.length} '
+        'options=${options.length}',
       );
       return null;
     }
@@ -286,6 +348,28 @@ class StudioBriefParser {
     for (final item in value) {
       if (item is! String) continue;
       final cleaned = cleanBriefItem(item);
+      if (cleaned == null) continue;
+      if (result.any(
+        (existing) => existing.toLowerCase() == cleaned.toLowerCase(),
+      )) {
+        continue;
+      }
+      result.add(cleaned);
+      if (result.length >= 6) break;
+    }
+    return result;
+  }
+
+  /// Like [safeJsonStringList] but prefixes each value with `prefix:` **before**
+  /// cleaning, so values starting with digits (e.g. "800-1400 words") are not
+  /// stripped by the list-marker regex in [cleanBriefItem].
+  List<String> safePrefixedStringList(String prefix, Object? value) {
+    if (value is String) return safePrefixedStringList(prefix, [value]);
+    if (value is! List) return const [];
+    final result = <String>[];
+    for (final item in value) {
+      if (item is! String) continue;
+      final cleaned = cleanBriefItem('$prefix: ${item.trim()}');
       if (cleaned == null) continue;
       if (result.any(
         (existing) => existing.toLowerCase() == cleaned.toLowerCase(),
