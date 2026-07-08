@@ -199,7 +199,9 @@ class _CharacterFolderCardState extends State<CharacterFolderCard> {
   }
 
   Widget _avatar(BuildContext context, Character c) {
-    final resolved = resolveGlazeFilePath(c.avatarPath!);
+    // Collage thumbnails are tiny; use the 512px thumbnail (fallback to the
+    // source avatar) so the grid doesn't decode full-res PNGs while scrolling.
+    final resolved = resolveGlazeThumbnailPath(c.avatarPath);
     if (resolved == null) return _gradient(context);
     return Image.file(
       File(resolved),

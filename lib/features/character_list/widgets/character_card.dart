@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../core/models/character.dart';
 import '../../../core/services/character_export_helper.dart';
@@ -223,18 +224,26 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   }
 
   Widget _buildImage() {
-    if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
-      final mq = MediaQuery.of(context);
-      final cacheW = (mq.size.width * mq.devicePixelRatio / 2).ceil();
-      return Image.file(
-        File(resolveGlazeFilePath(character.avatarPath!)!),
-        fit: BoxFit.cover,
-        cacheWidth: cacheW,
-        filterQuality: FilterQuality.high,
-        errorBuilder: (_, _, _) => _buildPlaceholder(),
-      );
-    }
-    return _buildPlaceholder();
+    final avatarPath = character.avatarPath;
+    if (avatarPath == null || avatarPath.isEmpty) return _buildPlaceholder();
+    // Prefer the pre-generated 512px thumbnail so first-scroll doesn't have to
+    // decode the full-resolution PNG per card (jank + delayed pop-in). Falls
+    // back to the source avatar when a thumbnail hasn't been generated yet.
+    final resolved = resolveGlazeThumbnailPath(avatarPath);
+    if (resolved == null) return _buildPlaceholder();
+    final usingThumb = p.extension(resolved).toLowerCase() == '.jpg';
+    final mq = MediaQuery.of(context);
+    return Image.file(
+      File(resolved),
+      fit: BoxFit.cover,
+      // Thumbnails are already small; only downscale the full-res fallback to
+      // roughly the card's on-screen width.
+      cacheWidth: usingThumb
+          ? null
+          : (mq.size.width * mq.devicePixelRatio / 2).ceil(),
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, _, _) => _buildPlaceholder(),
+    );
   }
 
   Widget _buildPlaceholder() {

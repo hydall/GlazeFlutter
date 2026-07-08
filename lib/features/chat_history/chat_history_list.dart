@@ -1,14 +1,11 @@
-import 'dart:io';
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 import 'package:go_router/go_router.dart';
 
 import '../../core/utils/html_to_markdown.dart';
-import '../../core/utils/platform_paths.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/utils/avatar_image.dart';
 import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../core/state/character_provider.dart' show avatarVersionProvider;
@@ -39,6 +36,23 @@ class ChatHistoryList extends ConsumerStatefulWidget {
 class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
   final Set<String> _expandedCharIds = {};
 
+  /// Avatar paths already warmed so we don't re-precache on every rebuild.
+  final Set<String> _precachedAvatars = {};
+
+  /// Decode + cache each distinct avatar ahead of scrolling so rows don't
+  /// pop in while the image decodes on first appearance.
+  void _precacheAvatars(List<ChatSessionInfo> sessions) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final s in sessions) {
+        final path = s.avatarPath;
+        if (path == null || path.isEmpty) continue;
+        if (!_precachedAvatars.add(path)) continue;
+        precacheGlazeAvatar(context, path);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessionsAsync = ref.watch(chatHistoryProvider);
@@ -50,6 +64,7 @@ class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
       ),
       error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
       data: (list) {
+        _precacheAvatars(list);
         final settings = settingsAsync.value ?? const AppSettings();
         var filtered = list;
         if (widget.searchQuery.isNotEmpty) {
@@ -559,13 +574,15 @@ class _SessionTile extends ConsumerWidget {
 
   Widget _buildAvatar(BuildContext context, WidgetRef ref, {double size = 48}) {
     ref.watch(avatarVersionProvider);
-    if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
+    final image = glazeAvatarImage(info.avatarPath);
+    if (image != null) {
       return ClipOval(
         child: SizedBox.square(
           dimension: size,
-          child: Image.file(
-            File(_thumbOrAvatar(info.avatarPath!)),
+          child: Image(
+            image: image,
             fit: BoxFit.cover,
+            gaplessPlayback: true,
             errorBuilder: (ctx, e, st) => _defaultAvatar(context, size),
           ),
         ),
@@ -712,13 +729,15 @@ class _GroupHeader extends ConsumerWidget {
     ChatSessionInfo info,
   ) {
     ref.watch(avatarVersionProvider);
-    if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
+    final image = glazeAvatarImage(info.avatarPath);
+    if (image != null) {
       return ClipOval(
         child: SizedBox.square(
           dimension: 48,
-          child: Image.file(
-            File(_thumbOrAvatar(info.avatarPath!)),
+          child: Image(
+            image: image,
             fit: BoxFit.cover,
+            gaplessPlayback: true,
             errorBuilder: (ctx, e, st) => _defaultGroupAvatar(context, info),
           ),
         ),
@@ -794,15 +813,6 @@ class _GroupHeader extends ConsumerWidget {
       }
     });
   }
-}
-
-String _thumbOrAvatar(String avatarPath) {
-  final resolved = resolveGlazeFilePath(avatarPath) ?? avatarPath;
-  final name = p.basenameWithoutExtension(resolved);
-  final dir = p.dirname(p.dirname(resolved));
-  final thumb = p.join(dir, 'thumbnails', '$name.jpg');
-  if (File(thumb).existsSync()) return thumb;
-  return resolved;
 }
 
 String formatTimeAgo(int epochMs) {

@@ -54,6 +54,25 @@ String? resolveGlazeFilePath(String? path) {
   return p.join(base, suffix);
 }
 
+/// Returns the on-disk path to the 512px thumbnail JPG for a stored avatar
+/// path when that thumbnail exists, otherwise the resolved full-resolution
+/// avatar path (or `null` when there is no avatar).
+///
+/// Lists (character grid, folder cards, chat history) should prefer this over
+/// [resolveGlazeFilePath] so that scrolling decodes small square JPGs instead
+/// of the multi-megabyte source PNGs — the latter causes visible jank and
+/// delayed "pop-in" the first time each card scrolls into view.
+String? resolveGlazeThumbnailPath(String? avatarPath) {
+  final resolved = resolveGlazeFilePath(avatarPath);
+  if (resolved == null || resolved.isEmpty) return resolved;
+  final name = p.basenameWithoutExtension(resolved);
+  // avatars/<id>.png -> <base>/thumbnails/<id>.jpg
+  final base = p.dirname(p.dirname(resolved));
+  final thumb = p.join(base, 'thumbnails', '$name.jpg');
+  if (File(thumb).existsSync()) return thumb;
+  return resolved;
+}
+
 String _desktopDataDir() {
   if (Platform.isWindows) {
     final appData = Platform.environment['APPDATA']!;
