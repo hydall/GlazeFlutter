@@ -94,7 +94,7 @@ void main() {
       expect(result, contains('Avoid:'));
       // "neon" from avoid (canonical) and "avoid_repeating: neon" from semantic
       // are different strings — both appear, no exact duplicates.
-      final avoidSection = result!.split('Avoid:').last;
+      final avoidSection = result.split('Avoid:').last;
       // Count lines containing "neon"
       final neonLines = avoidSection
           .split('\n')
