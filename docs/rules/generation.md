@@ -145,7 +145,7 @@ Studio Mode (tracker-around-generator, Phase 5+):
 - Trackers receive `StudioAgent.contextSize` (default 5, hard-cap 200) last
   messages via `_limitTrackerHistory` + `truncateAgentText` (head 40% + tail
   60%) + `stripHtmlTags`. The generator uses `maxFinalHistoryMessages`
-  (default 15) instead. MemoryBook injection in `dynamic_context` is NOT
+  (default 30) with a 60K token budget (whichever limit is hit first) instead.
   trimmed — only `chat_history` is. See INV-ST1, INV-ST2.
 - Studio profiles are reusable prompt/agent presets stored in DB and can be
   bound to multiple chat sessions. Do not treat Studio config as purely

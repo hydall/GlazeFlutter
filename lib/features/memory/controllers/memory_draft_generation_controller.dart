@@ -210,16 +210,20 @@ class MemoryDraftGenerationController {
     final toGenerate = needsGen.take(batchSize).toList();
     if (toGenerate.isEmpty) return;
 
-    await Future.wait(
-      toGenerate.map(
-        (draft) => generateDraft(
-          draft.id,
+    // Stagger starts so LLM requests don't all fire at once.
+    final futures = <Future<void>>[];
+    for (var i = 0; i < toGenerate.length; i++) {
+      if (i > 0) await Future<void>.delayed(const Duration(seconds: 2));
+      futures.add(
+        generateDraft(
+          toGenerate[i].id,
           onStart: onStart,
           onComplete: () {},
           onError: onError,
         ),
-      ),
-    );
+      );
+    }
+    await Future.wait(futures);
     onComplete();
   }
 

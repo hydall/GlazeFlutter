@@ -152,16 +152,15 @@ void main() {
     expect(plan.drafts[2].messageIds, ['m5', 'm6']);
   });
 
-  test('segments use stable index titles even when messages are covered', () {
-    // When some messages are covered by scan_chat entries interspersed
-    // with uncovered messages, segment titles should reflect stable
-    // positions (1-4, 5-8), not uncovered-list positions (1-4).
+  test('fixed blocks: covered messages do not stretch segment range', () {
+    // With fixed blocks of 4, messages m2 and m6 are covered but
+    // stay in their block. Block 1 (m1-m4) → uncovered: m1,m3,m4.
+    // Block 2 (m5-m8) → uncovered: m5,m7,m8.
     final plan = MemoryDraftPlanner.plan(
       book: const MemoryBook(
         id: 'book',
         sessionId: 's',
         entries: [
-          // Cover m2 and m6 with manual entries
           MemoryEntry(
             id: 'manual1',
             messageIds: ['m2'],
@@ -177,20 +176,18 @@ void main() {
         ],
       ),
       messages: List.generate(8, (i) => _message(i + 1)),
-      interval: 3,
+      interval: 4,
       lagMessages: 0,
       source: 'test',
       nowMillis: 1000,
     );
 
-    // Uncovered: m1, m3, m4, m5, m7, m8 (6 messages, m2 and m6 covered)
     expect(plan.uncoveredMessageCount, 6);
-    // 2 segments of 3 uncovered messages each
     expect(plan.drafts, hasLength(2));
-    // First segment: m1, m3, m4 → stable indices 1, 3, 4 → title "1-4"
+    // Block 1: m1-m4, uncovered m1,m3,m4
     expect(plan.drafts[0].title, '1-4');
     expect(plan.drafts[0].messageIds, ['m1', 'm3', 'm4']);
-    // Second segment: m5, m7, m8 → stable indices 5, 7, 8 → title "5-8"
+    // Block 2: m5-m8, uncovered m5,m7,m8
     expect(plan.drafts[1].title, '5-8');
     expect(plan.drafts[1].messageIds, ['m5', 'm7', 'm8']);
   });
