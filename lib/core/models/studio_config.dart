@@ -31,8 +31,9 @@ abstract class StudioConfig with _$StudioConfig {
     /// FINAL Studio agent (the generator). Trackers (intermediate agents) are
     /// trimmed per their own [StudioAgent.contextSize]. The final writer leans
     /// on the tracker briefs instead of re-reading the whole transcript.
-    /// 0 = no limit.
-    @Default(15) int maxFinalHistoryMessages,
+    /// 0 = no message-count limit (a 60K token budget still applies).
+    /// See [StudioHistoryLimiter.finalHistoryTokenBudget].
+    @Default(30) int maxFinalHistoryMessages,
 
     /// Verbatim content of "broadcast" preset blocks — cross-cutting rules
     /// (output language + prose-quality guards: anti-loop/echo/cliché/slop,

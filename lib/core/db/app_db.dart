@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-   int get schemaVersion => 63;
+   int get schemaVersion => 64;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1211,6 +1211,21 @@ class AppDatabase extends _$AppDatabase {
         } catch (e) {
           debugPrint(
             'Migration 63 (paragraph cap 6→12 in final_prose_style_anime) failed: $e',
+          );
+        }
+      }
+      if (from < 64) {
+        // Raise maxFinalHistoryMessages default from 15 to 30 for existing
+        // Studio configs that still use the old default. Configs explicitly
+        // set to other values are left untouched.
+        try {
+          await customStatement(
+            "UPDATE studio_config_rows SET max_final_history_messages = 30 "
+            "WHERE max_final_history_messages = 15",
+          );
+        } catch (e) {
+          debugPrint(
+            'Migration 64 (maxFinalHistoryMessages 15→30) failed: $e',
           );
         }
       }
