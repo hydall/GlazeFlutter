@@ -641,6 +641,12 @@ class StreamGenerationService {
             visibleStartIndex: vsi,
           );
     } catch (e) {
+      // When the final generator throws (e.g. HTTP 400), the exception
+      // propagates through runTrackerCycle without resetting the Studio
+      // cycle state — which was set to writingFinal by onFinalStart. Without
+      // this reset the StudioStatusCard stays visible forever with a spinner.
+      _ref.read(studioCycleStateProvider.notifier).state =
+          const StudioCycleState.error(sessionId: '');
       if (_isAborted()) {
         return ChatState(
           session: session,

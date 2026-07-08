@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../converters/gemini_messages.dart';
 import '../converters/thinking_budget.dart';
@@ -52,12 +53,17 @@ class GeminiChatTransport implements ChatTransport {
 
   final Dio _dio;
 
+  /// Number of automatic retries on HTTP 408 (Request Timeout) — common on
+  /// mobile networks where the upload is too slow for the provider.
+  static const int _maxRetries = 1;
+
   GeminiChatTransport({Dio? dio})
     : _dio =
           dio ??
           Dio(
             BaseOptions(
               connectTimeout: const Duration(seconds: 30),
+              sendTimeout: const Duration(seconds: 60),
               receiveTimeout: const Duration(seconds: 180),
             ),
           );
@@ -171,30 +177,42 @@ class GeminiChatTransport implements ChatTransport {
       return;
     }
 
-    try {
-      final built = buildRequest(request);
-      if (request.stream) {
-        await _streamResponse(
-          built.url,
-          built.headers,
-          built.body,
-          cancelToken: cancelToken,
-          onUpdate: onUpdate,
-          onComplete: onComplete,
-        );
-      } else {
-        await _oneShotResponse(
-          built.url,
-          built.headers,
-          built.body,
-          cancelToken: cancelToken,
-          onComplete: onComplete,
-        );
+    for (var attempt = 0; attempt <= _maxRetries; attempt++) {
+      try {
+        final built = buildRequest(request);
+        if (request.stream) {
+          await _streamResponse(
+            built.url,
+            built.headers,
+            built.body,
+            cancelToken: cancelToken,
+            onUpdate: onUpdate,
+            onComplete: onComplete,
+          );
+        } else {
+          await _oneShotResponse(
+            built.url,
+            built.headers,
+            built.body,
+            cancelToken: cancelToken,
+            onComplete: onComplete,
+          );
+        }
+        return; // success — no retry needed
+      } on DioException catch (e) {
+        if (attempt < _maxRetries &&
+            e.response?.statusCode == 408 &&
+            cancelToken?.isCancelled != true) {
+          debugPrint('[Gemini] HTTP 408 on attempt ${attempt + 1}/$_maxRetries — retrying');
+          await Future<void>.delayed(const Duration(seconds: 1));
+          continue;
+        }
+        onError?.call(e);
+        return;
+      } catch (e) {
+        onError?.call(e);
+        return;
       }
-    } on DioException catch (e) {
-      onError?.call(e);
-    } catch (e) {
-      onError?.call(e);
     }
   }
 
