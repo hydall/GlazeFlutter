@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../models/chat_message.dart';
 import '../models/memory_book.dart';
 
@@ -59,50 +61,33 @@ class MemoryDraftPlanner {
         .where((m) => m.id.isNotEmpty && !coveredIds.contains(m.id))
         .toList();
 
-    // Build segments by stable-message index, not by uncovered-list index.
-    // This ensures titles show real chat positions (1-15, 16-30, …) and
-    // segments cover contiguous chat ranges even when some messages in the
-    // range are already covered by Studio Ledger / agentic entries.
-    //
-    // Algorithm: walk eligible messages in stable order. Start a segment at
-    // the first uncovered message. Accumulate uncovered messages until the
-    // segment reaches [segmentSize] uncovered entries OR we run out of
-    // eligible messages. The segment's title is the stable index of its
-    // first uncovered message → stable index of its last uncovered message.
+    // Build fixed contiguous blocks of [segmentSize] messages.
+    // The range/title reflects the real chat positions (1-15, 16-30, …)
+    // even when some messages inside the block are already covered —
+    // covered messages are excluded from the draft's [messageIds] but
+    // do NOT stretch the block boundary.
     final segmentSize = interval < 1 ? 1 : interval;
     final newDrafts = <MemoryDraft>[];
     {
-      final eligibleSet = eligibleMessages;
       final uncoveredSet = uncovered.map((m) => m.id).toSet();
-      int i = 0; // index into eligibleMessages
-      while (i < eligibleSet.length) {
-        // Skip covered messages to find the start of the next segment.
-        if (!uncoveredSet.contains(eligibleSet[i].id)) {
-          i++;
-          continue;
-        }
-        // Start a new segment at position i.
-        final segmentMsgs = <ChatMessage>[];
-        int j = i;
-        while (j < eligibleSet.length && segmentMsgs.length < segmentSize) {
-          if (uncoveredSet.contains(eligibleSet[j].id)) {
-            segmentMsgs.add(eligibleSet[j]);
-          }
-          j++;
-        }
-        if (segmentMsgs.length < segmentSize) {
-          // Not enough uncovered messages left for a full segment.
-          break;
-        }
+      for (var start = 0; start < eligibleMessages.length; start += segmentSize) {
+        final end = math.min(start + segmentSize, eligibleMessages.length);
+        final block = eligibleMessages.sublist(start, end);
+        if (block.length < segmentSize) continue; // skip partial trailing block
+        final blockUncovered = block
+            .where((m) => uncoveredSet.contains(m.id))
+            .toList();
+        if (blockUncovered.isEmpty) continue;
+
         final segmentIds =
-            segmentMsgs.map((m) => m.id).toList(growable: false);
+            blockUncovered.map((m) => m.id).toList(growable: false);
         final segmentIdSet = segmentIds.toSet();
         final alreadyExists = book.pendingDrafts.any(
           (d) => d.messageIds.toSet().containsAll(segmentIdSet),
         );
         if (!alreadyExists) {
-          final firstIdx = stableMessages.indexOf(segmentMsgs.first);
-          final lastIdx = stableMessages.indexOf(segmentMsgs.last);
+          final firstIdx = stableMessages.indexOf(block.first);
+          final lastIdx = stableMessages.indexOf(block.last);
           final uniqueSuffix = segmentIds.join('|').hashCode.abs();
           newDrafts.add(
             MemoryDraft(
@@ -118,7 +103,6 @@ class MemoryDraftPlanner {
             ),
           );
         }
-        i = j;
       }
     }
 
