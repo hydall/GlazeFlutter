@@ -905,7 +905,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
 
     final bgBlur = preset.bgBlur > 0 ? preset.bgBlur : 0.0;
     final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
-    final bgPath = preset.bgImage;
     final fontStyle = batteryAware(
       ref,
       batterySaverMode,
@@ -921,6 +920,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       batterySaverMode,
       characterByIdProvider(widget.charId),
     );
+    // Source for the in-WebView background copy, mirroring what the Flutter
+    // ChatWebViewSurface._background() paints for each chatBgMode so the
+    // duplicated background matches. 'color' has no image.
+    final bgPath = switch (preset.chatBgMode) {
+      'custom' => preset.chatBgImage,
+      'avatar' => character?.avatarPath,
+      'color' => null,
+      _ => preset.bgImage, // 'inherit'
+    };
     final personaKey = (
       charId: widget.charId,
       sessionId: widget.state.session?.id,

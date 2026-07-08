@@ -801,7 +801,34 @@ export class Bridge {
   }
 
   setBackgroundImage(url, blur, opacity) {
-    // Background is handled by Flutter layer behind the transparent WebView.
+    // Duplicate the app background inside the WebView so its own
+    // backdrop-filter blur regions have real pixels to sample — CSS
+    // backdrop-filter can't see the natively-composited Flutter layer
+    // behind the transparent WebView. Flutter keeps painting the same
+    // background underneath as a fallback; this opaque copy sits on top.
+    let bg = document.getElementById('bg-layer');
+    if (!url) {
+      if (bg) {
+        bg.style.display = 'none';
+        bg.style.backgroundImage = '';
+      }
+      return;
+    }
+    if (!bg) {
+      bg = document.createElement('div');
+      bg.id = 'bg-layer';
+      document.body.insertBefore(bg, document.body.firstChild);
+    }
+    bg.style.display = 'block';
+    bg.style.backgroundImage = `url("${url}")`;
+    const b = Math.max(0, Number(blur) || 0);
+    bg.style.filter = b > 0 ? `blur(${b}px)` : '';
+    // CSS blur on an inset:0 layer bleeds transparent (darkened) edges,
+    // unlike Flutter's TileMode.clamp. Overscan the layer so the blurred
+    // fringe falls outside the viewport.
+    bg.style.inset = b > 0 ? `-${b * 2}px` : '0';
+    const op = opacity == null ? 1 : Math.max(0, Math.min(1, Number(opacity)));
+    bg.style.opacity = op;
   }
 
   setBackgroundNoise(opacity, intensity) {
