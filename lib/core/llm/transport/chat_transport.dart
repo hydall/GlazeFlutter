@@ -36,6 +36,10 @@ abstract class ChatTransport {
   /// chunk while streaming; `onComplete` fires once at the end with the full
   /// aggregated text. `onError` fires on transport-level errors. Cancellation
   /// is via [cancelToken].
+  ///
+  /// If the provider returns HTTP 408 (Request Timeout — common on mobile
+  /// networks where the upload is slow), the transport retries up to
+  /// [maxRetries] times before surfacing the error.
   Future<void> stream({
     required ChatTransportRequest request,
     CancelToken? cancelToken,
