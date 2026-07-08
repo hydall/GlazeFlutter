@@ -123,6 +123,7 @@
     "label_presence_penalty": "Штраф присутствия",
     "label_max_tokens": "Max Output Tokens",
     "label_context_size": "Context Size",
+    "label_first_chunk_timeout": "Таймаут до первого чанка (сек)",
     "label_stream": "Стриминг ответа",
     "desc_stream": "Отображать текст ответа постепенно по мере его появления",
     "label_auto_hide_images": "Скрывать изображения",

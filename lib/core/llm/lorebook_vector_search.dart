@@ -190,43 +190,61 @@ class LorebookVectorSearch {
     }
 
     // Main vector pool (vectorSearch=true entries) — both focused and
-    // fallback queries if available.
+    // fallback queries if available. Run in parallel with a 1s stagger
+    // to avoid bursting the embedding endpoint with simultaneous requests.
+    final mainFutures = <Future<void>>[];
     if (focusedQuery.isNotEmpty) {
-      await searchPool(candidates, focusedQuery);
+      mainFutures.add(searchPool(candidates, focusedQuery));
     }
     if (fallbackQuery.isNotEmpty && fallbackQuery != focusedQuery) {
-      await searchPool(candidates, fallbackQuery);
+      mainFutures.add(
+        Future.delayed(
+          const Duration(seconds: 1),
+          () => searchPool(candidates, fallbackQuery),
+        ),
+      );
     }
-
-    // NEW (patch #4 follow-up): semantic fallback pool for keyless entries.
-    // Lower threshold (default 0.3) and smaller topK (default 3). Only run
-    // against the focused query — the fallback query is for broader recall
-    // on the main pool and would over-activate keyless entries.
-    // Rationale: only the focused query is used for the fallback pool — the
-    // fallback query is for broader recall on the main pool and would
-    // over-activate keyless entries.
+    // Keyless fallback pool — also staggered by 1s relative to the
+    // fallback query. Shares the focused query embedding result, so the
+    // HTTP call is the same; the stagger avoids overlapping with the
+    // main pool's second HTTP call.
     final fallbackThreshold = settings.fallbackThreshold;
     final fallbackTopK = settings.fallbackTopK;
     final fallbackResults = <String, double>{};
     final fallbackLorebookIds = <String, String>{};
     if (focusedQuery.isNotEmpty && fallbackCandidates.isNotEmpty) {
-      final chunks = await _embeddingService.getEmbeddingsWithChunks(
-        [focusedQuery],
-        config,
-        cancelToken: cancelToken,
+      mainFutures.add(
+        Future.delayed(
+          const Duration(seconds: 2),
+          () async {
+            final chunks = await _embeddingService.getEmbeddingsWithChunks(
+              [focusedQuery],
+              config,
+              cancelToken: cancelToken,
+            );
+            final vecChunks = chunks
+                .map((c) => VectorChunk(text: c.text, vector: c.vector))
+                .toList();
+            final results = findTopKMulti(
+              vecChunks,
+              fallbackCandidates,
+              fallbackCandidates.length,
+              0,
+            );
+            for (final r in results) {
+              final entry = r.metadata['entry'] as LorebookEntry;
+              final score = r.score;
+              if (score >= fallbackThreshold) {
+                fallbackResults[entry.id] = score;
+                fallbackLorebookIds[entry.id] =
+                    r.metadata['lorebookId'] as String;
+              }
+            }
+          },
+        ),
       );
-      final vecChunks = chunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
-      final results = findTopKMulti(vecChunks, fallbackCandidates, fallbackCandidates.length, 0);
-      for (final r in results) {
-        final entry = r.metadata['entry'] as LorebookEntry;
-        // No hybrid boost for keyless entries — they have no keys to boost.
-        final score = r.score;
-        if (score >= fallbackThreshold) {
-          fallbackResults[entry.id] = score;
-          fallbackLorebookIds[entry.id] = r.metadata['lorebookId'] as String;
-        }
-      }
     }
+    await Future.wait(mainFutures);
 
     final threshold = effectiveThreshold;
     final topK = effectiveTopK;

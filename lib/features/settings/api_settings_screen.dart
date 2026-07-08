@@ -45,6 +45,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   final _modelCtrl = TextEditingController();
   final _maxTokensCtrl = TextEditingController();
   final _contextSizeCtrl = TextEditingController();
+  final _firstChunkTimeoutCtrl = TextEditingController();
   final _embEndpointCtrl = TextEditingController();
   final _embApiKeyCtrl = TextEditingController();
   final _embModelCtrl = TextEditingController();
@@ -87,6 +88,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     _modelCtrl,
     _maxTokensCtrl,
     _contextSizeCtrl,
+    _firstChunkTimeoutCtrl,
     _embEndpointCtrl,
     _embApiKeyCtrl,
     _embModelCtrl,
@@ -161,6 +163,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     _modelCtrl.text = config.model;
     _maxTokensCtrl.text = config.maxTokens.toString();
     _contextSizeCtrl.text = config.contextSize.toString();
+    _firstChunkTimeoutCtrl.text =
+        (config.firstChunkTimeoutMs ~/ 1000).toString();
     _embEndpointCtrl.text = config.embeddingEndpoint;
     _embApiKeyCtrl.text = config.embeddingApiKey;
     _embModelCtrl.text = config.embeddingModel;
@@ -208,6 +212,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             maxTokens: int.tryParse(_maxTokensCtrl.text) ?? config.maxTokens,
             contextSize:
                 int.tryParse(_contextSizeCtrl.text) ?? config.contextSize,
+            firstChunkTimeoutMs:
+                (int.tryParse(_firstChunkTimeoutCtrl.text) ?? 60) * 1000,
             temperature: _temperature,
             topP: _topP,
             topK: _topK,
@@ -612,6 +618,12 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 label: 'label_context_size'.tr(),
                 controller: _contextSizeCtrl,
                 placeholder: '32000',
+                keyboardType: TextInputType.number,
+              ),
+              MenuFieldItem(
+                label: 'label_first_chunk_timeout'.tr(),
+                controller: _firstChunkTimeoutCtrl,
+                placeholder: '60',
                 keyboardType: TextInputType.number,
               ),
             ],

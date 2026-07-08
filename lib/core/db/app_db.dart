@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-   int get schemaVersion => 64;
+   int get schemaVersion => 65;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1226,6 +1226,15 @@ class AppDatabase extends _$AppDatabase {
         } catch (e) {
           debugPrint(
             'Migration 64 (maxFinalHistoryMessages 15→30) failed: $e',
+          );
+        }
+      }
+      if (from < 65) {
+        try {
+          await m.addColumn(apiConfigs, apiConfigs.firstChunkTimeoutMs);
+        } catch (e) {
+          debugPrint(
+            'Migration 65 (firstChunkTimeoutMs column) failed: $e',
           );
         }
       }
