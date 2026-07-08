@@ -1554,10 +1554,11 @@
 
 /* ============================================================
  * Background layer
- * Flutter paints the theme surface color behind the WebView (ColoredBox).
- * WebView background is transparent so the Flutter color shows through.
- * When a chat bg image is set, Flutter renders it on top of the color,
- * and the WebView remains transparent throughout.
+ * Flutter paints the theme surface color (and a fallback background)
+ * behind the transparent WebView. When a bg image is set, a duplicate
+ * copy is drawn here in #bg-layer (populated by bridge.setBackgroundImage)
+ * so the WebView's own backdrop-filter regions can blur it — CSS
+ * backdrop-filter can't sample the native Flutter layer behind the view.
  * ============================================================ */
 #bg-layer {
   position: fixed;

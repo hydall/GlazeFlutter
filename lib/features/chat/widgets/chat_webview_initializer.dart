@@ -25,6 +25,9 @@ class ChatWebViewInitInput {
     required this.charAvatarPath,
     required this.personaAvatarPath,
     required this.greetingTotal,
+    required this.bgImagePath,
+    required this.bgBlur,
+    required this.bgOpacity,
     required this.bgNoiseOpacity,
     required this.bgNoiseIntensity,
     required this.chatFontName,
@@ -60,6 +63,9 @@ class ChatWebViewInitInput {
   final String? charAvatarPath;
   final String? personaAvatarPath;
   final int greetingTotal;
+  final String? bgImagePath;
+  final double bgBlur;
+  final double bgOpacity;
   final double bgNoiseOpacity;
   final double bgNoiseIntensity;
   final String? chatFontName;
@@ -130,6 +136,11 @@ class ChatWebViewInitializer {
 
     await _setIdentity();
     await applyTheme();
+    await bridge.setBackgroundImage(
+      input.bgImagePath,
+      input.bgBlur.toInt(),
+      input.bgOpacity,
+    );
     await bridge.setBackgroundNoise(
       input.bgNoiseOpacity,
       input.bgNoiseIntensity,
