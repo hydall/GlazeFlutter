@@ -6,7 +6,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/platform/haptics.dart';
 import '../../core/state/character_provider.dart';
-import '../../features/settings/app_settings_provider.dart';
 import '../shell/nav_height_provider.dart';
 import '../theme/app_colors.dart';
 import 'glass_surface.dart';
@@ -91,8 +90,6 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.iOS ||
             defaultTargetPlatform == TargetPlatform.macOS);
-    final batterySaver =
-        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
 
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
@@ -124,7 +121,7 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
         (isIosLikeTargetPlatform ? 6 : 16) + bottomPad,
       ),
       child: GlassSurface(
-        enableRipple: !batterySaver,
+        enableRipple: true,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: context.cs.outlineVariant),
         child: row,

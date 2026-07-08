@@ -142,9 +142,10 @@ class GlassSurface extends ConsumerWidget {
         child: surface,
       );
     }
-    if (enableRipple) {
+    if (enableRipple && !batterySaver) {
       return GlowRippleOverlay(
         glowColor: glowColor ?? context.cs.primary,
+        borderRadius: borderRadius,
         radiusFactor: rippleRadiusFactor,
         intensity: rippleIntensity,
         child: surface,

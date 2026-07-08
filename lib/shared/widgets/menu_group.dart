@@ -38,6 +38,7 @@ class MenuGroup extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: GlassSurface(
+        enableRipple: true,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: context.cs.outlineVariant),
         child: Column(

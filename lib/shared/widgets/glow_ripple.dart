@@ -144,16 +144,17 @@ class _GlowInkWellState extends State<GlowInkWell>
   Widget build(BuildContext context) {
     final color = widget.glowColor ?? context.cs.primary;
 
-    Widget inner = buildRippleOverlay(
-      color,
-      widget.child,
-      radiusFactor: widget.radiusFactor,
-      intensity: widget.intensity,
+    // Always clip so the glow can never bleed past the widget bounds; a null
+    // borderRadius degrades to a plain rectangular clip.
+    final Widget inner = ClipRRect(
+      borderRadius: widget.borderRadius ?? BorderRadius.zero,
+      child: buildRippleOverlay(
+        color,
+        widget.child,
+        radiusFactor: widget.radiusFactor,
+        intensity: widget.intensity,
+      ),
     );
-
-    if (widget.borderRadius != null) {
-      inner = ClipRRect(borderRadius: widget.borderRadius!, child: inner);
-    }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -177,12 +178,17 @@ class GlowRippleOverlay extends StatefulWidget {
     super.key,
     required this.child,
     this.glowColor,
+    this.borderRadius,
     this.radiusFactor = 1.0,
     this.intensity = 0.15,
   });
 
   final Widget child;
   final Color? glowColor;
+
+  /// Rounds the clip that keeps the glow inside the surface bounds. The glow is
+  /// always clipped; a null value falls back to a plain rectangular clip.
+  final BorderRadius? borderRadius;
 
   /// Scales the ripple's maximum radius (1.0 = full child extent). Lower values
   /// keep the glow tighter around the tap point.
@@ -207,6 +213,17 @@ class _GlowRippleOverlayState extends State<GlowRippleOverlay>
   @override
   Widget build(BuildContext context) {
     final color = widget.glowColor ?? context.cs.primary;
+    // Always clip so the glow can never bleed past the surface bounds; a null
+    // borderRadius degrades to a plain rectangular clip.
+    final Widget overlay = ClipRRect(
+      borderRadius: widget.borderRadius ?? BorderRadius.zero,
+      child: buildRippleOverlay(
+        color,
+        const SizedBox.expand(),
+        radiusFactor: widget.radiusFactor,
+        intensity: widget.intensity,
+      ),
+    );
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _onPointerDown,
@@ -214,14 +231,7 @@ class _GlowRippleOverlayState extends State<GlowRippleOverlay>
         children: [
           widget.child,
           Positioned.fill(
-            child: IgnorePointer(
-              child: buildRippleOverlay(
-                color,
-                const SizedBox.expand(),
-                radiusFactor: widget.radiusFactor,
-                intensity: widget.intensity,
-              ),
-            ),
+            child: IgnorePointer(child: overlay),
           ),
         ],
       ),

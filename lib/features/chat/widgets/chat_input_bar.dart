@@ -312,6 +312,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         id: 'input-pill',
         radius: 28,
         child: GlassSurface(
+          enableRipple: true,
           borderRadius: BorderRadius.circular(28),
           tint: context.cs.surface,
           border: uiBorder,
@@ -377,6 +378,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         id: 'input-pill',
         radius: 28,
         child: GlassSurface(
+          enableRipple: true,
           borderRadius: BorderRadius.circular(28),
           tint: context.cs.surface,
           border: uiBorder,
@@ -536,6 +538,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 id: 'input-pill',
                 radius: 28,
                 child: GlassSurface(
+                  enableRipple: true,
                   borderRadius: BorderRadius.circular(28),
                   tint: context.cs.surface,
                   border: _guidanceMode
