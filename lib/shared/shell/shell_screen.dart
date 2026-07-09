@@ -9,6 +9,7 @@ import '../widgets/glass_nav_bar.dart';
 import '../widgets/glaze_background.dart';
 import '../widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../widgets/glaze_toast.dart';
+import 'animated_header_below.dart';
 import 'shell_header_provider.dart';
 import 'desktop/desktop_layout_provider.dart';
 
@@ -113,19 +114,17 @@ class _PersistentHeader extends ConsumerWidget {
     // character list's tabs row), mirroring the chat header's hide-on-scroll.
     final hidden = ref.watch(shellHeaderHiddenProvider(branchIndex));
 
-    final switcher = AnimatedSwitcher(
+    // Only the app-bar row cross-fades on a screen switch; the `below` slot is
+    // hoisted out below so it animates on its own (see [AnimatedHeaderBelow]).
+    final appBar = AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeOutCubic,
       transitionBuilder: (child, animation) =>
           FadeTransition(opacity: animation, child: child),
-      // Default layoutBuilder stacks children with Alignment.center, so when
-      // the outgoing and incoming headers differ in height (e.g. a branch
-      // with a segmented-control `below` row vs. one without), the shorter
-      // header sits vertically centered against the taller one during the
-      // cross-fade, then snaps to the top the instant the taller child is
-      // disposed. Top-aligning keeps both children flush with the header's
-      // top edge throughout, so there's nothing to snap.
+      // Default layoutBuilder stacks children with Alignment.center; top-align
+      // instead so the app-bar rows stay flush with the header's top edge
+      // throughout the cross-fade rather than snapping when one is disposed.
       layoutBuilder: (currentChild, previousChildren) => Stack(
         alignment: Alignment.topCenter,
         children: [
@@ -137,26 +136,35 @@ class _PersistentHeader extends ConsumerWidget {
           ? const SizedBox.shrink(key: ValueKey('shell-header-empty'))
           : KeyedSubtree(
               key: ObjectKey(entry.key),
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GlazeAppBar(
-                        title: entry.config.title,
-                        titleWidget: entry.config.titleWidget,
-                        actions: entry.config.actions,
-                        showBack: entry.config.showBack,
-                        onBack: entry.config.onBack,
-                      ),
-                      _AnimatedHeaderBelow(below: entry.config.below),
-                    ],
-                  ),
-                ),
+              child: GlazeAppBar(
+                title: entry.config.title,
+                titleWidget: entry.config.titleWidget,
+                actions: entry.config.actions,
+                showBack: entry.config.showBack,
+                onBack: entry.config.onBack,
               ),
             ),
+    );
+
+    final content = SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            appBar,
+            // Decoupled from the app bar's cross-fade so that switching to a
+            // screen without a segmented control slides the control up and out
+            // on its own, instead of plain-fading with the rest of the header.
+            AnimatedHeaderBelow(
+              below: entry == null || entry.config.hidden
+                  ? null
+                  : entry.config.below,
+            ),
+          ],
+        ),
+      ),
     );
 
     return IgnorePointer(
@@ -169,53 +177,8 @@ class _PersistentHeader extends ConsumerWidget {
           opacity: hidden ? 0.0 : 1.0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
-          child: switcher,
+          child: content,
         ),
-      ),
-    );
-  }
-}
-
-/// Animates the header's `below` slot (e.g. the character list's segmented
-/// tab bar) in and out when a screen switch adds or removes it — as opposed to
-/// the header's own cross-fade, which only triggers when [ShellHeaderEntry.key]
-/// changes and stays silent for same-screen claims like the character list
-/// toggling in and out of a folder. Appearing slides down into place from
-/// above the app bar; disappearing rides back up and fades, mirroring the
-/// header's own hide-on-scroll direction convention.
-class _AnimatedHeaderBelow extends StatelessWidget {
-  final Widget? below;
-  const _AnimatedHeaderBelow({required this.below});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-      alignment: Alignment.topCenter,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 260),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeOutCubic,
-        layoutBuilder: (currentChild, previousChildren) => Stack(
-          alignment: Alignment.topCenter,
-          children: [...previousChildren, ?currentChild],
-        ),
-        transitionBuilder: (child, animation) => ClipRect(
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, -1),
-              end: Offset.zero,
-            ).animate(animation),
-            child: FadeTransition(opacity: animation, child: child),
-          ),
-        ),
-        child: below == null
-            ? const SizedBox.shrink(key: ValueKey('shell-header-below-empty'))
-            : KeyedSubtree(
-                key: const ValueKey('shell-header-below-content'),
-                child: below!,
-              ),
       ),
     );
   }

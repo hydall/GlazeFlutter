@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../../widgets/glaze_background.dart';
 import '../../widgets/glaze_scaffold.dart' show GlazeAppBar;
+import '../animated_header_below.dart';
 import '../shell_header_provider.dart';
 import 'desktop_floating_provider.dart';
 import 'desktop_glossary_popup.dart';
@@ -125,15 +126,16 @@ class _DesktopHeader extends ConsumerWidget {
       shellHeaderProvider.select((e) => resolveShellHeader(e, branchIndex)),
     );
 
-    return AnimatedSwitcher(
+    // Only the app-bar row cross-fades on a screen switch; the `below` slot is
+    // hoisted out below so it animates on its own (see [AnimatedHeaderBelow]).
+    final appBar = AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeOutCubic,
       transitionBuilder: (child, animation) =>
           FadeTransition(opacity: animation, child: child),
-      // See _PersistentHeader in shell_screen.dart: default Alignment.center
-      // layout makes a shorter header snap up once the taller outgoing one
-      // (e.g. one with a segmented-control `below` row) is disposed.
+      // See _PersistentHeader in shell_screen.dart: top-align so the app-bar
+      // rows stay flush with the header's top edge during the cross-fade.
       layoutBuilder: (currentChild, previousChildren) => Stack(
         alignment: Alignment.topCenter,
         children: [
@@ -145,21 +147,30 @@ class _DesktopHeader extends ConsumerWidget {
           ? const SizedBox.shrink(key: ValueKey('desktop-header-empty'))
           : KeyedSubtree(
               key: ObjectKey(entry.key),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GlazeAppBar(
-                    title: entry.config.title,
-                    titleWidget: entry.config.titleWidget,
-                    actions: entry.config.actions,
-                    showBack: entry.config.showBack,
-                    onBack: entry.config.onBack,
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  if (entry.config.below != null) entry.config.below!,
-                ],
+              child: GlazeAppBar(
+                title: entry.config.title,
+                titleWidget: entry.config.titleWidget,
+                actions: entry.config.actions,
+                showBack: entry.config.showBack,
+                onBack: entry.config.onBack,
+                borderRadius: BorderRadius.zero,
               ),
             ),
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        appBar,
+        // Decoupled from the app bar's cross-fade so that switching to a screen
+        // without a segmented control slides the control up and out on its own,
+        // instead of plain-fading with the rest of the header.
+        AnimatedHeaderBelow(
+          below: entry == null || entry.config.hidden
+              ? null
+              : entry.config.below,
+        ),
+      ],
     );
   }
 }
