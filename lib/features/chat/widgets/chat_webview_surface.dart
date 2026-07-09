@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_bridge_registry.dart';
-import '../bridge/chat_overlay_blur_region.dart';
 import '../bridge/chat_webview_bridge_host.dart';
 import '../bridge/chat_webview_environment.dart';
 import '../bridge/chat_webview_keep_alive.dart';
@@ -54,8 +53,6 @@ class ChatWebViewSurface extends ConsumerWidget {
     required this.chatBgColor,
     required this.chatBgAvatarPath,
     required this.bottomInset,
-    this.blurRegions = const [],
-    this.elementBlur = 0,
     required this.onBridgeReady,
     required this.onInitWebView,
   });
@@ -84,14 +81,6 @@ class ChatWebViewSurface extends ConsumerWidget {
   final Color? chatBgColor;
   final String? chatBgAvatarPath;
   final double bottomInset;
-
-  /// Glass overlay rects (header, input pill, buttons). Painted here as a
-  /// BackdropFilter sandwich BETWEEN the background and the WebView: below
-  /// the platform view the filter can sample the Flutter background, so the
-  /// global background appears blurred under the glass widgets even though
-  /// their own BackdropFilter (above the platform view) samples nothing.
-  final List<ChatOverlayBlurRegion> blurRegions;
-  final double elementBlur;
 
   /// Called by the surface after the bridge is created and
   /// registered in [chatBridgeRegistryProvider]. The parent widget
@@ -170,35 +159,15 @@ class ChatWebViewSurface extends ConsumerWidget {
       children: [
         // Background behind the transparent WebView.
         Positioned.fill(child: _background(context)),
-        // Blur sandwich for the global background — ALWAYS a single stable
-        // child, never a variable number of siblings: inserting/removing
-        // children BEFORE the InAppWebView shifts its index, and the keyless
-        // Stack reconciliation then disposes and recreates the platform view
-        // mid-load ("JS bridge did not initialize within 30s"). Region churn
-        // stays inside this nested Stack.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: Stack(
-              children: [
-                if (elementBlur > 0)
-                  for (final region in blurRegions)
-                    Positioned.fromRect(
-                      rect: region.rect,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(region.radius),
-                        child: BackdropFilter(
-                          filter: ui.ImageFilter.blur(
-                            sigmaX: elementBlur,
-                            sigmaY: elementBlur,
-                          ),
-                          child: const SizedBox.expand(),
-                        ),
-                      ),
-                    ),
-              ],
-            ),
-          ),
-        ),
+        // NOTE: the glass overlays (header, input pill, buttons) are NOT
+        // blurred here on the Flutter side. Their blur is reproduced entirely
+        // by CSS `backdrop-filter` strips *inside* the WebView (mirrored via
+        // setOverlayBlurRegions), which sample the WebView's own background
+        // copy (#bg-layer, with baked bg-blur + dim + noise) AND the messages
+        // in a single pass — the one source of truth for anything blurred.
+        // This removes the old Flutter BackdropFilter "sandwich" that could
+        // not reconcile with the in-WebView bg blur/dim and re-blurred every
+        // keyboard frame.
         Positioned.fill(
           child: IgnorePointer(
             ignoring: sessionSwitching,

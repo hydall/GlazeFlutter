@@ -277,6 +277,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       child: GlazeScaffold(
         extendBodyBehindHeader: true,
         resizeToAvoidBottomInset: false,
+        // The body is a full-screen chat WebView; the header's glass blur is
+        // reproduced by an in-WebView CSS strip (mirrored via the 'header'
+        // blur region in _measureBlurRegions), so drop the Flutter blur pass.
+        headerBlurViaWebView: true,
         hideHeader: _isHeaderHidden,
         title: title,
         titleWidget: _search.showSearch

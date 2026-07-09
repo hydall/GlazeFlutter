@@ -840,8 +840,6 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       chatBgColor: widget.chatBgColor,
       chatBgAvatarPath: widget.charAvatarPath,
       bottomInset: widget.bottomInset,
-      blurRegions: widget.blurRegions,
-      elementBlur: widget.elementBlur,
       onBridgeReady: (ChatBridgeController b) => _bridge = b,
       onInitWebView: _initWebView,
     );

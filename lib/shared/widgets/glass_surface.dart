@@ -30,6 +30,15 @@ class GlassSurface extends ConsumerWidget {
   final double rippleRadiusFactor;
   final double rippleIntensity;
 
+  /// When this surface floats over the chat `InAppWebView`, its own Flutter
+  /// [BackdropFilter] cannot sample the natively-composited WebView pixels, so
+  /// the blur is instead reproduced by a CSS `backdrop-filter` strip *inside*
+  /// the WebView (mirrored via [BlurRegionTracker] → `setOverlayBlurRegions`).
+  /// Setting this drops the redundant Flutter blur pass entirely — the surface
+  /// paints only tint / border / noise — which also removes the per-frame blur
+  /// recompute that made the keyboard animation janky.
+  final bool blurViaWebView;
+
   const GlassSurface({
     super.key,
     required this.child,
@@ -43,6 +52,7 @@ class GlassSurface extends ConsumerWidget {
     this.glowColor,
     this.rippleRadiusFactor = 1.0,
     this.rippleIntensity = 0.15,
+    this.blurViaWebView = false,
   });
 
   @override
@@ -58,7 +68,10 @@ class GlassSurface extends ConsumerWidget {
 
   Widget _build(BuildContext context, ThemePreset preset, bool batterySaver) {
     final alpha = batterySaver ? 1.0 : preset.elementOpacity.clamp(0.0, 1.0);
-    final blur = (batterySaver || PerfDebug.noGlassBlur)
+    // Over the chat WebView the blur is done by an in-WebView CSS strip, so the
+    // Flutter BackdropFilter is dropped here (it would sample the platform-view
+    // hole, not the WebView content, and cost a blur pass every frame).
+    final blur = (batterySaver || PerfDebug.noGlassBlur || blurViaWebView)
         ? 0.0
         : preset.elementBlur;
     final defaultBase = Theme.of(context).colorScheme.surfaceContainerHighest;

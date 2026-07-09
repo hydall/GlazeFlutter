@@ -26,6 +26,11 @@ class GlazeScaffold extends StatelessWidget {
   final bool hideHeader;
   final bool showBackground;
 
+  /// Set for the chat screen, whose body is a full-screen `InAppWebView`. The
+  /// floating header then drops its Flutter blur and lets an in-WebView CSS
+  /// strip reproduce it (see [GlassSurface.blurViaWebView]).
+  final bool headerBlurViaWebView;
+
   /// When true, this scaffold does not draw its own floating header. Instead it
   /// publishes its title/actions/back into the shell's persistent header (see
   /// [shellHeaderProvider]) and reserves the same vertical space. Only set this
@@ -51,6 +56,7 @@ class GlazeScaffold extends StatelessWidget {
     this.showBackground = true,
     this.useShellHeader = false,
     this.headerBranchIndex,
+    this.headerBlurViaWebView = false,
   });
 
   @override
@@ -81,6 +87,7 @@ class GlazeScaffold extends StatelessWidget {
           actions: actions,
           showBack: showBack,
           onBack: backHandler,
+          blurViaWebView: headerBlurViaWebView,
         ),
       ),
     );
@@ -226,6 +233,12 @@ class GlazeAppBar extends ConsumerWidget {
   final Widget? leading;
   final BorderRadius borderRadius;
 
+  /// When the header floats over the chat WebView its blur is reproduced by a
+  /// CSS strip inside the WebView (see [GlassSurface.blurViaWebView]); the
+  /// Flutter BackdropFilter is then dropped. Only the chat header sets this —
+  /// standalone shell-tab headers keep their own blur.
+  final bool blurViaWebView;
+
   const GlazeAppBar({
     super.key,
     this.title,
@@ -235,12 +248,14 @@ class GlazeAppBar extends ConsumerWidget {
     this.onBack,
     this.leading,
     this.borderRadius = const BorderRadius.all(Radius.circular(20)),
+    this.blurViaWebView = false,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return GlassSurface(
       enableRipple: true,
+      blurViaWebView: blurViaWebView,
       borderRadius: borderRadius,
       border: Border.all(color: context.cs.outlineVariant),
       child: SizedBox(

@@ -313,6 +313,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         radius: 28,
         child: GlassSurface(
           enableRipple: true,
+          blurViaWebView: true,
           borderRadius: BorderRadius.circular(28),
           tint: context.cs.surface,
           border: uiBorder,
@@ -379,6 +380,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         radius: 28,
         child: GlassSurface(
           enableRipple: true,
+          blurViaWebView: true,
           borderRadius: BorderRadius.circular(28),
           tint: context.cs.surface,
           border: uiBorder,
@@ -539,6 +541,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 radius: 28,
                 child: GlassSurface(
                   enableRipple: true,
+                  blurViaWebView: true,
                   borderRadius: BorderRadius.circular(28),
                   tint: context.cs.surface,
                   border: _guidanceMode
@@ -790,6 +793,10 @@ class _CircleBtnState extends ConsumerState<_CircleBtn>
           width: 40,
           height: 40,
           child: GlassSurface(
+            // Only the top-level circle buttons carry a blurRegionId (they
+            // float over the WebView and are mirrored to a CSS strip); the
+            // ones nested inside the input pill keep their Flutter blur.
+            blurViaWebView: widget.blurRegionId != null,
             borderRadius: BorderRadius.circular(20),
             tint: context.cs.surface,
             border: _uiBorder(context, preset),
