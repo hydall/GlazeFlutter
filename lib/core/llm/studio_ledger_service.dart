@@ -103,9 +103,9 @@ class StudioLedgerService {
     required this._trackerRepo,
     required this._bookRepo,
     required this._snapshotRepo,
-  })  : _parser = const StudioLedgerExportParser(),
-        _promptBuilder = const StudioLedgerPrompt(),
-        _opApplier = const LedgerOpApplier();
+  }) : _parser = const StudioLedgerExportParser(),
+       _promptBuilder = const StudioLedgerPrompt(),
+       _opApplier = const LedgerOpApplier();
 
   /// Run the Studio Ledger for [sessionId] on [finalAssistantText].
   ///
@@ -130,6 +130,7 @@ class StudioLedgerService {
     CancelToken? cancelToken,
     List<StudioPresetBlock> ledgerBlocks = const [],
     MacroContext? macroCtx,
+    bool commitSnapshot = false,
   }) async {
     // Studio Ledger is always-on when Studio is enabled. forceEnabled is
     // still respected for manual triggers.
@@ -303,12 +304,13 @@ class StudioLedgerService {
         try {
           final updatedTrackers = await _trackerRepo.getBySessionId(sessionId);
           await _snapshotRepo.upsertTrackers(
-                sessionId: sessionId,
-                messageId: messageId,
-                swipeId: swipeId,
-                agentSwipeId: agentSwipeId,
-                trackers: updatedTrackers,
-              );
+            sessionId: sessionId,
+            messageId: messageId,
+            swipeId: swipeId,
+            agentSwipeId: agentSwipeId,
+            trackers: updatedTrackers,
+            committed: commitSnapshot,
+          );
         } catch (e) {
           debugPrint('[StudioLedger] snapshot write failed: $e');
         }
@@ -374,7 +376,8 @@ class StudioLedgerService {
     final trackerBlock = _buildTrackerBlock(currentTrackers);
     final memoryBlock = _buildMemoryBlock(recentMemoryEntries);
 
-    final runtimeSuffix = '''
+    final runtimeSuffix =
+        '''
 <current_state>
 $trackerBlock
 </current_state>
@@ -438,9 +441,7 @@ Max value length: 2000 chars.''';
         )
         .toList();
     if (ledgerTrackers.isEmpty) return '(no prior state)';
-    return ledgerTrackers
-        .map((t) => '${t.name}: ${t.value}')
-        .join('\n');
+    return ledgerTrackers.map((t) => '${t.name}: ${t.value}').join('\n');
   }
 
   String _buildMemoryBlock(List<MemoryEntry> entries) {

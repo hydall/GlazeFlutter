@@ -5,40 +5,33 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/studio/studio_stream_interceptor.dart';
-import '../../../core/llm/studio_slot_resolver.dart';
-import '../../../core/models/api_config.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
-import '../../../features/settings/api_list_provider.dart';
 import '../state/recovery_state_provider.dart';
-import 'generation_pipeline.dart' show extractRecentHistoryText;
 
 /// Result of a recovery batch.
 class RecoveryResult {
   final String status; // 'ok' | 'aborted' | 'error'
   final int trackersWritten;
-  final int memoriesWritten;
   final int failedMessages;
   final String? error;
 
   const RecoveryResult({
     this.status = 'ok',
     this.trackersWritten = 0,
-    this.memoriesWritten = 0,
     this.failedMessages = 0,
     this.error,
   });
 }
 
-/// Re-runs the Studio tracker cycle and the MemoryBook agentic write-loop for
-/// each assistant message in a session, as if each turn had just completed.
+/// Re-runs the Studio tracker cycle for each assistant message in a session.
 ///
-/// Used when tracker outputs (`studioOutputs`) and memory entries were lost
+/// Used when tracker outputs (`studioOutputs`) were lost
 /// due to the `writeAssistant` regression (fixed in the studioOutputs
 /// restoration commit). The service walks the chat history message-by-message,
 /// builds a partial prompt up to each assistant message, runs the tracker
-/// cycle, persists the briefs, then runs the agentic write-loop for memory.
+/// cycle, and persists the briefs.
 ///
 /// Progress is surfaced via [recoveryStateProvider] so the UI can show
 /// "processing message N of M".
@@ -59,7 +52,6 @@ class TrackerMemoryRecoveryService {
     required String sessionId,
     required String charId,
     bool recoverTrackers = true,
-    bool recoverMemory = true,
   }) async {
     final token = CancelToken();
     _cancelToken = token;
@@ -67,8 +59,10 @@ class TrackerMemoryRecoveryService {
     final repo = _ref.read(chatRepoProvider);
     final session = await repo.getById(sessionId);
     if (session == null) {
-      _ref.read(recoveryStateProvider.notifier).state =
-          RecoveryState.error(sessionId: sessionId, error: 'session not found');
+      _ref.read(recoveryStateProvider.notifier).state = RecoveryState.error(
+        sessionId: sessionId,
+        error: 'session not found',
+      );
       return const RecoveryResult(status: 'error', error: 'session not found');
     }
 
@@ -87,25 +81,22 @@ class TrackerMemoryRecoveryService {
     }
 
     if (assistantIndices.isEmpty) {
-      _ref.read(recoveryStateProvider.notifier).state =
-          RecoveryState.done(
+      _ref.read(recoveryStateProvider.notifier).state = RecoveryState.done(
         sessionId: sessionId,
         totalMessages: 0,
         processedMessages: 0,
         trackersWritten: 0,
-        memoriesWritten: 0,
         failedMessages: 0,
       );
       return const RecoveryResult();
     }
 
     final studioConfig = recoverTrackers
-        ? await _ref.read(memoryStudioServiceProvider).getEnabledConfig(sessionId)
+        ? await _ref
+              .read(memoryStudioServiceProvider)
+              .getEnabledConfig(sessionId)
         : null;
-    final pipeline = _ref.read(pipelineSettingsProvider);
-
     var trackersWritten = 0;
-    var memoriesWritten = 0;
     var failed = 0;
 
     _ref.read(recoveryStateProvider.notifier).state = RecoveryState.running(
@@ -114,7 +105,6 @@ class TrackerMemoryRecoveryService {
       processedMessages: 0,
       currentMessageIndex: -1,
       trackersWritten: 0,
-      memoriesWritten: 0,
       failedMessages: 0,
     );
 
@@ -130,7 +120,6 @@ class TrackerMemoryRecoveryService {
         currentMessageIndex: msgIdx,
         currentMessageId: target.id,
         trackersWritten: trackersWritten,
-        memoriesWritten: memoriesWritten,
         failedMessages: failed,
       );
 
@@ -151,14 +140,16 @@ class TrackerMemoryRecoveryService {
           if (token.isCancelled) break;
           final promptResult = await buildPromptInIsolate(payload);
           if (token.isCancelled) break;
-          final result = await _ref.read(memoryStudioServiceProvider).runTrackersOnly(
-            config: studioConfig,
-            promptResult: promptResult,
-            promptPayload: payload,
-            apiConfig: payload.apiConfig,
-            sessionId: sessionId,
-            cancelToken: token,
-          );
+          final result = await _ref
+              .read(memoryStudioServiceProvider)
+              .runTrackersOnly(
+                config: studioConfig,
+                promptResult: promptResult,
+                promptPayload: payload,
+                apiConfig: payload.apiConfig,
+                sessionId: sessionId,
+                cancelToken: token,
+              );
           if (result.status == 'ok' || result.status == 'agent_errors') {
             await _setStudioOutputs(
               sessionId,
@@ -175,52 +166,7 @@ class TrackerMemoryRecoveryService {
 
       if (token.isCancelled) break;
 
-      // B. Memory agentic write-loop re-run (Studio-only).
-      if (recoverMemory && studioConfig != null) {
-        try {
-          final recentHistory = extractRecentHistoryText(
-            session.messages.sublist(0, msgIdx + 1),
-            maxMessages: 10,
-          );
-          final snapshot = await _ref
-              .read(trackerSnapshotRepoProvider)
-              .getLatestCommittedExcludingMessage(sessionId, target.id);
-          final trackers = snapshot?.trackers ??
-              await _ref.read(trackerRepoProvider).getBySessionId(sessionId);
-          final writeLoopConfig = await () async {
-            await _ref.read(apiListProvider.future);
-            final apiConfigs =
-                _ref.read(apiListProvider).value ?? const <ApiConfig>[];
-            return StudioSlotResolver.resolve(
-              apiConfigs: apiConfigs,
-              apiConfigId: studioConfig.cleanerApiConfigId,
-              fallback: _ref.read(activeApiConfigProvider),
-              errorLabel: 'recovery write-loop',
-              modelOverride: pipeline.cleaner.postCleanerModel,
-            );
-          }();
-          final res = await _ref.read(memoryAgenticWriteServiceProvider).runWriteLoop(
-            sessionId: sessionId,
-            settings: pipeline,
-            config: writeLoopConfig,
-            recentHistoryText: recentHistory,
-            currentTrackers: trackers,
-            messageId: target.id,
-            swipeId: target.swipeId,
-            agentSwipeId: target.agentSwipeId,
-            cancelToken: token,
-            isStillCurrent: () => !token.isCancelled,
-          );
-          if (res.status == 'ok') {
-            memoriesWritten += res.memoryResult?.written ?? 0;
-          }
-        } catch (e) {
-          failed++;
-          debugPrint('[Recovery] memory $i (msg $msgIdx) failed: $e');
-        }
-      }
-
-      // C. Post-turn graph/salience bookkeeping (non-fatal).
+      // B. Post-turn graph/salience bookkeeping (non-fatal).
       try {
         await _ref.read(memoryPostTurnServiceProvider).runPostTurn(sessionId);
       } catch (_) {}
@@ -233,7 +179,6 @@ class TrackerMemoryRecoveryService {
         currentMessageIndex: msgIdx,
         currentMessageId: target.id,
         trackersWritten: trackersWritten,
-        memoriesWritten: memoriesWritten,
         failedMessages: failed,
       );
     }
@@ -246,9 +191,8 @@ class TrackerMemoryRecoveryService {
             sessionId: sessionId,
             error: 'aborted',
             totalMessages: assistantIndices.length,
-            processedMessages: trackersWritten + memoriesWritten,
+            processedMessages: trackersWritten,
             trackersWritten: trackersWritten,
-            memoriesWritten: memoriesWritten,
             failedMessages: failed,
           )
         : RecoveryState.done(
@@ -256,7 +200,6 @@ class TrackerMemoryRecoveryService {
             totalMessages: assistantIndices.length,
             processedMessages: assistantIndices.length,
             trackersWritten: trackersWritten,
-            memoriesWritten: memoriesWritten,
             failedMessages: failed,
           );
     _ref.read(recoveryStateProvider.notifier).state = finalState;
@@ -264,7 +207,6 @@ class TrackerMemoryRecoveryService {
     return RecoveryResult(
       status: wasCancelled ? 'aborted' : 'ok',
       trackersWritten: trackersWritten,
-      memoriesWritten: memoriesWritten,
       failedMessages: failed,
     );
   }
@@ -307,5 +249,5 @@ class TrackerMemoryRecoveryService {
 
 final trackerMemoryRecoveryServiceProvider =
     Provider<TrackerMemoryRecoveryService>((ref) {
-  return TrackerMemoryRecoveryService(ref);
-});
+      return TrackerMemoryRecoveryService(ref);
+    });

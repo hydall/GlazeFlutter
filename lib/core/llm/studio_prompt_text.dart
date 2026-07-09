@@ -72,7 +72,7 @@ Notes:
     if (lower.contains('narrative') || lower.contains('pacing')) {
       return const _ControllerScope(
         owns:
-            'response shape only: beat type (ACTION / CONVERSATIONAL / ATMOSPHERIC / DYNAMIC-MIXED), qualitative tempo (short / medium / long), POV/camera, sensory budget, and where the reply should stop. Classify the user\'s last turn: physical movement, travel, object handling, or executed decision = ACTION even with dialogue; mostly speech = CONVERSATIONAL; slow/reflective = ATMOSPHERIC; action + dialogue comparable = DYNAMIC. Do NOT invent paragraph counts — the user\'s preset owns the numbers. When in doubt between action and conversational, prefer action. Never require the response to end on motion, departure, or physical displacement if that motion depends on {{user}} taking the next action; instead stop at the character\'s response/hook.',
+            'response shape only: the current beat, pacing, POV/camera, sensory budget, and where the reply should stop. The active Studio preset defines the applicable style, beat taxonomy, and response budget. Never require the response to end on motion, departure, or physical displacement if that motion depends on {{user}} taking the next action; instead stop at the character\'s response/hook.',
         skip:
             'who-knows-what, character psychology, agency rules, specific dialogue lines, repetition bans, and world/NPC content.',
       );
@@ -140,9 +140,7 @@ Notes:
   /// "оборачивай реплики в кавычки", "без тире", etc.).
   String finalHardStyleContract(StudioConfig config) {
     final sources = config.agents
-        .map(
-          (agent) => '${agent.name}\n${agent.sourceBlockNames}',
-        )
+        .map((agent) => '${agent.name}\n${agent.sourceBlockNames}')
         .join('\n\n');
     final rules = <String>[];
     // Intent-based em-dash ban: a ban verb near the WORDS "em dash" / "long

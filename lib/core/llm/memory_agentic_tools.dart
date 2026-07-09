@@ -13,8 +13,4 @@ export 'memory_agentic_search_handler.dart'
     show MemorySearchResult, MemorySearchHit, MemoryAgenticToolHandler;
 export 'memory_agentic_tool_definitions.dart' show MemoryAgenticToolDefinition;
 export 'memory_agentic_write_dtos.dart'
-    show
-        TrackerWriteRequest,
-        MemoryWriteRequest,
-        TrackerWriteResult,
-        MemoryWriteResult;
+    show TrackerWriteRequest, TrackerWriteResult;

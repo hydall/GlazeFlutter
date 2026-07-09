@@ -2,18 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
+import '../../../core/llm/macro_engine.dart';
 import '../../../core/llm/studio_ledger_service.dart';
 import '../../../core/llm/studio_slot_resolver.dart';
-import '../../../core/models/api_config.dart';
 import '../../../core/models/agent_operation_record.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/services/generation_notification_service.dart';
+import '../../../core/services/post_gen_foreground_guard.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../settings/api_list_provider.dart';
 import '../state/agent_operations_log_provider.dart';
-import 'agentic_operations_log_dialog.dart' show AgenticSessionScope, OperationTile;
+import 'agentic_operations_log_dialog.dart'
+    show AgenticSessionScope, OperationTile;
 
 class AgenticLastTurnTab extends ConsumerStatefulWidget {
   const AgenticLastTurnTab({super.key});
@@ -122,7 +125,8 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
   }
 
   String? _sessionIdOf(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<AgenticSessionScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<AgenticSessionScope>();
     return scope?.sessionId;
   }
 
@@ -144,30 +148,34 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
   Future<void> _rerunLedger(String sessionId, ChatMessage target) async {
     if (_runningLedger) return;
     setState(() => _runningLedger = true);
+    // Capture provider-owned dependencies synchronously. From this point on the
+    // operation is independent of the Agent Ops widget lifecycle.
+    final chatRepo = ref.read(chatRepoProvider);
+    final studioConfigRepo = ref.read(studioConfigRepoProvider);
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final apiConfigsFuture = ref.read(apiListProvider.future);
+    final activeApiConfig = ref.read(activeApiConfigProvider);
+    final ledgerService = ref.read(studioLedgerServiceProvider);
+    final trackerRepo = ref.read(trackerRepoProvider);
+    final presetRepo = ref.read(studioPresetRepoProvider);
+    final characterRepo = ref.read(characterRepoProvider);
     try {
-      final session = await ref.read(chatRepoProvider).getById(sessionId);
-      if (!mounted) return;
+      final session = await chatRepo.getById(sessionId);
       if (session == null) throw StateError('Session not found');
-      final studioConfig = await ref
-          .read(studioConfigRepoProvider)
-          .getBySessionId(sessionId);
-      if (!mounted) return;
+      final studioConfig = await studioConfigRepo.getBySessionId(sessionId);
       final recentHistory = _recentHistoryText(
         session.messages,
         maxMessages: 10,
         upToMessageId: target.id,
       );
       final startedAt = DateTime.now().millisecondsSinceEpoch;
-      final pipeline = ref.read(pipelineSettingsProvider);
-      await ref.read(apiListProvider.future);
-      final apiConfigs =
-          ref.read(apiListProvider).value ?? const <ApiConfig>[];
+      final apiConfigs = await apiConfigsFuture;
       final AuxApiConfig ledgerConfig;
       try {
         ledgerConfig = StudioSlotResolver.resolve(
           apiConfigs: apiConfigs,
           apiConfigId: studioConfig?.cleanerApiConfigId ?? '',
-          fallback: ref.read(activeApiConfigProvider),
+          fallback: activeApiConfig,
           errorLabel: 'ledger-rerun',
           modelOverride: pipeline.cleaner.postCleanerModel,
         );
@@ -181,35 +189,51 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
         }
         return;
       }
-      if (!mounted) return;
-      final result = await ref
-          .read(studioLedgerServiceProvider)
-          .run(
-            sessionId: sessionId,
-            settings: pipeline,
-            config: ledgerConfig,
-            finalAssistantText: target.content,
-            recentHistoryText: recentHistory,
-            messageId: target.id,
-            swipeId: target.swipeId,
-            agentSwipeId: target.agentSwipeId,
-            forceEnabled: true,
-            isStillCurrent: () => mounted,
-          );
-      if (!mounted) return;
-      await ref
-          .read(trackerRepoProvider)
-          .upsertValue(
-            sessionId,
-            '_ledger_diag:studio_ledger',
-            'turn=${target.id} • manual rerun, ${result.status} '
-                '(ops=${result.opsApplied})'
-                '${result.error == null ? '' : ': ${result.error}'}',
-            scope: 'ledger_diagnostic',
-            provenance:
-                'message=${target.id}|swipe=${target.swipeId}|'
-                'agentSwipe=${target.agentSwipeId}|manual=1',
-          );
+      final studioPreset = await presetRepo.getById(
+        studioConfig?.studioPresetId ?? 'default',
+      );
+      final character = await characterRepo.getById(session.characterId);
+      final macroCtx = MacroContext(
+        charName: character?.name ?? '',
+        charDescription: character?.description,
+        charScenario: character?.scenario,
+        charPersonality: character?.personality,
+        charMesExample: character?.mesExample,
+        userName: 'User',
+        macroName: character?.macroName,
+        charId: session.characterId,
+        sessionId: sessionId,
+      );
+
+      final result = await runWithPostGenForeground(
+        onStarted: GenerationNotificationService.instance.onPostGenStarted,
+        action: () => ledgerService.run(
+          sessionId: sessionId,
+          settings: pipeline,
+          config: ledgerConfig,
+          finalAssistantText: target.content,
+          recentHistoryText: recentHistory,
+          messageId: target.id,
+          swipeId: target.swipeId,
+          agentSwipeId: target.agentSwipeId,
+          forceEnabled: true,
+          ledgerBlocks: studioPreset?.blocks ?? const [],
+          macroCtx: macroCtx,
+          commitSnapshot: true,
+        ),
+        onFinished: GenerationNotificationService.instance.onPostGenFinished,
+      );
+      await trackerRepo.upsertValue(
+        sessionId,
+        '_ledger_diag:studio_ledger',
+        'turn=${target.id} • manual rerun, ${result.status} '
+            '(ops=${result.opsApplied})'
+            '${result.error == null ? '' : ': ${result.error}'}',
+        scope: 'ledger_diagnostic',
+        provenance:
+            'message=${target.id}|swipe=${target.swipeId}|'
+            'agentSwipe=${target.agentSwipeId}|manual=1',
+      );
       if (!mounted) return;
       _appendLedgerRecord(sessionId, target, result, startedAt);
       if (mounted) {

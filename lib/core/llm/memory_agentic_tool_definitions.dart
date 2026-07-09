@@ -3,7 +3,7 @@ import 'memory_agentic_policy.dart';
 /// Tool definitions for the agentic memory system.
 ///
 /// Read-only tools (`searchMemory`) are always available when agentic mode is
-/// on. Write tools (`writeMemory`, `updateTracker`) are only exposed when the
+/// on. The `updateTracker` tool is exposed when the
 /// policy allows writes — see [MemoryAgenticPolicy.settings.writeToolsEnabled].
 ///
 /// Extracted from `memory_agentic_tools.dart` (plan §7.3 cosmetic split).
@@ -24,7 +24,8 @@ class MemoryAgenticToolDefinition {
           'properties': {
             'query': {
               'type': 'string',
-              'description': 'Search query describing what you want to remember',
+              'description':
+                  'Search query describing what you want to remember',
             },
             'maxResults': {
               'type': 'integer',
@@ -63,8 +64,7 @@ class MemoryAgenticToolDefinition {
             },
             'value': {
               'type': 'string',
-              'description':
-                  'Tracker value (e.g. "happy", "tavern", "allies")',
+              'description': 'Tracker value (e.g. "happy", "tavern", "allies")',
             },
             'scope': {
               'type': 'string',
@@ -79,47 +79,8 @@ class MemoryAgenticToolDefinition {
     };
   }
 
-  /// Tool definition for `writeMemory` — creates a pending memory draft.
-  /// Drafts require human approval before becoming active memory entries.
-  static Map<String, dynamic> writeMemory() {
-    return {
-      'type': 'function',
-      'function': {
-        'name': 'writeMemory',
-        'description':
-            'Create a pending memory draft from a significant event or fact. '
-            'The draft will be reviewed by the user before becoming an active '
-            'memory entry. Use for important events, promises, revelations, '
-            'relationship changes — NOT for transient state (use updateTracker for that).',
-        'parameters': {
-          'type': 'object',
-          'properties': {
-            'title': {
-              'type': 'string',
-              'description':
-                  'Short title for the memory (e.g. "Lucy reveals the chip")',
-            },
-            'content': {
-              'type': 'string',
-              'description':
-                  'Full memory content — what happened, who was involved, why it matters',
-            },
-            'keys': {
-              'type': 'array',
-              'items': {'type': 'string'},
-              'description':
-                  'Search keys for retrieval (e.g. ["Lucy", "chip", "secret"])',
-            },
-          },
-          'required': ['title', 'content'],
-        },
-      },
-    };
-  }
-
   /// All available write tool definitions.
-  static List<Map<String, dynamic>> writeTools() =>
-      [updateTracker(), writeMemory()];
+  static List<Map<String, dynamic>> writeTools() => [updateTracker()];
 
   /// All available tool definitions for the given policy.
   /// Read-only tools are always included when agentic mode is enabled.

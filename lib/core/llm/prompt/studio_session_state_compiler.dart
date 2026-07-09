@@ -73,6 +73,8 @@ String? compileStudioSessionState(
     regular[entry.key] = entry.value;
   }
 
+  if (regular.values.every((value) => value.trim().isEmpty)) return null;
+
   // Group by namespace.
   final npcMap = <String, Map<String, String>>{};
   final relMap = <String, Map<String, String>>{};
@@ -224,8 +226,10 @@ String? compileStudioSessionState(
   final buf = StringBuffer();
   buf.writeln('<studio_session_state>');
   buf.writeln(
-    'These are established facts from this chat. '
-    'They override character-card baseline when conflicting.',
+    'These are established facts from this chat. They override character-card '
+    'baseline when conflicting. Source-material knowledge may fill gaps, but '
+    'must not contradict this session state, the character card, or supplied '
+    'lore. A fact missing from the card is not automatically unknown.',
   );
 
   // ── Present / Absent section (plan §Present Characters + Test 21) ────────

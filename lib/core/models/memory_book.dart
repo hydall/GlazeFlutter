@@ -57,25 +57,11 @@ abstract class MemoryEntry with _$MemoryEntry {
     @Default('curated') String kind,
     @Default('') String sourceHash,
 
-    /// Provenance marker for UI filtering (Phase 7). Empty for entries
-    /// created before the source field existed or for manual/curated
-    /// entries. Set to `'scan_chat'` when promoted from a scan draft, or
-    /// `'agentic'` when promoted from an agent write-loop draft. Lets the
-    /// MemoryBook UI tab agent-sourced entries separately from curated
-    /// ones (see `memory_books_sheet.dart` "Agent memories" tab).
+    /// Provenance marker. Empty for old/manual entries and `scan_chat` for
+    /// entries promoted from a generated range-summary draft.
     @Default('') String source,
 
-    /// When true, the agentic write-loop MUST NOT modify this entry —
-    /// `MemoryBookRepo.appendFactsToEntry` skips it and the parser marks
-    /// it as `[locked]` in the `<existing_memory_entries>` prompt block
-    /// so the LLM knows not to propose updates to it. Mirrors Marinara's
-    /// `locked` flag on lorebook entries. User-toggled via the MemoryBook
-    /// UI to protect manually-curated facts from being rewritten by the
-    /// agent. Rationale: user-toggled protection so the agentic write-loop
-    /// cannot rewrite manually-curated facts. `appendFactsToEntry` skips it
-    /// and the parser marks it `[locked]` in the `<existing_memory_entries>`
-    /// prompt block so the LLM knows not to propose updates (Marinara `locked`
-    /// flag analog).
+    /// User-controlled protection for manually curated entries.
     @Default(false) bool locked,
 
     /// When true, this entry is excluded from the embedding pipeline —

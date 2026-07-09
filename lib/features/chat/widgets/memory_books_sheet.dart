@@ -121,47 +121,38 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     final draftsNeedingGen = _ctrl.draftsNeedingGeneration;
     final isGenerating = _ctrl.isGenerating;
 
-    // Split drafts by source. Agent-sourced drafts (source == 'agentic') go
-    // to "Agent memories" tab; everything else is a bulk scan draft.
     final scanDrafts = pendingDrafts
-        .where((d) => d.source != 'agentic' && d.source != 'studio_ledger')
+        .where((d) => d.source != 'studio_ledger')
         .toList();
-    final agentDrafts = pendingDrafts
-        .where((d) => d.source == 'agentic')
-        .toList();
-    // Approved entries are also source-aware: entries promoted from agent
-    // drafts keep `source == 'agentic'`, everything else is curated/manual.
     // Studio Ledger entries (`source == 'studio_ledger'`) are legacy and
     // excluded from the UI — they were removed from the injection pipeline.
-    final agentEntries = entries.where((e) => e.source == 'agentic').toList();
     final curatedEntries = entries
-        .where((e) => e.source != 'agentic' && e.source != 'studio_ledger')
+        .where((e) => e.source != 'studio_ledger')
         .toList();
 
     // Swipe filter: when enabled, only show entries that were injected via
-    // triggeredMemories for the currently selected swipes, or entries whose
-    // source message is currently visible. Agentic write-loop memories are
-    // created after generation, so they never appear in triggeredMemories.
-    final selectedMemoryIds =
-        MemorySwipeFilter.selectedSwipeMemoryIds(widget.messages);
+    // triggeredMemories for the current swipes, or entries whose source
+    // message is currently visible.
+    final selectedMemoryIds = MemorySwipeFilter.selectedSwipeMemoryIds(
+      widget.messages,
+    );
     final selectedSourceMessageIds =
         MemorySwipeFilter.selectedSwipeSourceMessageIds(widget.messages);
-    final selectedSourceKeys =
-        MemorySwipeFilter.selectedSwipeSourceKeys(widget.messages);
+    final selectedSourceKeys = MemorySwipeFilter.selectedSwipeSourceKeys(
+      widget.messages,
+    );
 
     bool filterFn(MemoryEntry e) => MemorySwipeFilter.entryMatches(
-          e,
-          hideUnselected: _hideUnselectedMemories,
-          selectedMemoryIds: selectedMemoryIds,
-          selectedSourceMessageIds: selectedSourceMessageIds,
-          selectedSourceKeys: selectedSourceKeys,
-        );
+      e,
+      hideUnselected: _hideUnselectedMemories,
+      selectedMemoryIds: selectedMemoryIds,
+      selectedSourceMessageIds: selectedSourceMessageIds,
+      selectedSourceKeys: selectedSourceKeys,
+    );
 
     final filteredCurated = curatedEntries.where(filterFn).toList();
-    final filteredAgent = agentEntries.where(filterFn).toList();
-
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
@@ -208,13 +199,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                         args: [scanDrafts.length.toString()],
                       ),
                     ),
-                    Tab(
-                      text: 'memory_books_tab_agent_memories'.tr(
-                        args: [
-                          (agentDrafts.length + filteredAgent.length).toString(),
-                        ],
-                      ),
-                    ),
                   ],
                   tabAlignment: TabAlignment.fill,
                 ),
@@ -226,7 +210,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
           children: [
             _buildApprovedTab(filteredCurated),
             _buildScanDraftsTab(scanDrafts),
-            _buildAgentMemoriesTab(agentDrafts, filteredAgent),
           ],
         ),
       ),
@@ -270,60 +253,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             )
           else ...[
             _buildPendingDraftsSection(scanDrafts),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// "Agent memories" tab (Phase 7.2): pending agent-sourced drafts (awaiting
-  /// approval) + approved agent-sourced entries (auto-approved or promoted
-  /// manually). Both share the `source == 'agentic'` marker so the user can
-  /// see everything the write-loop / memory tracker produced in one place,
-  /// separate from bulk scan drafts and curated entries.
-  Widget _buildAgentMemoriesTab(
-    List<MemoryDraft> agentDrafts,
-    List<MemoryEntry> agentEntries,
-  ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (agentDrafts.isEmpty && agentEntries.isEmpty)
-            Text(
-              'memory_books_empty_agent_memories'.tr(),
-              style: TextStyle(
-                fontSize: 13,
-                color: context.cs.onSurfaceVariant,
-              ),
-            )
-          else ...[
-            if (agentDrafts.isNotEmpty) ...[
-              Text(
-                'memory_books_section_agent_drafts'.tr(),
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: context.cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...agentDrafts.map((draft) => _buildDraftCard(draft)),
-              const SizedBox(height: 12),
-            ],
-            if (agentEntries.isNotEmpty) ...[
-              Text(
-                'memory_books_section_agent_approved'.tr(),
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: context.cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...agentEntries.map((entry) => _buildEntryCard(entry)),
-            ],
           ],
         ],
       ),
@@ -1119,7 +1048,9 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: (isActive ? Colors.green : Colors.orange).withValues(alpha: 0.1),
+            color: (isActive ? Colors.green : Colors.orange).withValues(
+              alpha: 0.1,
+            ),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(

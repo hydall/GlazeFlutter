@@ -2,7 +2,6 @@ enum MemoryAgenticTool {
   inspectContext,
   proposeMemory,
   proposeTracker,
-  writeMemory,
   writeTracker,
 }
 
@@ -60,7 +59,6 @@ class MemoryAgenticPolicy {
       case MemoryAgenticTool.proposeMemory:
       case MemoryAgenticTool.proposeTracker:
         return false;
-      case MemoryAgenticTool.writeMemory:
       case MemoryAgenticTool.writeTracker:
         return true;
     }

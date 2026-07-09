@@ -185,12 +185,11 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             emptyLabel: 'Use tracker/chat model',
             value: pipeline.cleaner.postCleanerModel,
             apiConfigId: config.cleanerApiConfigId,
-            onChanged: (model) =>
-                _savePipelineModel(
-                  (p) => p.copyWith(
-                    cleaner: p.cleaner.copyWith(postCleanerModel: model),
-                  ),
-                ),
+            onChanged: (model) => _savePipelineModel(
+              (p) => p.copyWith(
+                cleaner: p.cleaner.copyWith(postCleanerModel: model),
+              ),
+            ),
             onApiConfigChanged: (apiConfigId) =>
                 _save(config.copyWith(cleanerApiConfigId: apiConfigId)),
             onSettings: () => _openSlotSettings(slot: StudioSlot.cleaner),
@@ -529,13 +528,15 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   label: Text('$value'),
-                  selected: pipeline.studioAgent.studioPostTrackerContextSize == value,
+                  selected:
+                      pipeline.studioAgent.studioPostTrackerContextSize ==
+                      value,
                   onSelected: (_) => _savePipelineModel(
                     (p) => p.copyWith(
-                    studioAgent: p.studioAgent.copyWith(
-                      studioPostTrackerContextSize: value,
+                      studioAgent: p.studioAgent.copyWith(
+                        studioPostTrackerContextSize: value,
+                      ),
                     ),
-                  ),
                   ),
                 ),
               ),
@@ -777,9 +778,8 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
           ),
           value: cleaner.postCleanerEnabled,
           onChanged: (v) => _savePipeline(
-            (p) => p.copyWith(
-              cleaner: p.cleaner.copyWith(postCleanerEnabled: v),
-            ),
+            (p) =>
+                p.copyWith(cleaner: p.cleaner.copyWith(postCleanerEnabled: v)),
           ),
         ),
       ],
@@ -805,8 +805,8 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
         Text('Recovery', style: tt.titleSmall),
         const SizedBox(height: 4),
         Text(
-          'Re-runs Studio tracker cycle + memory write-loop for all assistant '
-          'messages in this session.',
+          'Re-runs the Studio tracker cycle for all assistant messages in '
+          'this session.',
           style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
         ),
         const SizedBox(height: 8),
@@ -854,7 +854,6 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
               Expanded(
                 child: Text(
                   'Done: ${state.trackersWritten} trackers, '
-                  '${state.memoriesWritten} memories, '
                   '${state.failedMessages} failed',
                   style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
@@ -899,8 +898,8 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
       builder: (c) => AlertDialog(
         title: const Text('Recovery'),
         content: const Text(
-          'This will re-run the Studio tracker cycle and memory write-loop '
-          'for every assistant message in this session. Continue?',
+          'This will re-run the Studio tracker cycle for every assistant '
+          'message in this session. Continue?',
         ),
         actions: [
           TextButton(
@@ -922,5 +921,3 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     );
   }
 }
-
-

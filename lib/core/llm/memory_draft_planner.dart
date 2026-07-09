@@ -29,18 +29,17 @@ class MemoryDraftPlanner {
     required int nowMillis,
   }) {
     final stableMessages = messages
-        .where((m) => !m.isTyping && (m.role == 'user' || m.role == 'assistant'))
+        .where(
+          (m) => !m.isTyping && (m.role == 'user' || m.role == 'assistant'),
+        )
         .toList();
     final normalizedLag = lagMessages < 0 ? 0 : lagMessages;
     final eligibleMessages = stableMessages.length > normalizedLag
         ? stableMessages.take(stableMessages.length - normalizedLag).toList()
         : <ChatMessage>[];
 
-    // Covered-by-manual-scan: only curated/manual entries block the next scan
-    // segment. Agentic entries (`source:'agentic'`) are written by the agent
-    // write-loop and must NOT suppress a fresh manual scan over the same
-    // message range — otherwise the manual planner can never re-summarize a
-    // range the agent already touched.
+    // Studio Ledger facts are a separate layer and do not block MemoryBook
+    // range-summary coverage. Every other approved entry does.
     // Studio Ledger entries (`source:'studio_ledger'`) are legacy durable
     // facts that were removed from the injection pipeline — they must NOT
     // block the manual scan. The manual scan is a complementary summarization
@@ -48,7 +47,7 @@ class MemoryDraftPlanner {
     // mask most of the chat from the scanner.
     final coveredIds = <String>{};
     for (final entry in book.entries) {
-      if (entry.source == 'agentic' || entry.source == 'studio_ledger') {
+      if (entry.source == 'studio_ledger') {
         continue;
       }
       coveredIds.addAll(entry.messageIds);
@@ -70,7 +69,11 @@ class MemoryDraftPlanner {
     final newDrafts = <MemoryDraft>[];
     {
       final uncoveredSet = uncovered.map((m) => m.id).toSet();
-      for (var start = 0; start < eligibleMessages.length; start += segmentSize) {
+      for (
+        var start = 0;
+        start < eligibleMessages.length;
+        start += segmentSize
+      ) {
         final end = math.min(start + segmentSize, eligibleMessages.length);
         final block = eligibleMessages.sublist(start, end);
         if (block.length < segmentSize) continue; // skip partial trailing block
@@ -79,8 +82,9 @@ class MemoryDraftPlanner {
             .toList();
         if (blockUncovered.isEmpty) continue;
 
-        final segmentIds =
-            blockUncovered.map((m) => m.id).toList(growable: false);
+        final segmentIds = blockUncovered
+            .map((m) => m.id)
+            .toList(growable: false);
         final segmentIdSet = segmentIds.toSet();
         final alreadyExists = book.pendingDrafts.any(
           (d) => d.messageIds.toSet().containsAll(segmentIdSet),
@@ -94,8 +98,7 @@ class MemoryDraftPlanner {
               id: 'draft_${nowMillis}_${newDrafts.length}_$uniqueSuffix',
               title: '${firstIdx + 1}-${lastIdx + 1}',
               messageIds: segmentIds,
-              messageRange:
-                  MessageRange(start: firstIdx + 1, end: lastIdx + 1),
+              messageRange: MessageRange(start: firstIdx + 1, end: lastIdx + 1),
               status: 'pending_generation',
               source: source,
               createdAt: nowMillis,

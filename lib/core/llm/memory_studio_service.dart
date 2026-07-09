@@ -65,10 +65,8 @@ class MemoryStudioService {
     _executor,
     _log,
   );
-  late final StudioTrackerResultMapper _resultMapper = StudioTrackerResultMapper(
-    _briefParser,
-    _briefCache,
-  );
+  late final StudioTrackerResultMapper _resultMapper =
+      StudioTrackerResultMapper(_briefParser, _briefCache);
   late final StudioTrackerPhaseRunner _phaseRunner = StudioTrackerPhaseRunner(
     presetRepo: _ref.read(studioPresetRepoProvider),
     batcher: _batcher,
@@ -102,10 +100,18 @@ class MemoryStudioService {
         (await presetRepo.getById(config.studioPresetId)) ??
         (await presetRepo.getDefault());
     final agentEnabled = preset?.agentEnabled ?? const {};
+    final beautyPipelineEnabled =
+        preset?.blocks.any(
+          (block) => block.id == 'beauty_task' && block.enabled,
+        ) ??
+        false;
     final overridden = config.agents.map((a) {
       final specId = StudioControllerOntology.specForAgent(a).id;
       final presetToggle = agentEnabled[specId];
-      return presetToggle == false ? a.copyWith(enabled: false) : a;
+      final disableBeauty = specId == 'beauty' && !beautyPipelineEnabled;
+      return presetToggle == false || disableBeauty
+          ? a.copyWith(enabled: false)
+          : a;
     }).toList();
 
     final enabledAgents = overridden.where((a) => a.enabled).toList()

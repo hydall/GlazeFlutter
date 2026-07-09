@@ -29,115 +29,90 @@ void main() {
       expect(required, containsAll(['name', 'value']));
     });
 
-    test('writeMemory returns valid tool definition', () {
-      final def = MemoryAgenticToolDefinition.writeMemory();
-      expect(def['type'], 'function');
-      expect(def['function']['name'], 'writeMemory');
-      final required = def['function']['parameters']['required'] as List;
-      expect(required, containsAll(['title', 'content']));
-    });
-
     test('readOnlyTools returns only searchMemory', () {
       final tools = MemoryAgenticToolDefinition.readOnlyTools();
       expect(tools.length, 1);
       expect(tools.first['function']['name'], 'searchMemory');
     });
 
-    test('writeTools returns updateTracker + writeMemory', () {
+    test('writeTools returns only updateTracker', () {
       final tools = MemoryAgenticToolDefinition.writeTools();
-      expect(tools.length, 2);
+      expect(tools.length, 1);
       final names = tools.map((t) => t['function']['name']).toSet();
-      expect(names, {'updateTracker', 'writeMemory'});
+      expect(names, {'updateTracker'});
     });
 
     test('forPolicy returns empty when disabled', () {
-      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
-        enabled: false,
-      ));
+      final policy = MemoryAgenticPolicy(
+        const MemoryAgenticSettings(enabled: false),
+      );
       expect(MemoryAgenticToolDefinition.forPolicy(policy), isEmpty);
     });
 
     test('forPolicy returns read-only tools when readOnly', () {
-      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
-        enabled: true,
-        readOnly: true,
-      ));
+      final policy = MemoryAgenticPolicy(
+        const MemoryAgenticSettings(enabled: true, readOnly: true),
+      );
       final tools = MemoryAgenticToolDefinition.forPolicy(policy);
       expect(tools.length, 1);
       expect(tools.first['function']['name'], 'searchMemory');
     });
 
     test('forPolicy returns all tools when write enabled', () {
-      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
-        enabled: true,
-        readOnly: false,
-        writeToolsEnabled: true,
-      ));
+      final policy = MemoryAgenticPolicy(
+        const MemoryAgenticSettings(
+          enabled: true,
+          readOnly: false,
+          writeToolsEnabled: true,
+        ),
+      );
       final tools = MemoryAgenticToolDefinition.forPolicy(policy);
-      expect(tools.length, 3);
+      expect(tools.length, 2);
     });
   });
 
   group('MemoryAgenticPolicy — write tools', () {
-    test('denies writeMemory when readOnly', () {
-      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
-        enabled: true,
-        readOnly: true,
-      ));
-      final decision = policy.canUse(MemoryAgenticTool.writeMemory);
+    test('denies writeTracker when readOnly', () {
+      final policy = MemoryAgenticPolicy(
+        const MemoryAgenticSettings(enabled: true, readOnly: true),
+      );
+      final decision = policy.canUse(MemoryAgenticTool.writeTracker);
       expect(decision.allowed, isFalse);
       expect(decision.reason, 'agentic_read_only');
     });
 
     test('denies writeTracker when writeToolsEnabled is false', () {
-      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
-        enabled: true,
-        readOnly: false,
-        writeToolsEnabled: false,
-      ));
+      final policy = MemoryAgenticPolicy(
+        const MemoryAgenticSettings(
+          enabled: true,
+          readOnly: false,
+          writeToolsEnabled: false,
+        ),
+      );
       final decision = policy.canUse(MemoryAgenticTool.writeTracker);
       expect(decision.allowed, isFalse);
       expect(decision.reason, 'write_tools_disabled');
     });
 
     test('allows writeTracker when write enabled', () {
-      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
-        enabled: true,
-        readOnly: false,
-        writeToolsEnabled: true,
-        requireExplicitDiffApproval: false,
-      ));
+      final policy = MemoryAgenticPolicy(
+        const MemoryAgenticSettings(
+          enabled: true,
+          readOnly: false,
+          writeToolsEnabled: true,
+          requireExplicitDiffApproval: false,
+        ),
+      );
       final decision = policy.canUse(MemoryAgenticTool.writeTracker);
       expect(decision.allowed, isTrue);
     });
 
-    test('allows writeMemory when write enabled', () {
-      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
-        enabled: true,
-        readOnly: false,
-        writeToolsEnabled: true,
-        requireExplicitDiffApproval: false,
-      ));
-      final decision = policy.canUse(MemoryAgenticTool.writeMemory);
-      expect(decision.allowed, isTrue);
-    });
-
     test('denies all when disabled', () {
-      final policy = MemoryAgenticPolicy(const MemoryAgenticSettings(
-        enabled: false,
-      ));
-      expect(
-        policy.canUse(MemoryAgenticTool.writeMemory).allowed,
-        isFalse,
+      final policy = MemoryAgenticPolicy(
+        const MemoryAgenticSettings(enabled: false),
       );
-      expect(
-        policy.canUse(MemoryAgenticTool.writeTracker).allowed,
-        isFalse,
-      );
-      expect(
-        policy.canUse(MemoryAgenticTool.inspectContext).allowed,
-        isFalse,
-      );
+      expect(policy.canUse(MemoryAgenticTool.writeTracker).allowed, isFalse);
+      expect(policy.canUse(MemoryAgenticTool.inspectContext).allowed, isFalse);
     });
   });
 
@@ -169,66 +144,6 @@ void main() {
     });
   });
 
-  group('MemoryWriteRequest', () {
-    test('parses from JSON with keys', () {
-      final req = MemoryWriteRequest.fromJson({
-        'title': 'Lucy reveals the chip',
-        'content': 'Lucy showed a hidden microchip...',
-        'keys': ['Lucy', 'chip', 'secret'],
-      });
-      expect(req.title, 'Lucy reveals the chip');
-      expect(req.content, 'Lucy showed a hidden microchip...');
-      expect(req.keys, ['Lucy', 'chip', 'secret']);
-    });
-
-    test('defaults keys to empty list', () {
-      final req = MemoryWriteRequest.fromJson({
-        'title': 'Test',
-        'content': 'Content',
-      });
-      expect(req.keys, isEmpty);
-    });
-
-    // NEW (patch #4): existingEntryId field for append-only updates.
-    test('parses existingEntryId for append-only update', () {
-      final req = MemoryWriteRequest.fromJson({
-        'title': 'Lucy plan update',
-        'content': 'new fact: she has a knife',
-        'keys': ['Lucy'],
-        'existingEntryId': 'mem_abc123',
-      });
-      expect(req.existingEntryId, 'mem_abc123');
-      expect(req.content, 'new fact: she has a knife');
-    });
-
-    test('defaults existingEntryId to empty (create new entry)', () {
-      final req = MemoryWriteRequest.fromJson({
-        'title': 'Test',
-        'content': 'Content',
-      });
-      expect(req.existingEntryId, isEmpty);
-    });
-
-    test('toJson omits existingEntryId when empty', () {
-      const req = MemoryWriteRequest(
-        title: 'Test',
-        content: 'Content',
-      );
-      final json = req.toJson();
-      expect(json.containsKey('existingEntryId'), isFalse);
-    });
-
-    test('toJson includes existingEntryId when set', () {
-      const req = MemoryWriteRequest(
-        title: 'Test',
-        content: 'Content',
-        existingEntryId: 'mem_xyz',
-      );
-      final json = req.toJson();
-      expect(json['existingEntryId'], 'mem_xyz');
-    });
-  });
-
   group('TrackerRepo — write integration', () {
     late AppDatabase db;
     late TrackerRepo repo;
@@ -243,12 +158,7 @@ void main() {
     });
 
     test('upsertValue writes a tracker that can be read back', () async {
-      await repo.upsertValue(
-        's1',
-        'mood',
-        'happy',
-        provenance: 'memory_agent',
-      );
+      await repo.upsertValue('s1', 'mood', 'happy', provenance: 'memory_agent');
 
       final got = await repo.get('s1', 'mood');
       expect(got, isNotNull);
@@ -268,8 +178,12 @@ void main() {
     test('multiple trackers from same agent coexist', () async {
       await repo.upsertValue('s1', 'mood', 'happy', provenance: 'agent');
       await repo.upsertValue('s1', 'location', 'tavern', provenance: 'agent');
-      await repo.upsertValue('s1', 'relationship', 'allies',
-          provenance: 'agent');
+      await repo.upsertValue(
+        's1',
+        'relationship',
+        'allies',
+        provenance: 'agent',
+      );
 
       final all = await repo.getBySessionId('s1');
       expect(all.length, 3);
@@ -323,13 +237,12 @@ void main() {
       expect(result.anyWrites, isFalse);
     });
 
-    test('counts writes from both trackers and memories', () {
+    test('counts tracker writes', () {
       const result = MemoryWriteLoopResult(
         status: 'ok',
         trackerResult: TrackerWriteResult(written: 3),
-        memoryResult: MemoryWriteResult(written: 1),
       );
-      expect(result.totalWritten, 4);
+      expect(result.totalWritten, 3);
       expect(result.anyWrites, isTrue);
     });
 
