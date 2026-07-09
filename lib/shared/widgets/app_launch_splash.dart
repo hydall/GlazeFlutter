@@ -21,7 +21,6 @@ class AppLaunchSplash extends StatefulWidget {
 class _AppLaunchSplashState extends State<AppLaunchSplash>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final CurvedAnimation _curve;
 
   @override
   void initState() {
@@ -31,7 +30,6 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
       duration: const Duration(milliseconds: 1200),
       value: widget.isReady ? 1 : 0,
     );
-    _curve = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
   }
 
   @override
@@ -55,58 +53,70 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     final accent = theme.colorScheme.primary;
 
     return AnimatedBuilder(
-      animation: _curve,
+      animation: _controller,
       builder: (context, _) {
-        final t = widget.isReady ? _curve.value : 0.0;
-        final splashOpacity = widget.isReady
-            ? (1 - Curves.easeIn.transform(_interval(t, 0.30, 0.78))).clamp(
-                0.0,
-                1.0,
-              )
-            : 1.0;
+        // Timeline (t = 0..1 over 1200ms once ready):
+        //   0.00–0.22  logo pops in
+        //   0.22–0.46  HOLD — logo static & opaque, the child paints and
+        //              decodes its images behind an opaque cover
+        //   0.46–0.90  cover + logo fade out, revealing the settled child
+        //
+        // The child is painted at full opacity from the first frame (never
+        // wrapped in Opacity(0), which would make RenderOpacity skip painting
+        // and defer the list's expensive first layout + image decodes until it
+        // became visible — the jank). By keeping it painted but hidden behind
+        // an opaque cover during the hold, that heavy work happens while the
+        // logo is static, so the reveal is a pure crossfade over already
+        // rasterized content and stays smooth.
+        final t = widget.isReady ? _controller.value : 0.0;
+
         final logoIntroScale = Tween<double>(
           begin: 0.78,
           end: 1,
         ).transform(Curves.easeOutBack.transform(_interval(t, 0, 0.22)));
-        final logoExitScale = widget.isReady
-            ? Tween<double>(
-                begin: 1,
-                end: 1.12,
-              ).transform(Curves.easeInCubic.transform(_interval(t, 0.30, 0.78)))
-            : 1.0;
+        final logoExitScale = Tween<double>(
+          begin: 1,
+          end: 1.12,
+        ).transform(Curves.easeInCubic.transform(_interval(t, 0.46, 0.90)));
         final logoScale = logoIntroScale * logoExitScale;
-        final childOpacity = widget.isReady
-            ? Curves.easeOut.transform(_interval(t, 0.08, 0.58))
-            : 0.0;
-        final childScale = widget.isReady
-            ? Tween<double>(
-                begin: 0.82,
-                end: 1,
-              ).transform(
-                Curves.easeOutCubic.transform(_interval(t, 0.04, 0.72)),
-              )
-            : 0.82;
+
+        final reveal = Curves.easeInOutCubic.transform(
+          _interval(t, 0.46, 0.90),
+        );
+        final coverOpacity = (1 - reveal).clamp(0.0, 1.0);
+        final logoOpacity =
+            (1 - Curves.easeIn.transform(_interval(t, 0.50, 0.86))).clamp(
+              0.0,
+              1.0,
+            );
 
         return ColoredBox(
           color: background,
           child: Stack(
             fit: StackFit.expand,
             children: [
+              // Painted at full opacity immediately so first layout + image
+              // decodes happen during the hold, hidden behind the cover below.
               IgnorePointer(
-                ignoring: childOpacity < 0.999,
-                child: Opacity(
-                  opacity: childOpacity,
-                  child: Transform.scale(
-                    scale: childScale,
-                    child: widget.child,
-                  ),
-                ),
+                ignoring: coverOpacity > 0.02,
+                child: widget.child,
               ),
-              if (splashOpacity > 0)
+              // Opaque cover: hides the settling child, then fades to reveal it.
+              if (coverOpacity > 0)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: Opacity(
-                      opacity: splashOpacity,
+                      opacity: coverOpacity,
+                      child: ColoredBox(color: background),
+                    ),
+                  ),
+                ),
+              // Logo sits above the cover, static through the hold.
+              if (logoOpacity > 0)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: logoOpacity,
                       child: Center(
                         child: Transform.scale(
                           scale: logoScale,
