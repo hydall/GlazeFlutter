@@ -467,6 +467,31 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// `MediaQuery.padding.top` captured in build for the analytic header rect.
   double _blurSafeTop = 0;
 
+  /// Keyboard-inset settle tracking for the WebView-bound bottom inset.
+  /// While the keyboard animates, the WebView receives the predicted end
+  /// value once (per-frame `setBottomPadding` pushes relayout the whole
+  /// message list in the WebView every frame — the main keyboard-jank
+  /// source). [_keyboardSettled] flips back once the inset stops changing
+  /// and the actual value is pushed as a correction — a no-op in JS when
+  /// the prediction was right.
+  bool _keyboardSettled = true;
+  bool _keyboardRising = false;
+  Timer? _keyboardSettleTimer;
+
+  @override
+  void didUpdateWidget(covariant _ChatBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.keyboardHeight != widget.keyboardHeight) {
+      _keyboardRising = widget.keyboardHeight > oldWidget.keyboardHeight;
+      _keyboardSettled = false;
+      _keyboardSettleTimer?.cancel();
+      _keyboardSettleTimer = Timer(const Duration(milliseconds: 100), () {
+        if (!mounted) return;
+        setState(() => _keyboardSettled = true);
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -801,6 +826,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _keyboardSettleTimer?.cancel();
     _blurRegistry.dispose();
     super.dispose();
   }
@@ -819,6 +845,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
 
   void _measureBlurRegions() {
     if (!mounted) return;
+    // Transient layout: while the keyboard or drawer animates, the overlays
+    // move every frame — re-measuring would push per-frame region updates
+    // over the JS bridge and repaint the Flutter blur sandwich each frame.
+    // A build is guaranteed at settle (the keyboard settle-timer setState,
+    // the drawer animation's final tick with isAnimating == false), and it
+    // re-schedules this measure, so the final rects always land.
+    if (!_keyboardSettled || widget.drawerCtrl.isDrawerAnimating) return;
     final box = _webViewStateKey.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return;
     final origin = box.localToGlobal(Offset.zero);
@@ -997,7 +1030,40 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         final effectiveTopInset = messageListTop + memoryTopReserve;
 
         final messageListBottom = _inputBarHeight + effectiveBottomInset;
-        _lastMessageListBottom = messageListBottom;
+
+        // WebView-bound inset: the *end value* of the current transition,
+        // not the per-frame animated one. Pushing the animated value would
+        // relayout the whole in-WebView message list on every keyboard/
+        // drawer frame (see setBottomPadding in chat_bridge_controller.js).
+        // The Flutter overlays below keep following the animation; only the
+        // WebView padding jumps once, then gets corrected on settle (see
+        // didUpdateWidget). While the keyboard rises, the end value is
+        // predicted from the persisted last keyboard height; while it
+        // lowers, the end value is 0 (or the drawer height when switching).
+        final drawerTargetInset = drawerActive
+            ? widget.drawerCtrl.activeDrawerHeight
+            : 0.0;
+        final keyboardTargetInset = _keyboardSettled
+            ? widget.keyboardHeight
+            : (_keyboardRising
+                  ? math.max(
+                      widget.keyboardHeight,
+                      widget.drawerCtrl.lastKeyboardHeight,
+                    )
+                  : 0.0);
+        final targetPanelHeight = math.max(
+          drawerTargetInset,
+          keyboardTargetInset,
+        );
+        final targetFactor = math.min(
+          1.0,
+          targetPanelHeight / math.max(1.0, safeBottom),
+        );
+        final webViewBottomInset =
+            _inputBarHeight +
+            targetPanelHeight +
+            (safeBottom * (1 - targetFactor));
+        _lastMessageListBottom = webViewBottomInset;
         final showScrollBtn = _showScrollToBottom && !widget.search.showSearch;
 
         final animatedBottomPanelInset =
@@ -1036,7 +1102,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                     isGeneratingImage: widget.state.isGeneratingImage,
                     isPostGenRunning: widget.state.isPostGenRunning,
                     regenTargetId: widget.state.regenTargetId,
-                    bottomInset: messageListBottom,
+                    bottomInset: webViewBottomInset,
                     topInset: effectiveTopInset,
                     blurRegions: (batterySaver || preset.elementBlur <= 0)
                         ? const <ChatOverlayBlurRegion>[]
