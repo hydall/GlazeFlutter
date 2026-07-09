@@ -449,6 +449,30 @@ void main() {
     });
   });
 
+  group('Studio Narrative length ownership', () {
+    const narrativeAgent = StudioAgent(
+      id: 'narrative',
+      name: 'Narrative / Pacing / Style Controller',
+    );
+
+    test('runtime leaves numeric response budgets to the active preset', () {
+      final envelope = const StudioPromptText().intermediateRuntimeEnvelope(
+        narrativeAgent,
+      );
+      final narrative = StudioControllerOntology.specs.firstWhere(
+        (spec) => spec.id == 'narrative',
+      );
+
+      expect(envelope.toLowerCase(), isNot(contains('paragraph')));
+      expect(envelope.toLowerCase(), isNot(contains('word budget')));
+      expect(narrative.purpose.toLowerCase(), isNot(contains('paragraph')));
+      expect(
+        narrative.outputContract.toLowerCase(),
+        isNot(contains('paragraph')),
+      );
+    });
+  });
+
   group('PostCleanerService lumiaooc preservation', () {
     test(
       'lumiaooc dropped (and all tags dropped) is caught by protected-markup guard',
