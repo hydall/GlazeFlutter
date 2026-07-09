@@ -43,7 +43,18 @@ CustomTransitionPage<void> _overlayPage({
     transitionDuration: Duration.zero,
     reverseTransitionDuration: Duration.zero,
     child: child,
-    transitionsBuilder: (_, _, _, child) => child,
+    // This page's own enter/exit stays instant (zero duration, ignoring
+    // `animation`) — that's the point of `_overlayPage`. But `secondaryAnimation`
+    // drives THIS route while a child route (e.g. /menu/settings) is pushed on
+    // top of it, using the child route's own transition duration. Discarding it
+    // (as a plain `child` passthrough) left this page fully opaque underneath
+    // the child's push transition, so it wasn't covered until the child's
+    // animation fully completed — it then popped out of view in the last
+    // frame instead of cross-fading out in step with the child fading in.
+    transitionsBuilder: (_, _, secondaryAnimation, child) => FadeTransition(
+      opacity: Tween<double>(begin: 1.0, end: 0.0).animate(secondaryAnimation),
+      child: child,
+    ),
   );
 }
 
