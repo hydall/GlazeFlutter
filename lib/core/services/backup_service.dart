@@ -62,19 +62,20 @@ class BackupService {
       case BackupFormat.sillyTavernZip:
         await StBackupImporter(_db, _imageStorage, _cancel)
             .importFromFile(filePath, onProgress: onProgress);
-        return;
+        break;
       case BackupFormat.tavoZip:
         await TavoBackupImporter(_db, _imageStorage, _cancel)
             .importFromFile(filePath, onProgress: onProgress);
-        return;
+        break;
       case BackupFormat.flutterZip:
         await FlutterBackupImporter(_db, _imageStorage, _cancel)
             .importFromZipFile(filePath, onProgress: onProgress);
-        return;
+        break;
       case BackupFormat.legacyJsonGlaze:
         await _importLegacyJsonGlaze(filePath, onProgress: onProgress);
-        return;
+        break;
     }
+    await _db.purgeRetiredAgenticMicroMemory();
   }
 
   Future<BackupFormat> _detectFormat(String filePath) async {

@@ -74,21 +74,56 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
   }
 
   @override
-  Future<void> put(MemoryBook book) {
-    return into(memoryBookRows).insertOnConflictUpdate(
+  Future<void> put(MemoryBook book) async {
+    final existing = await getBySessionId(book.sessionId);
+    final retiredEntryIds = <String>{
+      ...?existing?.entries
+          .where((entry) => entry.source == 'agentic')
+          .map((entry) => entry.id),
+      ...book.entries
+          .where((entry) => entry.source == 'agentic')
+          .map((entry) => entry.id),
+    };
+    final sanitized = book.copyWith(
+      entries: book.entries
+          .where((entry) => entry.source != 'agentic')
+          .toList(),
+      pendingDrafts: book.pendingDrafts
+          .where((draft) => draft.source != 'agentic')
+          .toList(),
+    );
+
+    await into(memoryBookRows).insertOnConflictUpdate(
       MemoryBookRowsCompanion.insert(
-        sessionId: book.sessionId,
+        sessionId: sanitized.sessionId,
         entriesJson: Value(
-          jsonEncode(book.entries.map((e) => e.toJson()).toList()),
+          jsonEncode(sanitized.entries.map((e) => e.toJson()).toList()),
         ),
         pendingDraftsJson: Value(
-          jsonEncode(book.pendingDrafts.map((d) => d.toJson()).toList()),
+          jsonEncode(sanitized.pendingDrafts.map((d) => d.toJson()).toList()),
         ),
-        settingsJson: Value(jsonEncode(book.settings.toJson())),
-        lastProcessedMessageCount: Value(book.lastProcessedMessageCount),
+        settingsJson: Value(jsonEncode(sanitized.settings.toJson())),
+        lastProcessedMessageCount: Value(sanitized.lastProcessedMessageCount),
         updatedAt: Value(currentTimestampSeconds()),
       ),
     );
+    for (final entryId in retiredEntryIds) {
+      await customStatement('DELETE FROM embeddings WHERE entry_id = ?', [
+        entryId,
+      ]);
+      await customStatement(
+        'DELETE FROM memory_catalog_rows WHERE memory_entry_id = ?',
+        [entryId],
+      );
+      await customStatement(
+        'DELETE FROM memory_entity_rows WHERE memory_entry_id = ?',
+        [entryId],
+      );
+      await customStatement(
+        'DELETE FROM memory_salience_rows WHERE memory_entry_id = ?',
+        [entryId],
+      );
+    }
   }
 
   Future<void> updateSettings(String sessionId, MemoryBookSettings settings) {

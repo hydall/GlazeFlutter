@@ -245,6 +245,58 @@ void main() {
       );
     });
 
+    test(
+      'post-restore purge removes reintroduced agentic micro-memory',
+      () async {
+        await db.customStatement(
+          '''INSERT INTO memory_book_rows
+           (session_id, entries_json, pending_drafts_json, settings_json,
+            last_processed_message_count, updated_at)
+           VALUES (?, ?, ?, '{}', 0, 0)''',
+          [
+            'restored-session',
+            '[{"id":"restored-agent","source":"agentic"},'
+                '{"id":"restored-range","source":"scan"}]',
+            '[{"id":"restored-draft","source":"agentic"},'
+                '{"id":"restored-scan-draft","source":"scan"}]',
+          ],
+        );
+        await db.customStatement(
+          '''INSERT INTO embeddings (entry_id, source_type, source_id)
+           VALUES ('restored-agent', 'memory_entry',
+                   'memorybook_restored-session'),
+                  ('restored-range', 'memory_entry',
+                   'memorybook_restored-session')''',
+        );
+
+        await db.purgeRetiredAgenticMicroMemory();
+
+        final row = await db.customSelect(
+          '''SELECT entries_json, pending_drafts_json
+           FROM memory_book_rows WHERE session_id = 'restored-session' ''',
+        ).getSingle();
+        expect(
+          row.read<String>('entries_json'),
+          isNot(contains('restored-agent')),
+        );
+        expect(row.read<String>('entries_json'), contains('restored-range'));
+        expect(
+          row.read<String>('pending_drafts_json'),
+          isNot(contains('restored-draft')),
+        );
+        expect(
+          row.read<String>('pending_drafts_json'),
+          contains('restored-scan-draft'),
+        );
+        final embeddings = await db
+            .customSelect('SELECT entry_id FROM embeddings')
+            .get();
+        expect(embeddings.map((row) => row.read<String>('entry_id')), [
+          'restored-range',
+        ]);
+      },
+    );
+
     test('memory graph tables exist in current schema (v35)', () async {
       final entityCols = await db
           .customSelect("PRAGMA table_info('memory_entity_rows')")

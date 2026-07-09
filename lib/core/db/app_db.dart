@@ -1219,7 +1219,7 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       if (from < 66) {
-        await _removeAgenticMicroMemory();
+        await purgeRetiredAgenticMicroMemory();
         await _replaceLegacyWriteLoopPrompts();
       }
     },
@@ -1227,7 +1227,12 @@ class AppDatabase extends _$AppDatabase {
 
   /// Removes retired write-loop micro-memory while preserving range summaries,
   /// manual entries, Studio Ledger facts, and all MemoryBook settings.
-  Future<void> _removeAgenticMicroMemory() async {
+  /// Removes retired agentic micro-memory after a schema upgrade or a restore.
+  ///
+  /// Backup and cloud imports can carry a pre-v66 `memory_book_rows` payload
+  /// into an already-upgraded database, so this must remain callable after the
+  /// one-time schema migration as well.
+  Future<void> purgeRetiredAgenticMicroMemory() async {
     final rows = await customSelect(
       'SELECT session_id, entries_json, pending_drafts_json '
       'FROM memory_book_rows',

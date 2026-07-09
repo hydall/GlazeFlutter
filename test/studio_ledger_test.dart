@@ -448,6 +448,28 @@ Ledger text.
       expect(loaded.entries.first.sourceHash, 'abc123');
     });
 
+    test('sync ingress drops retired agentic entries and drafts', () async {
+      const sessionId = 'sess_sync_ingress';
+      await repo.put(
+        const MemoryBook(
+          id: 'memorybook_sess_sync_ingress',
+          sessionId: sessionId,
+          entries: [
+            MemoryEntry(id: 'agent-entry', source: 'agentic'),
+            MemoryEntry(id: 'range-entry', source: 'scan'),
+          ],
+          pendingDrafts: [
+            MemoryDraft(id: 'agent-draft', source: 'agentic'),
+            MemoryDraft(id: 'scan-draft', source: 'scan'),
+          ],
+        ),
+      );
+
+      final loaded = await repo.getBySessionId(sessionId);
+      expect(loaded!.entries.map((entry) => entry.id), ['range-entry']);
+      expect(loaded.pendingDrafts.map((draft) => draft.id), ['scan-draft']);
+    });
+
     // Test 4
     test('repeated durable facts are deduped by sourceHash', () async {
       const sessionId = 'sess_dedup';
