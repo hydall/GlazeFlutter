@@ -151,7 +151,7 @@ class _PersistentHeader extends ConsumerWidget {
                         showBack: entry.config.showBack,
                         onBack: entry.config.onBack,
                       ),
-                      if (entry.config.below != null) entry.config.below!,
+                      _AnimatedHeaderBelow(below: entry.config.below),
                     ],
                   ),
                 ),
@@ -171,6 +171,51 @@ class _PersistentHeader extends ConsumerWidget {
           curve: Curves.easeOutCubic,
           child: switcher,
         ),
+      ),
+    );
+  }
+}
+
+/// Animates the header's `below` slot (e.g. the character list's segmented
+/// tab bar) in and out when a screen switch adds or removes it — as opposed to
+/// the header's own cross-fade, which only triggers when [ShellHeaderEntry.key]
+/// changes and stays silent for same-screen claims like the character list
+/// toggling in and out of a folder. Appearing slides down into place from
+/// above the app bar; disappearing rides back up and fades, mirroring the
+/// header's own hide-on-scroll direction convention.
+class _AnimatedHeaderBelow extends StatelessWidget {
+  final Widget? below;
+  const _AnimatedHeaderBelow({required this.below});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 260),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeOutCubic,
+        layoutBuilder: (currentChild, previousChildren) => Stack(
+          alignment: Alignment.topCenter,
+          children: [...previousChildren, ?currentChild],
+        ),
+        transitionBuilder: (child, animation) => ClipRect(
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, -1),
+              end: Offset.zero,
+            ).animate(animation),
+            child: FadeTransition(opacity: animation, child: child),
+          ),
+        ),
+        child: below == null
+            ? const SizedBox.shrink(key: ValueKey('shell-header-below-empty'))
+            : KeyedSubtree(
+                key: const ValueKey('shell-header-below-content'),
+                child: below!,
+              ),
       ),
     );
   }
