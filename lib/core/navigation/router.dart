@@ -58,6 +58,38 @@ CustomTransitionPage<void> _overlayPage({
   );
 }
 
+/// Transparent cross-fade page for overlay sub-routes (e.g. `/menu/settings`).
+///
+/// The parent overlay (`_overlayPage`, e.g. `/menu`) fades itself out via
+/// `secondaryAnimation` while a child is pushed on top. That fade-out only
+/// reads visually if the incoming child is transparent during its transition.
+/// `_adaptivePage` (MaterialPage) uses the platform's default
+/// `ZoomPageTransitionsBuilder` on desktop, which composites the incoming page
+/// over an OPAQUE background/snapshot — that opaque layer hides the parent's
+/// fade-out, so the parent looked frozen and then snapped away in the final
+/// frame instead of cross-fading. A plain `FadeTransition` keeps the incoming
+/// page transparent throughout, so the parent's fade-out shows through and the
+/// two pages actually cross-fade over the shared shell background.
+CustomTransitionPage<void> _fadePage({
+  required GoRouterState state,
+  required Widget child,
+}) {
+  const duration = Duration(milliseconds: 220);
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    transitionDuration: duration,
+    reverseTransitionDuration: duration,
+    child: child,
+    // Drive the incoming page's own fade off `animation`; the parent overlay's
+    // fade-out is driven off its `secondaryAnimation` (see `_overlayPage`), and
+    // both run over this same duration, producing a symmetric cross-fade.
+    transitionsBuilder: (_, animation, _, child) => FadeTransition(
+      opacity: animation,
+      child: child,
+    ),
+  );
+}
+
 Page<void> _adaptivePage({
   required GoRouterState state,
   required Widget child,
@@ -202,14 +234,14 @@ GoRouter buildRouter(
               routes: [
                 GoRoute(
                   path: 'settings',
-                  pageBuilder: (_, state) => _adaptivePage(
+                  pageBuilder: (_, state) => _fadePage(
                     state: state,
                     child: const AppSettingsScreen(),
                   ),
                 ),
                 GoRoute(
                   path: 'themes',
-                  pageBuilder: (_, state) => _adaptivePage(
+                  pageBuilder: (_, state) => _fadePage(
                     state: state,
                     child: const ThemePresetScreen(),
                   ),
@@ -217,11 +249,11 @@ GoRouter buildRouter(
                 GoRoute(
                   path: 'about',
                   pageBuilder: (_, state) =>
-                      _adaptivePage(state: state, child: const AboutScreen()),
+                      _fadePage(state: state, child: const AboutScreen()),
                 ),
                 GoRoute(
                   path: 'glossary',
-                  pageBuilder: (_, state) => _adaptivePage(
+                  pageBuilder: (_, state) => _fadePage(
                     state: state,
                     child: const GlossarySheet(startExpanded: true),
                   ),
