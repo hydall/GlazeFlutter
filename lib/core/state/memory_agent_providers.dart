@@ -41,9 +41,7 @@ final memoryCadenceServiceProvider = Provider<MemoryCadenceService>((ref) {
 /// Post-turn pipeline service. Fire-and-forget after assistant response.
 /// Currently a no-op (entity graph disabled) — only cadence counter runs.
 final memoryPostTurnServiceProvider = Provider<MemoryPostTurnService>((ref) {
-  return MemoryPostTurnService(
-    ref.watch(memoryCadenceServiceProvider),
-  );
+  return MemoryPostTurnService(ref.watch(memoryCadenceServiceProvider));
 });
 
 /// Agentic memory service (Phase 10). Read-only searchMemory tool.
@@ -51,13 +49,12 @@ final memoryAgenticServiceProvider = Provider<MemoryAgenticService>((ref) {
   return MemoryAgenticService(ref);
 });
 
-/// Agentic write-loop service (Stage 1). Trackers + memory drafts.
+/// Agentic write-loop service (Stage 1). Trackers only.
 final memoryAgenticWriteServiceProvider = Provider<MemoryAgenticWriteService>((
   ref,
 ) {
   return MemoryAgenticWriteService(
     llm: const AuxLlmClient(),
-    bookRepo: ref.read(memoryBookRepoProvider),
     trackerRepo: ref.read(trackerRepoProvider),
     snapshotRepo: ref.read(trackerSnapshotRepoProvider),
   );

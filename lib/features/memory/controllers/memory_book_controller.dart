@@ -32,16 +32,16 @@ class MemoryBookController {
   final MemorySettingsMapper _settingsMapper = const MemorySettingsMapper();
   late final MemoryDraftGenerationController _draftGen =
       MemoryDraftGenerationController(
-    ref: _ref,
-    charId: _charId,
-    sessionId: _sessionId,
-    settingsMapper: _settingsMapper,
-    bookGetter: () => _book,
-    persistAndSet: (book) async {
-      _book = book;
-      await save();
-    },
-  );
+        ref: _ref,
+        charId: _charId,
+        sessionId: _sessionId,
+        settingsMapper: _settingsMapper,
+        bookGetter: () => _book,
+        persistAndSet: (book) async {
+          _book = book;
+          await save();
+        },
+      );
 
   MemoryBookController(this._ref, this._sessionId, this._charId);
 
@@ -55,8 +55,7 @@ class MemoryBookController {
       _ref.read(memoryGlobalSettingsProvider);
 
   /// Global pipeline LLM settings (singleton, SharedPreferences-backed).
-  PipelineSettings get pipelineSettings =>
-      _ref.read(pipelineSettingsProvider);
+  PipelineSettings get pipelineSettings => _ref.read(pipelineSettingsProvider);
 
   /// Returns the global [PipelineSettings]. Kept as a method for call-site
   /// compatibility — pipeline settings are now a singleton global, so this
@@ -113,7 +112,8 @@ class MemoryBookController {
     final batchSize = s.batchSize;
     final pg = pipelineSettings;
     final outTokens =
-        (pg.memoryBookApi.generationMaxTokens != null && pg.memoryBookApi.generationMaxTokens! > 0)
+        (pg.memoryBookApi.generationMaxTokens != null &&
+            pg.memoryBookApi.generationMaxTokens! > 0)
         ? '${pg.memoryBookApi.generationMaxTokens} out'
         : 'memory_books_summary_auto_out'.tr();
     return '$mode • $interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget • $packing • ${s.memoryExcerptChunksPerEntry}x${s.memoryExcerptTokensPerChunk} chunks';
@@ -180,13 +180,12 @@ class MemoryBookController {
     required void Function() onStart,
     required void Function() onComplete,
     required void Function(String error) onError,
-  }) =>
-      _draftGen.generateDraft(
-        draftId,
-        onStart: onStart,
-        onComplete: onComplete,
-        onError: onError,
-      );
+  }) => _draftGen.generateDraft(
+    draftId,
+    onStart: onStart,
+    onComplete: onComplete,
+    onError: onError,
+  );
 
   void cancelDraftGeneration(String draftId) =>
       _draftGen.cancelDraftGeneration(draftId);
@@ -195,12 +194,11 @@ class MemoryBookController {
     required void Function() onStart,
     required void Function() onComplete,
     required void Function(String error) onError,
-  }) =>
-      _draftGen.batchGenerate(
-        onStart: onStart,
-        onComplete: onComplete,
-        onError: onError,
-      );
+  }) => _draftGen.batchGenerate(
+    onStart: onStart,
+    onComplete: onComplete,
+    onError: onError,
+  );
 
   Future<void> approveDraft(String draftId) async {
     if (_book == null) return;
@@ -219,11 +217,9 @@ class MemoryBookController {
       messageRange: draft.messageRange,
       status: 'active',
       createdAt: DateTime.now().millisecondsSinceEpoch,
-      // Phase 7: preserve the draft's provenance marker so the MemoryBook
-      // UI can tab agent-sourced entries ('agentic') separately from scan
-      // drafts ('scan_chat') and curated entries ('').
+      // Preserve the draft's provenance marker for scan/manual entries.
       source: draft.source,
-      kind: draft.source == 'agentic' ? 'agent' : 'curated',
+      kind: 'curated',
     );
 
     _book = _book!.copyWith(
@@ -414,9 +410,10 @@ class MemoryBookController {
     }
 
     return switch (result.status) {
-      'ok' => 'Dedup: ${result.merged} merged, ${result.dropped} dropped, '
-          '${result.kept} kept (${result.pairsSentToLlm} pairs from '
-          '${result.candidatesChecked} entries)',
+      'ok' =>
+        'Dedup: ${result.merged} merged, ${result.dropped} dropped, '
+            '${result.kept} kept (${result.pairsSentToLlm} pairs from '
+            '${result.candidatesChecked} entries)',
       'no_book' => 'No memory book found.',
       'aborted' => 'Dedup aborted.',
       'timeout' => 'Dedup timed out.',

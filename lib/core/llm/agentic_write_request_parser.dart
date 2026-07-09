@@ -4,7 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/agent_operation_record.dart';
-import '../models/memory_book.dart';
+
 import '../models/pipeline_settings.dart';
 import '../models/studio_config.dart';
 import '../models/tracker.dart';
@@ -14,14 +14,13 @@ import 'macro_engine.dart';
 import 'studio/studio_aux_prompt_assembler.dart';
 
 /// Builds the agentic write-loop prompt + parses the LLM's JSON response
-/// into tracker/memory write requests. Extracted from
+/// into tracker write requests. Extracted from
 /// `MemoryAgenticWriteService._askLlmForWrites` (plan §7.2).
 ///
 /// Pure prompt/parse pair aside from the injected [AuxLlmClient] (used
 /// for the actual LLM call with retry/timeout). Behavior preserved verbatim.
-/// The write-execution (`_executeTrackerWrites` / `_executeMemoryWrites`)
-/// stays in `MemoryAgenticWriteService` — this specialist is only the
-/// request-shaping layer.
+/// Write execution stays in `MemoryAgenticWriteService`; this specialist is
+/// only the request-shaping layer.
 class AgenticWriteRequestParser {
   final AuxLlmClient _llm;
 
@@ -37,7 +36,6 @@ class AgenticWriteRequestParser {
     required String recentHistoryText,
     required List<Tracker> currentTrackers,
     required CancelToken cancelToken,
-    List<MemoryEntry> existingMemories = const [],
     List<StudioPresetBlock> writeloopBlocks = const [],
     MacroContext? macroCtx,
   }) async {
@@ -45,50 +43,21 @@ class AgenticWriteRequestParser {
         ? '(no active trackers)'
         : currentTrackers.map((t) => '- ${t.name}: ${t.value}').join('\n');
 
-    // NEW (patch #4): surface existing memory entries to the LLM so it can
-    // avoid duplicates and append newFacts to existing entries instead of
-    // rewriting them. Title + keys only — content is omitted to keep the
-    // prompt lean (mirrors Marinara's `<existing_entries>` block, which
-    // also omits full content). Locked entries are marked with `[locked]`
-    // so the LLM knows not to propose updates to them (Marinara analog).
-    // Rationale: showing existing entries lets the LLM avoid duplicates and
-    // append-only newFacts (patch #4). Locked entries are marked so the LLM
-    // knows not to propose updates (Marinara `locked` flag analog).
-    final existingBlock = existingMemories.isEmpty
-        ? '(no existing memory entries)'
-        : existingMemories
-              .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
-              .map((e) {
-                final keysStr = e.keys.isEmpty
-                    ? ''
-                    : ' [keys: ${e.keys.join(', ')}]';
-                final lockedStr = e.locked ? ' [locked: do not modify]' : '';
-                return '- ${e.title.isNotEmpty ? e.title : e.id}$keysStr$lockedStr';
-              })
-              .join('\n');
-
     final jsonSuffix = '''
 Respond with ONLY a JSON object (no markdown, no explanation):
 {
   "trackers": [
     {"name": "mood", "value": "happy", "scope": "chat"},
     {"name": "location", "value": "tavern"}
-  ],
-  "memories": [
-    {"title": "Lucy reveals the chip", "content": "...", "keys": ["Lucy", "chip"]},
-    {"existingEntryId": "mem_abc123", "title": "Lucy's plan", "content": "new fact only", "keys": ["Lucy"]}
   ]
 }
 
 Rules:
 - You are analyzing ~5 turns at once. Focus on significant changes across the batch, not every minor detail.
 - Only write trackers that CHANGED or are NEW. Don't repeat unchanged trackers.
-- Only create memory drafts for SIGNIFICANT events (not every turn).
-- If an event merely ADDS detail to an existing memory entry, write a memory request whose `existingEntryId` is the id of the existing entry and whose `content` contains only the NEW facts — do not restate or rewrite the existing entry. The pipeline will append your newFacts to the existing entry verbatim.
-- Do NOT create a new memory entry (no existingEntryId) that duplicates an existing entry's title/keys. Instead, write an append-only update with existingEntryId set.
-- If nothing is worth persisting, return: {"trackers": [], "memories": []}
-- Keep tracker values short (1-5 words).
-- Memory content should be 1-3 sentences describing what happened and why it matters.''';
+- Do not write MemoryBook entries or memory drafts. Long-term history is handled by MemoryBook range summaries and raw-message recall.
+- If nothing changed, return: {"trackers": []}
+- Keep tracker values short (1-5 words).''';
 
     final String prompt;
     if (writeloopBlocks.isNotEmpty && macroCtx != null) {
@@ -99,13 +68,13 @@ Rules:
         customReplacements: {
           '{{recentHistoryText}}': recentHistoryText,
           '{{trackersBlock}}': trackersBlock,
-          '{{existingBlock}}': existingBlock,
+          '{{existingBlock}}': '',
         },
         runtimeSuffix: jsonSuffix,
       );
     } else {
       prompt =
-          '''You are a memory agent for a roleplay conversation. You run every 5 turns and analyze the recent conversation batch to decide what facts to persist so they survive context truncation.
+          '''You are a state-tracking agent for a roleplay conversation. You run every 5 turns and analyze the recent conversation batch to update structured trackers.
 
 Recent conversation (last ~5 turns):
 $recentHistoryText
@@ -113,13 +82,11 @@ $recentHistoryText
 Current trackers:
 $trackersBlock
 
-Existing memory entries already in the MemoryBook:
-$existingBlock
-
 $jsonSuffix''';
     }
 
-    final maxTokens = (settings.memoryBookApi.generationMaxTokens != null &&
+    final maxTokens =
+        (settings.memoryBookApi.generationMaxTokens != null &&
             settings.memoryBookApi.generationMaxTokens! > 0)
         ? settings.memoryBookApi.generationMaxTokens!
         : 25000;
@@ -195,23 +162,7 @@ $jsonSuffix''';
         }
       }
 
-      final memoryRequests = <MemoryWriteRequest>[];
-      final memoryRaw = decoded['memories'];
-      if (memoryRaw is List) {
-        for (final item in memoryRaw) {
-          if (item is Map<String, dynamic>) {
-            final req = MemoryWriteRequest.fromJson(item);
-            if (req.title.isNotEmpty && req.content.isNotEmpty) {
-              memoryRequests.add(req);
-            }
-          }
-        }
-      }
-
-      return AgenticWriteResponse(
-        trackerRequests: trackerRequests,
-        memoryRequests: memoryRequests,
-      );
+      return AgenticWriteResponse(trackerRequests: trackerRequests);
     } catch (_) {
       return null;
     }
@@ -221,17 +172,11 @@ $jsonSuffix''';
       parseWriteResponse(text);
 }
 
-/// Parsed LLM response: the tracker + memory write requests the model
-/// proposed for this turn. Public so the write-execution service can read
-/// the fields after the parser returns.
+/// Parsed tracker updates proposed for this turn.
 class AgenticWriteResponse {
   final List<TrackerWriteRequest> trackerRequests;
-  final List<MemoryWriteRequest> memoryRequests;
 
-  const AgenticWriteResponse({
-    this.trackerRequests = const [],
-    this.memoryRequests = const [],
-  });
+  const AgenticWriteResponse({this.trackerRequests = const []});
 }
 
 /// Outcome of the write-loop LLM call: the parsed [AgenticWriteResponse]

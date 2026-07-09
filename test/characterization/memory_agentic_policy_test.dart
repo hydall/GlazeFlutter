@@ -6,7 +6,7 @@ void main() {
     const policy = MemoryAgenticPolicy(MemoryAgenticSettings());
 
     final read = policy.canUse(MemoryAgenticTool.inspectContext);
-    final write = policy.canUse(MemoryAgenticTool.writeMemory);
+    final write = policy.canUse(MemoryAgenticTool.writeTracker);
 
     expect(read.allowed, isFalse);
     expect(read.reason, 'agentic_disabled');
@@ -29,11 +29,11 @@ void main() {
     );
 
     expect(
-      readOnly.canUse(MemoryAgenticTool.writeMemory).reason,
+      readOnly.canUse(MemoryAgenticTool.writeTracker).reason,
       'agentic_read_only',
     );
     expect(
-      writeDisabled.canUse(MemoryAgenticTool.writeMemory).reason,
+      writeDisabled.canUse(MemoryAgenticTool.writeTracker).reason,
       'write_tools_disabled',
     );
   });

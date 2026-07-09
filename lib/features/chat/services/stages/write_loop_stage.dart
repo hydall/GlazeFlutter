@@ -84,10 +84,7 @@ class WriteLoopStage {
       final assistantTurnCount = messages
           .where((m) => m.role == 'assistant' && !m.isTyping)
           .length;
-      final cadenceReason = _resolveCadence(
-        pipeline,
-        assistantTurnCount,
-      );
+      final cadenceReason = _resolveCadence(pipeline, assistantTurnCount);
       if (cadenceReason != null) {
         debugPrint('[AgenticWrite] $cadenceReason');
         return;
@@ -178,11 +175,12 @@ class WriteLoopStage {
       );
 
       if (ctx.ref.mounted) {
-        ctx.ref.read(postGenStatusProvider.notifier).state =
-            PostGenStatusState.running(
-              sessionId: sessionId,
-              task: PostGenTask.writeLoop,
-            );
+        ctx.ref
+            .read(postGenStatusProvider.notifier)
+            .state = PostGenStatusState.running(
+          sessionId: sessionId,
+          task: PostGenTask.writeLoop,
+        );
       }
 
       final agenticService = ctx.ref.read(memoryAgenticWriteServiceProvider);
@@ -220,45 +218,43 @@ class WriteLoopStage {
         '[AgenticWrite] result session=$sessionId status=${result.status} '
         'trackersWritten=${result.trackerResult?.written ?? 0} '
         'trackersDenied=${result.trackerResult?.denied ?? 0} '
-        'memoriesWritten=${result.memoryResult?.written ?? 0} '
         'error=${result.error ?? "none"}',
       );
 
       if (ctx.ref.mounted) {
         final detail =
-            'Write-loop done (${result.trackerResult?.written ?? 0} trackers, '
-            '${result.memoryResult?.written ?? 0} memories)';
-        ctx.ref.read(postGenStatusProvider.notifier).state =
-            result.status == 'ok'
-                ? PostGenStatusState.done(
-                    sessionId: sessionId,
-                    task: PostGenTask.writeLoop,
-                    detail: detail,
-                  )
-                : PostGenStatusState.error(
-                    sessionId: sessionId,
-                    task: PostGenTask.writeLoop,
-                    detail: 'Write-loop ${result.status}',
-                  );
+            'Write-loop done (${result.trackerResult?.written ?? 0} trackers)';
+        ctx.ref
+            .read(postGenStatusProvider.notifier)
+            .state = result.status == 'ok'
+            ? PostGenStatusState.done(
+                sessionId: sessionId,
+                task: PostGenTask.writeLoop,
+                detail: detail,
+              )
+            : PostGenStatusState.error(
+                sessionId: sessionId,
+                task: PostGenTask.writeLoop,
+                detail: 'Write-loop ${result.status}',
+              );
       }
 
       // Post-write guard: the user may have deleted the assistant message
       // WHILE the write-loop was running (it can take 60s+). If so, the
-      // trackers and memory entries just written are now orphaned — tied to
+      // trackers just written are now orphaned — tied to
       // a messageId that no longer exists. Clean them up so the UI doesn't
       // show stale state for a deleted turn.
       if (result.status == 'ok' && ctx.ref.mounted) {
-        final postCheck = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+        final postCheck = await ctx.ref
+            .read(chatRepoProvider)
+            .getById(sessionId);
         if (postCheck == null ||
             !postCheck.messages.any((m) => m.id == lastAssistant.id)) {
           debugPrint(
             '[AgenticWrite] message ${lastAssistant.id} deleted during '
-            'write-loop — purging orphaned trackers + memory',
+            'write-loop — purging orphaned trackers',
           );
-          await ctx.ref
-              .read(memoryBookRepoProvider)
-              .deleteForMessage(sessionId, lastAssistant.id)
-              .catchError((Object _) {});
+
           await ctx.ref
               .read(trackerSnapshotRepoProvider)
               .deleteForMessage(sessionId, lastAssistant.id)
@@ -318,10 +314,7 @@ class WriteLoopStage {
   ///
   /// Cadence is hardcoded: the write-loop runs every 5 assistant turns
   /// (batch mode — the LLM analyzes 5 U-A turns at once).
-  String? _resolveCadence(
-    PipelineSettings pipeline,
-    int assistantTurnCount,
-  ) {
+  String? _resolveCadence(PipelineSettings pipeline, int assistantTurnCount) {
     const n = 5;
     if (n > 1 && assistantTurnCount % n != 0) {
       return 'skipping write-loop — hardcoded every $n turns, turn=$assistantTurnCount (not a multiple)';

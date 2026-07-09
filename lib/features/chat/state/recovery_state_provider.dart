@@ -1,13 +1,11 @@
 import 'package:flutter_riverpod/legacy.dart';
 
-/// Live state of the tracker+memory recovery batch, surfaced to the chat UI so
+/// Live state of the tracker recovery batch, surfaced to the chat UI so
 /// the user can see progress while the recovery walks the chat history.
 ///
-/// Recovery re-runs the Studio tracker cycle and the MemoryBook agentic
-/// write-loop for each assistant message in a session, as if that turn had
-/// just completed. Used when tracker outputs (studioOutputs) and memory
-/// entries were lost due to a bug (the `studioOutputs` regression fixed in
-/// the writeAssistant restoration).
+/// Recovery re-runs the Studio tracker cycle for each assistant message in a
+/// session. Used when tracker outputs were lost due to the `studioOutputs`
+/// regression fixed in the writeAssistant restoration.
 ///
 /// The phases are:
 ///   idle → running → done | error
@@ -23,7 +21,6 @@ class RecoveryState {
   final int currentMessageIndex;
   final String? currentMessageId;
   final int trackersWritten;
-  final int memoriesWritten;
   final int failedMessages;
   final String? error;
 
@@ -35,7 +32,6 @@ class RecoveryState {
     this.currentMessageIndex = -1,
     this.currentMessageId,
     this.trackersWritten = 0,
-    this.memoriesWritten = 0,
     this.failedMessages = 0,
     this.error,
   });
@@ -45,16 +41,15 @@ class RecoveryState {
   bool get isError => phase == RecoveryPhase.error;
 
   const RecoveryState.idle()
-      : sessionId = null,
-        phase = RecoveryPhase.idle,
-        totalMessages = 0,
-        processedMessages = 0,
-        currentMessageIndex = -1,
-        currentMessageId = null,
-        trackersWritten = 0,
-        memoriesWritten = 0,
-        failedMessages = 0,
-        error = null;
+    : sessionId = null,
+      phase = RecoveryPhase.idle,
+      totalMessages = 0,
+      processedMessages = 0,
+      currentMessageIndex = -1,
+      currentMessageId = null,
+      trackersWritten = 0,
+      failedMessages = 0,
+      error = null;
 
   const RecoveryState.running({
     required this.sessionId,
@@ -63,22 +58,20 @@ class RecoveryState {
     required this.currentMessageIndex,
     this.currentMessageId,
     required this.trackersWritten,
-    required this.memoriesWritten,
     required this.failedMessages,
   }) : phase = RecoveryPhase.running,
-        error = null;
+       error = null;
 
   const RecoveryState.done({
     required this.sessionId,
     required this.totalMessages,
     required this.processedMessages,
     required this.trackersWritten,
-    required this.memoriesWritten,
     required this.failedMessages,
   }) : phase = RecoveryPhase.done,
-        currentMessageIndex = -1,
-        currentMessageId = null,
-        error = null;
+       currentMessageIndex = -1,
+       currentMessageId = null,
+       error = null;
 
   const RecoveryState.error({
     required this.sessionId,
@@ -88,7 +81,6 @@ class RecoveryState {
     this.currentMessageIndex = -1,
     this.currentMessageId,
     this.trackersWritten = 0,
-    this.memoriesWritten = 0,
     this.failedMessages = 0,
   }) : phase = RecoveryPhase.error;
 }

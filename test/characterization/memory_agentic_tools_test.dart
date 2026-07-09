@@ -10,7 +10,10 @@ void main() {
       final tool = MemoryAgenticToolDefinition.searchMemory();
       expect(tool['type'], 'function');
       expect(tool['function']['name'], 'searchMemory');
-      expect(tool['function']['parameters']['properties']['query']['type'], 'string');
+      expect(
+        tool['function']['parameters']['properties']['query']['type'],
+        'string',
+      );
     });
 
     test('readOnlyTools returns only searchMemory', () {
@@ -169,7 +172,7 @@ void main() {
       const policy = MemoryAgenticPolicy(
         MemoryAgenticSettings(enabled: true, readOnly: true),
       );
-      final decision = policy.canUse(MemoryAgenticTool.writeMemory);
+      final decision = policy.canUse(MemoryAgenticTool.writeTracker);
       expect(decision.allowed, isFalse);
       expect(decision.reason, 'agentic_read_only');
     });
@@ -183,7 +186,7 @@ void main() {
           requireExplicitDiffApproval: true,
         ),
       );
-      final decision = policy.canUse(MemoryAgenticTool.writeMemory);
+      final decision = policy.canUse(MemoryAgenticTool.writeTracker);
       expect(decision.allowed, isFalse);
       expect(decision.reason, 'diff_approval_required');
     });
@@ -198,7 +201,7 @@ void main() {
         ),
       );
       final decision = policy.canUse(
-        MemoryAgenticTool.writeMemory,
+        MemoryAgenticTool.writeTracker,
         explicitDiffApproved: true,
       );
       expect(decision.allowed, isTrue);

@@ -32,7 +32,9 @@ void main() {
       book: const MemoryBook(
         id: 'book',
         sessionId: 's',
-        entries: [MemoryEntry(id: 'e1', messageIds: ['m1', 'm2'])],
+        entries: [
+          MemoryEntry(id: 'e1', messageIds: ['m1', 'm2']),
+        ],
       ),
       messages: List.generate(6, (i) => _message(i + 1)),
       interval: 2,
@@ -45,41 +47,6 @@ void main() {
     expect(plan.drafts, hasLength(2));
     expect(plan.drafts[0].messageIds, ['m3', 'm4']);
     expect(plan.drafts[1].messageIds, ['m5', 'm6']);
-  });
-
-  test('agentic entries do not block manual scan coverage', () {
-    // Agentic entries (source:'agentic') are written by the agent write-loop.
-    // They must NOT suppress a fresh manual scan over the same range —
-    // otherwise the manual planner could never re-summarize what the agent
-    // touched. Rationale (patch #1): agentic entries (source:'agentic') must
-    // NOT suppress a fresh manual scan — only manual entries (source:'scan_chat'
-    // / kind:'curated') block. Pending drafts block (anti-dup-segment).
-    final plan = MemoryDraftPlanner.plan(
-      book: const MemoryBook(
-        id: 'book',
-        sessionId: 's',
-        entries: [
-          MemoryEntry(
-            id: 'agentic1',
-            messageIds: ['m1', 'm2'],
-            source: 'agentic',
-            kind: 'agent',
-          ),
-        ],
-      ),
-      messages: List.generate(6, (i) => _message(i + 1)),
-      interval: 2,
-      lagMessages: 0,
-      source: 'test',
-      nowMillis: 1000,
-    );
-
-    // The agentic entry's messageIds remain uncovered → manual scan proceeds.
-    expect(plan.uncoveredMessageCount, 6);
-    expect(plan.drafts, hasLength(3));
-    expect(plan.drafts[0].messageIds, ['m1', 'm2']);
-    expect(plan.drafts[1].messageIds, ['m3', 'm4']);
-    expect(plan.drafts[2].messageIds, ['m5', 'm6']);
   });
 
   test('scan_chat (manual) entries still block coverage', () {
@@ -112,8 +79,7 @@ void main() {
 
   test('studio_ledger entries do not block manual scan coverage', () {
     // Studio Ledger entries (source:'studio_ledger') are per-turn durable
-    // facts — a different memory layer. They must NOT suppress manual scan,
-    // same as agentic entries.
+    // facts — a different memory layer. They must NOT suppress manual scan.
     final plan = MemoryDraftPlanner.plan(
       book: const MemoryBook(
         id: 'book',

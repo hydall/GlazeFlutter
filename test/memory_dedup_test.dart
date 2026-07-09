@@ -55,16 +55,7 @@ void main() {
   });
 
   group('MemoryEntry source filtering', () {
-    test('studio_ledger source is separate from agentic', () {
-      final agent = MemoryEntry(
-        id: 'mem_agent',
-        title: 'Agent memory',
-        content: 'Something happened',
-        source: 'agentic',
-        kind: 'agent',
-        status: 'active',
-        createdAt: 0,
-      );
+    test('studio_ledger source is separate from MemoryBook entries', () {
       final studio = MemoryEntry(
         id: 'mem_studio',
         title: 'Studio ledger',
@@ -84,12 +75,9 @@ void main() {
         createdAt: 0,
       );
 
-      expect(agent.source, 'agentic');
       expect(studio.source, 'studio_ledger');
       expect(curated.source, '');
-      expect(agent.source != studio.source, true);
       expect(studio.source != curated.source, true);
-      expect(agent.source != curated.source, true);
     });
   });
 

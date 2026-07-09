@@ -8,7 +8,7 @@ import 'package:glaze_flutter/core/llm/agentic_write_request_parser.dart';
 /// the parser handles valid, invalid, and edge-case LLM output.
 void main() {
   group('parseWriteResponse', () {
-    test('parses valid JSON with trackers + memories', () {
+    test('parses trackers and ignores legacy memories payload', () {
       final text = '''
 {
   "trackers": [
@@ -25,9 +25,6 @@ void main() {
       expect(response!.trackerRequests.length, 2);
       expect(response.trackerRequests.first.name, 'mood');
       expect(response.trackerRequests.first.value, 'happy');
-      expect(response.memoryRequests.length, 1);
-      expect(response.memoryRequests.first.title, 'Lucy reveals the chip');
-      expect(response.memoryRequests.first.keys, ['Lucy', 'chip']);
     });
 
     test('returns null for invalid JSON', () {
@@ -60,7 +57,6 @@ void main() {
       );
       expect(response, isNotNull);
       expect(response!.trackerRequests, isEmpty);
-      expect(response.memoryRequests, isEmpty);
     });
 
     test('skips tracker entries with empty name or value', () {
@@ -78,36 +74,6 @@ void main() {
       expect(response, isNotNull);
       expect(response!.trackerRequests.length, 1);
       expect(response.trackerRequests.first.name, 'location');
-    });
-
-    test('skips memory entries with empty title or content', () {
-      final text = '''
-{
-  "trackers": [],
-  "memories": [
-    {"title": "", "content": "x"},
-    {"title": "Valid", "content": ""}
-  ]
-}
-''';
-      final response = AgenticWriteRequestParser.parseWriteResponse(text);
-      expect(response, isNotNull);
-      expect(response!.memoryRequests, isEmpty);
-    });
-
-    test('parses existingEntryId for append-only update', () {
-      final text = '''
-{
-  "trackers": [],
-  "memories": [
-    {"title": "Update", "content": "new fact", "keys": ["k"], "existingEntryId": "mem_abc"}
-  ]
-}
-''';
-      final response = AgenticWriteRequestParser.parseWriteResponse(text);
-      expect(response, isNotNull);
-      expect(response!.memoryRequests.length, 1);
-      expect(response.memoryRequests.first.existingEntryId, 'mem_abc');
     });
   });
 }
