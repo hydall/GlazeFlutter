@@ -540,7 +540,7 @@ void main() {
     });
 
     test('flush() called before setMessages', () {
-      final idx = bridgeJs.indexOf('setMessages(messagesJson)');
+      final idx = bridgeJs.indexOf('setMessages(messagesJson');
       final methodBody = bridgeJs.substring(idx, idx + 100);
       expect(methodBody, contains('this.flush()'));
     });

@@ -16,6 +16,7 @@ class MessageBridgeCommands {
   Future<void> setMessages(
     List<ChatMessage> messages, {
     int visibleStartIndex = 0,
+    bool preserveScroll = false,
   }) async {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
@@ -38,6 +39,14 @@ class MessageBridgeCommands {
       mapped[i]['text'] = resolved[i];
     }
     final json = jsonEncode(mapped);
+    if (preserveScroll) {
+      // Pass the preserve-scroll flag through as a second JS argument so the
+      // bridge anchors the current reading position instead of re-pinning to
+      // the bottom on this batch replace.
+      return _host.evalJs(
+        'window.bridge?.setMessages(${_host.escapeJsonStr(json)}, true)',
+      );
+    }
     return _host.callJs('setMessages', json);
   }
 
