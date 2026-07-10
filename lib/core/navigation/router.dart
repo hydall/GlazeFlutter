@@ -12,7 +12,6 @@ import '../../features/character_list/character_list_screen.dart';
 import '../../features/character_gallery/gallery_screen.dart';
 import '../../features/chat/chat_screen.dart';
 import '../../features/chat_history/chat_history_screen.dart';
-import '../../features/dev_chat/dev_chat_screen.dart';
 import '../../features/lorebooks/lorebook_list_screen.dart';
 import '../../features/lorebooks/lorebook_global_settings_screen.dart';
 import '../../features/lorebooks/embedding_settings_screen.dart';
@@ -321,11 +320,6 @@ GoRouter buildRouter(
       path: '/sync',
       pageBuilder: (_, state) =>
           _overlayPage(state: state, child: const SyncSheet()),
-    ),
-    GoRoute(
-      path: '/dev-chat',
-      pageBuilder: (_, state) =>
-          _adaptivePage(state: state, child: const DevChatScreen()),
     ),
     GoRoute(
       path: '/extensions',
