@@ -162,32 +162,43 @@ class _CoveragePanelState extends ConsumerState<CoveragePanel> {
             );
 
     if (widget.embedded) {
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
-            child: Row(
-              children: [
-                Text(
-                  'Lorebook Coverage',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: context.cs.onSurfaceVariant,
-                  ),
+      // The Prompt Inspector injects the floating-header height as the body's
+      // top inset. Offset the whole embedded column (toolbar included) by it,
+      // then strip the inset from descendants so [body] — which also reads
+      // padding.top for its leading spacer — doesn't add the gap a second time.
+      return Padding(
+        padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+        child: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                child: Row(
+                  children: [
+                    Text(
+                      'Lorebook Coverage',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.refresh, size: 20),
+                      tooltip: 'Refresh',
+                      onPressed: _loading ? null : _load,
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.refresh, size: 20),
-                  tooltip: 'Refresh',
-                  onPressed: _loading ? null : _load,
-                ),
-              ],
-            ),
+              ),
+              Expanded(child: body),
+            ],
           ),
-          Expanded(child: body),
-        ],
+        ),
       );
     }
 
