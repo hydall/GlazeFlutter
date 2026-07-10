@@ -7,31 +7,34 @@ List<LorebookEntry> mergeKeywordVector({
   required LorebookGlobalSettings settings,
 }) {
   final maxEntries = settings.maxInjectedEntries;
+  final maxVector = settings.vectorTopK;
   final constantKeywords = keywordEntries.where((e) => e.constant).toList();
   final triggeredKeywords = applyLorebookPerBookLimits(
     keywordEntries.where((e) => !e.constant).toList(),
   );
 
+  // Step 1: fill with keyword entries first (constants + triggered).
+  // Keywords can occupy up to maxEntries slots (minus constants).
+  final usedKeyword = triggeredKeywords
+      .take(maxEntries - constantKeywords.length)
+      .toList();
+
   if (vectorEntries.isEmpty) {
     return [
       ...constantKeywords.map(_fromScanned),
-      ...triggeredKeywords.take(maxEntries).map(_fromScanned),
+      ...usedKeyword.map(_fromScanned),
     ];
   }
 
-  final splitPct = settings.keywordVectorSplit;
+  // Step 2: fill remaining slots with vector entries, but no more than
+  // maxVector (vectorTopK).  Unused keyword slots do NOT carry over to
+  // vector — vectorTopK is a hard cap, not a split percentage.
+  final keywordSlotCount = constantKeywords.length + usedKeyword.length;
+  final remainingSlots = maxEntries - keywordSlotCount;
+  final vectorSlots = remainingSlots < maxVector ? remainingSlots : maxVector;
+  final usableVectorSlots = vectorSlots < 0 ? 0 : vectorSlots;
 
-  final keywordSlots = (maxEntries * splitPct / 100).round();
-  final vectorSlots = maxEntries - keywordSlots;
-
-  final usedKeyword = triggeredKeywords.take(keywordSlots).toList();
-  final unusedKeywordSlots = keywordSlots - usedKeyword.length;
-  final adjustedVectorSlots = vectorSlots + unusedKeywordSlots;
-
-  // Avoid duplicate prompt content for keyword entries already selected in the
-  // keyword slice. Keyword matches that overflow keywordSlots may still be
-  // selected through vector slots; prompt_builder labels those as keyword using
-  // the full keyword activation set so the badge matches Coverage.
+  // Dedupe vector entries against keyword entries already selected.
   final keywordIds = {
     ...constantKeywords.map((e) => e.id),
     ...usedKeyword.map((e) => e.id),
@@ -40,16 +43,11 @@ List<LorebookEntry> mergeKeywordVector({
       .where((e) => !keywordIds.contains(e.id))
       .toList();
 
-  // If dedup removed some entries, compensate by taking more from the vector
-  // pool so vectorSlots is still filled (requires vector search to return
-  // enough candidates — overrideTopK=maxInjectedEntries handles that).
-  final usedVector = dedupedVector.take(adjustedVectorSlots).toList();
-
-  final keywordAsEntries = usedKeyword.map(_fromScanned).toList();
+  final usedVector = dedupedVector.take(usableVectorSlots).toList();
 
   return [
     ...constantKeywords.map(_fromScanned),
-    ...keywordAsEntries,
+    ...usedKeyword.map(_fromScanned),
     ...usedVector,
   ];
 }

@@ -49,7 +49,11 @@ class LorebookVectorSearcher {
           .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
           .toList();
       final activations = _ref.read(lorebookActivationsProvider);
-      final overrideTopK = settings.maxInjectedEntries;
+      // Let the vector search use its own vectorTopK setting (with per-book
+      // overrides).  Previously this passed maxInjectedEntries as overrideTopK,
+      // which made vectorTopK a dead setting in hybrid mode.  The merger now
+      // caps vector entries at min(vectorTopK, remainingSlots) regardless of
+      // how many candidates the search returns.
       final results = await searchService.search(
         searchHistory,
         currentText,
@@ -60,7 +64,6 @@ class LorebookVectorSearcher {
         character: character,
         activations: activations,
         chatId: chatId,
-        overrideTopK: overrideTopK,
         cancelToken: cancelToken,
       );
 
