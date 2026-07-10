@@ -219,16 +219,27 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
           );
 
     if (widget.embedded) {
-      return Column(
-        children: [
-          TokenizerEmbeddedToolbar(
-            showSettings: _showSettings,
-            onToggleSettings: () =>
-                setState(() => _showSettings = !_showSettings),
-            onRefresh: _loading ? null : _calculate,
+      // The Prompt Inspector injects the floating-header height as the body's
+      // top inset. Offset the whole embedded column (toolbar included) by it,
+      // then strip the inset from descendants so the scroll body — which also
+      // reads padding.top — doesn't add the gap a second time.
+      return Padding(
+        padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+        child: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          child: Column(
+            children: [
+              TokenizerEmbeddedToolbar(
+                showSettings: _showSettings,
+                onToggleSettings: () =>
+                    setState(() => _showSettings = !_showSettings),
+                onRefresh: _loading ? null : _calculate,
+              ),
+              Expanded(child: body),
+            ],
           ),
-          Expanded(child: body),
-        ],
+        ),
       );
     }
 

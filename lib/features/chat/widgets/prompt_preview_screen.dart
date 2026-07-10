@@ -105,58 +105,69 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       }
     });
     if (widget.embedded) {
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
-            child: Row(
-              children: [
-                Text(
-                  'magic_request_preview'.tr(),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: context.cs.onSurfaceVariant,
-                  ),
-                ),
-                const Spacer(),
-                if (_previewTabIndex == 1) ...[
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      Icons.copy,
-                      size: 20,
-                      color: context.cs.primary,
+      // The Prompt Inspector injects the floating-header height as the body's
+      // top inset. Offset the whole embedded column (toolbar + tab bar) by it,
+      // then strip the inset from descendants so _buildBody — which also reads
+      // padding.top — doesn't add the gap a second time.
+      return Padding(
+        padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+        child: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+                child: Row(
+                  children: [
+                    Text(
+                      'magic_request_preview'.tr(),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: context.cs.onSurfaceVariant,
+                      ),
                     ),
-                    tooltip: 'action_copy'.tr(),
-                    onPressed: _copyContent,
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                _SegmentedToggle(
-                  isRaw: _previewTabIndex == 1,
-                  onChanged: (isRaw) =>
-                      setState(() => _previewTabIndex = isRaw ? 1 : 0),
+                    const Spacer(),
+                    if (_previewTabIndex == 1) ...[
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(
+                          Icons.copy,
+                          size: 20,
+                          color: context.cs.primary,
+                        ),
+                        tooltip: 'action_copy'.tr(),
+                        onPressed: _copyContent,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    _SegmentedToggle(
+                      isRaw: _previewTabIndex == 1,
+                      onChanged: (isRaw) =>
+                          setState(() => _previewTabIndex = isRaw ? 1 : 0),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          GlazeTabBar(
-            tabs: [
-              GlazeTabItem(
-                label: 'tab_request'.tr(),
-                icon: Icons.upload_rounded,
               ),
-              GlazeTabItem(
-                label: 'tab_response'.tr(),
-                icon: Icons.download_rounded,
+              GlazeTabBar(
+                tabs: [
+                  GlazeTabItem(
+                    label: 'tab_request'.tr(),
+                    icon: Icons.upload_rounded,
+                  ),
+                  GlazeTabItem(
+                    label: 'tab_response'.tr(),
+                    icon: Icons.download_rounded,
+                  ),
+                ],
+                activeIndex: _dataTabIndex,
+                onChanged: (i) => setState(() => _dataTabIndex = i),
               ),
+              Expanded(child: _buildBody()),
             ],
-            activeIndex: _dataTabIndex,
-            onChanged: (i) => setState(() => _dataTabIndex = i),
           ),
-          Expanded(child: _buildBody()),
-        ],
+        ),
       );
     }
 
