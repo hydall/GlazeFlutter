@@ -13,6 +13,7 @@ import '../../../core/state/shared_prefs_provider.dart';
 import 'catalog_models.dart';
 import 'services/datacat_provider.dart';
 import 'services/janitor_provider.dart';
+import 'services/janitor_public_lorebook.dart';
 import 'services/janny_provider.dart';
 import 'services/chub_provider.dart';
 
@@ -254,6 +255,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   Future<String> importCharacter(
     DownloadedCharacter downloaded, {
     String? sourceUrl,
+    bool attachLorebooks = false,
+    Map<String, dynamic>? janitorMeta,
   }) async {
     final charRepo = _ref.read(characterRepoProvider);
     final imageStorage = await _ref.read(imageStorageProvider.future);
@@ -303,6 +306,31 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         '[character_import] catalog no_lorebook character=$id '
         'book_type=${charData.characterBook.runtimeType}',
       );
+    }
+
+    // When the user opted to import the character *with* its attached lorebooks,
+    // download the character's public (JSON) lorebooks and save them scoped to
+    // the new character. Private/closed and advanced (JS) lorebooks can't be
+    // pulled whole — those still go through the Lorebooks tab's Extract/Build
+    // flow. A lorebook failure never blocks the character import.
+    if (attachLorebooks && janitorMeta != null) {
+      try {
+        final books = await fetchPublicLorebooks(janitorMeta);
+        for (final book in books) {
+          if (!book.accessible || book.entryCount == 0) continue;
+          final lorebook = book.toLorebook(characterId: id);
+          debugPrint(
+            '[character_import] catalog saving_attached_lorebook '
+            'id=${lorebook.id} name=${lorebook.name} '
+            'entries=${lorebook.entries.length} character=$id',
+          );
+          await lorebookRepo.put(lorebook);
+        }
+      } catch (e) {
+        debugPrint(
+          '[character_import] attach_lorebooks_failed character=$id error=$e',
+        );
+      }
     }
 
     return id;

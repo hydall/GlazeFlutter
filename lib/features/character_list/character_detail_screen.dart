@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/character.dart';
 import '../../core/services/chat_import_export.dart';
 import '../catalog/services/janitor_provider.dart';
+import '../catalog/services/janitor_public_lorebook.dart';
 import '../catalog/widgets/janitor_comments_section.dart';
 import '../catalog/widgets/janitor_lorebooks_tab.dart';
 import '../../core/services/persona_character_converter.dart';
@@ -61,26 +62,14 @@ Border _detailHeaderBorder(BuildContext context, ThemePreset preset) {
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
 
-List<GlazeTabItem> _detailTabs(
-  BuildContext context, {
-  bool withLorebooks = false,
-  bool withComments = false,
-}) => [
+// Only two tabs: Info (with comments folded in under the bio) and Prompt Blocks
+// (with lorebooks folded in under the prompts).
+List<GlazeTabItem> _detailTabs(BuildContext context) => [
   GlazeTabItem(label: 'section_info'.tr(), icon: Icons.info_outline_rounded),
   GlazeTabItem(
     label: 'section_prompt_blocks'.tr(),
     icon: Icons.description_outlined,
   ),
-  if (withLorebooks)
-    GlazeTabItem(
-      label: 'section_lorebooks'.tr(),
-      icon: Icons.menu_book_outlined,
-    ),
-  if (withComments)
-    GlazeTabItem(
-      label: 'section_comments'.tr(),
-      icon: Icons.forum_outlined,
-    ),
 ];
 
 // ─── Screen ────────────────────────────────────────────────────────────────
@@ -169,7 +158,10 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
   /// tab is shown listing public lorebooks (downloadable) and offering local
   /// extraction + LLM build of the closed lorebook.
   final JanitorLorebookArgs? janitorLorebookArgs;
-  final Future<void> Function()? onImport;
+
+  /// Runs the import. [includeLorebooks] is chosen via the import-options bottom
+  /// sheet when the previewed character has attached lorebooks.
+  final Future<void> Function({bool includeLorebooks})? onImport;
   final bool importing;
 
   /// Current phase label while [importing] (e.g. local extraction progress).
@@ -208,20 +200,28 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
   int _commentPage = 1;
   bool _commentsLoading = false;
   bool _commentsHasMore = true;
-  bool _commentsStarted = false;
   Object? _commentsError;
 
   bool get _hasComments => widget.janitorReviewCharId != null;
   bool get _hasLorebooks => widget.janitorLorebookArgs != null;
 
-  /// Lorebooks (when present) sits right after Prompt Blocks; Comments follows.
-  int get _lorebooksTabIndex => 2;
-  int get _commentsTabIndex => _hasComments ? 2 + (_hasLorebooks ? 1 : 0) : -1;
+  /// Whether the previewed character actually lists attached lorebooks (not just
+  /// that it is a JanitorAI preview). Drives the import-options bottom sheet.
+  bool get _previewHasLorebooks =>
+      widget.janitorLorebookArgs != null &&
+      lorebookScriptRefs(widget.janitorLorebookArgs!.meta).isNotEmpty;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    // Comments live under the Info tab (the default tab), so start paging as
+    // soon as the sheet opens rather than waiting for a tab switch.
+    if (_hasComments) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadMoreComments();
+      });
+    }
   }
 
   @override
@@ -231,7 +231,8 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
   }
 
   void _onScroll() {
-    if (!_hasComments || _activeTabIndex != _commentsTabIndex) return;
+    // Comments are folded into the Info tab (index 0); page them as it scrolls.
+    if (!_hasComments || _activeTabIndex != 0) return;
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
     if (pos.pixels >= pos.maxScrollExtent - 600) {
@@ -267,10 +268,6 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
 
   void _onTabChanged(int i) {
     setState(() => _activeTabIndex = i);
-    if (_hasComments && i == _commentsTabIndex && !_commentsStarted) {
-      _commentsStarted = true;
-      _loadMoreComments();
-    }
   }
 
   /// Pops the GlazeBottomSheet, then pops this modal sheet returning [route]
@@ -430,6 +427,46 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => CharacterVariationsSheet(groupId: groupId),
+    );
+  }
+
+  /// Import FAB tap. When the previewed character ships attached lorebooks the
+  /// user first picks whether to pull them along; otherwise the import starts
+  /// immediately.
+  void _handleImportTap() {
+    if (widget.importing) return;
+    if (_previewHasLorebooks) {
+      _showImportOptions();
+    } else {
+      widget.onImport?.call();
+    }
+  }
+
+  void _showImportOptions() {
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'catalog_import_options_title'.tr(),
+      items: [
+        BottomSheetItem(
+          icon: Icons.auto_stories_outlined,
+          label: 'catalog_import_with_lorebooks'.tr(),
+          hint: 'catalog_import_with_lorebooks_hint'.tr(),
+          onTap: () {
+            rootNav.pop();
+            widget.onImport?.call(includeLorebooks: true);
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.person_outline_rounded,
+          label: 'catalog_import_char_only'.tr(),
+          hint: 'catalog_import_char_only_hint'.tr(),
+          onTap: () {
+            rootNav.pop();
+            widget.onImport?.call(includeLorebooks: false);
+          },
+        ),
+      ],
     );
   }
 
@@ -594,7 +631,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
               ? _ImportFab(
                   importing: widget.importing,
                   phase: widget.importPhase,
-                  onTap: () => widget.onImport?.call(),
+                  onTap: _handleImportTap,
                 )
               : _ChatFab(onTap: () => _openChat(context, char.id)),
     );
@@ -633,11 +670,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: GlazeTabBar(
-                tabs: _detailTabs(
-                  context,
-                  withLorebooks: _hasLorebooks,
-                  withComments: _hasComments,
-                ),
+                tabs: _detailTabs(context),
                 activeIndex: _activeTabIndex,
                 onChanged: _onTabChanged,
               ),
@@ -656,26 +689,48 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
   }
 
   Widget _buildTabContent(Character char) {
-    if (_hasComments && _activeTabIndex == _commentsTabIndex) {
-      return JanitorCommentsView(
-        key: const ValueKey('comments'),
-        comments: _comments,
-        loading: _commentsLoading,
-        hasMore: _commentsHasMore,
-        error: _commentsError,
-        onRetry: _loadMoreComments,
-      );
-    }
-    if (_hasLorebooks && _activeTabIndex == _lorebooksTabIndex) {
-      return JanitorLorebooksTab(
-        key: const ValueKey('lorebooks'),
-        args: widget.janitorLorebookArgs!,
-      );
-    }
     if (_activeTabIndex == 0) {
-      return _InfoTab(key: const ValueKey('info'), character: char);
+      // Info tab: bio/tags, with the character's comments folded in below it.
+      return KeyedSubtree(
+        key: const ValueKey('info'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _InfoTab(character: char),
+            if (_hasComments) ...[
+              _TabSectionHeader(
+                icon: Icons.forum_outlined,
+                label: 'section_comments'.tr(),
+              ),
+              JanitorCommentsView(
+                comments: _comments,
+                loading: _commentsLoading,
+                hasMore: _commentsHasMore,
+                error: _commentsError,
+                onRetry: _loadMoreComments,
+              ),
+            ],
+          ],
+        ),
+      );
     }
-    return _PromptsTab(key: const ValueKey('prompts'), character: char);
+    // Prompt Blocks tab: prompt accordions, with the lorebooks folded in below.
+    return KeyedSubtree(
+      key: const ValueKey('prompts'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PromptsTab(character: char),
+          if (_hasLorebooks) ...[
+            _TabSectionHeader(
+              icon: Icons.menu_book_outlined,
+              label: 'section_lorebooks'.tr(),
+            ),
+            JanitorLorebooksTab(args: widget.janitorLorebookArgs!),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildFloatingHeader(Character? char) {
@@ -1028,6 +1083,38 @@ class _HeroPlaceholder extends StatelessWidget {
   }
 }
 
+// ─── Folded-in section header ────────────────────────────────────────────────
+
+/// Header that separates a folded-in section (comments under the Info tab,
+/// lorebooks under the Prompt Blocks tab) from the tab's primary content.
+class _TabSectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _TabSectionHeader({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: context.cs.primary),
+          const SizedBox(width: 8),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.77,
+              color: context.cs.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ─── Info tab ──────────────────────────────────────────────────────────────
 
 class _InfoTab extends StatelessWidget {
@@ -1121,12 +1208,22 @@ class _InfoTab extends StatelessWidget {
                 }
                 return const SizedBox.shrink();
               },
+              // A custom inlineComponents list replaces gpt_markdown's built-in
+              // inline set, so the standard emphasis parsers must be listed
+              // explicitly — otherwise `**bold**` / `*italic*` render as literal
+              // asterisks. Bold is listed before italic so `**` wins over `*`.
+              // Colours are left null so emphasis inherits the bio text colour.
               inlineComponents: [
                 HtmlColorMd(),
                 GlowTextMd(),
                 ColorGlowTextMd(),
                 GradientTextMd(),
                 BackgroundTextMd(),
+                ColoredBoldMd(),
+                ColoredUnderscoreBoldMd(),
+                ColoredItalicMd(),
+                ColoredUnderscoreItalicMd(),
+                LinkMd(),
                 ImageMd(),
               ],
             ),

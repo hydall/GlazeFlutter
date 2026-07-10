@@ -1,6 +1,8 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 Color? parseHexColor(String hex) {
   var h = hex.replaceFirst('#', '');
@@ -282,6 +284,44 @@ class ColoredUnderscoreBoldMd extends InlineMd {
     return TextSpan(
       children: MarkdownComponent.generate(context, "${match?[1]}", conf, false),
       style: conf.style,
+    );
+  }
+}
+
+/// Inline `[label](url)` link. A custom `inlineComponents` list replaces
+/// gpt_markdown's built-in inline parsers (including its link parser), so this
+/// restores tappable links. Only `http`/`https` targets are accepted; the
+/// label keeps flowing inline (via a [TapGestureRecognizer]) so long links wrap
+/// like normal text. When [color] is null the link uses the theme's primary
+/// colour.
+class LinkMd extends InlineMd {
+  final Color? color;
+  LinkMd({this.color});
+
+  @override
+  RegExp get exp => RegExp(r'\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)');
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text.trim());
+    final label = match?[1] ?? '';
+    final url = match?[2] ?? '';
+    final linkColor = color ?? Theme.of(context).colorScheme.primary;
+    final style = (config.style ?? const TextStyle()).copyWith(
+      color: linkColor,
+      decoration: TextDecoration.underline,
+      decorationColor: linkColor,
+    );
+    return TextSpan(
+      text: label,
+      style: style,
+      recognizer: TapGestureRecognizer()
+        ..onTap = () {
+          final uri = Uri.tryParse(url);
+          if (uri != null) {
+            launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        },
     );
   }
 }
