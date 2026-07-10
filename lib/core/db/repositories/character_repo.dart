@@ -331,9 +331,18 @@ class CharacterRepo implements SyncCharacterStore {
 
   /// Hides or reveals an entire variation group. Applied group-wide so that
   /// promoting a sibling on delete never resurfaces a hidden character.
+  ///
+  /// Legacy rows (and catalog imports predating the group backfill) can still
+  /// carry an empty `variant_group_id`; for a standalone character [groupId] is
+  /// its own `char_id`, so we also match those by id — otherwise the update
+  /// silently affected zero rows and the hide toggle appeared to do nothing.
   Future<void> setHidden(String groupId, bool hidden) async {
     await (_db.update(_db.characters)
-          ..where((t) => t.variantGroupId.equals(groupId)))
+          ..where(
+            (t) =>
+                t.variantGroupId.equals(groupId) |
+                (t.variantGroupId.equals('') & t.charId.equals(groupId)),
+          ))
         .write(CharactersCompanion(hidden: Value(hidden)));
   }
 
@@ -374,6 +383,9 @@ class CharacterRepo implements SyncCharacterStore {
     await _db.into(_db.characters).insertOnConflictUpdate(
           CharactersCompanion(
             charId: Value(id),
+            // A catalog import is a standalone character: seed its group id so
+            // group-wide operations (e.g. hide) can match it by id.
+            variantGroupId: Value(id),
             name: Value(name),
             avatarPath: Value(avatarPath),
             description: Value(description),

@@ -570,6 +570,41 @@ void main() {
         await repo.setHidden('c1', false);
         expect((await repo.getVariants('c1')).any((c) => c.hidden), isFalse);
       });
+
+      test('setHidden hides a standalone row with empty variant_group_id',
+          () async {
+        // Legacy rows (and catalog imports predating the group backfill) can
+        // still carry an empty variant_group_id. setHidden resolves the group
+        // id to the char id for a standalone character, so it must match those
+        // rows by id — otherwise the hide toggle silently affects zero rows.
+        await db.into(db.characters).insert(
+              const CharactersCompanion(
+                charId: Value('legacy'),
+                name: Value('Legacy'),
+                variantGroupId: Value(''),
+              ),
+            );
+
+        await repo.setHidden('legacy', true);
+        expect((await repo.getById('legacy'))!.hidden, isTrue);
+
+        final page = await repo.getPage(
+          limit: 50,
+          offset: 0,
+          sort: CharacterSortField.name,
+          dir: CharacterSortDir.asc,
+        );
+        expect(page, isEmpty);
+
+        await repo.setHidden('legacy', false);
+        expect((await repo.getById('legacy'))!.hidden, isFalse);
+      });
+
+      test('catalog imports are hideable', () async {
+        await repo.createCharacterFromCatalog(id: 'cat', name: 'Cat');
+        await repo.setHidden('cat', true);
+        expect((await repo.getById('cat'))!.hidden, isTrue);
+      });
     });
   });
 

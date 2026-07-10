@@ -841,6 +841,14 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           },
         ),
         BottomSheetItem(
+          icon: Icons.visibility_off_outlined,
+          label: 'action_hide'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _hideSelected(context, selection);
+          },
+        ),
+        BottomSheetItem(
           icon: Icons.delete_rounded,
           label: 'action_delete'.tr(),
           isDestructive: true,
@@ -928,6 +936,20 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     if (!context.mounted) return;
     ref.read(characterSelectionProvider.notifier).clear();
     GlazeToast.show(context, 'action_add_fav'.tr());
+  }
+
+  Future<void> _hideSelected(
+    BuildContext context,
+    CharacterSelectionState selection,
+  ) async {
+    final ids = {...selection.ids};
+    final notifier = ref.read(charactersProvider.notifier);
+    for (final id in ids) {
+      await notifier.setHidden(id, true);
+    }
+    if (!context.mounted) return;
+    ref.read(characterSelectionProvider.notifier).clear();
+    GlazeToast.show(context, 'chars_hidden_toast'.plural(ids.length));
   }
 
   void _addSelectedToFolder(
