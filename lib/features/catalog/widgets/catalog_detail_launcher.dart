@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -109,7 +110,7 @@ class _CatalogDetailLauncherState
     );
   }
 
-  Future<void> _doImport() async {
+  Future<void> _doImport({bool includeLorebooks = false}) async {
     final downloaded = _downloaded;
     if (downloaded == null || _importing) return;
     setState(() {
@@ -144,9 +145,17 @@ class _CatalogDetailLauncherState
           );
         }
       } else {
+        if (includeLorebooks && mounted) {
+          setState(() => _importPhase = 'catalog_import_lorebooks_phase'.tr());
+        }
         importedCharId = await ref
             .read(catalogProvider.notifier)
-            .importCharacter(downloaded, sourceUrl: _sourceUrl());
+            .importCharacter(
+              downloaded,
+              sourceUrl: _sourceUrl(),
+              attachLorebooks: includeLorebooks,
+              janitorMeta: _janitorMeta,
+            );
       }
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop(importedCharId);

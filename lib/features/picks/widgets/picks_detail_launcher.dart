@@ -96,7 +96,10 @@ class _PicksDetailLauncherState extends ConsumerState<PicksDetailLauncher> {
     }
   }
 
-  Future<void> _doImport() async {
+  // [includeLorebooks] is unused here — Picks characters have no attached
+  // lorebooks tab, so the import-options sheet never appears. The named
+  // parameter is kept to satisfy CharacterDetailScreen.onImport's signature.
+  Future<void> _doImport({bool includeLorebooks = false}) async {
     if (_character == null || _importing) return;
     setState(() => _importing = true);
 
