@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/db/repositories/character_repo.dart' show CharacterRepo;
 import '../../core/models/chat_message.dart';
+import '../../core/state/character_provider.dart'
+    show revealHiddenCharactersProvider;
 import '../../core/state/db_provider.dart';
 import '../../core/utils/sync_deletion_tracker.dart';
 import '../chat/chat_session_service.dart';
@@ -42,8 +44,14 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
   StreamSubscription<dynamic>? _charactersSub;
   List<ChatSessionInfo>? _lastResult;
 
+  /// Mirrors [revealHiddenCharactersProvider]: while false, sessions belonging
+  /// to hidden characters are dropped from the history list. Watched in
+  /// [build] so toggling reveal rebuilds the list.
+  bool _revealHidden = false;
+
   @override
   Future<List<ChatSessionInfo>> build() async {
+    _revealHidden = ref.watch(revealHiddenCharactersProvider);
     final chatRepo = ref.read(chatRepoProvider);
     final charRepo = ref.read(characterRepoProvider);
     await _sub?.cancel();
@@ -71,8 +79,14 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
     final charIds = allMeta.map((m) => m.characterId).toSet();
     final charMap = await charRepo.getByIds(charIds);
 
-    final result = allMeta.map((m) {
+    final result = <ChatSessionInfo>[];
+    for (final m in allMeta) {
       final char = charMap[m.characterId];
+      // Hidden characters take their chats with them: sessions drop out of the
+      // history list while the character is hidden and reappear when it's
+      // revealed (same gesture as the My Characters list). Orphan sessions
+      // (no character row) are always kept.
+      if (char != null && char.hidden && !_revealHidden) continue;
       final baseName = char?.displayName?.trim().isNotEmpty == true
           ? char!.displayName!.trim()
           : (char?.name ?? 'Unknown');
@@ -82,7 +96,7 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
       final characterName = (variant != null && variant.isNotEmpty)
           ? '$baseName — $variant'
           : baseName;
-      return ChatSessionInfo(
+      result.add(ChatSessionInfo(
         sessionId: m.sessionId,
         characterId: m.characterId,
         characterName: characterName,
@@ -92,8 +106,8 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
         messageCount: m.messageCount,
         sessionIndex: m.sessionIndex,
         sessionName: m.sessionName,
-      );
-    }).toList();
+      ));
+    }
 
     result.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
     return result;
