@@ -22,11 +22,16 @@ class ChatHistoryList extends ConsumerStatefulWidget {
   /// a translucent shell header instead of being clipped by it.
   final double topPadding;
 
+  /// Bottom padding applied inside the scroll view so the last rows can scroll
+  /// clear of the translucent bottom nav bar instead of being hidden by it.
+  final double bottomPadding;
+
   const ChatHistoryList({
     super.key,
     this.collapsed = false,
     this.searchQuery = '',
     this.topPadding = 0,
+    this.bottomPadding = 20,
   });
 
   @override
@@ -88,7 +93,7 @@ class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
         }
 
         return ListView.builder(
-          padding: EdgeInsets.only(top: widget.topPadding, bottom: 20),
+          padding: EdgeInsets.only(top: widget.topPadding, bottom: widget.bottomPadding),
           itemCount: filtered.length + 1,
           itemBuilder: (_, i) {
             if (i == 0) return _buildCountHeader(filtered.length);

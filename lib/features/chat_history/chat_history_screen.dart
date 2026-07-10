@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/shell/header_scroll_hider.dart';
+import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
 
@@ -137,10 +138,12 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
   Widget _buildFullScreen(BuildContext context) {
     final settingsAsync = ref.watch(appSettingsProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0 + 16.0;
+    final bottomPad = ref.watch(navHeightProvider) + 20;
 
     final list = ChatHistoryList(
       searchQuery: _searchQuery,
       topPadding: topPad,
+      bottomPadding: bottomPad,
     );
     final body = settingsAsync.value?.batterySaver ?? false
         ? list
