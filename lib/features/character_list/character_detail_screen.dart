@@ -1223,6 +1223,7 @@ class _InfoTab extends StatelessWidget {
                 ColoredUnderscoreBoldMd(),
                 ColoredItalicMd(),
                 ColoredUnderscoreItalicMd(),
+                LinkMd(),
                 ImageMd(),
               ],
             ),
