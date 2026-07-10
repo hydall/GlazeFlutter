@@ -17,6 +17,7 @@ import '../../../../core/models/character.dart';
 import '../../../../core/models/chat_message.dart';
 import '../../../../core/models/pipeline_settings.dart';
 import '../../../../core/models/studio_config.dart';
+import '../../../../core/state/active_studio_preset_provider.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../../../core/state/memory_agent_providers.dart';
 import '../../../../core/state/character_provider.dart';
@@ -166,7 +167,7 @@ class CleanerStage {
         broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
         studioConfigEnabled = studioConfig?.enabled == true;
         studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
-        studioPresetId = studioConfig?.studioPresetId ?? 'default';
+        studioPresetId = await ctx.ref.read(activeStudioPresetProvider.future);
       } catch (e) {
         debugPrint(
           '[PostCleaner] broadcast load failed session=$sessionId error=$e',
@@ -1015,7 +1016,7 @@ class CleanerStage {
       broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
       studioConfigEnabled = studioConfig?.enabled == true;
       studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
-      studioPresetId = studioConfig?.studioPresetId ?? 'default';
+      studioPresetId = await ctx.ref.read(activeStudioPresetProvider.future);
     } catch (e) {
       debugPrint(
         '[PostCleaner] rerun broadcast load failed session=$sessionId error=$e',

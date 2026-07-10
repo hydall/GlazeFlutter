@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
@@ -29,6 +29,7 @@ class StudioBriefCache {
   CacheProbe probeCache({
     required StudioAgent agent,
     required StudioConfig config,
+    required String presetId,
     required PromptPayload promptPayload,
     required String sceneKey,
     required int turnIndex,
@@ -36,6 +37,7 @@ class StudioBriefCache {
     final policy = effectiveRefreshPolicy(agent);
     final cacheKey = cacheKeyForAgent(
       config: config,
+      presetId: presetId,
       agent: agent,
       policy: policy,
       sceneKey: sceneKey,
@@ -110,6 +112,7 @@ class StudioBriefCache {
 
   String cacheKeyForAgent({
     required StudioConfig config,
+    required String presetId,
     required StudioAgent agent,
     required String policy,
     required String sceneKey,
@@ -117,7 +120,7 @@ class StudioBriefCache {
     final base = <String, dynamic>{
       'v': 2,
       'profileId': config.profileId,
-      'studioPresetId': config.studioPresetId,
+      'studioPresetId': presetId,
       'configUpdatedAt': config.updatedAt,
       'agentId': agent.id,
       'sourceBlockNames': agent.sourceBlockNames,
@@ -174,10 +177,7 @@ class StudioBriefCache {
       return policy;
     }
 
-    final text = [
-      agent.name,
-      agent.sourceBlockNames,
-    ].join('\n').toLowerCase();
+    final text = [agent.name, agent.sourceBlockNames].join('\n').toLowerCase();
     if (RegExp(
       r'ban|banned|forbidden|clich|клиш|запрет|forbidden words',
       caseSensitive: false,

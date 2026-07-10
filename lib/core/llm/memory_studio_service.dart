@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/api_config.dart';
 import '../models/studio_config.dart';
+import '../state/active_studio_preset_provider.dart';
 import '../state/db_provider.dart';
 import 'agent_runner.dart';
 import 'prompt_builder.dart';
@@ -96,8 +97,9 @@ class MemoryStudioService {
     // `false` overrides StudioAgent.enabled = true; `true` or absent
     // preserves the agent's own enabled state.
     final presetRepo = _ref.read(studioPresetRepoProvider);
+    final activePresetId = await _ref.read(activeStudioPresetProvider.future);
     final preset =
-        (await presetRepo.getById(config.studioPresetId)) ??
+        (await presetRepo.getById(activePresetId)) ??
         (await presetRepo.getDefault());
     final agentEnabled = preset?.agentEnabled ?? const {};
     final beautyPipelineEnabled =
@@ -143,8 +145,10 @@ class MemoryStudioService {
       return const StudioPipelineResult(status: 'aborted', response: '');
     }
 
+    final presetId = await _ref.read(activeStudioPresetProvider.future);
     final phaseResult = await _phaseRunner.run(
       config: config,
+      presetId: presetId,
       promptResult: promptResult,
       promptPayload: promptPayload,
       apiConfig: apiConfig,
@@ -283,8 +287,10 @@ class MemoryStudioService {
       return const StudioPipelineResult(status: 'aborted', response: '');
     }
 
+    final presetId = await _ref.read(activeStudioPresetProvider.future);
     final phaseResult = await _phaseRunner.run(
       config: config,
+      presetId: presetId,
       promptResult: promptResult,
       promptPayload: promptPayload,
       apiConfig: apiConfig,

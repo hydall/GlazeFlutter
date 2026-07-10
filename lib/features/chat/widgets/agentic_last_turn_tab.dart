@@ -9,6 +9,7 @@ import '../../../core/models/agent_operation_record.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/services/generation_notification_service.dart';
 import '../../../core/services/post_gen_foreground_guard.dart';
+import '../../../core/state/active_studio_preset_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -190,7 +191,7 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
         return;
       }
       final studioPreset = await presetRepo.getById(
-        studioConfig?.studioPresetId ?? 'default',
+        await ref.read(activeStudioPresetProvider.future),
       );
       final character = await characterRepo.getById(session.characterId);
       final macroCtx = MacroContext(

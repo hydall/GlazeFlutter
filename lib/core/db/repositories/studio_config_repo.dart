@@ -24,11 +24,13 @@ class StudioConfigRepo implements SyncStudioConfigStore {
       if (profiles.isEmpty) return null;
       final profile = profiles.first;
       // Bind the session to the profile so future lookups are direct.
-      await _upsertRow(profile.copyWith(
-        sessionId: sessionId,
-        profileId: profile.profileId,
-        enabled: profile.enabled,
-      ));
+      await _upsertRow(
+        profile.copyWith(
+          sessionId: sessionId,
+          profileId: profile.profileId,
+          enabled: profile.enabled,
+        ),
+      );
       return profile.copyWith(sessionId: sessionId);
     }
     final binding = _rowToModel(row);
@@ -140,7 +142,6 @@ class StudioConfigRepo implements SyncStudioConfigStore {
               jsonEncode(config.agents.map((a) => a.toJson()).toList()),
             ),
             finalPresetId: Value(config.finalPresetId),
-            studioPresetId: Value(config.studioPresetId),
             runApiConfigId: Value(config.runApiConfigId),
             expensiveApiConfigId: Value(config.expensiveApiConfigId),
             cheapApiConfigId: Value(config.cheapApiConfigId),
@@ -205,7 +206,6 @@ class StudioConfigRepo implements SyncStudioConfigStore {
         enabled: row.enabled,
         agents: agents,
         finalPresetId: row.finalPresetId,
-        studioPresetId: row.studioPresetId,
         runApiConfigId: row.runApiConfigId,
         expensiveApiConfigId: row.expensiveApiConfigId,
         cheapApiConfigId: row.cheapApiConfigId,
