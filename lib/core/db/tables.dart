@@ -351,9 +351,9 @@ class StudioConfigRows extends Table {
   BoolColumn get enabled => boolean().withDefault(const Constant(false))();
   TextColumn get agentsJson => text().withDefault(const Constant('[]'))();
   TextColumn get finalPresetId => text().withDefault(const Constant(''))();
-  TextColumn get studioPresetId => text().withDefault(const Constant('default'))();
   TextColumn get runApiConfigId => text().withDefault(const Constant(''))();
-  TextColumn get expensiveApiConfigId => text().withDefault(const Constant(''))();
+  TextColumn get expensiveApiConfigId =>
+      text().withDefault(const Constant(''))();
   TextColumn get cheapApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get cleanerApiConfigId => text().withDefault(const Constant(''))();
   TextColumn get runModelOverride => text().withDefault(const Constant(''))();

@@ -72,10 +72,10 @@ class StudioTrackerPhaseRunner {
   /// Resolves the DB Studio preset for [config]. Returns the preset or an
   /// error string if no preset is found.
   Future<({StudioPreset? preset, String? error})> resolvePreset(
-    StudioConfig config,
+    String presetId,
   ) async {
     final presetRepo = _presetRepo;
-    final presetById = await presetRepo.getById(config.studioPresetId);
+    final presetById = await presetRepo.getById(presetId);
     if (presetById != null) {
       return (preset: presetById, error: null);
     }
@@ -93,6 +93,7 @@ class StudioTrackerPhaseRunner {
   /// `status == 'ok'` and [briefs] on success, or an error status.
   Future<PreGenPhaseResult> run({
     required StudioConfig config,
+    required String presetId,
     required PromptResult promptResult,
     required PromptPayload promptPayload,
     required ApiConfig apiConfig,
@@ -103,7 +104,7 @@ class StudioTrackerPhaseRunner {
       return const PreGenPhaseResult(status: 'aborted');
     }
 
-    final presetResult = await resolvePreset(config);
+    final presetResult = await resolvePreset(presetId);
     if (presetResult.error != null) {
       return PreGenPhaseResult(status: 'error', error: presetResult.error);
     }
@@ -154,6 +155,7 @@ class StudioTrackerPhaseRunner {
         final probe = _briefCache.probeCache(
           agent: agent,
           config: config,
+          presetId: presetId,
           promptPayload: promptPayload,
           sceneKey: sceneKey,
           turnIndex: turnIndex,

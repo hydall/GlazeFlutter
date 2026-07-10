@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/platform_paths.dart';
 import '../utils/time_helpers.dart';
@@ -44,7 +45,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 66;
+  int get schemaVersion => 67;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -837,9 +838,6 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         final colNames = cols.map((r) => r.read<String>('name')).toSet();
 
-        if (!colNames.contains('studio_preset_id')) {
-          await m.addColumn(studioConfigRows, studioConfigRows.studioPresetId);
-        }
         if (!colNames.contains('expensive_api_config_id')) {
           await m.addColumn(
             studioConfigRows,
@@ -1221,6 +1219,33 @@ class AppDatabase extends _$AppDatabase {
       if (from < 66) {
         await purgeRetiredAgenticMicroMemory();
         await _replaceLegacyWriteLoopPrompts();
+      }
+      if (from < 67) {
+        // Studio preset is now a global singleton stored in SharedPreferences
+        // (activeStudioPresetProvider). Preserve the most recently updated
+        // per-session choice once, then drop the old column.
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          if (!prefs.containsKey('activeStudioPresetId')) {
+            final rows = await customSelect(
+              'SELECT studio_preset_id FROM studio_config_rows '
+              "WHERE studio_preset_id <> '' "
+              'ORDER BY updated_at DESC LIMIT 1',
+            ).get();
+            if (rows.isNotEmpty) {
+              final presetId = rows.first.read<String>('studio_preset_id');
+              if (presetId.isNotEmpty) {
+                await prefs.setString('activeStudioPresetId', presetId);
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Migration 67 (preserve active Studio preset) failed: $e');
+          rethrow;
+        }
+        await customStatement(
+          'ALTER TABLE studio_config_rows DROP COLUMN studio_preset_id',
+        );
       }
     },
   );

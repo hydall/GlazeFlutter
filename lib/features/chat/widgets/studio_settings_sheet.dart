@@ -11,6 +11,7 @@ import '../../../core/llm/studio_controller_ontology.dart';
 import '../../../core/models/pipeline_settings.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/services/file_export_service.dart';
+import '../../../core/state/active_studio_preset_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/utils/time_helpers.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -106,6 +107,12 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     final repo = ref.read(studioConfigRepoProvider);
     await repo.upsert(config);
     setState(() => _config = config);
+  }
+
+  Future<void> _changeStudioPreset(String presetId) async {
+    // Global: one SharedPreferences key, applies to every session instantly.
+    await ref.read(activeStudioPresetProvider.notifier).set(presetId);
+    setState(() {});
   }
 
   @override
@@ -204,7 +211,10 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             subtitle: const Text('Enable or disable individual Studio agents'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
-              final presetId = config.studioPresetId;
+              final presetId = await ref.read(
+                activeStudioPresetProvider.future,
+              );
+              if (!mounted) return;
               await GlazeBottomSheet.show<void>(
                 context,
                 title: 'Agents',
@@ -218,7 +228,10 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             subtitle: const Text('Trackers, Final Agent, Cleaner, Ledger'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
-              final presetId = config.studioPresetId;
+              final presetId = await ref.read(
+                activeStudioPresetProvider.future,
+              );
+              if (!mounted) return;
               await GlazeBottomSheet.show<void>(
                 context,
                 title: 'Preset Blocks',
@@ -243,12 +256,14 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   }
 
   Widget _buildPresetSelector(StudioConfig config) {
+    final activePresetId =
+        ref.watch(activeStudioPresetProvider).value ?? 'default';
     final current = _studioPresets
-        .where((p) => p.id == config.studioPresetId)
+        .where((p) => p.id == activePresetId)
         .firstOrNull;
     final label = current?.name.isNotEmpty == true
         ? current!.name
-        : config.studioPresetId;
+        : activePresetId;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.view_module_outlined),
@@ -272,7 +287,7 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
         iconColor: Theme.of(context).colorScheme.primary,
         onTap: () {
           Navigator.of(context, rootNavigator: true).pop();
-          unawaited(_createStudioPreset(config));
+          unawaited(_createStudioPreset());
         },
       ),
       BottomSheetItem(
@@ -282,11 +297,13 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
         iconColor: Theme.of(context).colorScheme.primary,
         onTap: () {
           Navigator.of(context, rootNavigator: true).pop();
-          unawaited(_importPreset(config));
+          unawaited(_importPreset());
         },
       ),
       ..._studioPresets.map((preset) {
-        final active = preset.id == config.studioPresetId;
+        final active =
+            preset.id ==
+            (ref.read(activeStudioPresetProvider).value ?? 'default');
         final name = preset.name.isNotEmpty ? preset.name : preset.id;
         final sections =
             preset.blocks
@@ -302,7 +319,7 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
           iconColor: Theme.of(context).colorScheme.primary,
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            _save(config.copyWith(studioPresetId: preset.id));
+            _changeStudioPreset(preset.id);
           },
           actions: [
             BottomSheetAction(
@@ -329,7 +346,7 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     );
   }
 
-  Future<void> _createStudioPreset(StudioConfig config) async {
+  Future<void> _createStudioPreset() async {
     final nameCtrl = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -363,7 +380,11 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
 
     final source =
         _studioPresets
-            .where((preset) => preset.id == config.studioPresetId)
+            .where(
+              (preset) =>
+                  preset.id ==
+                  (ref.read(activeStudioPresetProvider).value ?? 'default'),
+            )
             .firstOrNull ??
         _studioPresets.firstOrNull;
     if (source == null) {
@@ -383,10 +404,10 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     final nextPresets = await ref.read(studioPresetRepoProvider).getAll();
     nextPresets.sort((a, b) => a.name.compareTo(b.name));
     setState(() => _studioPresets = nextPresets);
-    await _save(config.copyWith(studioPresetId: preset.id));
+    await ref.read(activeStudioPresetProvider.notifier).set(preset.id);
   }
 
-  Future<void> _importPreset(StudioConfig config) async {
+  Future<void> _importPreset() async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['json'],
@@ -448,7 +469,7 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
       final nextPresets = await ref.read(studioPresetRepoProvider).getAll();
       nextPresets.sort((a, b) => a.name.compareTo(b.name));
       setState(() => _studioPresets = nextPresets);
-      await _save(config.copyWith(studioPresetId: preset.id));
+      await ref.read(activeStudioPresetProvider.notifier).set(preset.id);
       if (mounted) GlazeToast.show(context, 'Preset "$trimmedName" imported.');
     } catch (e) {
       if (mounted) GlazeToast.show(context, 'Failed to import preset: $e');
@@ -501,8 +522,8 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     nextPresets.sort((a, b) => a.name.compareTo(b.name));
     setState(() => _studioPresets = nextPresets);
 
-    if (config.studioPresetId == preset.id) {
-      await _save(config.copyWith(studioPresetId: 'default'));
+    if ((await ref.read(activeStudioPresetProvider.future)) == preset.id) {
+      await ref.read(activeStudioPresetProvider.notifier).set('default');
     }
     if (mounted) GlazeToast.show(context, 'Preset deleted.');
   }

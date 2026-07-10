@@ -20,7 +20,6 @@ abstract class StudioConfig with _$StudioConfig {
     @Default(false) bool enabled,
     @Default([]) List<StudioAgent> agents,
     @Default('') String finalPresetId,
-    @Default('default') String studioPresetId,
     @Default('') String runApiConfigId,
     @Default('') String expensiveApiConfigId,
     @Default('') String cheapApiConfigId,
@@ -89,6 +88,7 @@ abstract class StudioPreset with _$StudioPreset {
     required String id,
     @Default('') String name,
     @Default([]) List<StudioPresetBlock> blocks,
+
     /// Per-agent on/off overrides keyed by controller spec id
     /// (e.g. `'continuity'`, `'narrative'`, `'final'`).
     /// An entry `false` disables the agent; `true` or absent = enabled.
