@@ -171,39 +171,43 @@ GoRouter buildRouter(
               routes: [
                 GoRoute(
                   path: 'api',
-                  pageBuilder: (_, state) => _adaptivePage(
+                  pageBuilder: (_, state) => _fadePage(
                     state: state,
                     child: const ApiSettingsScreen(startExpanded: true),
                   ),
                 ),
                 GoRoute(
                   path: 'personas',
-                  pageBuilder: (_, state) => _adaptivePage(
+                  pageBuilder: (_, state) => _fadePage(
                     state: state,
                     child: const PersonaListScreen(startExpanded: true),
                   ),
                 ),
                 GoRoute(
                   path: 'presets',
-                  pageBuilder: (_, state) => _adaptivePage(
+                  pageBuilder: (_, state) => _fadePage(
                     state: state,
                     child: const PresetListScreen(startExpanded: true),
                   ),
                 ),
                 GoRoute(
                   path: 'regex',
-                  pageBuilder: (_, state) => _adaptivePage(
+                  pageBuilder: (_, state) => _fadePage(
                     state: state,
                     child: const RegexSheet(startExpanded: true),
                   ),
                 ),
                 GoRoute(
                   path: 'lorebooks',
-                  pageBuilder: (_, state) => _adaptivePage(
+                  pageBuilder: (_, state) => _fadePage(
                     state: state,
                     child: const LorebookListScreen(startExpanded: true),
                   ),
                   routes: [
+                    // Drill-down inside the lorebook list (not a direct sub-view
+                    // of the tools overlay), so it keeps the platform push
+                    // transition — an opaque cover reads fine here and avoids
+                    // the OverlayPortal layout regression covered in tests.
                     GoRoute(
                       path: 'settings',
                       pageBuilder: (_, state) => _adaptivePage(
@@ -215,7 +219,7 @@ GoRouter buildRouter(
                 ),
                 GoRoute(
                   path: 'embeddings',
-                  pageBuilder: (_, state) => _adaptivePage(
+                  pageBuilder: (_, state) => _fadePage(
                     state: state,
                     child: const EmbeddingSettingsScreen(),
                   ),
