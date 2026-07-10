@@ -8,6 +8,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart'
     hide NotificationVisibility;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../platform/haptics.dart';
 import '../utils/platform_paths.dart';
 
 class NotificationNavigationData {
@@ -192,6 +193,11 @@ class GenerationNotificationService {
   }) async {
     _isGenerating = false;
     await _releaseForeground();
+
+    // Buzz the moment the bot's reply lands, whether the app is foregrounded
+    // (user watching the chat) or backgrounded (paired with the notification
+    // below). Gated by the user's incoming-message vibration toggle.
+    await Haptics.messageReceived();
 
     if (_isMobile && _lifecycleState != AppLifecycleState.resumed) {
       await sendMessageNotification(

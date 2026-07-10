@@ -61,6 +61,7 @@ abstract class AppSettings with _$AppSettings {
     @Default(false) bool addBlockAtTop,
     @Default(true) bool openCardAfterImport,
     @Default(true) bool hapticFeedback,
+    @Default(true) bool messageVibration,
     @Default(false) bool extractJanitorLocally,
   }) = _AppSettings;
 }
@@ -75,9 +76,15 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
       'hapticFeedback',
       defaultValue: true,
     );
-    // Cache the toggle so the central [Haptics] gate can decide synchronously
-    // in tap handlers.
+    final messageVibration = _readBoolPref(
+      prefs,
+      'messageVibration',
+      defaultValue: true,
+    );
+    // Cache the toggles so the central [Haptics] gate can decide synchronously
+    // in tap handlers and on message completion.
     Haptics.configure(enabled: hapticFeedback);
+    Haptics.configureMessageVibration(enabled: messageVibration);
     return AppSettings(
       enterToSend: _readBoolPref(prefs, 'enterToSend', defaultValue: true),
       hideMessageId: _readBoolPref(prefs, 'hideMessageId', defaultValue: false),
@@ -130,6 +137,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
         defaultValue: true,
       ),
       hapticFeedback: hapticFeedback,
+      messageVibration: messageVibration,
       extractJanitorLocally: _readBoolPref(
         prefs,
         'extractJanitorLocally',
@@ -169,11 +177,13 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setBool('addBlockAtTop', normalized.addBlockAtTop);
     await prefs.setBool('openCardAfterImport', normalized.openCardAfterImport);
     await prefs.setBool('hapticFeedback', normalized.hapticFeedback);
+    await prefs.setBool('messageVibration', normalized.messageVibration);
     await prefs.setBool(
       'extractJanitorLocally',
       normalized.extractJanitorLocally,
     );
     Haptics.configure(enabled: normalized.hapticFeedback);
+    Haptics.configureMessageVibration(enabled: normalized.messageVibration);
     state = AsyncData(normalized);
   }
 }
