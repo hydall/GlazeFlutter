@@ -33,7 +33,6 @@ import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/sheet_view.dart';
-import '../../shared/widgets/colored_markdown.dart';
 import 'widgets/character_variations_sheet.dart';
 
 // ─── Colour tokens ─────────────────────────────────────────────────────────
@@ -1154,6 +1153,11 @@ class _InfoTab extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
+            // Lightweight markdown only: standard inline/block formatting
+            // (bold, italic, strikethrough, lists, headings, links). The heavy
+            // custom components (glow/gradient/background/HTML-color shaders)
+            // and image rendering are intentionally left out — a bio never
+            // needs them and they cost layout/paint work here.
             child: GptMarkdown(
               hasHtmlTags(notes) ? htmlToMarkdown(notes) : notes,
               style: const TextStyle(
@@ -1163,59 +1167,13 @@ class _InfoTab extends StatelessWidget {
               ),
               onLinkTap: (url, title) async {
                 final uri = Uri.tryParse(url);
-                if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
               },
-              imageBuilder: (context, url, width, height) {
-                if (url.startsWith('http://') || url.startsWith('https://')) {
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: url,
-                      width: width,
-                      height: height,
-                      fit: BoxFit.contain,
-                    ),
-                  );
-                }
-                if (url.startsWith('data:')) {
-                  final commaIdx = url.indexOf(',');
-                  if (commaIdx > 0) {
-                    try {
-                      final bytes = Uri.parse(url).data!.contentAsBytes();
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(
-                          bytes,
-                          width: width,
-                          height: height,
-                          fit: BoxFit.contain,
-                        ),
-                      );
-                    } catch (_) {}
-                  }
-                }
-                final file = File(url);
-                if (file.existsSync()) {
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.file(
-                      file,
-                      width: width,
-                      height: height,
-                      fit: BoxFit.contain,
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-              inlineComponents: [
-                HtmlColorMd(),
-                GlowTextMd(),
-                ColorGlowTextMd(),
-                GradientTextMd(),
-                BackgroundTextMd(),
-                ImageMd(),
-              ],
+              // Suppress images so no network/file/data image loading happens.
+              imageBuilder: (context, url, width, height) =>
+                  const SizedBox.shrink(),
             ),
           ),
         ],
