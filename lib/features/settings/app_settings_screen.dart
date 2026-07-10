@@ -164,6 +164,15 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                     .read(appSettingsProvider.notifier)
                     .save(s.copyWith(hapticFeedback: v)),
               ),
+            if (Haptics.isMessageVibrationConfigurable)
+              MenuSwitchItem(
+                label: 'menu_message_vibration'.tr(),
+                description: 'desc_message_vibration'.tr(),
+                value: s.messageVibration,
+                onChanged: (v) => ref
+                    .read(appSettingsProvider.notifier)
+                    .save(s.copyWith(messageVibration: v)),
+              ),
           ],
         ),
         MenuGroup(

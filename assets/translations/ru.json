@@ -820,6 +820,8 @@
     "menu_interface_settings": "Настройки интерфейса",
     "menu_haptic_feedback": "Виброотклик",
     "desc_haptic_feedback": "Вибрация при нажатии на кнопки и элементы управления",
+    "menu_message_vibration": "Вибрация при сообщении",
+    "desc_message_vibration": "Вибрировать при получении сообщения от бота",
     "menu_app_toast_position": "Позиция уведомлений",
     "desc_app_toast_position": "Выберите, где будут появляться внутриприложенческие уведомления",
     "toast_position_top": "Сверху",

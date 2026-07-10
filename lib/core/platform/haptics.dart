@@ -23,6 +23,7 @@ class Haptics {
   Haptics._();
 
   static bool _enabled = true;
+  static bool _messageVibrationEnabled = true;
 
   /// Updates the cached iOS toggle. Called by the app settings notifier on
   /// load and whenever the toggle changes.
@@ -30,10 +31,30 @@ class Haptics {
     _enabled = enabled;
   }
 
+  /// Updates the cached incoming-message vibration toggle. Called by the app
+  /// settings notifier on load and whenever the toggle changes.
+  static void configureMessageVibration({required bool enabled}) {
+    _messageVibrationEnabled = enabled;
+  }
+
   /// Whether the haptic toggle is user-configurable on this platform (iOS only;
   /// see the class doc for why).
   static bool get isConfigurable =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+  /// Whether the incoming-message vibration is available on this platform.
+  /// Offered on both mobile platforms (Android + iOS) since it is an explicit
+  /// notification the user opts into, not an OS-level tap echo.
+  static bool get isMessageVibrationConfigurable {
+    if (kIsWeb) return false;
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+        return true;
+      default:
+        return false; // Desktop: no vibration hardware.
+    }
+  }
 
   /// Whether feedback should fire on this platform given the iOS toggle.
   static bool get shouldVibrate {
@@ -66,5 +87,15 @@ class Haptics {
   static Future<void> heavyImpact() async {
     if (!shouldVibrate) return;
     await HapticFeedback.heavyImpact();
+  }
+
+  /// Fires when a bot message finishes generating, gated by the user's
+  /// incoming-message vibration toggle. Unlike UI feedback this fires on
+  /// Android too, because it is an explicit app-level notification the user
+  /// opted into rather than a tap echo the OS already governs.
+  static Future<void> messageReceived() async {
+    if (!_messageVibrationEnabled) return;
+    if (!isMessageVibrationConfigurable) return;
+    await HapticFeedback.mediumImpact();
   }
 }
