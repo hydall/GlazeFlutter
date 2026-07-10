@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/utils/html_to_markdown.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/utils/avatar_image.dart';
 import '../../shared/widgets/glass_surface.dart';
@@ -13,6 +12,7 @@ import '../chat/chat_actions_service.dart';
 import '../chat/chat_provider.dart';
 import '../settings/app_settings_provider.dart';
 import 'chat_history_provider.dart';
+import 'widgets/message_preview_text.dart';
 
 class ChatHistoryList extends ConsumerStatefulWidget {
   final bool collapsed;
@@ -401,15 +401,13 @@ class _SessionTile extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    stripHtml(info.lastMessage).replaceAll('\n', ' '),
+                  MessagePreviewText(
+                    raw: info.lastMessage,
                     style: TextStyle(
                       fontSize: 13,
                       height: 16 / 13,
                       color: context.cs.onSurfaceVariant,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -456,14 +454,13 @@ class _SessionTile extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 4),
-            Text(
-              stripHtml(info.lastMessage).replaceAll('\n', ' '),
+            MessagePreviewText(
+              raw: info.lastMessage,
               style: TextStyle(
                 fontSize: 12,
                 color: context.cs.onSurfaceVariant,
               ),
               maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -704,15 +701,13 @@ class _GroupHeader extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    stripHtml(latest.lastMessage).replaceAll('\n', ' '),
+                  MessagePreviewText(
+                    raw: latest.lastMessage,
                     style: TextStyle(
                       fontSize: 13,
                       height: 16 / 13,
                       color: context.cs.onSurfaceVariant,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
