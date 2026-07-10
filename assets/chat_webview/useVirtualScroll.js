@@ -232,6 +232,63 @@ class UseVirtualScroll {
         this.refresh({ startAtBottom: true });
     }
 
+    // Record the topmost message currently in view plus its pixel offset from
+    // the container's top edge. Used to preserve the reading position across a
+    // full re-render — e.g. switching preset changes the active display regexes,
+    // which forces every message to re-render via setMessages. Returns null when
+    // nothing is rendered.
+    captureAnchor() {
+        const container = this.container;
+        if (!container || this.items.length === 0) return null;
+        const cTop = container.getBoundingClientRect().top;
+        for (let i = this.renderStart; i < this.renderEnd; i++) {
+            const item = this.items[i];
+            if (!item || !item.el || item.el.parentNode !== container) continue;
+            const r = item.el.getBoundingClientRect();
+            // The first rendered row whose bottom crosses the container's top
+            // edge is the one anchoring the current view.
+            if (r.bottom > cTop + 1) {
+                return { id: item.id, offset: r.top - cTop };
+            }
+        }
+        return null;
+    }
+
+    // Restore a position captured by captureAnchor: bring the anchor message
+    // back to the same pixel offset it held before the re-render. Returns true
+    // when the anchor was found and applied, false otherwise (e.g. the message
+    // no longer exists) so callers can fall back to the default position.
+    restoreAnchor(anchor) {
+        if (!anchor) return false;
+        const item = this.itemMap.get(anchor.id);
+        if (!item) return false;
+        const container = this.container;
+        const count = this.items.length;
+        const index = item.index;
+        // Render a window around the anchor so its element is mounted in the DOM.
+        const vh = container.clientHeight || 800;
+        const estInView = Math.max(20, Math.ceil(vh / this.estimateHeight) + this.getBuffer());
+        this.renderStart = Math.max(0, index - this.getBuffer());
+        this.renderEnd = Math.min(count, index + estInView);
+        this.visibleIndices.clear();
+        this.realVisibleIndices.clear();
+        this.updateSpacers();
+        this.renderDOM();
+        // Measure where the anchor landed and nudge scrollTop so it sits at the
+        // recorded offset again. Reading getBoundingClientRect forces a layout
+        // flush, so the delta reflects the freshly rendered geometry.
+        const cTop = container.getBoundingClientRect().top;
+        const currentOffset = item.el.getBoundingClientRect().top - cTop;
+        this.isProgrammaticScrolling = true;
+        container.scrollTop += currentOffset - anchor.offset;
+        clearTimeout(this._anchorUnlock);
+        this._anchorUnlock = setTimeout(() => {
+            this.isProgrammaticScrolling = false;
+            this.updateWindow();
+        }, 80);
+        return true;
+    }
+
     append(id, el) {
         if (this.itemMap.has(id)) {
             this.update(id, el);

@@ -508,8 +508,15 @@ class ChatBridgeController {
   // group property directly: _bridge.messages.setMessages(...).
 
   // Messages
-  Future<void> setMessages(List<ChatMessage> m, {int visibleStartIndex = 0}) =>
-      messages.setMessages(m, visibleStartIndex: visibleStartIndex);
+  Future<void> setMessages(
+    List<ChatMessage> m, {
+    int visibleStartIndex = 0,
+    bool preserveScroll = false,
+  }) => messages.setMessages(
+    m,
+    visibleStartIndex: visibleStartIndex,
+    preserveScroll: preserveScroll,
+  );
   Future<void> appendMessage(ChatMessage m) => messages.appendMessage(m);
   Future<void> appendMessages(List<ChatMessage> m, {int startIndex = 0}) =>
       messages.appendMessages(m, startIndex: startIndex);

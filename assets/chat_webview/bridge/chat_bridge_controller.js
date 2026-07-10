@@ -282,9 +282,13 @@ export class Bridge {
   }
 
   /* ---------- Message list API ---------- */
-  setMessages(messagesJson) {
+  setMessages(messagesJson, preserveScroll = false) {
     this.flush();
     this._suppressLoadMore = true;
+    // When re-rendering in place (e.g. a preset switch changes display regexes),
+    // remember the current reading position so the batch replace below doesn't
+    // yank the chat back to the top/bottom.
+    const anchor = preserveScroll ? this.virtualList.captureAnchor() : null;
     this._panelHost?.closeAll();
     const container = document.getElementById('chat-container') || document.body;
     if (![...container.classList].some(c => c.startsWith('layout-'))) {
@@ -306,6 +310,7 @@ export class Bridge {
     }
 
     this.virtualList.setMessagesBatch(ids, elements);
+    if (anchor) this.virtualList.restoreAnchor(anchor);
     this._hideLoadingScreen();
     this._imgGenTimer.ensureRunning();
     setTimeout(() => { this._suppressLoadMore = false; }, 1000);

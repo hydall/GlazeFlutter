@@ -84,7 +84,15 @@ class ChatWebViewBuildListeners {
           )),
         );
         b.setRegexContext(newList, character, effectivePersona);
-        b.setMessages(messages, visibleStartIndex: visibleStartIndex);
+        // Switching preset changes the active display regexes, which forces a
+        // full re-render of every message. Preserve the current scroll position
+        // so the chat stays put instead of jumping (see restoreAnchor in the
+        // webview virtual list).
+        b.setMessages(
+          messages,
+          visibleStartIndex: visibleStartIndex,
+          preserveScroll: true,
+        );
       }
     });
   }

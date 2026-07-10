@@ -302,7 +302,7 @@ void main() {
     });
 
     test('setMessages() closes panels before rendering a new batch', () {
-      final marker = 'setMessages(messagesJson) {';
+      final marker = 'setMessages(messagesJson';
       final idx = bridgeControllerJs.indexOf(marker);
       expect(idx, isNot(-1));
       final body = _extractBlockBody(bridgeControllerJs, idx);
