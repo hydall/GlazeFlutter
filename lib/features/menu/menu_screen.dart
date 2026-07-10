@@ -1,7 +1,9 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/chat_message.dart';
 import '../../core/services/onboarding_service.dart';
@@ -17,7 +19,7 @@ import '../catalog/widgets/janitor_extract_sheet.dart';
 import '../catalog/widgets/janitor_login_sheet.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
-import '../dev_chat/dev_chat_provider.dart';
+import '../settings/app_settings_provider.dart';
 import 'update_dialog.dart';
 import '../../core/services/update_check_service.dart';
 
@@ -36,11 +38,18 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
   ShellHeaderConfig buildShellHeader() =>
       ShellHeaderConfig(title: 'menu_menu_title'.tr());
 
+  Future<void> _openLink(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final navHeight = ref.watch(navHeightProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0;
-    final devChatHidden = ref.watch(devChatHiddenProvider).value ?? false;
+    final lang = ref.watch(appSettingsProvider).value?.language ?? 'en';
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -51,50 +60,14 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
               bottom: navHeight + 20,
             ),
             children: [
-                if (!devChatHidden)
-                  MenuGroup(
-                    header: 'menu_dev_chat_header'.tr(),
-                    items: [
-                      MenuItem(
-                        icon: Icons.support_agent_outlined,
-                        label: 'menu_dev_chat'.tr(),
-                        subtitle: 'menu_dev_chat_hint'.tr(),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.visibility_off_outlined),
-                          tooltip: 'menu_dev_chat_hide'.tr(),
-                          onPressed: () => ref
-                              .read(devChatHiddenProvider.notifier)
-                              .set(true),
-                        ),
-                        onTap: () => context.push('/dev-chat'),
-                      ),
-                    ],
-                  ),
                 MenuGroup(
                   header: 'section_settings'.tr(),
                   items: [
-                    if (devChatHidden)
-                      MenuSwitchItem(
-                        label: 'menu_dev_chat_show'.tr(),
-                        value: false,
-                        onChanged: (_) => ref
-                            .read(devChatHiddenProvider.notifier)
-                            .set(false),
-                      ),
                     MenuItem(
                       icon: Icons.settings_outlined,
                       label: 'menu_app_settings'.tr(),
                       subtitle: 'menu_app_settings_hint'.tr(),
                       onTap: () => context.push('/menu/settings'),
-                    ),
-                    MenuItem(
-                      icon: Icons.replay_rounded,
-                      label: 'onboarding_replay'.tr(),
-                      subtitle: 'onboarding_replay_hint'.tr(),
-                      onTap: () async {
-                        await resetOnboarding();
-                        if (context.mounted) showOnboarding(context);
-                      },
                     ),
                     MenuItem(
                       icon: Icons.backup_outlined,
@@ -253,16 +226,51 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                   header: 'section_info'.tr(),
                   items: [
                     MenuItem(
+                      icon: Icons.info_outline_rounded,
+                      label: 'menu_about'.tr(),
+                      subtitle: 'menu_about_hint'.tr(),
+                      onTap: () => context.push('/menu/about'),
+                    ),
+                    MenuItem(
                       icon: Icons.menu_book_rounded,
                       label: 'menu_glossary'.tr(),
                       subtitle: 'menu_glossary_hint'.tr(),
                       onTap: () => context.push('/menu/glossary'),
                     ),
+                    if (lang == 'en')
+                      MenuItem(
+                        iconWidget: SvgPicture.asset(
+                          'assets/logos/discord.svg',
+                          colorFilter: const ColorFilter.mode(
+                            Color(0xFF5865F2),
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                        label: 'about_discord'.tr(),
+                        subtitle: 'about_join_community'.tr(),
+                        onTap: () => _openLink('https://discord.gg/jnGhd7p6Ht'),
+                      )
+                    else
+                      MenuItem(
+                        iconWidget: SvgPicture.asset(
+                          'assets/logos/telegram.svg',
+                          colorFilter: const ColorFilter.mode(
+                            Color(0xFF2AABEE),
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                        label: 'about_telegram'.tr(),
+                        subtitle: 'about_join_community'.tr(),
+                        onTap: () => _openLink('https://t.me/glazeapp'),
+                      ),
                     MenuItem(
-                      icon: Icons.info_outline_rounded,
-                      label: 'menu_about'.tr(),
-                      subtitle: 'menu_about_hint'.tr(),
-                      onTap: () => context.push('/menu/about'),
+                      icon: Icons.replay_rounded,
+                      label: 'onboarding_replay'.tr(),
+                      subtitle: 'onboarding_replay_hint'.tr(),
+                      onTap: () async {
+                        await resetOnboarding();
+                        if (context.mounted) showOnboarding(context);
+                      },
                     ),
                   ],
                 ),

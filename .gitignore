@@ -190,9 +190,6 @@ pubget.txt
 # Browser-Claude chat output (patches / PR drafts, not committed as-is)
 docs/chatoutput/
 
-# Dev Chat: local Worker URL for the app (written by dev_chat_bridge/deploy.ps1)
-dart_defines.json
-
 # OpenCode local config
 opencode.json
 opencode.jsonc
