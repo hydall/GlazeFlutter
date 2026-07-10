@@ -256,32 +256,40 @@ CoverageResult computeLorebookCoverage({
 
   final hasVector = dedupedVectorEntries.isNotEmpty;
 
-  // Apply the same slot-split logic as mergeKeywordVector / lorebook_scanner.
+  // Apply the same keyword-first logic as mergeKeywordVector.
   // Constants bypass this entirely — they are always in-budget.
-  final splitPct = globalSettings.keywordVectorSplit;
-  final keywordSlots = hasVector ? (maxInjectedEntries * splitPct / 100).round() : maxInjectedEntries;
-  final vectorSlots = maxInjectedEntries - keywordSlots;
+  // Keywords fill up to maxInjectedEntries; vectors fill remaining slots
+  // but no more than vectorTopK (hard cap, no carry-over from unused
+  // keyword slots).
+  final maxVector = globalSettings.vectorTopK;
 
-  final usedKeyword = keywordActivatedList.take(keywordSlots).toList();
-  final unusedKeywordSlots = keywordSlots - usedKeyword.length;
-  final adjustedVectorSlots = vectorSlots + unusedKeywordSlots;
+  final usedKeyword = keywordActivatedList
+      .take(maxInjectedEntries - constantActivated.length)
+      .toList();
 
-  final usedVector = dedupedVectorEntries.take(adjustedVectorSlots).toList();
-
-  // Keyword entries beyond keywordSlots are cut off by the entry cap.
-  final keywordCutOffCount = keywordActivatedList.length > keywordSlots
-      ? keywordActivatedList.length - keywordSlots
+  final keywordSlotCount = constantActivated.length + usedKeyword.length;
+  final remainingSlots = maxInjectedEntries - keywordSlotCount;
+  final vectorSlots = hasVector
+      ? (remainingSlots < maxVector ? remainingSlots : maxVector)
       : 0;
-  for (int i = keywordSlots; i < keywordActivatedList.length; i++) {
+  final usableVectorSlots = vectorSlots < 0 ? 0 : vectorSlots;
+
+  final usedVector = dedupedVectorEntries.take(usableVectorSlots).toList();
+
+  // Keyword entries beyond the keyword budget are cut off by the entry cap.
+  final keywordCutOffCount = keywordActivatedList.length > usedKeyword.length
+      ? keywordActivatedList.length - usedKeyword.length
+      : 0;
+  for (int i = usedKeyword.length; i < keywordActivatedList.length; i++) {
     keywordActivatedList[i].cutOffByBudget = true;
   }
 
-  // Vector entries beyond adjustedVectorSlots are cut off by the entry cap.
-  final vectorCutOffCount = dedupedVectorEntries.length > adjustedVectorSlots
-      ? dedupedVectorEntries.length - adjustedVectorSlots
+  // Vector entries beyond usableVectorSlots are cut off by the entry cap.
+  final vectorCutOffCount = dedupedVectorEntries.length > usableVectorSlots
+      ? dedupedVectorEntries.length - usableVectorSlots
       : 0;
   final vectorInBudget = usedVector;
-  final vectorOverBudget = dedupedVectorEntries.skip(adjustedVectorSlots).toList();
+  final vectorOverBudget = dedupedVectorEntries.skip(usableVectorSlots).toList();
 
   final totalCutOff = keywordCutOffCount + vectorCutOffCount;
   // Constants are always active; keyword/vector cut-offs still count as "activated"
@@ -312,7 +320,7 @@ CoverageResult computeLorebookCoverage({
     // In-budget keyword entries.
     ...usedKeyword.map(_toCoverage),
     // Over-budget keyword entries (cut off by entry cap).
-    ...keywordActivatedList.skip(keywordSlots).map((c) {
+    ...keywordActivatedList.skip(usedKeyword.length).map((c) {
       final base = _toCoverage(c);
       return CoverageEntry(
         id: base.id,

@@ -83,7 +83,6 @@ class _CoveragePanelState extends ConsumerState<CoveragePanel> {
             character: character,
             activations: activations,
             chatId: session.id,
-            overrideTopK: settings.maxInjectedEntries,
           );
           final entryMap = <String, LorebookEntry>{};
           final entryToLbId = <String, String>{};
