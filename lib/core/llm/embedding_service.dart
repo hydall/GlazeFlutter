@@ -17,6 +17,26 @@ class EmbeddingConfig {
   });
 }
 
+/// Resolves a raw embedding endpoint into the concrete `/embeddings` URL.
+///
+/// Mirrors the chat transport's `normalizeEndpoint`: trims whitespace and
+/// prepends `https://` when no scheme is present. Without the scheme a
+/// separate embedding endpoint entered as `api.host/v1` becomes a malformed
+/// scheme-less URL that iOS's HTTP stack rejects — which is why embeddings
+/// failed on iPhone whenever the vector endpoint differed from the (already
+/// schemed) chat endpoint, yet worked when both were shared.
+String resolveEmbeddingEndpoint(String endpoint) {
+  var normalized = endpoint.trim();
+  if (normalized.isEmpty) return normalized;
+  if (!normalized.startsWith(RegExp(r'https?://', caseSensitive: false))) {
+    normalized = 'https://$normalized';
+  }
+  if (RegExp(r'/embeddings/?$', caseSensitive: false).hasMatch(normalized)) {
+    return normalized;
+  }
+  return '${normalized.replaceFirst(RegExp(r'/+$'), '')}/embeddings';
+}
+
 String embeddingModelSignature(EmbeddingConfig config) {
   final endpoint = config.endpoint.trim();
   final model = config.model.trim();
@@ -257,7 +277,7 @@ class EmbeddingService {
   }) async {
     if (texts.isEmpty) return [];
 
-    final url = _resolveEndpoint(config.endpoint);
+    final url = resolveEmbeddingEndpoint(config.endpoint);
 
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (config.apiKey.isNotEmpty) {
@@ -303,14 +323,6 @@ class EmbeddingService {
       }
       throw 'Network error: ${e.message}';
     }
-  }
-
-  String _resolveEndpoint(String endpoint) {
-    if (endpoint.isEmpty) return endpoint;
-    if (RegExp(r'/embeddings/?$', caseSensitive: false).hasMatch(endpoint)) {
-      return endpoint;
-    }
-    return '${endpoint.replaceFirst(RegExp(r'/+$'), '')}/embeddings';
   }
 
   List<String> _chunkText(String text, int maxTokens) {

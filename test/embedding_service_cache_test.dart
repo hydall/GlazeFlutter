@@ -14,6 +14,59 @@ void main() {
     });
   });
 
+  group('resolveEmbeddingEndpoint', () {
+    test('prepends https:// when scheme is missing (iOS fix)', () {
+      expect(
+        resolveEmbeddingEndpoint('api.host/v1'),
+        'https://api.host/v1/embeddings',
+      );
+    });
+
+    test('preserves an existing http:// scheme', () {
+      expect(
+        resolveEmbeddingEndpoint('http://127.0.0.1:11434/v1'),
+        'http://127.0.0.1:11434/v1/embeddings',
+      );
+    });
+
+    test('preserves an existing https:// scheme', () {
+      expect(
+        resolveEmbeddingEndpoint('https://api.openai.com/v1'),
+        'https://api.openai.com/v1/embeddings',
+      );
+    });
+
+    test('trims whitespace before resolving', () {
+      expect(
+        resolveEmbeddingEndpoint('  https://api.host/v1  '),
+        'https://api.host/v1/embeddings',
+      );
+    });
+
+    test('does not double-append when path already ends in /embeddings', () {
+      expect(
+        resolveEmbeddingEndpoint('https://api.host/v1/embeddings'),
+        'https://api.host/v1/embeddings',
+      );
+      expect(
+        resolveEmbeddingEndpoint('api.host/v1/embeddings/'),
+        'https://api.host/v1/embeddings/',
+      );
+    });
+
+    test('strips trailing slashes before appending', () {
+      expect(
+        resolveEmbeddingEndpoint('https://api.host/v1//'),
+        'https://api.host/v1/embeddings',
+      );
+    });
+
+    test('returns empty string untouched', () {
+      expect(resolveEmbeddingEndpoint(''), '');
+      expect(resolveEmbeddingEndpoint('   '), '');
+    });
+  });
+
   group('EmbeddingConfig', () {
     test('defaults are sensible', () {
       const config = EmbeddingConfig(endpoint: 'https://x');
