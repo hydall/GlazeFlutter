@@ -1164,6 +1164,12 @@
     "action_unhide": "Показать персонажа",
     "char_hidden_toast": "Персонаж скрыт",
     "char_unhidden_toast": "Персонаж снова виден",
+    "chars_hidden_toast": {
+        "one": "{} персонаж скрыт",
+        "few": "{} персонажа скрыто",
+        "many": "{} персонажей скрыто",
+        "other": "{} персонажа скрыто"
+    },
     "hidden_chars_revealed": "Скрытые персонажи показаны",
     "hidden_chars_hidden": "Скрытые персонажи спрятаны",
     "catalog_filters": "Фильтры",
