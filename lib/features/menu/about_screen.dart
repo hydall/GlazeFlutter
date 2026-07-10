@@ -158,22 +158,6 @@ class _CommunitySection extends StatelessWidget {
       header: 'about_community_header'.tr(),
       headerIcon: Icons.people_outline_rounded,
       items: [
-        if (lang == 'en')
-          _LinkTile(
-            svgAsset: 'assets/logos/discord.svg',
-            label: 'about_discord'.tr(),
-            subtitle: 'about_join_community'.tr(),
-            brandColor: const Color(0xFF5865F2),
-            onTap: () => onLink('https://discord.gg/jnGhd7p6Ht'),
-          )
-        else
-          _LinkTile(
-            svgAsset: 'assets/logos/telegram.svg',
-            label: 'about_telegram'.tr(),
-            subtitle: 'about_join_community'.tr(),
-            brandColor: const Color(0xFF2AABEE),
-            onTap: () => onLink('https://t.me/glazeapp'),
-          ),
         _LinkTile(
           svgAsset: 'assets/logos/github.svg',
           label: 'btn_github'.tr(),
