@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../../core/models/character.dart';
 import '../../../../core/models/chat_message.dart';
+import '../../../extensions/providers/extensions_settings_provider.dart';
 import '../../../extensions/services/extension_post_gen_service.dart';
 import '../../state/post_gen_status_provider.dart';
 import 'stage_context.dart';
@@ -28,12 +29,17 @@ class ExtBlocksStage {
     if (session.id.isEmpty || session.messages.isEmpty) return;
     final lastMessage = session.messages.last;
     if (lastMessage.role == 'user' || lastMessage.isError) return;
+    // Do not publish a post-gen task for a disabled feature. The service
+    // also guards this, but it returns early silently; publishing status here
+    // would otherwise show a false "Extension blocks done" card.
+    if (!ctx.ref.read(extensionsSettingsProvider).enabled) return;
     if (ctx.ref.mounted) {
-      ctx.ref.read(postGenStatusProvider.notifier).state =
-          PostGenStatusState.running(
-            sessionId: session.id,
-            task: PostGenTask.extBlocks,
-          );
+      ctx.ref
+          .read(postGenStatusProvider.notifier)
+          .state = PostGenStatusState.running(
+        sessionId: session.id,
+        task: PostGenTask.extBlocks,
+      );
     }
     try {
       final extensionService = ctx.ref.read(extensionPostGenServiceProvider);
@@ -45,22 +51,22 @@ class ExtBlocksStage {
         agentSwipeId: agentSwipeId,
       );
       if (ctx.ref.mounted) {
-        ctx.ref.read(postGenStatusProvider.notifier).state =
-            PostGenStatusState.done(
-              sessionId: session.id,
-              task: PostGenTask.extBlocks,
-            );
+        ctx.ref
+            .read(postGenStatusProvider.notifier)
+            .state = PostGenStatusState.done(
+          sessionId: session.id,
+          task: PostGenTask.extBlocks,
+        );
       }
     } catch (e) {
-      debugPrint(
-        '[ExtBlocksStage] launch for swipe=$agentSwipeId failed: $e',
-      );
+      debugPrint('[ExtBlocksStage] launch for swipe=$agentSwipeId failed: $e');
       if (ctx.ref.mounted) {
-        ctx.ref.read(postGenStatusProvider.notifier).state =
-            PostGenStatusState.error(
-              sessionId: session.id,
-              task: PostGenTask.extBlocks,
-            );
+        ctx.ref
+            .read(postGenStatusProvider.notifier)
+            .state = PostGenStatusState.error(
+          sessionId: session.id,
+          task: PostGenTask.extBlocks,
+        );
       }
     }
   }
