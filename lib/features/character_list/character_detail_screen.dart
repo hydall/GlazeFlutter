@@ -1208,12 +1208,21 @@ class _InfoTab extends StatelessWidget {
                 }
                 return const SizedBox.shrink();
               },
+              // A custom inlineComponents list replaces gpt_markdown's built-in
+              // inline set, so the standard emphasis parsers must be listed
+              // explicitly — otherwise `**bold**` / `*italic*` render as literal
+              // asterisks. Bold is listed before italic so `**` wins over `*`.
+              // Colours are left null so emphasis inherits the bio text colour.
               inlineComponents: [
                 HtmlColorMd(),
                 GlowTextMd(),
                 ColorGlowTextMd(),
                 GradientTextMd(),
                 BackgroundTextMd(),
+                ColoredBoldMd(),
+                ColoredUnderscoreBoldMd(),
+                ColoredItalicMd(),
+                ColoredUnderscoreItalicMd(),
                 ImageMd(),
               ],
             ),
