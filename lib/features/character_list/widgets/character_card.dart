@@ -13,6 +13,7 @@ import '../../../core/state/character_provider.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/card_tag_chips.dart';
+import '../../../shared/widgets/dust_disintegration.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
@@ -41,13 +42,18 @@ class CharacterCard extends ConsumerStatefulWidget {
 }
 
 class _CharacterCardState extends ConsumerState<CharacterCard>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   bool _pressed = false;
   bool _hovered = false;
   int _tokenCount = 0;
   late final AnimationController _entryCtrl;
   late final Animation<double> _fadeAnim;
   late final Animation<double> _scaleAnim;
+
+  /// Snapshot boundary + dust state for the iOS-style delete animation.
+  final GlobalKey _boundaryKey = GlobalKey();
+  late final AnimationController _dustCtrl;
+  DustParticles? _dust;
 
   Character get character => widget.character;
   String get _displayName {
@@ -69,6 +75,10 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
     _entryCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
+    );
+    _dustCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
     );
     final curve = CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut);
     _fadeAnim = curve;
@@ -93,6 +103,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   @override
   void dispose() {
     _entryCtrl.dispose();
+    _dustCtrl.dispose();
     super.dispose();
   }
 
@@ -113,11 +124,34 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         ? const Color(0xFFFF6B6B).withValues(alpha: shadowAlpha)
         : Colors.black.withValues(alpha: shadowAlpha);
 
+    // Once a delete is triggered the card is replaced in-place by its dust
+    // cloud: the sampled particles scatter while the grid keeps the slot until
+    // the animation ends and the character is actually removed.
+    if (_dust != null) {
+      return FadeTransition(
+        opacity: _fadeAnim,
+        child: ScaleTransition(
+          scale: _scaleAnim,
+          child: IgnorePointer(
+            child: AnimatedBuilder(
+              animation: _dustCtrl,
+              builder: (_, _) => CustomPaint(
+                painter: DustPainter(_dust!, _dustCtrl.value),
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return FadeTransition(
       opacity: _fadeAnim,
       child: ScaleTransition(
         scale: _scaleAnim,
-      child: MouseRegion(
+      child: RepaintBoundary(
+        key: _boundaryKey,
+        child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
         child: GestureDetector(
@@ -218,6 +252,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
             ),
           ),
         ),
+      ),
       ),
       ),
     );
@@ -441,7 +476,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
           centered: true,
           onTap: () async {
             Navigator.of(context, rootNavigator: true).pop();
-            await ref.read(charactersProvider.notifier).remove(character.id);
+            await _disintegrate();
           },
         ),
         BottomSheetItem(
@@ -451,6 +486,23 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         ),
       ],
     );
+  }
+
+  /// Plays the iOS-style "crumble to dust" animation in place, then removes the
+  /// character. Capture the notifier up front so the deletion still lands even
+  /// though this card unmounts the instant [remove] rebuilds the grid.
+  Future<void> _disintegrate() async {
+    if (_dust != null) return; // already dissolving
+    final notifier = ref.read(charactersProvider.notifier);
+    final data = await DustParticles.capture(_boundaryKey);
+    if (!mounted || data == null) {
+      // Couldn't snapshot (e.g. unmounted) — fall back to an instant delete.
+      await notifier.remove(character.id);
+      return;
+    }
+    setState(() => _dust = data);
+    await _dustCtrl.forward(from: 0);
+    await notifier.remove(character.id);
   }
 }
 
