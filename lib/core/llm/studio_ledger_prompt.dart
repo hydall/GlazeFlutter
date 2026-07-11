@@ -218,7 +218,7 @@ Rules:
 - Do not mark an entity absent unless it explicitly leaves, dies, is left behind, or the scene changes.
 - Return <studio_ledger> plus <glaze_memory_export> JSON.
 - Prefer patch ops in the ops list for persistence. Do not rewrite the whole world state.
-- Reuse an exact key from <current_state> when it represents the same fact. Update it with set; do not create a synonym key.
+- Reuse an exact key from <current_state> or <existing_keys> when it represents the same fact. Update it with set; do not create a synonym key.
 - Keep entity/relationship/arc/world state compact. Update current truth; do not create a history log.
 - Never output ledger text as story prose or a chat message.
 - Entity state keys: npc:Name.relationship_to_user, npc:Name.attitude_to_user, npc:Name.knowledge, npc:Name.boundaries, npc:Name.card_overrides

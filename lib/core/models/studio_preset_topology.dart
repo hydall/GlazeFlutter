@@ -47,7 +47,7 @@ StudioPreset prepareStudioPresetForMode(
       final content = StudioBriefMacroRenderer.stripStudioBriefMacros(
         block.content,
       );
-      if (content.isEmpty) continue;
+      if (content.trim().isEmpty) continue;
       candidate = block.copyWith(content: content);
     }
     if (candidate.kind == 'tracker_instruction') {

@@ -150,6 +150,7 @@ void main() {
       expect(currentState, isNot(contains('npc:Rebecca.attitude_to_user')));
       expect(prompt, contains('<existing_keys>'));
       expect(prompt, contains('npc:Rebecca.attitude_to_user'));
+      expect(prompt, contains('from <current_state> or <existing_keys>'));
       expect(prompt, isNot(contains('Max value length')));
     });
   });

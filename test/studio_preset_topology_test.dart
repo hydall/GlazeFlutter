@@ -74,7 +74,7 @@ void main() {
     );
     expect(
       preset.blocks.firstWhere((b) => b.id == 'mixed_briefs').content,
-      'Keep this independent instruction.',
+      'Keep this independent instruction.\n\n',
     );
     expect(
       preset.blocks.firstWhere((b) => b.id == 'beauty_extractor').enabled,

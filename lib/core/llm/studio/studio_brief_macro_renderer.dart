@@ -25,13 +25,8 @@ class StudioBriefMacroRenderer {
   static bool hasAnyStudioBriefMacro(String content) =>
       studioBriefMacroRegex.hasMatch(content);
 
-  static String stripStudioBriefMacros(String content) => content
-      .replaceAll(studioBriefMacroRegex, '')
-      .split('\n')
-      .map((line) => line.trimRight())
-      .where((line) => line.isNotEmpty)
-      .join('\n')
-      .trim();
+  static String stripStudioBriefMacros(String content) =>
+      content.replaceAll(studioBriefMacroRegex, '');
 
   /// Replaces all `{{studio_*_brief}}` macros in [content] with the
   /// corresponding expanded brief text from [priorBriefs].

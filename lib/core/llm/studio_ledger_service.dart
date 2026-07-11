@@ -473,7 +473,7 @@ Ops format:
 
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
 Allowed ops: set, append_unique, delete.
-Reuse an exact key from <current_state> for the same fact; update it with set instead of creating a synonym key.
+Reuse an exact key from <current_state> or <existing_keys> for the same fact; update it with set instead of creating a synonym key.
 Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).''';
 
     return const StudioAuxPromptAssembler().assemble(

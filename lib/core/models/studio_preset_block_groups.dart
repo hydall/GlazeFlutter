@@ -53,6 +53,7 @@ bool isStudioPresetGroupHeader(StudioPresetBlock block) =>
 final _leadingGroupTags = RegExp(
   r'^\s*(?:(</[A-Za-z][\w-]*>)\s*)?(?:(<[A-Za-z][\w-]*>)\s*)?',
 );
+final _standaloneClosingTag = RegExp(r'^\s*</[A-Za-z][\w-]*>\s*$');
 
 /// Converts legacy Loom boundaries, where each header closes the previous
 /// section and opens its own, into explicit system blocks owned by the group.
@@ -128,13 +129,14 @@ List<StudioPresetBlock> normalizeStudioGroupBoundaries(
   if (pendingClose != null && previousHeaderId != null) {
     final existingClose = output.lastOrNull;
     if (existingClose != null &&
-        existingClose.content.trim() == pendingClose &&
-        existingClose != output.first) {
+        existingClose != output.first &&
+        _standaloneClosingTag.hasMatch(existingClose.content)) {
       output[output.length - 1] = existingClose.copyWith(
         id: '${previousHeaderId}_group_close',
         title: 'Closing tag',
         kind: 'group_close',
         role: 'system',
+        content: pendingClose,
       );
     } else {
       output.add(

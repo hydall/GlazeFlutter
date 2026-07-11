@@ -140,6 +140,33 @@ void main() {
     );
   });
 
+  test('replaces a mismatched final standalone close', () {
+    const legacy = [
+      StudioPresetBlock(
+        id: 'lore_header',
+        title: '━ Lore',
+        content: '<loomlore>\nLore instructions',
+        order: 0,
+      ),
+      StudioPresetBlock(id: 'lore_option', content: 'Option', order: 1),
+      StudioPresetBlock(
+        id: 'legacy_close',
+        role: 'system',
+        content: '</loomwrong>',
+        order: 2,
+      ),
+    ];
+
+    final normalized = normalizeStudioGroupBoundaries(legacy);
+
+    expect(normalized.any((block) => block.content == '</loomwrong>'), isFalse);
+    expect(
+      normalized.where((block) => block.content == '</loomlore>'),
+      hasLength(1),
+    );
+    expect(normalized.last.id, 'lore_header_group_close');
+  });
+
   test('normalizes legacy cross-group tags into owned boundary blocks', () {
     const legacy = [
       StudioPresetBlock(
