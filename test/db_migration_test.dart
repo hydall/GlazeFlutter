@@ -76,7 +76,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 66);
+      expect(version, 67);
     });
 
     test(
@@ -113,11 +113,38 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 66);
+        expect(version.first.read<int>('user_version'), 67);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },
     );
+
+    test('v67 upgrade tolerates a v66 schema without studio_preset_id', () async {
+      final file = File(
+        '${Directory.systemTemp.path}/glaze_mig_studio_${DateTime.now().microsecondsSinceEpoch}.db',
+      );
+      addTearDown(() async {
+        if (file.existsSync()) await file.delete();
+      });
+
+      final seeded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      await seeded.customSelect('SELECT 1').get();
+      await seeded.customStatement('PRAGMA user_version = 66');
+      await seeded.close();
+
+      final upgraded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      addTearDown(() async => upgraded.close());
+      await upgraded.customSelect('SELECT 1').get();
+
+      final version = await upgraded
+          .customSelect('PRAGMA user_version')
+          .getSingle();
+      expect(version.read<int>('user_version'), 67);
+    });
 
     test('memory catalog table exists in current schema', () async {
       final rows = await db
