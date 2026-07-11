@@ -156,11 +156,14 @@ void main() {
 
     final items = groupStudioPresetBlocks(narrativeBlocks);
 
-    expect(items, hasLength(5));
+    expect(items, hasLength(4));
     expect(items.first.exclusive, isTrue);
-    expect(items.first.children.map((block) => block.id), ['ao3', 'anime']);
-    expect(items.skip(1).map((item) => item.standalone?.id), [
+    expect(items.first.children.map((block) => block.id), [
+      'ao3',
       'endless',
+      'anime',
+    ]);
+    expect(items.skip(1).map((item) => item.standalone?.id), [
       'bratty',
       'doujinshi',
       'deflections',

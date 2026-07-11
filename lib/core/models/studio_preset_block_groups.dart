@@ -48,7 +48,6 @@ const _exclusiveStudioHeaders = <String>{
 };
 
 const _narrativeStyleAddonTitles = <String>{
-  'endless storytelling',
   'bratty ass narrative',
   'doujinshi narrative',
   'emotional deflections',
