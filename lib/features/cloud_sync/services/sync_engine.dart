@@ -1212,9 +1212,13 @@ class SyncEngine {
     final pipelineSettings = prefs.getString(
       SyncSerialization.pipelineSettingsKey,
     );
-    if (pipelineSettings == null) return null;
+    final activeStudioPresetId = prefs.getString(
+      SyncSerialization.activeStudioPresetKey,
+    );
+    if (pipelineSettings == null && activeStudioPresetId == null) return null;
     return SyncSerialization.localStoragePayload(
       pipelineSettings: pipelineSettings,
+      activeStudioPresetId: activeStudioPresetId,
     );
   }
 
@@ -1231,10 +1235,22 @@ class SyncEngine {
         );
       }
     }
+    final activeStudioPresetId = data[SyncSerialization.activeStudioPresetKey];
+    if (activeStudioPresetId is String) {
+      if (activeStudioPresetId.isEmpty) {
+        await prefs.remove(SyncSerialization.activeStudioPresetKey);
+      } else {
+        await prefs.setString(
+          SyncSerialization.activeStudioPresetKey,
+          activeStudioPresetId,
+        );
+      }
+    }
   }
 
   Future<void> _deleteLocalStorage() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(SyncSerialization.pipelineSettingsKey);
+    await prefs.remove(SyncSerialization.activeStudioPresetKey);
   }
 }

@@ -4,7 +4,9 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/state/character_provider.dart';
+import '../../../core/state/active_studio_preset_provider.dart';
 import '../../../core/state/chat_session_ops_provider.dart';
+import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../../../shared/theme/theme_provider.dart';
@@ -327,6 +329,8 @@ class SyncController {
     _ref.invalidate(lorebooksProvider);
     _ref.invalidate(chatSessionOpsProvider);
     _ref.invalidate(chatHistoryProvider);
+    _ref.invalidate(activeStudioPresetProvider);
+    _ref.invalidate(studioPresetProvider);
     _ref.read(themeProvider.notifier).reload();
 
     // Bump the version counter so widgets that watch avatarVersionProvider

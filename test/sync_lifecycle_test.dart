@@ -780,6 +780,35 @@ void main() {
     },
   );
 
+  test('Cloud round-trip restores the active Studio preset', () async {
+    const activePreset = 'studio_loom_causal_direct_v1';
+    final source = SyncWorld();
+    final sourcePrefs = await SharedPreferences.getInstance();
+    await sourcePrefs.setString(
+      SyncSerialization.activeStudioPresetKey,
+      activePreset,
+    );
+    await source.engine.pushEntities(onProgress: (_) {});
+
+    final cloudPayload =
+        jsonDecode(
+              source.cloud.files[cloudPath('local_storage', 'local_storage')]!,
+            )
+            as Map<String, dynamic>;
+    expect(cloudPayload[SyncSerialization.activeStudioPresetKey], activePreset);
+
+    SharedPreferences.setMockInitialValues({});
+    final target = SyncWorld();
+    target.cloud.files.addAll(source.cloud.files);
+    await target.engine.pullEntities(onProgress: (_) {}, onConflict: (_) {});
+
+    final targetPrefs = await SharedPreferences.getInstance();
+    expect(
+      targetPrefs.getString(SyncSerialization.activeStudioPresetKey),
+      activePreset,
+    );
+  });
+
   test(
     'Singleton push: lorebooks/api_presets/theme_presets upload as list',
     () async {

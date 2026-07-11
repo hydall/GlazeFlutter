@@ -584,10 +584,14 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final pipelineSettings = prefs.getString(
       SyncSerialization.pipelineSettingsKey,
     );
-    if (pipelineSettings != null) {
+    final activeStudioPresetId = prefs.getString(
+      SyncSerialization.activeStudioPresetKey,
+    );
+    if (pipelineSettings != null || activeStudioPresetId != null) {
       const type = 'local_storage';
       final payload = SyncSerialization.localStoragePayload(
         pipelineSettings: pipelineSettings,
+        activeStudioPresetId: activeStudioPresetId,
       );
       final hash = SyncSerialization.computeSyncHash(payload);
       final key = entryKey(type, type);

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -911,6 +912,7 @@ void main() {
         'theme_active_preset': 'p1',
         'theme_accent': '7996CE',
         'activePresetId': 'preset-42',
+        'activeStudioPresetId': 'studio_loom_causal_direct_v1',
         'enterToSend': true,
         'someInt': 42,
         'someDouble': 3.14,
@@ -928,10 +930,63 @@ void main() {
       expect(sp.getString('theme_active_preset'), equals('p1'));
       expect(sp.getString('theme_accent'), equals('7996CE'));
       expect(sp.getString('activePresetId'), equals('preset-42'));
+      expect(
+        sp.getString('activeStudioPresetId'),
+        equals('studio_loom_causal_direct_v1'),
+      );
       expect(sp.getBool('enterToSend'), isTrue);
       expect(sp.getInt('someInt'), equals(42));
       expect(sp.getDouble('someDouble'), closeTo(3.14, 0.001));
       expect(sp.getStringList('stringList'), equals(['a', 'b', 'c']));
+    });
+
+    test('restores Studio preset blocks without changing their order', () async {
+      final blocks = [
+        {
+          'id': 'anime',
+          'title': 'Anime-Style Story',
+          'kind': 'prompt',
+          'role': 'system',
+          'section': 'final',
+          'enabled': true,
+          'content': '<loomstyle>anime</loomstyle>',
+        },
+        {
+          'id': 'bratty',
+          'title': 'Bratty Ass Narrative',
+          'kind': 'prompt',
+          'role': 'system',
+          'section': 'final',
+          'enabled': false,
+          'content': '<loomstyle>bratty</loomstyle>',
+        },
+      ];
+      final archive = buildGlzArchive();
+      archive.addFile(
+        ArchiveFile.bytes(
+          'tables/studio_preset_rows.jsonl',
+          utf8.encode(
+            '${jsonEncode({
+              'preset_id': 'studio_loom_causal_direct_v1',
+              'name': 'Loom Direct',
+              'blocks_json': jsonEncode(blocks),
+              'agent_enabled_json': '{}',
+              'execution_mode': 'direct',
+              'updated_at': 42,
+            })}\n',
+          ),
+        ),
+      );
+
+      await writeAndImport(archive, db, imageStorage);
+
+      final row = await db.customSelect(
+        'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
+        variables: [
+          drift.Variable.withString('studio_loom_causal_direct_v1'),
+        ],
+      ).getSingle();
+      expect(jsonDecode(row.read<String>('blocks_json')), equals(blocks));
     });
 
     test('silently skips missing preferences.json (v2 backups)', () async {
