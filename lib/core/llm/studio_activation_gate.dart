@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/studio_config.dart';
+import 'studio_controller_ontology.dart';
 
 /// Pure agent-gating specialist extracted from `MemoryStudioService`
 /// (plan §2): keyword-based tracker activation + the 3-phase agent split.
@@ -11,6 +12,37 @@ import '../models/studio_config.dart';
 /// reference them via `MemoryStudioService.<name>`.
 class StudioActivationGate {
   StudioActivationGate._();
+
+  /// Whether a controller belongs to [mode]'s pre-generation topology.
+  ///
+  /// This deliberately says nothing about post-generation processing: the
+  /// Post Cleaner / fact-checker switch remains an independent pipeline
+  /// setting in every Studio mode.
+  static bool isControllerAllowed(String specId, StudioExecutionMode mode) {
+    return switch (mode) {
+      StudioExecutionMode.legacy => true,
+      StudioExecutionMode.direct => specId == 'final',
+      StudioExecutionMode.assisted =>
+        specId == 'final' || specId == 'continuity' || specId == 'narrative',
+    };
+  }
+
+  /// Applies an explicit preset topology to persisted runtime agents.
+  /// Runtime `agents_json` can outlive a preset switch, so Direct must not
+  /// rely on callers having already disabled individual pregen agents.
+  static List<StudioAgent> applyExecutionMode(
+    List<StudioAgent> agents,
+    StudioExecutionMode mode,
+  ) {
+    return agents
+        .map((agent) {
+          final specId = StudioControllerOntology.specForAgent(agent).id;
+          final isPreGen = agent.phase == 'pre_generation';
+          final disabled = isPreGen && !isControllerAllowed(specId, mode);
+          return disabled ? agent.copyWith(enabled: false) : agent;
+        })
+        .toList(growable: false);
+  }
 
   /// True if at least one of [keywords] appears (case-insensitive substring
   /// match) in the last [scanDepth] entries of [historyContents]. When
@@ -23,8 +55,7 @@ class StudioActivationGate {
   ) {
     if (keywords.isEmpty) return true;
     if (historyContents.isEmpty) return false;
-    final effectiveDepth =
-        scanDepth <= 0 ? historyContents.length : scanDepth;
+    final effectiveDepth = scanDepth <= 0 ? historyContents.length : scanDepth;
     final start = historyContents.length - effectiveDepth;
     final window = historyContents.sublist(start < 0 ? 0 : start);
     final loweredKeywords = keywords
@@ -90,8 +121,9 @@ class StudioActivationGate {
     // as the generator, regardless of phase, and remove it from the post-gen
     // list so it isn't run twice.
     final finalAgent = agents.last;
-    final filteredPostGen =
-        postGen.where((a) => a.id != finalAgent.id).toList();
+    final filteredPostGen = postGen
+        .where((a) => a.id != finalAgent.id)
+        .toList();
     return AgentPhaseSplit(
       preGenTrackers: const [],
       postGenTrackers: filteredPostGen,

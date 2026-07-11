@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/db/studio_seed_blocks.dart';
 import '../../../core/models/studio_config.dart';
+import '../../../core/models/studio_preset_block_groups.dart';
 import '../../../core/state/db_provider.dart';
 import '../../studio/widgets/studio_block_editor_dialog.dart';
+import '../../studio/widgets/studio_preset_group_tile.dart';
 
 /// Studio Preset Editor as a bottom sheet — replaces the full-screen
 /// [StudioPresetEditorScreen]. Shows preset blocks grouped by section.
@@ -59,8 +61,12 @@ class _StudioPresetEditorSheetState
 
   List<StudioPresetBlock> get _sectionBlocks {
     final blocks = _preset?.blocks ?? const <StudioPresetBlock>[];
-    return blocks.where((b) => b.section == _activeSection).toList();
+    return blocks.where((b) => b.section == _activeSection).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
   }
+
+  List<StudioPresetBlockGroup> get _sectionItems =>
+      groupStudioPresetBlocks(_sectionBlocks);
 
   @override
   Widget build(BuildContext context) {
@@ -88,15 +94,24 @@ class _StudioPresetEditorSheetState
           Expanded(
             child: _sectionBlocks.isEmpty
                 ? const Center(child: Text('No blocks in this section'))
-                : ReorderableListView.builder(
+                : ListView.builder(
                     primary: false,
-                    buildDefaultDragHandles: false,
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
-                    itemCount: _sectionBlocks.length,
-                    onReorderItem: _onReorder,
+                    itemCount: _sectionItems.length,
                     itemBuilder: (context, index) {
-                      final block = _sectionBlocks[index];
+                      final item = _sectionItems[index];
+                      if (item.header != null) {
+                        return StudioPresetGroupTile(
+                          group: item,
+                          onSelectExclusive: (id) =>
+                              _selectExclusiveBlock(item, id),
+                          onToggle: _toggleBlock,
+                          onEdit: _editBlock,
+                          onDelete: _deleteBlock,
+                        );
+                      }
+                      final block = item.standalone!;
                       return Dismissible(
                         key: ValueKey(block.id),
                         direction: DismissDirection.horizontal,
@@ -143,7 +158,7 @@ class _StudioPresetEditorSheetState
                           return ok == true;
                         },
                         onDismissed: (_) => _deleteBlock(block),
-                        child: _buildBlockTile(block, index),
+                        child: _buildBlockTile(block),
                       );
                     },
                   ),
@@ -196,24 +211,7 @@ class _StudioPresetEditorSheetState
     );
   }
 
-  Future<void> _onReorder(int oldIndex, int newIndex) async {
-    if (_preset == null) return;
-    final sectionBlocks = _sectionBlocks;
-    final moved = sectionBlocks.removeAt(oldIndex);
-    sectionBlocks.insert(newIndex, moved);
-    final otherBlocks = _preset!.blocks
-        .where((b) => b.section != _activeSection)
-        .toList();
-    final rebuilt = [...otherBlocks, ...sectionBlocks];
-    await _save(
-      _preset!.copyWith(
-        blocks: rebuilt,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
-  }
-
-  Widget _buildBlockTile(StudioPresetBlock block, int index) {
+  Widget _buildBlockTile(StudioPresetBlock block) {
     return ListTile(
       key: ValueKey('tile_${block.id}'),
       title: Text(
@@ -223,24 +221,12 @@ class _StudioPresetEditorSheetState
             : const TextStyle(decoration: TextDecoration.lineThrough),
       ),
       subtitle: Text(
-        '${block.kind} · ${block.role} · #$index',
+        '${block.kind} · ${block.role} · order=${block.order}',
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Switch(
-            value: block.enabled,
-            onChanged: (v) => _toggleBlock(block, v),
-          ),
-          ReorderableDragStartListener(
-            index: index,
-            child: const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Icon(Icons.drag_indicator, size: 24),
-            ),
-          ),
-        ],
+      trailing: Switch(
+        value: block.enabled,
+        onChanged: (v) => _toggleBlock(block, v),
       ),
       onTap: () => _editBlock(block),
     );
@@ -268,18 +254,33 @@ class _StudioPresetEditorSheetState
       builder: (_) => StudioBlockEditorDialog(block: block),
     );
     if (result == null || _preset == null) return;
-    final blocks = _preset!.blocks.map((b) {
-      return b.id == result.id ? result : b;
-    }).toList();
+    final blocks = updateStudioPresetBlockRespectingGroups(
+      _preset!.blocks,
+      result,
+    );
     await _save(_preset!.copyWith(blocks: blocks));
   }
 
   Future<void> _toggleBlock(StudioPresetBlock block, bool enabled) async {
     if (_preset == null) return;
-    final blocks = _preset!.blocks.map((b) {
-      return b.id == block.id ? b.copyWith(enabled: enabled) : b;
-    }).toList();
+    final blocks = updateStudioPresetBlockRespectingGroups(
+      _preset!.blocks,
+      block.copyWith(enabled: enabled),
+    );
     await _save(_preset!.copyWith(blocks: blocks));
+  }
+
+  Future<void> _selectExclusiveBlock(
+    StudioPresetBlockGroup group,
+    String selectedId,
+  ) async {
+    if (_preset == null) return;
+    await _save(
+      _preset!.copyWith(
+        blocks: selectExclusiveStudioBlock(_preset!.blocks, group, selectedId),
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   Future<void> _deleteBlock(StudioPresetBlock block) async {

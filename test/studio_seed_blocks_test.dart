@@ -113,21 +113,24 @@ void main() {
       expect(ids, contains('cleaner_beauty'));
     });
 
-    test('cleaner_beauty has beauty state macro and lumiaooc do-not-color rule', () {
-      final blocks = studioPresetSeedBlocks();
-      final beauty = blocks.firstWhere((b) => b['id'] == 'cleaner_beauty');
-      final content = beauty['content'] as String;
-      expect(content, contains('{{beautyBrief}}'));
-      expect(content, contains('{{getvar::glaze_beauty_state}}'));
-      expect(content, contains('lumiaooc'));
-      expect(content, contains('glaze_beauty_state'));
-      // lumiaooc coloring is now deterministic in code (wrapLumiaOocColors),
-      // so the cleaner prompt must NOT carry the old reserved-color rule or
-      // the reserved.lumia_ooc JSON-shape field.
-      expect(content, isNot(contains('reserved')));
-      expect(content, isNot(contains('lumia_ooc')));
-      expect(content, isNot(contains('#9370DB')));
-    });
+    test(
+      'cleaner_beauty has beauty state macro and lumiaooc do-not-color rule',
+      () {
+        final blocks = studioPresetSeedBlocks();
+        final beauty = blocks.firstWhere((b) => b['id'] == 'cleaner_beauty');
+        final content = beauty['content'] as String;
+        expect(content, contains('{{beautyBrief}}'));
+        expect(content, contains('{{getvar::glaze_beauty_state}}'));
+        expect(content, contains('lumiaooc'));
+        expect(content, contains('glaze_beauty_state'));
+        // lumiaooc coloring is now deterministic in code (wrapLumiaOocColors),
+        // so the cleaner prompt must NOT carry the old reserved-color rule or
+        // the reserved.lumia_ooc JSON-shape field.
+        expect(content, isNot(contains('reserved')));
+        expect(content, isNot(contains('lumia_ooc')));
+        expect(content, isNot(contains('#9370DB')));
+      },
+    );
 
     test('cleaner_rules contains concrete NoriMyn prose guard rules', () {
       final blocks = studioPresetSeedBlocks();

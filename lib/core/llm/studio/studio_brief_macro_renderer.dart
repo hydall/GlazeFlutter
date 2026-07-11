@@ -10,7 +10,7 @@ import '../../models/studio_config.dart';
 class StudioBriefMacroRenderer {
   final StudioBriefDeduper _briefDeduper;
 
-  static final _studioBriefMacroRegex = RegExp(
+  static final studioBriefMacroRegex = RegExp(
     r'\{\{studio_(?:agent|tracker|continuity|agency|narrative|dialogue|guard|world|meta|beauty)_briefs?\}\}',
     caseSensitive: false,
   );
@@ -19,8 +19,14 @@ class StudioBriefMacroRenderer {
 
   /// True if [content] contains any `{{studio_*_brief}}` macro.
   bool hasStudioBriefMacro(String content) {
-    return _studioBriefMacroRegex.hasMatch(content);
+    return hasAnyStudioBriefMacro(content);
   }
+
+  static bool hasAnyStudioBriefMacro(String content) =>
+      studioBriefMacroRegex.hasMatch(content);
+
+  static String stripStudioBriefMacros(String content) =>
+      content.replaceAll(studioBriefMacroRegex, '');
 
   /// Replaces all `{{studio_*_brief}}` macros in [content] with the
   /// corresponding expanded brief text from [priorBriefs].

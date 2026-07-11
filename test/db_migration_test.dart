@@ -76,7 +76,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 67);
+      expect(version, 70);
     });
 
     test(
@@ -113,7 +113,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 67);
+        expect(version.first.read<int>('user_version'), 70);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },
@@ -143,7 +143,85 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 67);
+      expect(version.read<int>('user_version'), 70);
+    });
+
+    test('current schema includes atomic character fact tables', () async {
+      final version = await db.customSelect('PRAGMA user_version').getSingle();
+      expect(version.read<int>('user_version'), 70);
+
+      final factColumns = await db
+          .customSelect("PRAGMA table_info('character_knowledge_fact_rows')")
+          .get();
+      final factNames = factColumns
+          .map((row) => row.read<String>('name'))
+          .toSet();
+      expect(
+        factNames,
+        containsAll(<String>{
+          'id',
+          'chat_session_id',
+          'knower_key',
+          'subject_key',
+          'fact_class',
+          'scope_key',
+          'predicate',
+          'object',
+          'epistemic_state',
+          'source_message_id',
+          'source_swipe_id',
+          'source_agent_swipe_id',
+          'supersedes_id',
+          'lifecycle',
+        }),
+      );
+
+      final baselineColumns = await db
+          .customSelect("PRAGMA table_info('character_session_baseline_rows')")
+          .get();
+      final baselineNames = baselineColumns
+          .map((row) => row.read<String>('name'))
+          .toSet();
+      expect(
+        baselineNames,
+        containsAll(<String>{
+          'chat_session_id',
+          'character_id',
+          'baseline_card_json',
+          'baseline_hash',
+          'source_hash_last_seen',
+          'card_update_policy',
+        }),
+      );
+    });
+
+    test('v67 upgrades to atomic character fact schema', () async {
+      final file = File(
+        '${Directory.systemTemp.path}/glaze_mig_atomic_${DateTime.now().microsecondsSinceEpoch}.db',
+      );
+      addTearDown(() async {
+        if (file.existsSync()) await file.delete();
+      });
+
+      final seeded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      await seeded.customSelect('SELECT 1').get();
+      await seeded.customStatement('PRAGMA user_version = 67');
+      await seeded.close();
+
+      final upgraded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      addTearDown(() async => upgraded.close());
+      await upgraded.customSelect('SELECT 1').get();
+
+      final version = await upgraded
+          .customSelect('PRAGMA user_version')
+          .getSingle();
+      expect(version.read<int>('user_version'), 70);
+      final check = await upgraded.customSelect('PRAGMA integrity_check').get();
+      expect(check.single.read<String>('integrity_check'), 'ok');
     });
 
     test('memory catalog table exists in current schema', () async {

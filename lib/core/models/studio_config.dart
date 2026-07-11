@@ -4,6 +4,21 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'studio_config.freezed.dart';
 part 'studio_config.g.dart';
 
+enum StudioExecutionMode {
+  legacy,
+  direct,
+  assisted;
+
+  String get wireName => name;
+
+  static StudioExecutionMode fromWireName(String value) {
+    return StudioExecutionMode.values.firstWhere(
+      (mode) => mode.wireName == value,
+      orElse: () => StudioExecutionMode.legacy,
+    );
+  }
+}
+
 /// Reusable Studio configuration profile.
 ///
 /// Created when the user clicks "Build Studio" in the MagicDrawer Studio menu.
@@ -94,6 +109,10 @@ abstract class StudioPreset with _$StudioPreset {
     /// An entry `false` disables the agent; `true` or absent = enabled.
     /// Travel with the preset on import/export so agent toggles are portable.
     @Default({}) Map<String, bool> agentEnabled,
+
+    /// Explicit topology prevents stale stored agents from reviving pregen
+    /// calls when a Direct/Assisted preset is selected.
+    @Default(StudioExecutionMode.legacy) StudioExecutionMode executionMode,
     @Default(0) int updatedAt,
   }) = _StudioPreset;
 

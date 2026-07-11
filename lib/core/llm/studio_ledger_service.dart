@@ -3,14 +3,17 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../db/repositories/character_knowledge_fact_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/tracker_repo.dart';
 import '../db/repositories/tracker_snapshot_repo.dart';
 import '../models/agent_operation_record.dart';
+import '../models/character_knowledge_fact.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
 import '../models/studio_config.dart';
 import '../models/tracker.dart';
+import '../utils/id_generator.dart';
 import 'aux_llm_client.dart';
 import 'ledger/ledger_op_applier.dart';
 import 'macro_engine.dart';
@@ -94,6 +97,7 @@ class StudioLedgerService {
   final TrackerRepo _trackerRepo;
   final MemoryBookRepo _bookRepo;
   final TrackerSnapshotRepo _snapshotRepo;
+  final CharacterKnowledgeFactRepo _knowledgeFactRepo;
   final StudioLedgerExportParser _parser;
   final StudioLedgerPrompt _promptBuilder;
   final LedgerOpApplier _opApplier;
@@ -103,6 +107,7 @@ class StudioLedgerService {
     required this._trackerRepo,
     required this._bookRepo,
     required this._snapshotRepo,
+    required this._knowledgeFactRepo,
   }) : _parser = const StudioLedgerExportParser(),
        _promptBuilder = const StudioLedgerPrompt(),
        _opApplier = const LedgerOpApplier();
@@ -296,6 +301,50 @@ class StudioLedgerService {
         'session=$sessionId',
       );
 
+      // Atomic facts use the same tentative assistant-swipe anchor as the
+      // tracker snapshot. They become visible only when the next user turn
+      // commits that anchor.
+      if (export.knowledgeFacts.isNotEmpty &&
+          token.isCancelled == false &&
+          isStillCurrent?.call() != false) {
+        try {
+          await _knowledgeFactRepo.insertAllTentative(
+            export.knowledgeFacts
+                .map(
+                  (fact) => CharacterKnowledgeFact(
+                    id: generateId(),
+                    chatSessionId: sessionId,
+                    knowerKey: fact.knowerKey,
+                    knowerName: fact.knowerName,
+                    subjectKey: fact.subjectKey,
+                    subjectName: fact.subjectName,
+                    factClass: CharacterKnowledgeFactClass.fromWireName(
+                      fact.factClass,
+                    ),
+                    scopeKey: fact.scopeKey,
+                    predicate: fact.predicate,
+                    object: fact.object,
+                    epistemicState:
+                        CharacterKnowledgeEpistemicState.fromWireName(
+                          fact.epistemicState,
+                        ),
+                    confidence: fact.confidence,
+                    importance: fact.importance,
+                    entities: fact.entities,
+                    topics: fact.topics,
+                    sourceMessageId: messageId,
+                    sourceSwipeId: swipeId,
+                    sourceAgentSwipeId: agentSwipeId,
+                    supersedesId: fact.supersedesId,
+                  ),
+                )
+                .toList(growable: false),
+          );
+        } catch (e) {
+          debugPrint('[StudioLedger] knowledge fact write failed: $e');
+        }
+      }
+
       // ── 7. Snapshot post-ledger tracker state for rollback/swipe safety ──
       // The mutable tracker_rows table is only the live working store. Prompt
       // reads use committed tracker_snapshots, so every ledger write must also
@@ -373,7 +422,11 @@ class StudioLedgerService {
       );
     }
 
-    final trackerBlock = _buildTrackerBlock(currentTrackers);
+    final trackerBlock = _promptBuilder.buildCurrentStateBlock(
+      currentTrackers,
+      '$recentHistoryText\n$finalAssistantText',
+    );
+    final keyCatalog = _promptBuilder.buildExistingKeyCatalog(currentTrackers);
     final memoryBlock = _buildMemoryBlock(recentMemoryEntries);
 
     final runtimeSuffix =
@@ -381,6 +434,10 @@ class StudioLedgerService {
 <current_state>
 $trackerBlock
 </current_state>
+
+<existing_keys>
+$keyCatalog
+</existing_keys>
 
 <existing_memory>
 $memoryBlock
@@ -416,8 +473,8 @@ Ops format:
 
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
 Allowed ops: set, append_unique, delete.
-Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).
-Max value length: 2000 chars.''';
+Reuse an exact key from <current_state> or <existing_keys> for the same fact; update it with set instead of creating a synonym key.
+Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).''';
 
     return const StudioAuxPromptAssembler().assemble(
       blocks: ledgerBlocks,
@@ -425,23 +482,6 @@ Max value length: 2000 chars.''';
       macroCtx: macroCtx,
       runtimeSuffix: runtimeSuffix,
     );
-  }
-
-  String _buildTrackerBlock(List<Tracker> trackers) {
-    if (trackers.isEmpty) return '(no prior state)';
-    final ledgerTrackers = trackers
-        .where((t) => t.scope == 'ledger' || t.scope == 'chat')
-        .where(
-          (t) =>
-              t.name.startsWith('npc:') ||
-              t.name.startsWith('relationship:') ||
-              t.name.startsWith('arc:') ||
-              t.name.startsWith('world:') ||
-              t.name.startsWith('scene.'),
-        )
-        .toList();
-    if (ledgerTrackers.isEmpty) return '(no prior state)';
-    return ledgerTrackers.map((t) => '${t.name}: ${t.value}').join('\n');
   }
 
   String _buildMemoryBlock(List<MemoryEntry> entries) {
@@ -458,8 +498,11 @@ Max value length: 2000 chars.''';
 
   bool _isNoWriteLedgerOutput(LedgerParseResult parseResult) {
     final reason = parseResult.rejectionReason ?? '';
-    if (reason == 'empty export (no ops, no durable facts)') return true;
     if (reason == 'no <glaze_memory_export> block found') return true;
+    if (reason ==
+        'empty export (no ops, no durable facts, no knowledge facts)') {
+      return true;
+    }
     return false;
   }
 }

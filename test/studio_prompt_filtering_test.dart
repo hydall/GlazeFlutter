@@ -60,11 +60,12 @@ PromptResult _result(List<PromptMessage> messages) => PromptResult(
   globalVars: const {},
 );
 
-PromptPayload _payload({Preset? preset}) => PromptPayload(
+PromptPayload _payload({Preset? preset, String? studioState}) => PromptPayload(
   character: const Character(id: 'c1', name: 'TestChar'),
   history: const [],
   apiConfig: const ApiConfig(id: 'a1'),
   preset: preset,
+  studioSessionStateContent: studioState,
 );
 
 void main() {
@@ -138,6 +139,81 @@ void main() {
       expect(text, isNot(contains('CONTINUITY ONLY')));
       expect(text, isNot(contains('DIALOGUE ONLY')));
       expect(text, isNot(contains('SEEDED RUNTIME ENVELOPE')));
+      expect(text, isNot(contains('Studio controller briefs')));
+    });
+
+    test('final blocks expand the dedicated studio state macro', () {
+      final text = joinedMessages(
+        builder.buildAgentMessages(
+          agent: const StudioAgent(id: 'final', name: 'Main Responder'),
+          promptResult: promptResult,
+          promptPayload: _payload(
+            studioState:
+                '<studio_session_state>Lucy present</studio_session_state>',
+          ),
+          config: config,
+          studioPreset: const StudioPreset(
+            id: 'macro',
+            blocks: [
+              StudioPresetBlock(
+                id: 'state',
+                content: '{{studio_state}}',
+                section: 'final',
+              ),
+            ],
+          ),
+          priorBriefs: const [],
+          isFinalResponse: true,
+        ),
+      );
+
+      expect(text, contains('<studio_session_state>Lucy present'));
+      expect(text, isNot(contains('{{studio_state}}')));
+    });
+
+    test('group boundaries remain separate ordered system messages', () {
+      final messages = builder.buildAgentMessages(
+        agent: const StudioAgent(id: 'final', name: 'Main Responder'),
+        promptResult: promptResult,
+        promptPayload: promptPayload,
+        config: config,
+        studioPreset: const StudioPreset(
+          id: 'boundaries',
+          blocks: [
+            StudioPresetBlock(
+              id: 'pov_open',
+              kind: 'group_open',
+              role: 'system',
+              content: '<loompov>',
+              section: 'final',
+              order: 1,
+            ),
+            StudioPresetBlock(
+              id: 'pov_content',
+              role: 'system',
+              content: 'POV instructions',
+              section: 'final',
+              order: 2,
+            ),
+            StudioPresetBlock(
+              id: 'pov_close',
+              kind: 'group_close',
+              role: 'system',
+              content: '</loompov>',
+              section: 'final',
+              order: 3,
+            ),
+          ],
+        ),
+        priorBriefs: const [],
+        isFinalResponse: true,
+      );
+
+      expect(messages.map((message) => (message['role'], message['content'])), [
+        ('system', '<loompov>'),
+        ('system', 'POV instructions'),
+        ('system', '</loompov>'),
+      ]);
     });
 
     test('cleaner run receives only cleaner-section Studio blocks', () {

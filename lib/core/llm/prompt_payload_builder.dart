@@ -27,6 +27,7 @@ import 'prompt/arc_state_builder.dart';
 import 'prompt/ledger_tracker_loader.dart';
 import 'prompt/lorebook_vector_searcher.dart';
 import 'prompt/studio_session_state_compiler.dart';
+import 'knowledge/character_knowledge_projection.dart';
 import 'prompt_inputs.dart';
 import 'prompt_inputs_collector.dart';
 import 'summary_service.dart';
@@ -174,14 +175,16 @@ class PromptPayloadBuilder {
       // window happens later inside buildPrompt (see
       // docs/INVARIANTS.md §5.5).
       final lorebookFuture = (!skipVectorSearch)
-          ? _vectorSearcher.search(
-              session.messages,
-              currentText,
-              character.world,
-              character,
-              chatId: session.id,
-              cancelToken: cancelToken,
-            ).timeout(const Duration(seconds: 30), onTimeout: () => const [])
+          ? _vectorSearcher
+                .search(
+                  session.messages,
+                  currentText,
+                  character.world,
+                  character,
+                  chatId: session.id,
+                  cancelToken: cancelToken,
+                )
+                .timeout(const Duration(seconds: 30), onTimeout: () => const [])
           : Future<List<LorebookEntry>>.value(const []);
 
       final memoryFuture = memoryService.buildCandidatesWithDiagnostics(
@@ -247,10 +250,8 @@ class PromptPayloadBuilder {
         recalledMessagesContent = block.toString();
         recalledMessageChunks = recallResult.matches
             .map(
-              (m) => RecalledMessageChunk(
-                text: m.text,
-                messageIds: m.messageIds,
-              ),
+              (m) =>
+                  RecalledMessageChunk(text: m.text, messageIds: m.messageIds),
             )
             .toList(growable: false);
       }
@@ -319,17 +320,32 @@ class PromptPayloadBuilder {
     // and conflict-preventing canon overrides are never trimmed before raw
     // recall or optional InfBlocks.
     String? studioSessionStateContent;
+    String? characterKnowledgeContent;
+    if (sessionId != null) {
+      try {
+        final facts = await _ref
+            .read(characterKnowledgeFactRepoProvider)
+            .getActiveForSession(sessionId);
+        characterKnowledgeContent = compileCharacterKnowledgeProjection(
+          facts,
+          latestUserText: latestUserTextFromHistory(history),
+          latestAssistantText: latestAssistantTextFromHistory(history),
+        );
+      } catch (e) {
+        debugPrint('[PromptBuilder] character knowledge load failed: $e');
+      }
+    }
     if (sessionId != null) {
       try {
         final ledgerTrackers = await _ledgerTrackerLoader
             .loadEffectiveLedgerTrackers(sessionId);
         if (ledgerTrackers.isNotEmpty) {
           studioSessionStateContent = compileStudioSessionState(
-              ledgerTrackers,
-              sessionId,
-              latestUserText: latestUserTextFromHistory(history),
-              latestAssistantText: latestAssistantTextFromHistory(history),
-            );
+            ledgerTrackers,
+            sessionId,
+            latestUserText: latestUserTextFromHistory(history),
+            latestAssistantText: latestAssistantTextFromHistory(history),
+          );
         }
       } catch (e) {
         debugPrint('[PromptBuilder] studio_session_state load failed: $e');
@@ -410,6 +426,7 @@ class PromptPayloadBuilder {
       arcContent: arcContent,
       entitiesContent: entitiesContent,
       studioSessionStateContent: studioSessionStateContent,
+      characterKnowledgeContent: characterKnowledgeContent,
       recalledMessagesContent: recalledMessagesContent,
       recalledMessageChunks: recalledMessageChunks,
     );

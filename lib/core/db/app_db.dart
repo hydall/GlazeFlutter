@@ -35,6 +35,8 @@ part 'app_db.g.dart';
     StudioPresetRows,
     TrackerRows,
     TrackerSnapshots,
+    CharacterKnowledgeFactRows,
+    CharacterSessionBaselineRows,
     ExtensionPresets,
     InfoBlocks,
   ],
@@ -45,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 67;
+  int get schemaVersion => 70;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1256,6 +1258,35 @@ class AppDatabase extends _$AppDatabase {
         } catch (e) {
           debugPrint('Migration 67 (preserve active Studio preset) failed: $e');
           rethrow;
+        }
+      }
+      if (from < 68) {
+        final rows = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = rows.map((row) => row.read<String>('name')).toSet();
+        if (!tableNames.contains('character_knowledge_fact_rows')) {
+          await m.createTable(characterKnowledgeFactRows);
+        }
+        if (!tableNames.contains('character_session_baseline_rows')) {
+          await m.createTable(characterSessionBaselineRows);
+        }
+      }
+      if (from < 69) {
+        final columns = await customSelect(
+          "PRAGMA table_info('studio_preset_rows')",
+        ).get();
+        final names = columns
+            .map((column) => column.read<String>('name'))
+            .toSet();
+        if (!names.contains('agent_enabled_json')) {
+          await m.addColumn(
+            studioPresetRows,
+            studioPresetRows.agentEnabledJson,
+          );
+        }
+        if (!names.contains('execution_mode')) {
+          await m.addColumn(studioPresetRows, studioPresetRows.executionMode);
         }
       }
     },

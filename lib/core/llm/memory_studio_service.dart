@@ -115,8 +115,12 @@ class MemoryStudioService {
           ? a.copyWith(enabled: false)
           : a;
     }).toList();
+    final topologyGated = StudioActivationGate.applyExecutionMode(
+      overridden,
+      preset?.executionMode ?? StudioExecutionMode.legacy,
+    );
 
-    final enabledAgents = overridden.where((a) => a.enabled).toList()
+    final enabledAgents = topologyGated.where((a) => a.enabled).toList()
       ..sort((a, b) => a.order.compareTo(b.order));
     if (enabledAgents.isEmpty) {
       return null;

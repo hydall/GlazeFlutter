@@ -279,7 +279,7 @@ class PostCleanerService {
     List<StudioPresetBlock> cleanerBlocks = const [],
     MacroContext? macroCtx,
   }) async {
-    final prompt = _buildCleanerPrompt(
+    final prompt = buildStudioCleanerPrompt(
       assistantText: assistantText,
       broadcastBlocks: broadcastBlocks,
       recentMessages: recentMessages,
@@ -374,7 +374,8 @@ class PostCleanerService {
   /// and broadcast blocks are appended as a code-owned suffix. The beauty
   /// brief/state are injected via custom replacements so a `cleaner_beauty`
   /// block can use `{{beautyBrief}}` and `{{getvar::glaze_beauty_state}}`.
-  String _buildCleanerPrompt({
+  @visibleForTesting
+  static String buildStudioCleanerPrompt({
     required String assistantText,
     List<String> broadcastBlocks = const [],
     List<ChatMessage> recentMessages = const [],
@@ -411,9 +412,6 @@ class PostCleanerService {
     }
 
     final skipBlockIds = <String>{'cleaner_audit'};
-    if (beautyBrief.trim().isEmpty) {
-      skipBlockIds.add('cleaner_beauty');
-    }
 
     final suffix = StringBuffer();
 

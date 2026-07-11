@@ -40,7 +40,11 @@ class StudioLedgerPrompt {
     required List<Tracker> currentTrackers,
     required List<MemoryEntry> recentMemoryEntries,
   }) {
-    final trackerBlock = _buildTrackerBlock(currentTrackers);
+    final trackerBlock = buildCurrentStateBlock(
+      currentTrackers,
+      '$recentHistoryText\n$finalAssistantText',
+    );
+    final keyCatalog = buildExistingKeyCatalog(currentTrackers);
     final memoryBlock = _buildMemoryBlock(recentMemoryEntries);
 
     return '''$_systemPrompt
@@ -48,6 +52,10 @@ class StudioLedgerPrompt {
 <current_state>
 $trackerBlock
 </current_state>
+
+<existing_keys>
+$keyCatalog
+</existing_keys>
 
 <existing_memory>
 $memoryBlock
@@ -79,15 +87,25 @@ When there are no state changes or durable facts, output empty arrays —
 do NOT skip the block.
 
 Ops format:
-{"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"durableFacts":[{"title":"…","content":"…","keys":["…"],"entities":["…"]}]}
+{"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"durableFacts":[{"title":"…","content":"…","keys":["…"],"entities":["…"]}],"knowledgeFacts":[{"knowerKey":"entity:lucy","knowerName":"Lucy","subjectKey":"entity:danvi","subjectName":"Danvi","factClass":"relationship","scopeKey":"relationship:danvi","predicate":"trusts","object":"Trusts Danvi.","epistemicState":"confirmed","confidence":0.9,"importance":0.8,"entities":["Lucy"],"topics":["trust"],"supersedesId":null}]}
 
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
 Allowed ops: set, append_unique, delete.
+Do not write npc:*.knowledge — use knowledgeFacts instead.
 Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).
-Max value length: 2000 chars.''';
+Allowed factClass: knowledge, relationship, behavior_change, commitment, goal, persistent_condition, identity_development.
+Allowed epistemicState: observed, heard_claim, inferred, confirmed, disbelieved, forgotten, retracted.
+knowledgeFacts rules:
+- One proposition per fact. Never summarize prior facts.
+- supersedesId only when correcting a known injected fact ID.
+- Distinguish direct observation, heard claim, inference, confirmation, disbelief, and correction.
+- Never output future events as facts.
+- scopeKey: narrowest defensible scope (e.g. relationship:danvi), never global for convenience.''';
   }
 
-  String _buildTrackerBlock(List<Tracker> trackers) {
+  /// Full values for state relevant to this turn. This filters rows, never
+  /// truncates them; persisted tracker data remains lossless.
+  String buildCurrentStateBlock(List<Tracker> trackers, String turnContext) {
     if (trackers.isEmpty) return '(no prior state)';
     // Show only ledger-scope trackers (entity/relationship/arc/world/scene).
     final ledgerTrackers = trackers
@@ -100,10 +118,55 @@ Max value length: 2000 chars.''';
               t.name.startsWith('world:') ||
               t.name.startsWith('scene.'),
         )
+        .where((tracker) => _isRelevantTracker(tracker, turnContext))
         .toList();
     if (ledgerTrackers.isEmpty) return '(no prior state)';
     return ledgerTrackers.map((t) => '${t.name}: ${t.value}').join('\n');
   }
+
+  bool _isRelevantTracker(Tracker tracker, String turnContext) {
+    if (tracker.name.startsWith('world:') ||
+        tracker.name.startsWith('scene.')) {
+      return true;
+    }
+    final haystack = _searchTerms(turnContext);
+    final key = tracker.name.split('.').first;
+    final identifiers = key
+        .split(':')
+        .skip(1)
+        .expand((part) => _searchTerms(part))
+        .where((term) => term.length > 2);
+    return identifiers.any(haystack.contains);
+  }
+
+  Set<String> _searchTerms(String text) => text
+      .toLowerCase()
+      .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
+      .where((term) => term.isNotEmpty)
+      .toSet();
+
+  /// Names only, so aliases can resolve to an existing canonical key without
+  /// injecting every stored value into the Ledger prompt.
+  String buildExistingKeyCatalog(List<Tracker> trackers) {
+    final keys =
+        trackers
+            .where(
+              (tracker) => tracker.scope == 'ledger' || tracker.scope == 'chat',
+            )
+            .map((tracker) => tracker.name)
+            .where(_isLedgerKey)
+            .toSet()
+            .toList()
+          ..sort();
+    return keys.isEmpty ? '(no prior keys)' : keys.join('\n');
+  }
+
+  bool _isLedgerKey(String name) =>
+      name.startsWith('npc:') ||
+      name.startsWith('relationship:') ||
+      name.startsWith('arc:') ||
+      name.startsWith('world:') ||
+      name.startsWith('scene.');
 
   String _buildMemoryBlock(List<MemoryEntry> entries) {
     if (entries.isEmpty) return '(no existing memory)';
@@ -155,6 +218,7 @@ Rules:
 - Do not mark an entity absent unless it explicitly leaves, dies, is left behind, or the scene changes.
 - Return <studio_ledger> plus <glaze_memory_export> JSON.
 - Prefer patch ops in the ops list for persistence. Do not rewrite the whole world state.
+- Reuse an exact key from <current_state> or <existing_keys> when it represents the same fact. Update it with set; do not create a synonym key.
 - Keep entity/relationship/arc/world state compact. Update current truth; do not create a history log.
 - Never output ledger text as story prose or a chat message.
 - Entity state keys: npc:Name.relationship_to_user, npc:Name.attitude_to_user, npc:Name.knowledge, npc:Name.boundaries, npc:Name.card_overrides

@@ -81,10 +81,13 @@ class StudioMessageBuilder {
               ..writeln()
               ..writeln(_promptText.intermediateRuntimeEnvelope(agent));
           }
-          if (isFinalResponse) {
+          if (isFinalResponse &&
+              (hasExplicitBriefMacros || priorBriefs.isNotEmpty)) {
             control
               ..writeln()
               ..writeln(_promptText.finalBriefUsageNote());
+          }
+          if (isFinalResponse) {
             final styleContract = _promptText.finalHardStyleContract(config);
             if (styleContract.isNotEmpty) {
               control

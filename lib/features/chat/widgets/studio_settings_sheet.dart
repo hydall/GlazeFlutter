@@ -10,6 +10,7 @@ import '../../../core/llm/model_fetcher.dart';
 import '../../../core/llm/studio_controller_ontology.dart';
 import '../../../core/models/pipeline_settings.dart';
 import '../../../core/models/studio_config.dart';
+import '../../../core/models/studio_preset_topology.dart';
 import '../../../core/services/file_export_service.dart';
 import '../../../core/state/active_studio_preset_provider.dart';
 import '../../../core/state/db_provider.dart';
@@ -142,6 +143,8 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
             onChanged: (v) => _save(config.copyWith(enabled: v)),
           ),
           const Divider(),
+          _buildModeSelector(),
+          const SizedBox(height: 4),
           _buildPresetSelector(config),
           const Divider(),
           Text('Models', style: Theme.of(context).textTheme.titleSmall),
@@ -255,12 +258,38 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
     await ref.read(pipelineSettingsProvider.notifier).save(mutate(pipeline));
   }
 
+  StudioPreset? get _activeStudioPreset {
+    final activePresetId =
+        ref.watch(activeStudioPresetProvider).value ?? 'default';
+    return _studioPresets.where((p) => p.id == activePresetId).firstOrNull;
+  }
+
+  String _modeLabel(StudioExecutionMode mode) {
+    return switch (mode) {
+      StudioExecutionMode.legacy => 'Legacy — full controller pipeline',
+      StudioExecutionMode.direct => 'Direct Loom — FINAL without pregen',
+      StudioExecutionMode.assisted =>
+        'Assisted Loom — Continuity + Scene Director',
+    };
+  }
+
+  Widget _buildModeSelector() {
+    final current = _activeStudioPreset;
+    final mode = current?.executionMode ?? StudioExecutionMode.legacy;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.account_tree_outlined),
+      title: const Text('Studio Mode'),
+      subtitle: Text(_modeLabel(mode)),
+      trailing: const Icon(Icons.arrow_drop_down),
+      onTap: _openStudioModeSelector,
+    );
+  }
+
   Widget _buildPresetSelector(StudioConfig config) {
     final activePresetId =
         ref.watch(activeStudioPresetProvider).value ?? 'default';
-    final current = _studioPresets
-        .where((p) => p.id == activePresetId)
-        .firstOrNull;
+    final current = _activeStudioPreset;
     final label = current?.name.isNotEmpty == true
         ? current!.name
         : activePresetId;
@@ -276,6 +305,67 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
       trailing: const Icon(Icons.arrow_drop_down),
       onTap: () => _openStudioPresetSelector(config),
     );
+  }
+
+  Future<void> _openStudioModeSelector() async {
+    final current = _activeStudioPreset;
+    final items = <BottomSheetItem>[
+      for (final mode in StudioExecutionMode.values)
+        BottomSheetItem(
+          label: _modeLabel(mode),
+          hint: switch (mode) {
+            StudioExecutionMode.legacy =>
+              'Keep the selected full Studio preset and all enabled controllers.',
+            StudioExecutionMode.direct => 'FINAL only; no pregen controllers.',
+            StudioExecutionMode.assisted =>
+              'Continuity and Scene Director before FINAL.',
+          },
+          icon: current?.executionMode == mode ? Icons.check : null,
+          iconColor: Theme.of(context).colorScheme.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            unawaited(_selectStudioMode(mode));
+          },
+        ),
+    ];
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'Studio Mode',
+      items: items,
+    );
+  }
+
+  Future<void> _selectStudioMode(StudioExecutionMode mode) async {
+    final current = _activeStudioPreset;
+    if (current?.executionMode == mode) return;
+    // A reduced Direct/Assisted preset cannot seed another mode: it may already
+    // lack the controller blocks the target needs. Always derive a new mode
+    // preset from the selected full Legacy preset, with `default` as fallback.
+    final source = current?.executionMode == StudioExecutionMode.legacy
+        ? current
+        : _studioPresets.where((preset) => preset.id == 'default').firstOrNull;
+    if (source == null) {
+      if (mounted) GlazeToast.show(context, 'No Studio preset to copy.');
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final modeName = switch (mode) {
+      StudioExecutionMode.legacy => 'Legacy Studio',
+      StudioExecutionMode.direct => 'Direct Loom',
+      StudioExecutionMode.assisted => 'Assisted Loom',
+    };
+    final preset = prepareStudioPresetForMode(
+      source,
+      id: 'studio_${mode.wireName}_$now',
+      name: '$modeName $now',
+      mode: mode,
+      updatedAt: now,
+    );
+    await ref.read(studioPresetRepoProvider).upsert(preset);
+    final nextPresets = await ref.read(studioPresetRepoProvider).getAll();
+    nextPresets.sort((a, b) => a.name.compareTo(b.name));
+    if (mounted) setState(() => _studioPresets = nextPresets);
+    await _changeStudioPreset(preset.id);
   }
 
   Future<void> _openStudioPresetSelector(StudioConfig config) async {

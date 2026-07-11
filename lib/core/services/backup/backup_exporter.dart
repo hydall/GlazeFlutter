@@ -26,7 +26,8 @@ class BackupExporter {
   //         preferences.json.
   //   8 — added tracker_rows (live Tracker Values) alongside snapshots.
   //   9 — added studio_preset_rows (DB-backed Studio prompt block presets).
-  static const int _schemaVersion = 9;
+  //  10 — added atomic character facts and immutable session baselines.
+  static const int _schemaVersion = 10;
 
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
@@ -201,6 +202,8 @@ class BackupExporter {
       'memory_salience_rows',
       'memory_cadence_rows',
       'memory_consolidation_rows',
+      'character_knowledge_fact_rows',
+      'character_session_baseline_rows',
     ];
   }
 }

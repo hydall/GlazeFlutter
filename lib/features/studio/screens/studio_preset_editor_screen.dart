@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/db/studio_seed_blocks.dart';
 import '../../../core/models/studio_config.dart';
+import '../../../core/models/studio_preset_block_groups.dart';
 import '../../../core/state/db_provider.dart';
 import '../widgets/studio_block_editor_dialog.dart';
+import '../widgets/studio_preset_group_tile.dart';
 
 /// Screen for editing a [StudioPreset] — its blocks grouped by section.
 ///
@@ -14,10 +16,7 @@ import '../widgets/studio_block_editor_dialog.dart';
 class StudioPresetEditorScreen extends ConsumerStatefulWidget {
   final String presetId;
 
-  const StudioPresetEditorScreen({
-    super.key,
-    required this.presetId,
-  });
+  const StudioPresetEditorScreen({super.key, required this.presetId});
 
   @override
   ConsumerState<StudioPresetEditorScreen> createState() =>
@@ -64,22 +63,23 @@ class _StudioPresetEditorScreenState
 
   List<StudioPresetBlock> get _sectionBlocks {
     final blocks = _preset?.blocks ?? const <StudioPresetBlock>[];
-    return blocks
-        .where((b) => b.section == _activeSection)
-        .toList()
+    return blocks.where((b) => b.section == _activeSection).toList()
       ..sort((a, b) => a.order.compareTo(b.order));
   }
+
+  List<StudioPresetBlockGroup> get _sectionItems =>
+      groupStudioPresetBlocks(_sectionBlocks);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_preset?.name.isNotEmpty == true
-            ? _preset!.name
-            : 'Studio Preset Editor'),
-        leading: BackButton(
-          onPressed: () => Navigator.of(context).pop(),
+        title: Text(
+          _preset?.name.isNotEmpty == true
+              ? _preset!.name
+              : 'Studio Preset Editor',
         ),
+        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         actions: [
           IconButton(
             icon: const Icon(Icons.restore),
@@ -91,23 +91,33 @@ class _StudioPresetEditorScreenState
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _preset == null
-              ? const Center(child: Text('Preset not found'))
-              : Column(
-                  children: [
-                    _buildSectionTabs(),
-                    Expanded(
-                      child: _sectionBlocks.isEmpty
-                          ? const Center(
-                              child: Text('No blocks in this section'),
-                            )
-                          : ListView.builder(
-                              itemCount: _sectionBlocks.length,
-                              itemBuilder: (context, index) =>
-                                  _buildBlockTile(_sectionBlocks[index]),
-                            ),
-                    ),
-                  ],
+          ? const Center(child: Text('Preset not found'))
+          : Column(
+              children: [
+                _buildSectionTabs(),
+                Expanded(
+                  child: _sectionBlocks.isEmpty
+                      ? const Center(child: Text('No blocks in this section'))
+                      : ListView.builder(
+                          itemCount: _sectionItems.length,
+                          itemBuilder: (context, index) {
+                            final item = _sectionItems[index];
+                            if (item.header != null) {
+                              return StudioPresetGroupTile(
+                                group: item,
+                                onSelectExclusive: (id) =>
+                                    _selectExclusiveBlock(item, id),
+                                onToggle: _toggleBlock,
+                                onEdit: _editBlock,
+                                onDelete: _deleteBlock,
+                              );
+                            }
+                            return _buildBlockTile(item.standalone!);
+                          },
+                        ),
                 ),
+              ],
+            ),
       floatingActionButton: _loading || _preset == null
           ? null
           : FloatingActionButton(
@@ -173,9 +183,7 @@ class _StudioPresetEditorScreenState
       builder: (_) => StudioBlockEditorDialog(block: newBlock, isNew: true),
     );
     if (result == null || _preset == null) return;
-    final updated = _preset!.copyWith(
-      blocks: [..._preset!.blocks, result],
-    );
+    final updated = _preset!.copyWith(blocks: [..._preset!.blocks, result]);
     await _save(updated);
   }
 
@@ -185,18 +193,33 @@ class _StudioPresetEditorScreenState
       builder: (_) => StudioBlockEditorDialog(block: block),
     );
     if (result == null || _preset == null) return;
-    final blocks = _preset!.blocks.map((b) {
-      return b.id == result.id ? result : b;
-    }).toList();
+    final blocks = updateStudioPresetBlockRespectingGroups(
+      _preset!.blocks,
+      result,
+    );
     await _save(_preset!.copyWith(blocks: blocks));
   }
 
   Future<void> _toggleBlock(StudioPresetBlock block, bool enabled) async {
     if (_preset == null) return;
-    final blocks = _preset!.blocks.map((b) {
-      return b.id == block.id ? b.copyWith(enabled: enabled) : b;
-    }).toList();
+    final blocks = updateStudioPresetBlockRespectingGroups(
+      _preset!.blocks,
+      block.copyWith(enabled: enabled),
+    );
     await _save(_preset!.copyWith(blocks: blocks));
+  }
+
+  Future<void> _selectExclusiveBlock(
+    StudioPresetBlockGroup group,
+    String selectedId,
+  ) async {
+    if (_preset == null) return;
+    await _save(
+      _preset!.copyWith(
+        blocks: selectExclusiveStudioBlock(_preset!.blocks, group, selectedId),
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   Future<void> _deleteBlock(StudioPresetBlock block) async {
@@ -204,7 +227,9 @@ class _StudioPresetEditorScreenState
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Delete Block'),
-        content: Text('Delete "${block.title.isNotEmpty ? block.title : block.id}"?'),
+        content: Text(
+          'Delete "${block.title.isNotEmpty ? block.title : block.id}"?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -246,20 +271,24 @@ class _StudioPresetEditorScreenState
     if (confirmed != true || _preset == null) return;
     final seedData = studioPresetSeedBlocks();
     final seedBlocks = seedData
-        .map((m) => StudioPresetBlock(
-              id: m['id'] as String? ?? '',
-              title: (m['name'] as String?) ?? (m['title'] as String?) ?? '',
-              kind: (m['kind'] as String?) ?? 'custom_text',
-              role: (m['role'] as String?) ?? 'system',
-              content: (m['content'] as String?) ?? '',
-              enabled: (m['enabled'] as bool?) ?? true,
-              order: (m['order'] as int?) ?? 0,
-              section: (m['section'] as String?) ?? 'pregen',
-            ))
+        .map(
+          (m) => StudioPresetBlock(
+            id: m['id'] as String? ?? '',
+            title: (m['name'] as String?) ?? (m['title'] as String?) ?? '',
+            kind: (m['kind'] as String?) ?? 'custom_text',
+            role: (m['role'] as String?) ?? 'system',
+            content: (m['content'] as String?) ?? '',
+            enabled: (m['enabled'] as bool?) ?? true,
+            order: (m['order'] as int?) ?? 0,
+            section: (m['section'] as String?) ?? 'pregen',
+          ),
+        )
         .toList();
-    await _save(_preset!.copyWith(
-      blocks: seedBlocks,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await _save(
+      _preset!.copyWith(
+        blocks: seedBlocks,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 }

@@ -176,18 +176,19 @@ class TrackerSnapshotRepo {
         .write(const TrackerSnapshotsCompanion(committed: Value(1)));
   }
 
-  /// Mark the latest snapshot for [sessionId] as committed. Convenience for
-  /// the common "user sent a follow-up" case where the caller does not know
-  /// the exact anchor.
-  Future<void> commitLatest(String sessionId) async {
+  /// Marks and returns the latest snapshot for [sessionId] as committed.
+  /// Callers that maintain another provenance-anchored store can use the exact
+  /// returned anchor instead of guessing by timestamp.
+  Future<TrackerSnapshot?> commitLatest(String sessionId) async {
     final latest = await getLatest(sessionId);
-    if (latest == null) return;
+    if (latest == null) return null;
     await commit(
       sessionId: sessionId,
       messageId: latest.messageId,
       swipeId: latest.swipeId,
       agentSwipeId: latest.agentSwipeId,
     );
+    return latest;
   }
 
   /// Delete all snapshots for a message (across all swipes/agent-swipes).

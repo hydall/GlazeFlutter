@@ -11,6 +11,7 @@ import '../sync_models.dart';
 
 class SyncSerialization {
   static const pipelineSettingsKey = 'pipelineSettings';
+  static const activeStudioPresetKey = 'activeStudioPresetId';
 
   /// Content fingerprint for manifest conflict detection (not full session JSON).
   static String computeChatMetadataHash(SessionMetadata metadata) {
@@ -144,9 +145,14 @@ class SyncSerialization {
   }
 
   static Map<String, dynamic> localStoragePayload({
-    required String pipelineSettings,
+    String? pipelineSettings,
+    String? activeStudioPresetId,
   }) {
-    return {'__localStorage': true, pipelineSettingsKey: pipelineSettings};
+    return {
+      '__localStorage': true,
+      pipelineSettingsKey: ?pipelineSettings,
+      activeStudioPresetKey: ?activeStudioPresetId,
+    };
   }
 
   static String guessImageExt(String dataUrl) {

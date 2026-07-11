@@ -266,9 +266,19 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     // from the previous assistant turn by sending a follow-up. This separates
     // accepted state (committed=1, used by getLatestCommitted) from
     // tentative/regen state (committed=0).
-    await ref
+    final committedSnapshot = await ref
         .read(trackerSnapshotRepoProvider)
         .commitLatest(current.session!.id);
+    if (committedSnapshot != null) {
+      await ref
+          .read(characterKnowledgeFactRepoProvider)
+          .activateAnchor(
+            sessionId: current.session!.id,
+            messageId: committedSnapshot.messageId,
+            swipeId: committedSnapshot.swipeId,
+            agentSwipeId: committedSnapshot.agentSwipeId,
+          );
+    }
     if (!ref.mounted) return;
     ChatSessionService.updateCache(updatedSession);
     _invalidateHistory();
@@ -326,7 +336,8 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
     if (!ref.mounted) return;
-    if (state.value?.isGenerating == true || state.value?.isPostGenRunning == true) {
+    if (state.value?.isGenerating == true ||
+        state.value?.isPostGenRunning == true) {
       abortGeneration();
     }
     final current = state.value;

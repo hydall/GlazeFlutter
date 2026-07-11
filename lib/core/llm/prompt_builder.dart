@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/character.dart';
 import '../models/persona.dart';
@@ -641,6 +641,15 @@ PromptResult _assembleMessages({
     // 'macro' target: skip hard block, user must place {{memory}} in preset
   }
 
+  if (payload.characterKnowledgeContent != null &&
+      payload.characterKnowledgeContent!.isNotEmpty) {
+    injectCharacterKnowledgeBlock(
+      messages,
+      attributionBlocks,
+      payload.characterKnowledgeContent!,
+    );
+  }
+
   // Studio Session State: inject <studio_session_state> canon block so
   // the LLM sees committed entity/relationship/arc/world state overriding
   // character-card baseline. Placed before recalled_messages so it has
@@ -688,8 +697,7 @@ PromptResult _assembleMessages({
   // entries) as the estimate; excerpting may reduce this further, but the
   // visible window stays conservative (fewer excluded messages is always
   // safe — the model still sees them in history).
-  final estimatedMemoryTokens =
-      payload.memorySelection?.totalTokens ?? 0;
+  final estimatedMemoryTokens = payload.memorySelection?.totalTokens ?? 0;
 
   var breakdown = calculator.calculate(
     staticBlocks: attributionBlocks,
@@ -809,7 +817,6 @@ PromptResult _assembleMessages({
   );
 }
 
-
 /// Filters [PromptPayload.recalledMessageChunks] by the source-window
 /// visibility override, then formats the surviving chunks into a
 /// `<recalled_messages>` block. Falls back to
@@ -896,4 +903,3 @@ void applyAppendToLastMessage(
     blockName: '${original.blockName ?? 'Last user'} + $blockNames',
   );
 }
-

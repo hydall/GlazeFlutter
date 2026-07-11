@@ -97,12 +97,8 @@ class CleanerStage {
     if (!ctx.ref.mounted) return;
 
     try {
-      final bookRepo = ctx.ref.read(memoryBookRepoProvider);
-      final book = await bookRepo.getBySessionId(sessionId);
-      if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
       final pipeline = ctx.ref.read(pipelineSettingsProvider);
       if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
-      if (book == null) return;
 
       // The cleaner must only rewrite the just-generated assistant message.
       // If the trailing message is an error (e.g. Studio returned an empty
@@ -150,6 +146,45 @@ class CleanerStage {
           recentMessages.add(m);
         }
       }
+
+      // Cleaner enablement controls only cleaner/audit calls. Route the
+      // independent ExtBlocks + Ledger stages before touching cleaner-only
+      // prerequisites such as MemoryBook, preset blocks, or the cleaner API
+      // slot, so a missing cleaner dependency cannot suppress post-generation.
+      if (!pipeline.cleaner.postCleanerEnabled && genId >= 0) {
+        debugPrint(
+          '[PostCleaner] skipping — postCleanerEnabled=false session=$sessionId',
+        );
+        ctx.ref.read(postCleanerStateProvider.notifier).state =
+            const PostCleanerState.idle();
+        final effectiveChar =
+            character ?? ctx.ref.read(characterByIdProvider(ctx.charId));
+        if (effectiveChar != null && ctx.ref.mounted) {
+          final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+          if (refreshed != null) {
+            await extBlocks.launchForSwipe(
+              session: refreshed,
+              character: effectiveChar,
+              agentSwipeId: -1,
+            );
+          }
+        }
+        if (ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId)) {
+          await ledger.run(
+            sessionId: sessionId,
+            messages: recentMessages,
+            genId: genId,
+            finalAssistantText: lastAssistant.content,
+            targetMessage: lastAssistant,
+          );
+        }
+        return;
+      }
+
+      final bookRepo = ctx.ref.read(memoryBookRepoProvider);
+      final book = await bookRepo.getBySessionId(sessionId);
+      if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
+      if (book == null) return;
 
       // Load broadcast blocks (output language + prose guards) captured at
       // Studio build time so the cleaner applies the user's own rules instead
@@ -372,52 +407,10 @@ class CleanerStage {
     bool abortCheck() =>
         ctx.ref.mounted && (isManualRerun || ctx.abortHandler.isCurrentGen(genId));
 
-    // ── Post-cleaner disabled toggle (AUTO path only) ───────────────────
-    // When postCleanerEnabled is false on the auto path, skip the cleaner
-    // LLM and the fact-checker entirely — launch ExtBlocks + Ledger on the
-    // raw assistant text. Manual rerun (genId < 0) always runs the cleaner
-    // regardless — the user explicitly asked for it via the rerun button.
-    //
-    // On manual rerun, suppress ExtBlocks/Ledger re-launch ONLY when the
-    // toggle was off — they already ran on the raw text during auto post-gen.
+    // Manual rerun explicitly runs the cleaner even when the auto-cleaner
+    // toggle is off. In that case ExtBlocks/Ledger already ran on the raw auto
+    // response, so do not launch them a second time after the manual rewrite.
     final skipPostGenOnRerun = isManualRerun && !pipeline.cleaner.postCleanerEnabled;
-
-    if (!pipeline.cleaner.postCleanerEnabled && !isManualRerun) {
-      debugPrint(
-        '[PostCleaner] skipping — postCleanerEnabled=false session=$sessionId',
-      );
-      ctx.ref.read(postCleanerStateProvider.notifier).state =
-          const PostCleanerState.idle();
-      // Launch ExtBlocks on the original swipe (-1 = no cleaned sub-swipe).
-      if (character != null && ctx.ref.mounted) {
-        final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
-        if (refreshed != null) {
-          await extBlocks.launchForSwipe(
-            session: refreshed,
-            character: character,
-            agentSwipeId: -1,
-          );
-        }
-      }
-      // Run Ledger on the original assistant text.
-      // Awaited (not unawaited) so the foreground service hold acquired by
-      // PostGenCoordinator stays alive until the ledger LLM call finishes —
-      // otherwise the OS may suspend the app mid-request when the screen
-      // turns off.
-      if (ctx.ref.mounted) {
-        await ledger.run(
-          sessionId: sessionId,
-          messages: recentMessages,
-          genId: genId,
-          finalAssistantText: assistantText,
-          targetMessage: targetMessage,
-          isManualRerun: isManualRerun,
-          resolvedConfig: cleanerConfig,
-          cancelToken: null,
-        );
-      }
-      return;
-    }
 
     final cleanerTimeout = const AuxLlmClient().resolveCleanerTimeout(pipeline);
     debugPrint(

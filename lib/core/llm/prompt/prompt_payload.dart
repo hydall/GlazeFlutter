@@ -1,7 +1,8 @@
 import '../../models/character.dart';
 import '../../models/persona.dart';
 import '../../models/preset.dart' show Preset, PresetRegex;
-import '../../models/chat_message.dart' show ChatMessage, AuthorsNote, TriggeredEntry;
+import '../../models/chat_message.dart'
+    show ChatMessage, AuthorsNote, TriggeredEntry;
 import '../../models/api_config.dart';
 import '../../models/lorebook.dart'
     show Lorebook, LorebookGlobalSettings, LorebookActivations, LorebookEntry;
@@ -60,7 +61,11 @@ class PromptPayload {
   /// state has been committed for this session yet.
   final String? studioSessionStateContent;
 
-  /// Lossless backstop for the lossy MemoryBook compression — top-K raw
+  /// Scoped atomic character facts committed by Studio Ledger. This is a
+  /// separate prompt layer and never mutates the base card payload.
+  final String? characterKnowledgeContent;
+
+  /// Lossless backstop
   /// chat-message chunks semantically closest to the current user message,
   /// returned by [MessageRecallService]. Injected into the prompt as a
   /// `<recalled_messages>` system block before the first user/assistant
@@ -141,6 +146,7 @@ class PromptPayload {
     this.arcContent,
     this.entitiesContent,
     this.studioSessionStateContent,
+    this.characterKnowledgeContent,
     this.recalledMessagesContent,
     this.recalledMessageChunks = const [],
     this.disableSourceWindowExclusion = false,
