@@ -1223,29 +1223,40 @@ class AppDatabase extends _$AppDatabase {
       if (from < 67) {
         // Studio preset is now a global singleton stored in SharedPreferences
         // (activeStudioPresetProvider). Preserve the most recently updated
-        // per-session choice once, then drop the old column.
+        // per-session choice once, then drop the old column. A database that
+        // upgrades from before v55 executes the current v55 migration code,
+        // which no longer creates studio_preset_id; therefore this column is
+        // optional here.
         try {
-          final prefs = await SharedPreferences.getInstance();
-          if (!prefs.containsKey('activeStudioPresetId')) {
-            final rows = await customSelect(
-              'SELECT studio_preset_id FROM studio_config_rows '
-              "WHERE studio_preset_id <> '' "
-              'ORDER BY updated_at DESC LIMIT 1',
-            ).get();
-            if (rows.isNotEmpty) {
-              final presetId = rows.first.read<String>('studio_preset_id');
-              if (presetId.isNotEmpty) {
-                await prefs.setString('activeStudioPresetId', presetId);
+          final columns = await customSelect(
+            "PRAGMA table_info('studio_config_rows')",
+          ).get();
+          final hasLegacyPresetId = columns.any(
+            (column) => column.read<String>('name') == 'studio_preset_id',
+          );
+          if (hasLegacyPresetId) {
+            final prefs = await SharedPreferences.getInstance();
+            if (!prefs.containsKey('activeStudioPresetId')) {
+              final rows = await customSelect(
+                'SELECT studio_preset_id FROM studio_config_rows '
+                "WHERE studio_preset_id <> '' "
+                'ORDER BY updated_at DESC LIMIT 1',
+              ).get();
+              if (rows.isNotEmpty) {
+                final presetId = rows.first.read<String>('studio_preset_id');
+                if (presetId.isNotEmpty) {
+                  await prefs.setString('activeStudioPresetId', presetId);
+                }
               }
             }
+            await customStatement(
+              'ALTER TABLE studio_config_rows DROP COLUMN studio_preset_id',
+            );
           }
         } catch (e) {
           debugPrint('Migration 67 (preserve active Studio preset) failed: $e');
           rethrow;
         }
-        await customStatement(
-          'ALTER TABLE studio_config_rows DROP COLUMN studio_preset_id',
-        );
       }
     },
   );
