@@ -114,6 +114,71 @@ void main() {
     );
   });
 
+  test('renders narrative modifiers as independent add-on switches', () {
+    const narrativeBlocks = [
+      StudioPresetBlock(
+        id: 'style_header',
+        title: '━✏️ Narrative Styles',
+        order: 0,
+      ),
+      StudioPresetBlock(id: 'ao3', title: 'AO3-Style Fan Fiction', order: 1),
+      StudioPresetBlock(
+        id: 'endless',
+        title: 'Endless Storytelling',
+        enabled: false,
+        order: 2,
+      ),
+      StudioPresetBlock(
+        id: 'bratty',
+        title: 'Bratty Ass Narrative',
+        enabled: false,
+        order: 3,
+      ),
+      StudioPresetBlock(
+        id: 'anime',
+        title: 'Anime-Style Story',
+        enabled: false,
+        order: 4,
+      ),
+      StudioPresetBlock(
+        id: 'doujinshi',
+        title: 'Doujinshi Narrative',
+        enabled: false,
+        order: 5,
+      ),
+      StudioPresetBlock(
+        id: 'deflections',
+        title: 'Emotional Deflections',
+        enabled: false,
+        order: 6,
+      ),
+    ];
+
+    final items = groupStudioPresetBlocks(narrativeBlocks);
+
+    expect(items, hasLength(5));
+    expect(items.first.exclusive, isTrue);
+    expect(items.first.children.map((block) => block.id), ['ao3', 'anime']);
+    expect(items.skip(1).map((item) => item.standalone?.id), [
+      'endless',
+      'bratty',
+      'doujinshi',
+      'deflections',
+    ]);
+
+    final withBratty = updateStudioPresetBlockRespectingGroups(
+      narrativeBlocks,
+      narrativeBlocks
+          .firstWhere((block) => block.id == 'bratty')
+          .copyWith(enabled: true),
+    );
+    expect(withBratty.firstWhere((block) => block.id == 'ao3').enabled, isTrue);
+    expect(
+      withBratty.firstWhere((block) => block.id == 'bratty').enabled,
+      isTrue,
+    );
+  });
+
   test('repairs a mismatched legacy close from the owned opening tag', () {
     const legacy = [
       StudioPresetBlock(

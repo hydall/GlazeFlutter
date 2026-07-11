@@ -47,6 +47,13 @@ const _exclusiveStudioHeaders = <String>{
   'response length controls',
 };
 
+const _narrativeStyleAddonTitles = <String>{
+  'endless storytelling',
+  'bratty ass narrative',
+  'doujinshi narrative',
+  'emotional deflections',
+};
+
 bool isStudioPresetGroupHeader(StudioPresetBlock block) =>
     block.title.trimLeft().startsWith('━');
 
@@ -176,15 +183,35 @@ List<StudioPresetBlockGroup> groupStudioPresetBlocks(
   void flush() {
     final current = header;
     if (current == null) return;
+    final isNarrativeStyles =
+        _normalizedHeaderTitle(current.title) == 'narrative styles';
+    final groupedChildren = isNarrativeStyles
+        ? children
+              .where(
+                (block) => !_narrativeStyleAddonTitles.contains(
+                  block.title.trim().toLowerCase(),
+                ),
+              )
+              .toList(growable: false)
+        : children;
     result.add(
       StudioPresetBlockGroup.section(
         header: current,
         openingBoundary: boundaries['${current.id}_group_open'],
         closingBoundary: boundaries['${current.id}_group_close'],
-        children: List.unmodifiable(children),
+        children: List.unmodifiable(groupedChildren),
         exclusive: _isExclusiveHeader(current.title),
       ),
     );
+    if (isNarrativeStyles) {
+      for (final child in children) {
+        if (_narrativeStyleAddonTitles.contains(
+          child.title.trim().toLowerCase(),
+        )) {
+          result.add(StudioPresetBlockGroup.standalone(child));
+        }
+      }
+    }
     header = null;
     children = <StudioPresetBlock>[];
   }
@@ -260,9 +287,12 @@ bool _isPointOfViewHeader(String title) =>
     title.toLowerCase().contains('point-of-view');
 
 bool _isExclusiveHeader(String title) {
-  final normalized = title
+  return _exclusiveStudioHeaders.contains(_normalizedHeaderTitle(title));
+}
+
+String _normalizedHeaderTitle(String title) {
+  return title
       .replaceFirst(RegExp(r'^━[^\p{L}\p{N}]*', unicode: true), '')
       .trim()
       .toLowerCase();
-  return _exclusiveStudioHeaders.contains(normalized);
 }
