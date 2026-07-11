@@ -36,6 +36,7 @@ class SyncService {
   final SyncChatSummaryStore? _chatSummaryStore;
   final SyncCharacterFolderStore? _characterFolderStore;
   final SyncMemoryGraphStore? _memoryGraphStore;
+  final SyncCharacterKnowledgeStore? _characterKnowledgeStore;
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
 
   SyncProvider _provider = SyncProvider.dropbox;
@@ -44,6 +45,7 @@ class SyncService {
   int? _lastSyncTime;
   final List<SyncConflict> _conflicts = [];
   final List<String> _resolvedAsCloud = [];
+  bool _resolvedAsLocal = false;
   Map<String, dynamic>? _accountInfo;
   bool _autoSyncEnabled = false;
   int _autoSyncMessageCount = 5;
@@ -102,6 +104,7 @@ class SyncService {
     this._chatSummaryStore,
     this._characterFolderStore,
     this._memoryGraphStore,
+    this._characterKnowledgeStore,
     required Future<void> Function(LorebookActivations) saveLorebookActivations,
     // ignore: prefer_initializing_formals
   }) : _saveLorebookActivations = saveLorebookActivations;
@@ -134,6 +137,7 @@ class SyncService {
     chatSummaryStore: _chatSummaryStore,
     characterFolderStore: _characterFolderStore,
     memoryGraphStore: _memoryGraphStore,
+    characterKnowledgeStore: _characterKnowledgeStore,
     imageStore: _imageStorage,
   );
 
@@ -160,6 +164,7 @@ class SyncService {
     _chatSummaryStore,
     _characterFolderStore,
     _memoryGraphStore,
+    _characterKnowledgeStore,
     _saveLorebookActivations,
   );
 
@@ -220,6 +225,7 @@ class SyncService {
       _lastError = null;
       _conflicts.clear();
       _resolvedAsCloud.clear();
+      _resolvedAsLocal = false;
 
       try {
         final engine = _engine;
@@ -282,6 +288,8 @@ class SyncService {
         await _engine.resolveConflict(conflict, choice);
         if (choice == 'cloud') {
           _resolvedAsCloud.add(conflict.key);
+        } else {
+          _resolvedAsLocal = true;
         }
       }
       _conflicts.clear();
@@ -300,6 +308,8 @@ class SyncService {
       await _engine.resolveConflict(conflict, choice);
       if (choice == 'cloud') {
         _resolvedAsCloud.add(conflict.key);
+      } else {
+        _resolvedAsLocal = true;
       }
       _conflicts.removeWhere((c) => c.key == conflict.key);
     } catch (e) {
@@ -322,8 +332,10 @@ class SyncService {
           resolvedAsCloud: _resolvedAsCloud.isNotEmpty
               ? List.from(_resolvedAsCloud)
               : null,
+          pushLocalChanges: _resolvedAsLocal,
         );
         _resolvedAsCloud.clear();
+        _resolvedAsLocal = false;
         _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setInt('gz_sync_last', _lastSyncTime!);

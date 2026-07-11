@@ -27,6 +27,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncChatSummaryStore? _chatSummaryStore;
   final SyncCharacterFolderStore? _characterFolderStore;
   final SyncMemoryGraphStore? _memoryGraphStore;
+  final SyncCharacterKnowledgeStore? _characterKnowledgeStore;
   final SyncImageStore? _imageStore;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
@@ -52,6 +53,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     this._chatSummaryStore,
     this._characterFolderStore,
     this._memoryGraphStore,
+    this._characterKnowledgeStore,
     this._imageStore,
   });
 
@@ -372,6 +374,33 @@ class SyncManifestBuilder implements SyncManifestProvider {
           type: 'memory_graph',
           id: sessionId,
           path: cloudPath('memory_graph', sessionId),
+          updatedAt: updatedAt,
+          hash: hash,
+        );
+      }
+    }
+
+    if (_characterKnowledgeStore != null) {
+      final sessionIds = await _characterKnowledgeStore.getAllSessionIds();
+      for (final sessionId in sessionIds) {
+        final knowledge = await _characterKnowledgeStore.getBySessionId(
+          sessionId,
+        );
+        if (knowledge == null) continue;
+        final hash = SyncSerialization.computeSyncHash(knowledge);
+        final key = entryKey('character_knowledge', sessionId);
+        final prevEntry = previous.entries[key];
+        final cloudEntry = cloudManifest?.entries[key];
+        final updatedAt = _resolveUpdatedAt(
+          hash: hash,
+          prevEntry: prevEntry,
+          cloudEntry: cloudEntry,
+          now: now,
+        );
+        entries[key] = SyncManifestEntry(
+          type: 'character_knowledge',
+          id: sessionId,
+          path: cloudPath('character_knowledge', sessionId),
           updatedAt: updatedAt,
           hash: hash,
         );

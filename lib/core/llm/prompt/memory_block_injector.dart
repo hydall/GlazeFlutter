@@ -85,6 +85,28 @@ void injectRecalledMessagesBlock(
   }
 }
 
+void injectCharacterKnowledgeBlock(
+  List<PromptMessage> messages,
+  List<StaticBlock> attributionBlocks,
+  String content,
+) {
+  attributionBlocks.add(
+    StaticBlock(id: 'current_character_state', content: content),
+  );
+  final stateMsg = PromptMessage(
+    role: 'system',
+    content: content,
+    blockId: 'current_character_state',
+    blockName: 'Current Character State',
+  );
+  final historyIdx = messages.indexWhere((m) => m.isHistory);
+  if (historyIdx >= 0) {
+    messages.insert(historyIdx, stateMsg);
+  } else {
+    messages.add(stateMsg);
+  }
+}
+
 /// Injects the `<studio_session_state>` system block before the first history
 /// message so the LLM sees committed entity/relationship/arc/world canon state
 /// overriding character-card baseline. Placed before recalled_messages to give

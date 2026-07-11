@@ -339,6 +339,85 @@ class TrackerSnapshots extends Table {
   Set<Column> get primaryKey => {sessionId, messageId, swipeId, agentSwipeId};
 }
 
+/// Append-only, provenance-backed character knowledge and development delta.
+/// Corrections point to prior rows; the earlier row remains inspectable.
+@DataClassName('CharacterKnowledgeFactRow')
+@TableIndex(
+  name: 'idx_character_knowledge_fact_session_lifecycle_knower',
+  columns: {#chatSessionId, #lifecycle, #knowerKey},
+)
+@TableIndex(
+  name: 'idx_character_knowledge_fact_session_lifecycle_subject',
+  columns: {#chatSessionId, #lifecycle, #subjectKey},
+)
+@TableIndex(
+  name: 'idx_character_knowledge_fact_source_anchor',
+  columns: {
+    #chatSessionId,
+    #sourceMessageId,
+    #sourceSwipeId,
+    #sourceAgentSwipeId,
+  },
+)
+@TableIndex(
+  name: 'idx_character_knowledge_fact_session_supersedes',
+  columns: {#chatSessionId, #supersedesId},
+)
+class CharacterKnowledgeFactRows extends Table {
+  @override
+  String get tableName => 'character_knowledge_fact_rows';
+
+  TextColumn get id => text()();
+  TextColumn get chatSessionId => text()();
+  TextColumn get knowerKey => text()();
+  TextColumn get knowerName => text().withDefault(const Constant(''))();
+  TextColumn get subjectKey => text()();
+  TextColumn get subjectName => text().withDefault(const Constant(''))();
+  TextColumn get factClass => text()();
+  TextColumn get scopeKey => text().withDefault(const Constant(''))();
+  TextColumn get predicate => text()();
+  TextColumn get object => text()();
+  TextColumn get epistemicState => text()();
+  RealColumn get confidence => real().withDefault(const Constant(0.0))();
+  RealColumn get importance => real().withDefault(const Constant(0.0))();
+  TextColumn get entitiesJson => text().withDefault(const Constant('[]'))();
+  TextColumn get topicsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get sourceMessageId => text().withDefault(const Constant(''))();
+  IntColumn get sourceSwipeId => integer().withDefault(const Constant(0))();
+  IntColumn get sourceAgentSwipeId =>
+      integer().withDefault(const Constant(0))();
+  TextColumn get sourceKind =>
+      text().withDefault(const Constant('studio_ledger'))();
+  TextColumn get supersedesId => text().nullable()();
+  TextColumn get lifecycle => text().withDefault(const Constant('tentative'))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Immutable source-card revision selected for a session.
+/// Session development remains in [CharacterKnowledgeFactRows].
+@DataClassName('CharacterSessionBaselineRow')
+class CharacterSessionBaselineRows extends Table {
+  @override
+  String get tableName => 'character_session_baseline_rows';
+
+  TextColumn get chatSessionId => text()();
+  TextColumn get characterId => text()();
+  TextColumn get baselineCardJson => text()();
+  TextColumn get baselineHash => text()();
+  TextColumn get sourceHashLastSeen => text().withDefault(const Constant(''))();
+  TextColumn get cardUpdatePolicy =>
+      text().withDefault(const Constant('follow_source'))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {chatSessionId};
+}
+
 @DataClassName('StudioConfigRow')
 @TableIndex(name: 'idx_studio_config_session', columns: {#sessionId})
 class StudioConfigRows extends Table {
@@ -376,6 +455,9 @@ class StudioPresetRows extends Table {
   TextColumn get presetId => text()();
   TextColumn get name => text()();
   TextColumn get blocksJson => text().withDefault(const Constant('[]'))();
+  TextColumn get agentEnabledJson => text().withDefault(const Constant('{}'))();
+  TextColumn get executionMode =>
+      text().withDefault(const Constant('legacy'))();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();
 
   @override

@@ -20,6 +20,8 @@ import '../db/repositories/studio_preset_repo.dart';
 import '../models/studio_config.dart';
 import '../db/repositories/tracker_repo.dart';
 import '../db/repositories/tracker_snapshot_repo.dart';
+import '../db/repositories/character_knowledge_fact_repo.dart';
+import '../db/repositories/character_session_baseline_repo.dart';
 import '../db/repositories/extension_presets_repository.dart';
 import '../db/repositories/info_blocks_repository.dart';
 import '../models/memory_book.dart';
@@ -136,6 +138,17 @@ final trackerRepoProvider = Provider<TrackerRepo>((ref) {
 final trackerSnapshotRepoProvider = Provider<TrackerSnapshotRepo>((ref) {
   return TrackerSnapshotRepo(ref.watch(appDbProvider));
 });
+
+final characterKnowledgeFactRepoProvider = Provider<CharacterKnowledgeFactRepo>(
+  (ref) {
+    return CharacterKnowledgeFactRepo(ref.watch(appDbProvider));
+  },
+);
+
+final characterSessionBaselineRepoProvider =
+    Provider<CharacterSessionBaselineRepo>((ref) {
+      return CharacterSessionBaselineRepo(ref.watch(appDbProvider));
+    });
 
 final memoryBookProvider = FutureProvider.family<MemoryBook?, String>((
   ref,

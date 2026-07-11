@@ -248,6 +248,13 @@ class ChatSessionService {
           toSessionId: session.id,
           messageIds: branchedMessageIds,
         );
+    await _ref
+        .read(characterKnowledgeFactRepoProvider)
+        .copyForSessionBranch(
+          fromSessionId: current.id,
+          toSessionId: session.id,
+          messageIds: branchedMessageIds,
+        );
     await saveCurrentSessionIndex(charId, nextIndex);
     return session;
   }
@@ -276,6 +283,9 @@ class ChatSessionService {
     // Wipe tracker snapshots so stale state from before the clear does not
     // leak into the fresh chat.
     await _ref.read(trackerSnapshotRepoProvider).deleteBySessionId(session.id);
+    await _ref
+        .read(characterKnowledgeFactRepoProvider)
+        .deleteBySessionId(session.id);
     // Also wipe the live `tracker_rows` store. Without this, the UI
     // ("Tracker values" tab) falls back to
     // `trackerRepo.getBySessionId` when no snapshot is found and shows the

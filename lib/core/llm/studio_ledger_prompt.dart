@@ -79,12 +79,21 @@ When there are no state changes or durable facts, output empty arrays —
 do NOT skip the block.
 
 Ops format:
-{"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"durableFacts":[{"title":"…","content":"…","keys":["…"],"entities":["…"]}]}
+{"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"durableFacts":[{"title":"…","content":"…","keys":["…"],"entities":["…"]}],"knowledgeFacts":[{"knowerKey":"entity:lucy","knowerName":"Lucy","subjectKey":"entity:danvi","subjectName":"Danvi","factClass":"relationship","scopeKey":"relationship:danvi","predicate":"trusts","object":"Trusts Danvi.","epistemicState":"confirmed","confidence":0.9,"importance":0.8,"entities":["Lucy"],"topics":["trust"],"supersedesId":null}]}
 
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
 Allowed ops: set, append_unique, delete.
+Do not write npc:*.knowledge — use knowledgeFacts instead.
 Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).
-Max value length: 2000 chars.''';
+Allowed factClass: knowledge, relationship, behavior_change, commitment, goal, persistent_condition, identity_development.
+Allowed epistemicState: observed, heard_claim, inferred, confirmed, disbelieved, forgotten, retracted.
+Max value length: 2000 chars.
+knowledgeFacts rules:
+- One proposition per fact. Never summarize prior facts.
+- supersedesId only when correcting a known injected fact ID.
+- Distinguish direct observation, heard claim, inference, confirmation, disbelief, and correction.
+- Never output future events as facts.
+- scopeKey: narrowest defensible scope (e.g. relationship:danvi), never global for convenience.''';
   }
 
   String _buildTrackerBlock(List<Tracker> trackers) {

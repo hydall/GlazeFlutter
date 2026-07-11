@@ -49,6 +49,8 @@ class StudioPresetRepo implements SyncStudioPresetStore {
             blocksJson: Value(
               jsonEncode(normalized.blocks.map((b) => b.toJson()).toList()),
             ),
+            agentEnabledJson: Value(jsonEncode(normalized.agentEnabled)),
+            executionMode: Value(normalized.executionMode.wireName),
             updatedAt: Value(normalized.updatedAt),
           ),
         );
@@ -73,11 +75,20 @@ class StudioPresetRepo implements SyncStudioPresetStore {
     } catch (_) {
       blocks = [];
     }
+    Map<String, bool> agentEnabled;
+    try {
+      agentEnabled = (jsonDecode(row.agentEnabledJson) as Map<String, dynamic>)
+          .map((key, value) => MapEntry(key, value == true));
+    } catch (_) {
+      agentEnabled = const {};
+    }
     return _normalizePreset(
       StudioPreset(
         id: row.presetId,
         name: row.name,
         blocks: blocks,
+        agentEnabled: agentEnabled,
+        executionMode: StudioExecutionMode.fromWireName(row.executionMode),
         updatedAt: row.updatedAt,
       ),
     );

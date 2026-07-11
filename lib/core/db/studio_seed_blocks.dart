@@ -9,3 +9,8 @@ import 'app_db.dart' as db;
 /// false positive.
 List<Map<String, dynamic>> studioPresetSeedBlocks() =>
     db.studioPresetSeedBlocks();
+
+/// Returns topology-specific seed data for reset, when [presetId] is a Loom
+/// preset; otherwise returns the legacy default seed layout.
+List<Map<String, dynamic>> studioPresetSeedBlocksForPreset(String presetId) =>
+    db.studioPresetSeedBlocksForPreset(presetId);

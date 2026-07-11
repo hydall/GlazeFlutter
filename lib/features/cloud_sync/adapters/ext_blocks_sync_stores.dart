@@ -216,29 +216,35 @@ class CharacterFolderSyncStore implements SyncCharacterFolderStore {
     return {
       '__singleton': true,
       'folders': folders
-          .map((f) => {
-                'folderId': f.id,
-                'name': f.name,
-                'color': f.color,
-                'sortOrder': f.sortOrder,
-                'createdAt': f.createdAt,
-                'updatedAt': f.updatedAt,
-              })
+          .map(
+            (f) => {
+              'folderId': f.id,
+              'name': f.name,
+              'color': f.color,
+              'sortOrder': f.sortOrder,
+              'createdAt': f.createdAt,
+              'updatedAt': f.updatedAt,
+            },
+          )
           .toList(),
       'members': members
-          .map((m) => {
-                'folderId': m.folderId,
-                'charId': m.charId,
-                'addedAt': m.addedAt,
-              })
+          .map(
+            (m) => {
+              'folderId': m.folderId,
+              'charId': m.charId,
+              'addedAt': m.addedAt,
+            },
+          )
           .toList(),
     };
   }
 
   @override
   Future<void> applyAll(Map<String, dynamic> data) async {
-    final folders = (data['folders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final members = (data['members'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final folders =
+        (data['folders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final members =
+        (data['members'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
     await _repo.deleteAllFoldersAndMembers();
     for (final f in folders) {
@@ -279,33 +285,41 @@ class MemoryGraphSyncStore implements SyncMemoryGraphStore {
   @override
   Future<List<String>> getAllSessionIds() async {
     final ids = <String>{};
-    final catalog = await _db.customSelect(
-      "SELECT DISTINCT chat_session_id FROM memory_catalog_rows",
-    ).get();
+    final catalog = await _db
+        .customSelect(
+          "SELECT DISTINCT chat_session_id FROM memory_catalog_rows",
+        )
+        .get();
     for (final r in catalog) {
       ids.add(r.read<String>('chat_session_id'));
     }
-    final entities = await _db.customSelect(
-      "SELECT DISTINCT chat_session_id FROM memory_entity_rows",
-    ).get();
+    final entities = await _db
+        .customSelect("SELECT DISTINCT chat_session_id FROM memory_entity_rows")
+        .get();
     for (final r in entities) {
       ids.add(r.read<String>('chat_session_id'));
     }
-    final salience = await _db.customSelect(
-      "SELECT DISTINCT chat_session_id FROM memory_salience_rows",
-    ).get();
+    final salience = await _db
+        .customSelect(
+          "SELECT DISTINCT chat_session_id FROM memory_salience_rows",
+        )
+        .get();
     for (final r in salience) {
       ids.add(r.read<String>('chat_session_id'));
     }
-    final cadence = await _db.customSelect(
-      "SELECT DISTINCT chat_session_id FROM memory_cadence_rows",
-    ).get();
+    final cadence = await _db
+        .customSelect(
+          "SELECT DISTINCT chat_session_id FROM memory_cadence_rows",
+        )
+        .get();
     for (final r in cadence) {
       ids.add(r.read<String>('chat_session_id'));
     }
-    final consolidation = await _db.customSelect(
-      "SELECT DISTINCT chat_session_id FROM memory_consolidation_rows",
-    ).get();
+    final consolidation = await _db
+        .customSelect(
+          "SELECT DISTINCT chat_session_id FROM memory_consolidation_rows",
+        )
+        .get();
     for (final r in consolidation) {
       ids.add(r.read<String>('chat_session_id'));
     }
@@ -314,21 +328,21 @@ class MemoryGraphSyncStore implements SyncMemoryGraphStore {
 
   @override
   Future<Map<String, dynamic>?> getBySessionId(String sessionId) async {
-    final catalog = await (_db.select(_db.memoryCatalogRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .get();
-    final entities = await (_db.select(_db.memoryEntityRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .get();
-    final salience = await (_db.select(_db.memorySalienceRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .get();
-    final cadence = await (_db.select(_db.memoryCadenceRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .get();
-    final consolidation = await (_db.select(_db.memoryConsolidationRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .get();
+    final catalog = await (_db.select(
+      _db.memoryCatalogRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).get();
+    final entities = await (_db.select(
+      _db.memoryEntityRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).get();
+    final salience = await (_db.select(
+      _db.memorySalienceRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).get();
+    final cadence = await (_db.select(
+      _db.memoryCadenceRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).get();
+    final consolidation = await (_db.select(
+      _db.memoryConsolidationRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).get();
 
     if (catalog.isEmpty &&
         entities.isEmpty &&
@@ -356,39 +370,53 @@ class MemoryGraphSyncStore implements SyncMemoryGraphStore {
   ) async {
     await deleteBySessionId(sessionId);
 
-    final catalog = (data['catalog'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final entities = (data['entities'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final salience = (data['salience'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final cadence = (data['cadence'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final catalog =
+        (data['catalog'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final entities =
+        (data['entities'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final salience =
+        (data['salience'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final cadence =
+        (data['cadence'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final consolidation =
         (data['consolidation'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
     for (final row in catalog) {
-      await _db.into(_db.memoryCatalogRows).insert(
+      await _db
+          .into(_db.memoryCatalogRows)
+          .insert(
             MemoryCatalogRow.fromJson(row),
             mode: InsertMode.insertOrReplace,
           );
     }
     for (final row in entities) {
-      await _db.into(_db.memoryEntityRows).insert(
+      await _db
+          .into(_db.memoryEntityRows)
+          .insert(
             MemoryEntityRow.fromJson(row),
             mode: InsertMode.insertOrReplace,
           );
     }
     for (final row in salience) {
-      await _db.into(_db.memorySalienceRows).insert(
+      await _db
+          .into(_db.memorySalienceRows)
+          .insert(
             MemorySalienceRow.fromJson(row),
             mode: InsertMode.insertOrReplace,
           );
     }
     for (final row in cadence) {
-      await _db.into(_db.memoryCadenceRows).insert(
+      await _db
+          .into(_db.memoryCadenceRows)
+          .insert(
             MemoryCadenceRow.fromJson(row),
             mode: InsertMode.insertOrReplace,
           );
     }
     for (final row in consolidation) {
-      await _db.into(_db.memoryConsolidationRows).insert(
+      await _db
+          .into(_db.memoryConsolidationRows)
+          .insert(
             MemoryConsolidationRow.fromJson(row),
             mode: InsertMode.insertOrReplace,
           );
@@ -397,20 +425,103 @@ class MemoryGraphSyncStore implements SyncMemoryGraphStore {
 
   @override
   Future<void> deleteBySessionId(String sessionId) async {
-    await (_db.delete(_db.memoryCatalogRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .go();
-    await (_db.delete(_db.memoryEntityRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .go();
-    await (_db.delete(_db.memorySalienceRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .go();
-    await (_db.delete(_db.memoryCadenceRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .go();
-    await (_db.delete(_db.memoryConsolidationRows)
-          ..where((t) => t.chatSessionId.equals(sessionId)))
-        .go();
+    await (_db.delete(
+      _db.memoryCatalogRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).go();
+    await (_db.delete(
+      _db.memoryEntityRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).go();
+    await (_db.delete(
+      _db.memorySalienceRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).go();
+    await (_db.delete(
+      _db.memoryCadenceRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).go();
+    await (_db.delete(
+      _db.memoryConsolidationRows,
+    )..where((t) => t.chatSessionId.equals(sessionId))).go();
+  }
+}
+
+/// Adapter for atomic character knowledge and immutable session baselines.
+/// Retained/retracted rows are intentionally included: their lifecycle is
+/// provenance, not disposable cache state.
+class CharacterKnowledgeSyncStore implements SyncCharacterKnowledgeStore {
+  final AppDatabase _db;
+
+  CharacterKnowledgeSyncStore(this._db);
+
+  @override
+  Future<List<String>> getAllSessionIds() async {
+    final ids = <String>{};
+    final facts = await _db
+        .customSelect(
+          'SELECT DISTINCT chat_session_id FROM character_knowledge_fact_rows',
+        )
+        .get();
+    final baselines = await _db
+        .customSelect(
+          'SELECT DISTINCT chat_session_id FROM character_session_baseline_rows',
+        )
+        .get();
+    for (final row in [...facts, ...baselines]) {
+      ids.add(row.read<String>('chat_session_id'));
+    }
+    return ids.toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getBySessionId(String sessionId) async {
+    final facts = await (_db.select(
+      _db.characterKnowledgeFactRows,
+    )..where((row) => row.chatSessionId.equals(sessionId))).get();
+    final baseline = await (_db.select(
+      _db.characterSessionBaselineRows,
+    )..where((row) => row.chatSessionId.equals(sessionId))).getSingleOrNull();
+    if (facts.isEmpty && baseline == null) return null;
+    return {
+      '__characterKnowledge': true,
+      'sessionId': sessionId,
+      'facts': facts.map((row) => row.toJson()).toList(),
+      if (baseline != null) 'baseline': baseline.toJson(),
+    };
+  }
+
+  @override
+  Future<void> applyBySessionId(
+    String sessionId,
+    Map<String, dynamic> data,
+  ) async {
+    await deleteBySessionId(sessionId);
+    final facts = (data['facts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final baseline = data['baseline'] as Map<String, dynamic>?;
+    await _db.transaction(() async {
+      for (final fact in facts) {
+        await _db
+            .into(_db.characterKnowledgeFactRows)
+            .insert(
+              CharacterKnowledgeFactRow.fromJson(fact),
+              mode: InsertMode.insertOrReplace,
+            );
+      }
+      if (baseline != null) {
+        await _db
+            .into(_db.characterSessionBaselineRows)
+            .insert(
+              CharacterSessionBaselineRow.fromJson(baseline),
+              mode: InsertMode.insertOrReplace,
+            );
+      }
+    });
+  }
+
+  @override
+  Future<void> deleteBySessionId(String sessionId) async {
+    await (_db.delete(
+      _db.characterKnowledgeFactRows,
+    )..where((row) => row.chatSessionId.equals(sessionId))).go();
+    await (_db.delete(
+      _db.characterSessionBaselineRows,
+    )..where((row) => row.chatSessionId.equals(sessionId))).go();
   }
 }

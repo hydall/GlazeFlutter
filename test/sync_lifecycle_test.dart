@@ -558,6 +558,7 @@ class SyncWorld {
     null,
     null,
     null,
+    null,
     (_) async {},
   );
 }
@@ -754,6 +755,30 @@ void main() {
           'so the next pull sees a mismatch again → infinite conflict loop.',
     );
   });
+
+  test(
+    'Pull preserves a local entity absent from an older cloud manifest',
+    () async {
+      final source = SyncWorld();
+      await source.characters.put(makeChar('cloud-char', name: 'Cloud'));
+      await source.engine.pushEntities(onProgress: (_) {});
+
+      final target = SyncWorld();
+      target.cloud.files.addAll(source.cloud.files);
+      await target.characters.put(makeChar('local-new', name: 'Local new'));
+
+      await target.engine.pullEntities(onProgress: (_) {}, onConflict: (_) {});
+
+      expect(target.characters.data['cloud-char'], isNotNull);
+      expect(
+        target.characters.data['local-new'],
+        isNotNull,
+        reason:
+            'Manifest absence is not a deletion. Only an explicit tombstone may '
+            'remove a local entity during pull.',
+      );
+    },
+  );
 
   test(
     'Singleton push: lorebooks/api_presets/theme_presets upload as list',

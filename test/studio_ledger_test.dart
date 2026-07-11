@@ -9,6 +9,7 @@ import 'package:glaze_flutter/core/db/repositories/memory_book_repo.dart';
 import 'package:glaze_flutter/core/db/repositories/tracker_repo.dart';
 import 'package:glaze_flutter/core/db/repositories/tracker_snapshot_repo.dart';
 import 'package:glaze_flutter/core/llm/studio_ledger_export_parser.dart';
+import 'package:glaze_flutter/core/llm/studio_ledger_prompt.dart';
 import 'package:glaze_flutter/core/llm/prompt_payload_builder.dart'
     show kCompileStudioSessionStateForTest;
 import 'package:glaze_flutter/core/models/memory_book.dart';
@@ -151,6 +152,48 @@ $_validJson
       expect(result.export, isNotNull);
       expect(result.export!.ops, hasLength(3));
       expect(result.wasRejected, isFalse);
+    });
+
+    test('keeps valid atomic facts while dropping malformed siblings', () {
+      const raw = '''
+<glaze_memory_export>
+{
+  "ops": [],
+  "durableFacts": [],
+  "knowledgeFacts": [
+    {
+      "knowerKey": "entity:lucy",
+      "knowerName": "Lucy",
+      "subjectKey": "entity:danvi",
+      "subjectName": "Danvi",
+      "factClass": "relationship",
+      "scopeKey": "relationship:danvi",
+      "predicate": "trusts",
+      "object": "Trusts Danvi with personal risk.",
+      "epistemicState": "confirmed",
+      "confidence": 1.4,
+      "importance": 0.8,
+      "entities": ["Lucy", "Danvi"],
+      "topics": ["trust"]
+    },
+    {
+      "knowerKey": "entity:lucy",
+      "subjectKey": "entity:danvi",
+      "predicate": "",
+      "object": "Missing predicate",
+      "confidence": 0.5,
+      "importance": 0.5
+    }
+  ]
+}
+</glaze_memory_export>''';
+
+      final result = parser.parse(raw);
+
+      expect(result.export, isNotNull);
+      expect(result.export!.knowledgeFacts, hasLength(1));
+      expect(result.export!.knowledgeFacts.single.factClass, 'relationship');
+      expect(result.export!.knowledgeFacts.single.confidence, 1.0);
     });
 
     // Test 2

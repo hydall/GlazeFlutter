@@ -104,9 +104,8 @@ class SyncManifest {
   ///         Values, separate from rollback snapshots.
   ///   8 — added `studio_preset` entity type (DB-backed StudioPresetRows).
   ///   9 — added `local_storage` singleton for global PipelineSettings.
-  ///  10 — added `chat_summary` (per-session), `character_folders` (singleton),
-  ///         and `memory_graph` (per-session) entity types.
-  static const int currentVersion = 10;
+  ///  11 — added `character_knowledge` (atomic facts + session baseline).
+  static const int currentVersion = 11;
 
   final int version;
   final String deviceId;
@@ -205,6 +204,8 @@ String cloudPath(String type, String id) {
       return '$cloudBase/character_folders.json';
     case 'memory_graph':
       return '$cloudBase/memory_graphs/$id.json';
+    case 'character_knowledge':
+      return '$cloudBase/character_knowledge/$id.json';
     case 'lorebooks':
       return '$cloudBase/lorebooks.json';
     case 'api_presets':

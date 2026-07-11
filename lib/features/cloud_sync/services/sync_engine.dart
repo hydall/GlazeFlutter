@@ -54,6 +54,7 @@ class SyncEngine {
   final SyncChatSummaryStore? _chatSummaryStore;
   final SyncCharacterFolderStore? _characterFolderStore;
   final SyncMemoryGraphStore? _memoryGraphStore;
+  final SyncCharacterKnowledgeStore? _characterKnowledgeStore;
   final Future<void> Function(LorebookActivations) _saveLorebookActivations;
   final SyncQueue _queue = SyncQueue();
   late final SyncBinaryAssetSyncer _binarySyncer;
@@ -82,6 +83,7 @@ class SyncEngine {
     this._chatSummaryStore,
     this._characterFolderStore,
     this._memoryGraphStore,
+    this._characterKnowledgeStore,
     this._saveLorebookActivations,
   ) {
     _binarySyncer = SyncBinaryAssetSyncer(
@@ -111,6 +113,7 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/studio_presets');
     await _adapter.ensureFolder('$cloudBase/chat_summaries');
     await _adapter.ensureFolder('$cloudBase/memory_graphs');
+    await _adapter.ensureFolder('$cloudBase/character_knowledge');
 
     onProgress(const SyncProgress(message: 'Building sync manifest...'));
     final localManifest = await _manifestBuilder.buildLocalManifest();
@@ -367,6 +370,7 @@ class SyncEngine {
   Future<void> applyPendingPull({
     required void Function(SyncProgress) onProgress,
     List<String>? resolvedAsCloud,
+    bool pushLocalChanges = false,
   }) async {
     final cloudManifest =
         await _loadCloudManifestForPendingPull() ??
@@ -377,7 +381,6 @@ class SyncEngine {
     );
 
     final pullEntries = <SyncManifestEntry>[];
-    final cloudKeys = cloudManifest.entries.keys.toSet();
 
     for (final cloudEntry in cloudManifest.entries.values) {
       final localEntry = localManifest.entries[cloudEntry.key];
@@ -402,13 +405,6 @@ class SyncEngine {
       pullEntries.add(cloudEntry);
     }
 
-    for (final localEntry in localManifest.entries.values) {
-      if (localEntry.deleted) continue;
-      if (!cloudKeys.contains(localEntry.key)) {
-        await _deleteLocalEntity(localEntry.type, localEntry.id);
-      }
-    }
-
     if (pullEntries.isNotEmpty) {
       await _applyPullEntries(
         pullEntries,
@@ -421,6 +417,16 @@ class SyncEngine {
         const SyncProgress(current: 0, total: 0, message: 'Nothing to pull'),
       );
       await _finalizePull(localManifest, cloudManifest);
+    }
+
+    // A local conflict winner must become cloud truth immediately. In
+    // particular, this preserves additive local entities (such as Loom
+    // presets) absent from an older cloud manifest.
+    if (pushLocalChanges) {
+      await pushEntities(
+        onProgress: onProgress,
+        includeApiKeys: _includeApiKeys,
+      );
     }
 
     await _clearPendingPullManifest();
@@ -465,14 +471,6 @@ class SyncEngine {
         delayMs: 300,
       );
       taskErrors = result.errors;
-    }
-
-    final cloudKeys = cloudManifest.entries.keys.toSet();
-    for (final localEntry in localManifest.entries.values) {
-      if (localEntry.deleted) continue;
-      if (!cloudKeys.contains(localEntry.key)) {
-        await _deleteLocalEntity(localEntry.type, localEntry.id);
-      }
     }
 
     await _finalizePull(localManifest, cloudManifest);
@@ -777,6 +775,9 @@ class SyncEngine {
         case 'memory_graph':
           if (_memoryGraphStore == null) return null;
           return _memoryGraphStore.getBySessionId(id);
+        case 'character_knowledge':
+          if (_characterKnowledgeStore == null) return null;
+          return _characterKnowledgeStore.getBySessionId(id);
         default:
           return null;
       }
@@ -865,6 +866,11 @@ class SyncEngine {
         case 'memory_graph':
           if (_memoryGraphStore != null) {
             await _memoryGraphStore.applyBySessionId(id, data);
+          }
+          break;
+        case 'character_knowledge':
+          if (_characterKnowledgeStore != null) {
+            await _characterKnowledgeStore.applyBySessionId(id, data);
           }
           break;
       }
@@ -1189,6 +1195,11 @@ class SyncEngine {
         case 'memory_graph':
           if (_memoryGraphStore != null) {
             await _memoryGraphStore.deleteBySessionId(id);
+          }
+          break;
+        case 'character_knowledge':
+          if (_characterKnowledgeStore != null) {
+            await _characterKnowledgeStore.deleteBySessionId(id);
           }
           break;
         // extensions_settings has no meaningful "delete" — it's always present.

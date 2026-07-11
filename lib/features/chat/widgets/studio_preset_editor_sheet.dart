@@ -329,7 +329,7 @@ class _StudioPresetEditorSheetState
       ),
     );
     if (confirmed != true || _preset == null) return;
-    final seedData = studioPresetSeedBlocks();
+    final seedData = studioPresetSeedBlocksForPreset(_preset!.id);
     final seedBlocks = seedData
         .map(
           (m) => StudioPresetBlock(

@@ -107,31 +107,39 @@ class ChatMessageService {
     memoryBookRepo
         .deleteForMessage(session.id, messageId)
         .catchError((Object _) {});
-    snapshotRepo.deleteForMessage(session.id, messageId).then((_) {
-      // After the deleted message's snapshots are gone, the latest
-      // committed snapshot is the one written for the PREVIOUS message —
-      // that is the tracker state the user should see after deletion.
-      // Roll back the live `tracker_rows` store to it so the UI
-      // (agentic_operations_log_dialog "Tracker values" tab)
-      // shows the rolled-back state
-      // instead of the cumulative state that included writes from the
-      // deleted message. Sentinel anchor (messageId='') survives
-      // deleteForMessage and serves as the legacy baseline.
-      return snapshotRepo.getLatestCommitted(session.id);
-    }).then((snapshot) {
-      if (snapshot == null) {
-        // No committed snapshot exists — the deleted message was the first
-        // (its snapshot was uncommitted; commit happens only on the next
-        // user turn via chat_provider.commitLatest). There is nothing to
-        // roll back to, so clear the live store entirely: otherwise the
-        // trackers written by the deleted turn would persist in
-        // `tracker_rows` forever (the UI falls back to tracker_rows when
-        // no snapshot is found). See chat_message_service.deleteMessage.
-        trackerRepo.clearForSession(session.id);
-        return;
-      }
-      trackerRepo.replaceForSession(session.id, snapshot.trackers);
-    }).catchError((Object _) {});
+    _ref
+        .read(characterKnowledgeFactRepoProvider)
+        .retractForMessage(session.id, messageId)
+        .catchError((Object _) {});
+    snapshotRepo
+        .deleteForMessage(session.id, messageId)
+        .then((_) {
+          // After the deleted message's snapshots are gone, the latest
+          // committed snapshot is the one written for the PREVIOUS message —
+          // that is the tracker state the user should see after deletion.
+          // Roll back the live `tracker_rows` store to it so the UI
+          // (agentic_operations_log_dialog "Tracker values" tab)
+          // shows the rolled-back state
+          // instead of the cumulative state that included writes from the
+          // deleted message. Sentinel anchor (messageId='') survives
+          // deleteForMessage and serves as the legacy baseline.
+          return snapshotRepo.getLatestCommitted(session.id);
+        })
+        .then((snapshot) {
+          if (snapshot == null) {
+            // No committed snapshot exists — the deleted message was the first
+            // (its snapshot was uncommitted; commit happens only on the next
+            // user turn via chat_provider.commitLatest). There is nothing to
+            // roll back to, so clear the live store entirely: otherwise the
+            // trackers written by the deleted turn would persist in
+            // `tracker_rows` forever (the UI falls back to tracker_rows when
+            // no snapshot is found). See chat_message_service.deleteMessage.
+            trackerRepo.clearForSession(session.id);
+            return;
+          }
+          trackerRepo.replaceForSession(session.id, snapshot.trackers);
+        })
+        .catchError((Object _) {});
     return _persist(session, newMessages);
   }
 

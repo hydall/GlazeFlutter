@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'json_repair.dart';
+import '../models/character_knowledge_fact.dart';
 import '../models/studio_ledger_export.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,18 +146,26 @@ class StudioLedgerExportParser {
       );
     }
 
+    final validatedFacts = _validateKnowledgeFacts(export.knowledgeFacts);
+
     // Ignore completely empty exports.
-    final isEmpty = validatedOps.isEmpty && export.durableFacts.isEmpty;
+    final isEmpty =
+        validatedOps.isEmpty &&
+        export.durableFacts.isEmpty &&
+        validatedFacts.isEmpty;
     if (isEmpty) {
       return LedgerParseResult(
         visibleLedger: visibleLedger,
         rejectionReason: rejectedOps.isNotEmpty
-            ? 'all ops rejected, no durable facts'
-            : 'empty export (no ops, no durable facts)',
+            ? 'all ops rejected, no durable facts or knowledge facts'
+            : 'empty export (no ops, no durable facts, no knowledge facts)',
       );
     }
 
-    final validatedExport = export.copyWith(ops: validatedOps);
+    final validatedExport = export.copyWith(
+      ops: validatedOps,
+      knowledgeFacts: validatedFacts,
+    );
     return LedgerParseResult(
       export: validatedExport,
       visibleLedger: visibleLedger,
@@ -198,6 +207,7 @@ class StudioLedgerExportParser {
       'entities': _normalizeEntities(json['entities']),
       'arcState': _normalizeArcState(json['arcState']),
       'durableFacts': _normalizeDurableFacts(json['durableFacts']),
+      'knowledgeFacts': _normalizeKnowledgeFacts(json['knowledgeFacts']),
       'ops': _normalizeOps(json['ops']),
     };
   }
@@ -330,6 +340,30 @@ class StudioLedgerExportParser {
         .toList();
   }
 
+  List<Map<String, dynamic>> _normalizeKnowledgeFacts(dynamic value) {
+    return _listItems(value).map((item) {
+      final map = _asMap(item) ?? const <String, dynamic>{};
+      return {
+        'knowerKey': _stringValue(map['knowerKey']),
+        'knowerName': _stringValue(map['knowerName']),
+        'subjectKey': _stringValue(map['subjectKey']),
+        'subjectName': _stringValue(map['subjectName']),
+        'factClass': _stringValue(map['factClass']).ifBlank('knowledge'),
+        'scopeKey': _stringValue(map['scopeKey']),
+        'predicate': _stringValue(map['predicate']),
+        'object': _stringValue(map['object']),
+        'epistemicState': _stringValue(
+          map['epistemicState'],
+        ).ifBlank('observed'),
+        'confidence': _doubleValue(map['confidence'], 0.5),
+        'importance': _doubleValue(map['importance'], 0.5),
+        'entities': _stringList(map['entities']),
+        'topics': _stringList(map['topics']),
+        'supersedesId': _nullableStringValue(map['supersedesId']),
+      };
+    }).toList();
+  }
+
   List<Map<String, dynamic>> _normalizeOps(dynamic value) {
     return _listItems(value).map((item) {
       final map = _asMap(item);
@@ -383,6 +417,16 @@ class StudioLedgerExportParser {
     return value.toString().trim();
   }
 
+  double _doubleValue(dynamic value, double fallback) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(_stringValue(value)) ?? fallback;
+  }
+
+  String? _nullableStringValue(dynamic value) {
+    final normalized = _stringValue(value);
+    return normalized.isEmpty ? null : normalized;
+  }
+
   bool _boolValue(dynamic value) {
     if (value is bool) return value;
     if (value is num) return value != 0;
@@ -391,6 +435,60 @@ class StudioLedgerExportParser {
   }
 
   // ── Validation ──────────────────────────────────────────────────────────────
+
+  List<LedgerKnowledgeFact> _validateKnowledgeFacts(
+    List<LedgerKnowledgeFact> facts,
+  ) {
+    final accepted = <LedgerKnowledgeFact>[];
+    final seen = <String>{};
+    for (final fact in facts) {
+      final normalized = fact.copyWith(
+        confidence: fact.confidence.clamp(0, 1).toDouble(),
+        importance: fact.importance.clamp(0, 1).toDouble(),
+      );
+      final reason = _validateKnowledgeFact(normalized);
+      if (reason != null) {
+        debugPrint('[StudioLedger] rejected knowledge fact: $reason');
+        continue;
+      }
+      final dedupeKey = [
+        normalized.knowerKey,
+        normalized.subjectKey,
+        normalized.factClass,
+        normalized.scopeKey,
+        normalized.predicate,
+        normalized.object,
+        normalized.epistemicState,
+      ].join('\u0000');
+      if (seen.add(dedupeKey)) accepted.add(normalized);
+    }
+    return accepted;
+  }
+
+  String? _validateKnowledgeFact(LedgerKnowledgeFact fact) {
+    if (fact.knowerKey.isEmpty || fact.subjectKey.isEmpty) {
+      return 'missing knowerKey or subjectKey';
+    }
+    if (fact.predicate.isEmpty || fact.object.isEmpty) {
+      return 'missing predicate or object';
+    }
+    if (fact.object.length > kLedgerMaxValueChars ||
+        fact.predicate.length > 120 ||
+        fact.scopeKey.length > 160) {
+      return 'field exceeds length limit';
+    }
+    if (!CharacterKnowledgeFactClass.values.any(
+      (value) => value.wireName == fact.factClass,
+    )) {
+      return 'unknown factClass "${fact.factClass}"';
+    }
+    if (!CharacterKnowledgeEpistemicState.values.any(
+      (value) => value.wireName == fact.epistemicState,
+    )) {
+      return 'unknown epistemicState "${fact.epistemicState}"';
+    }
+    return null;
+  }
 
   /// Returns a rejection reason string, or null when the op is valid.
   String? _validateOp(LedgerOp op) {

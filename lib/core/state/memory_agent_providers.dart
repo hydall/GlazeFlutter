@@ -86,6 +86,7 @@ final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
     trackerRepo: ref.read(trackerRepoProvider),
     bookRepo: ref.read(memoryBookRepoProvider),
     snapshotRepo: ref.read(trackerSnapshotRepoProvider),
+    knowledgeFactRepo: ref.read(characterKnowledgeFactRepoProvider),
   );
 });
 

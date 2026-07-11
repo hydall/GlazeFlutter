@@ -148,6 +148,16 @@ abstract class SyncMemoryGraphStore {
   Future<void> deleteBySessionId(String sessionId);
 }
 
+/// Provenance-preserving atomic character facts plus the immutable baseline
+/// selected for a chat session. The collection is synced as one payload so a
+/// pulled session never gets facts without its source-card evidence.
+abstract class SyncCharacterKnowledgeStore {
+  Future<List<String>> getAllSessionIds();
+  Future<Map<String, dynamic>?> getBySessionId(String sessionId);
+  Future<void> applyBySessionId(String sessionId, Map<String, dynamic> data);
+  Future<void> deleteBySessionId(String sessionId);
+}
+
 abstract class SyncManifestProvider {
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest});
   Future<SyncManifest> readLocalManifest();

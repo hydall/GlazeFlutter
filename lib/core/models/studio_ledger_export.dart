@@ -130,6 +130,31 @@ abstract class LedgerDurableFact with _$LedgerDurableFact {
       _$LedgerDurableFactFromJson(json);
 }
 
+/// One atomic character-state delta emitted by the existing Studio Ledger.
+/// IDs and provenance are assigned from the assistant-swipe anchor at write time.
+@freezed
+abstract class LedgerKnowledgeFact with _$LedgerKnowledgeFact {
+  const factory LedgerKnowledgeFact({
+    required String knowerKey,
+    @Default('') String knowerName,
+    required String subjectKey,
+    @Default('') String subjectName,
+    @Default('knowledge') String factClass,
+    @Default('') String scopeKey,
+    required String predicate,
+    required String object,
+    @Default('observed') String epistemicState,
+    @Default(0.5) double confidence,
+    @Default(0.5) double importance,
+    @Default([]) List<String> entities,
+    @Default([]) List<String> topics,
+    String? supersedesId,
+  }) = _LedgerKnowledgeFact;
+
+  factory LedgerKnowledgeFact.fromJson(Map<String, dynamic> json) =>
+      _$LedgerKnowledgeFactFromJson(json);
+}
+
 /// The full machine-readable export from Studio Ledger.
 ///
 /// [ops] is the authoritative patch list — persistence uses only ops.
@@ -142,6 +167,7 @@ abstract class StudioLedgerExport with _$StudioLedgerExport {
     @Default([]) List<LedgerEntity> entities,
     @Default([]) List<LedgerArcState> arcState,
     @Default([]) List<LedgerDurableFact> durableFacts,
+    @Default([]) List<LedgerKnowledgeFact> knowledgeFacts,
     @Default([]) List<LedgerOp> ops,
   }) = _StudioLedgerExport;
 
