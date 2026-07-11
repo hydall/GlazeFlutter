@@ -123,10 +123,7 @@ BeautyStateResult applyBeautyState(
   }
   final vars = parsed.stateJson == null
       ? pendingVars
-      : <String, String>{
-          ...?pendingVars,
-          beautyStateVarKey: parsed.stateJson!,
-        };
+      : <String, String>{...?pendingVars, beautyStateVarKey: parsed.stateJson!};
   return BeautyStateResult(text: parsed.cleanedText, vars: vars);
 }
 
@@ -143,6 +140,18 @@ final RegExp _leadingFontTagRegex = RegExp(
   caseSensitive: false,
 );
 
+final RegExp _bareLumiaOocLineRegex = RegExp(
+  r'(^|\n)([ \t]*)(?:Lumia|Люмия)[ \t]*(?:\(|\[)?(?:OOC|ООС)(?:\)|\])?[ \t]*:[ \t]*(.+?)(?=\n{2,}|$)',
+  caseSensitive: false,
+  multiLine: true,
+  dotAll: true,
+);
+
+final RegExp _unclosedLumiaOocRegex = RegExp(
+  r'<lumiaooc>(?![\s\S]*?</lumiaooc>)([\s\S]*)$',
+  caseSensitive: false,
+);
+
 /// Deterministically wraps the text inside every `<lumiaooc>...</lumiaooc>`
 /// block in [lumiaOocColor], unless it is already wrapped in a `<font>` tag.
 ///
@@ -155,16 +164,33 @@ final RegExp _leadingFontTagRegex = RegExp(
 ///
 /// Pure & synchronous — safe to call from any isolate / test. Preserves the
 /// `<lumiaooc>` wrapper, the block position, and inner whitespace/newlines.
-String wrapLumiaOocColors(String text) {
-  if (!text.toLowerCase().contains('<lumiaooc>')) return text;
-  return text.replaceAllMapped(_lumiaOocBlockRegex, (m) {
+final RegExp _fencedCodeRegex = RegExp(r'```[\s\S]*?```');
+
+String _normalizeLumiaOocChunk(String text) {
+  final canonicalBlocks = <String>[];
+  final protected = text.replaceAllMapped(_lumiaOocBlockRegex, (match) {
+    canonicalBlocks.add(match.group(0)!);
+    return '\u0000LUMIA${canonicalBlocks.length - 1}\u0000';
+  });
+  var normalized = protected.replaceAllMapped(_bareLumiaOocLineRegex, (m) {
+    final prefix = m.group(1) ?? '';
+    final indent = m.group(2) ?? '';
+    final body = (m.group(3) ?? '').trim();
+    return '$prefix$indent<lumiaooc>$body</lumiaooc>';
+  });
+  for (var index = 0; index < canonicalBlocks.length; index++) {
+    normalized = normalized.replaceFirst(
+      '\u0000LUMIA$index\u0000',
+      canonicalBlocks[index],
+    );
+  }
+  normalized = normalized.replaceAllMapped(_unclosedLumiaOocRegex, (m) {
+    return '<lumiaooc>${m.group(1) ?? ''}</lumiaooc>';
+  });
+  if (!normalized.toLowerCase().contains('<lumiaooc>')) return normalized;
+  return normalized.replaceAllMapped(_lumiaOocBlockRegex, (m) {
     final inner = m.group(1) ?? '';
-    // Already wrapped in a <font color="..."> tag — leave unchanged.
-    if (_leadingFontTagRegex.hasMatch(inner)) {
-      return m.group(0)!;
-    }
-    // Preserve the original wrapper tag casing (e.g. <LumiaOOC>) so the
-    // output matches what the model emitted.
+    if (_leadingFontTagRegex.hasMatch(inner)) return m.group(0)!;
     final full = m.group(0)!;
     final openEnd = full.indexOf('>');
     final closeStart = full.lastIndexOf('</');
@@ -175,4 +201,16 @@ String wrapLumiaOocColors(String text) {
     final closeTag = full.substring(closeStart);
     return '$openTag<font color="$lumiaOocColor">$inner</font>$closeTag';
   });
+}
+
+String wrapLumiaOocColors(String text) {
+  final output = StringBuffer();
+  var cursor = 0;
+  for (final match in _fencedCodeRegex.allMatches(text)) {
+    output.write(_normalizeLumiaOocChunk(text.substring(cursor, match.start)));
+    output.write(match.group(0));
+    cursor = match.end;
+  }
+  output.write(_normalizeLumiaOocChunk(text.substring(cursor)));
+  return output.toString();
 }

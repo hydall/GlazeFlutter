@@ -127,7 +127,34 @@ List<Tracker> _makeTrackers(
 void main() {
   const parser = StudioLedgerExportParser();
 
-  // ── Parser tests ───────────────────────────────────────────────────────────
+  group('StudioLedgerPrompt', () {
+    test('injects full values only for relevant existing state', () {
+      final prompt = const StudioLedgerPrompt().build(
+        finalAssistantText: 'Lucy checks the door.',
+        recentHistoryText: 'Danvi asks Lucy about the plan.',
+        currentTrackers: _makeTrackers('s', {
+          'world:time': '00:48',
+          'scene.present_entities': 'Lucy, Danvi',
+          'npc:Lucy.attitude_to_user': 'wary but familiar',
+          'npc:Rebecca.attitude_to_user': 'friendly',
+          'arc:door_plan.status': 'active',
+        }),
+        recentMemoryEntries: const [],
+      );
+
+      expect(prompt, contains('world:time: 00:48'));
+      expect(prompt, contains('npc:Lucy.attitude_to_user: wary but familiar'));
+      final currentState = RegExp(
+        r'<current_state>([\s\S]*?)</current_state>',
+      ).firstMatch(prompt)!.group(1)!;
+      expect(currentState, isNot(contains('npc:Rebecca.attitude_to_user')));
+      expect(prompt, contains('<existing_keys>'));
+      expect(prompt, contains('npc:Rebecca.attitude_to_user'));
+      expect(prompt, isNot(contains('Max value length')));
+    });
+  });
+
+  // ── Parser tests
   group('StudioLedgerExportParser', () {
     // Test 1
     test('extracts valid JSON from <glaze_memory_export>', () {
@@ -305,16 +332,16 @@ Ledger text.
       expect(result.wasRejected, isTrue);
     });
 
-    test('rejects value exceeding kLedgerMaxValueChars', () {
-      final longVal = 'x' * (kLedgerMaxValueChars + 1);
+    test('preserves long ledger values without truncation', () {
+      final longVal = 'x' * 4000;
       final longOpBlock =
           '<glaze_memory_export>\n'
           '{"ops":[{"op":"set","key":"npc:Lucy.knowledge","value":"$longVal",'
           '"evidence":"test","eventState":"completed"}],"durableFacts":[]}\n'
           '</glaze_memory_export>';
       final result = parser.parse(longOpBlock);
-      expect(result.export, isNull);
-      expect(result.wasRejected, isTrue);
+      expect(result.wasRejected, isFalse);
+      expect(result.export?.ops.single.value, longVal);
     });
 
     test('ignores empty export (no ops and no durableFacts)', () {

@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/db/studio_seed_blocks.dart';
 import '../../../core/models/studio_config.dart';
+import '../../../core/models/studio_preset_block_groups.dart';
 import '../../../core/state/db_provider.dart';
 import '../widgets/studio_block_editor_dialog.dart';
+import '../widgets/studio_preset_group_tile.dart';
 
 /// Screen for editing a [StudioPreset] — its blocks grouped by section.
 ///
@@ -65,6 +67,9 @@ class _StudioPresetEditorScreenState
       ..sort((a, b) => a.order.compareTo(b.order));
   }
 
+  List<StudioPresetBlockGroup> get _sectionItems =>
+      groupStudioPresetBlocks(_sectionBlocks);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -94,9 +99,21 @@ class _StudioPresetEditorScreenState
                   child: _sectionBlocks.isEmpty
                       ? const Center(child: Text('No blocks in this section'))
                       : ListView.builder(
-                          itemCount: _sectionBlocks.length,
-                          itemBuilder: (context, index) =>
-                              _buildBlockTile(_sectionBlocks[index]),
+                          itemCount: _sectionItems.length,
+                          itemBuilder: (context, index) {
+                            final item = _sectionItems[index];
+                            if (item.header != null) {
+                              return StudioPresetGroupTile(
+                                group: item,
+                                onSelectExclusive: (id) =>
+                                    _selectExclusiveBlock(item, id),
+                                onToggle: _toggleBlock,
+                                onEdit: _editBlock,
+                                onDelete: _deleteBlock,
+                              );
+                            }
+                            return _buildBlockTile(item.standalone!);
+                          },
                         ),
                 ),
               ],
@@ -176,18 +193,33 @@ class _StudioPresetEditorScreenState
       builder: (_) => StudioBlockEditorDialog(block: block),
     );
     if (result == null || _preset == null) return;
-    final blocks = _preset!.blocks.map((b) {
-      return b.id == result.id ? result : b;
-    }).toList();
+    final blocks = updateStudioPresetBlockRespectingGroups(
+      _preset!.blocks,
+      result,
+    );
     await _save(_preset!.copyWith(blocks: blocks));
   }
 
   Future<void> _toggleBlock(StudioPresetBlock block, bool enabled) async {
     if (_preset == null) return;
-    final blocks = _preset!.blocks.map((b) {
-      return b.id == block.id ? b.copyWith(enabled: enabled) : b;
-    }).toList();
+    final blocks = updateStudioPresetBlockRespectingGroups(
+      _preset!.blocks,
+      block.copyWith(enabled: enabled),
+    );
     await _save(_preset!.copyWith(blocks: blocks));
+  }
+
+  Future<void> _selectExclusiveBlock(
+    StudioPresetBlockGroup group,
+    String selectedId,
+  ) async {
+    if (_preset == null) return;
+    await _save(
+      _preset!.copyWith(
+        blocks: selectExclusiveStudioBlock(_preset!.blocks, group, selectedId),
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   Future<void> _deleteBlock(StudioPresetBlock block) async {

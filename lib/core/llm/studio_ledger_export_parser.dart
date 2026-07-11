@@ -15,21 +15,17 @@ import '../models/studio_ledger_export.dart';
 //
 // Validation rules: ledger output is treated as untrusted model output until
 // parsed and validated. Reject unknown operations, unknown namespace prefixes,
-// overlong values (trim deterministically), malformed JSON, future facts,
+// malformed JSON, future facts,
 // completion of user actions/choices/threats/plans/offers without evidence in
 // accepted chat. Skip locked fields. Ignore empty exports. Quarantine bad
 // exports as diagnostics only.
 //   - Reject unknown op codes.
 //   - Reject unknown namespace prefixes.
-//   - Reject overlong values (exceeds kLedgerMaxValueChars).
 //   - Reject malformed JSON.
 //   - Skip locked fields (done at write-time by TrackerRepo).
 //   - Ignore empty exports (no ops AND no durableFacts).
 //   - Quarantine bad exports, return null.
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Maximum character length for a single op value.
-const int kLedgerMaxValueChars = 2000;
 
 /// Allowed namespace prefixes for op keys.
 const Set<String> kAllowedNamespacePrefixes = {
@@ -472,9 +468,7 @@ class StudioLedgerExportParser {
     if (fact.predicate.isEmpty || fact.object.isEmpty) {
       return 'missing predicate or object';
     }
-    if (fact.object.length > kLedgerMaxValueChars ||
-        fact.predicate.length > 120 ||
-        fact.scopeKey.length > 160) {
+    if (fact.predicate.length > 120 || fact.scopeKey.length > 160) {
       return 'field exceeds length limit';
     }
     if (!CharacterKnowledgeFactClass.values.any(
@@ -513,11 +507,6 @@ class StudioLedgerExportParser {
     // For set / append_unique: value must not be empty.
     if (op.op != 'delete' && op.value.trim().isEmpty) {
       return 'empty value for op "${op.op}"';
-    }
-
-    // Overlong value.
-    if (op.value.length > kLedgerMaxValueChars) {
-      return 'value exceeds max length ($kLedgerMaxValueChars chars)';
     }
 
     // Unknown event state.

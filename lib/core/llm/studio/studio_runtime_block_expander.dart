@@ -69,6 +69,7 @@ class StudioRuntimeBlockExpander {
       macroName: promptPayload.character.macroName,
       arcContent: promptPayload.arcContent,
       entitiesContent: promptPayload.entitiesContent,
+      studioSessionState: promptPayload.studioSessionStateContent,
     );
     return replaceMacros(studioExpanded, macroCtx).text;
   }

@@ -25,7 +25,8 @@ void main() {
         'speakers': {'Alice': '#abc123'},
         'bg': '#1a1a1a',
       };
-      final text = 'Narrative response here.\n\n'
+      final text =
+          'Narrative response here.\n\n'
           '<glaze_beauty_state>${jsonEncode(state)}</glaze_beauty_state>';
       final result = parseBeautyState(text);
       expect(result.markerFound, isTrue);
@@ -36,9 +37,14 @@ void main() {
     });
 
     test('multiple markers — LAST one wins', () {
-      final first = {'speakers': {'Alice': '#aaa'}};
-      final second = {'speakers': {'Alice': '#bbb', 'Bob': '#ccc'}};
-      final text = '<glaze_beauty_state>${jsonEncode(first)}</glaze_beauty_state>'
+      final first = {
+        'speakers': {'Alice': '#aaa'},
+      };
+      final second = {
+        'speakers': {'Alice': '#bbb', 'Bob': '#ccc'},
+      };
+      final text =
+          '<glaze_beauty_state>${jsonEncode(first)}</glaze_beauty_state>'
           ' narrative '
           '<glaze_beauty_state>${jsonEncode(second)}</glaze_beauty_state>';
       final result = parseBeautyState(text);
@@ -57,7 +63,8 @@ void main() {
     });
 
     test('malformed JSON inside marker — stateJson null, tag stripped', () {
-      const text = 'narrative\n<glaze_beauty_state>{not valid json</glaze_beauty_state>';
+      const text =
+          'narrative\n<glaze_beauty_state>{not valid json</glaze_beauty_state>';
       final result = parseBeautyState(text);
       expect(result.markerFound, isTrue);
       expect(result.stateJson, isNull);
@@ -76,7 +83,8 @@ void main() {
     });
 
     test('marker is case-insensitive', () {
-      const text = 'narrative\n<GLAZE_BEAUTY_STATE>{"x":1}</GLAZE_BEAUTY_STATE>';
+      const text =
+          'narrative\n<GLAZE_BEAUTY_STATE>{"x":1}</GLAZE_BEAUTY_STATE>';
       final result = parseBeautyState(text);
       expect(result.markerFound, isTrue);
       expect(result.stateJson, isNotNull);
@@ -84,7 +92,8 @@ void main() {
     });
 
     test('marker preserves surrounding text including HTML artifacts', () {
-      const text = '<div style="color:red">scene</div>\n'
+      const text =
+          '<div style="color:red">scene</div>\n'
           '<glaze_beauty_state>{"palette":"dark"}</glaze_beauty_state>';
       final result = parseBeautyState(text);
       expect(result.markerFound, isTrue);
@@ -95,17 +104,15 @@ void main() {
 
     test('nested JSON object with arrays — parsed correctly', () {
       final state = {
-        'speakers': {
-          'Alice': '#abc',
-          'Bob': '#def',
-        },
+        'speakers': {'Alice': '#abc', 'Bob': '#def'},
         'thoughts': <String, String>{},
         'palette': 'dark',
         'font': 'sans-serif',
         'art_style': 'street_art_anime',
         'reserved': {'lumia_ooc': '#9370DB'},
       };
-      final text = 'response\n<glaze_beauty_state>${jsonEncode(state)}</glaze_beauty_state>';
+      final text =
+          'response\n<glaze_beauty_state>${jsonEncode(state)}</glaze_beauty_state>';
       final result = parseBeautyState(text);
       expect(result.markerFound, isTrue);
       final decoded = jsonDecode(result.stateJson!) as Map<String, dynamic>;
@@ -114,14 +121,19 @@ void main() {
       expect(decoded['art_style'], 'street_art_anime');
     });
 
-    test('trimmed output — leading/trailing whitespace removed from cleaned', () {
-      const text = '  narrative  \n<glaze_beauty_state>{"x":1}</glaze_beauty_state>  ';
-      final result = parseBeautyState(text);
-      expect(result.cleanedText, 'narrative');
-    });
+    test(
+      'trimmed output — leading/trailing whitespace removed from cleaned',
+      () {
+        const text =
+            '  narrative  \n<glaze_beauty_state>{"x":1}</glaze_beauty_state>  ';
+        final result = parseBeautyState(text);
+        expect(result.cleanedText, 'narrative');
+      },
+    );
 
     test('JSON array root (not object) — stateJson null', () {
-      const text = 'narrative\n<glaze_beauty_state>["a","b","c"]</glaze_beauty_state>';
+      const text =
+          'narrative\n<glaze_beauty_state>["a","b","c"]</glaze_beauty_state>';
       final result = parseBeautyState(text);
       expect(result.markerFound, isTrue);
       expect(result.stateJson, isNull);
@@ -141,6 +153,28 @@ void main() {
   });
 
   group('wrapLumiaOocColors', () {
+    test(
+      'normalizes an explicit bare Lumia OOC line into the canonical tag',
+      () {
+        const text = 'Основной ответ.\n\nLumia OOC: Не забудь про левую дверь.';
+        expect(
+          wrapLumiaOocColors(text),
+          'Основной ответ.\n\n'
+          '<lumiaooc><font color="#9370DB">Не забудь про левую дверь.'
+          '</font></lumiaooc>',
+        );
+      },
+    );
+
+    test('closes a malformed Lumia OOC wrapper at the end of the response', () {
+      const text = 'Основной ответ.\n<lumiaooc>Люмия здесь.';
+      expect(
+        wrapLumiaOocColors(text),
+        'Основной ответ.\n'
+        '<lumiaooc><font color="#9370DB">Люмия здесь.</font></lumiaooc>',
+      );
+    });
+
     test('wraps a bare <lumiaooc> block in the signature color', () {
       const text = '<lumiaooc>\n\nHello from Lumia.\n\n</lumiaooc>';
       final wrapped = wrapLumiaOocColors(text);
@@ -153,6 +187,21 @@ void main() {
     test('idempotent — already wrapped block is left unchanged', () {
       const text =
           '<lumiaooc><font color="#9370DB">\nLumia note.\n</font></lumiaooc>';
+      expect(wrapLumiaOocColors(text), text);
+    });
+
+    test('idempotent when a canonical block starts with a Lumia OOC label', () {
+      const text = '<lumiaooc>\nLumia OOC: Already canonical.\n</lumiaooc>';
+      final once = wrapLumiaOocColors(text);
+      expect(wrapLumiaOocColors(once), once);
+      expect(
+        RegExp('<lumiaooc>', caseSensitive: false).allMatches(once),
+        hasLength(1),
+      );
+    });
+
+    test('does not normalize Lumia OOC labels inside fenced code', () {
+      const text = '```text\nLumia OOC: example only\n```';
       expect(wrapLumiaOocColors(text), text);
     });
 
@@ -177,10 +226,7 @@ void main() {
     test('case-insensitive — <LumiaOOC> is wrapped', () {
       const text = '<LumiaOOC>note</LumiaOOC>';
       final wrapped = wrapLumiaOocColors(text);
-      expect(
-        wrapped,
-        '<LumiaOOC><font color="#9370DB">note</font></LumiaOOC>',
-      );
+      expect(wrapped, '<LumiaOOC><font color="#9370DB">note</font></LumiaOOC>');
     });
 
     test('preserves inner newlines and whitespace', () {
@@ -197,6 +243,11 @@ void main() {
       expect(wrapLumiaOocColors(text), text);
     });
 
+    test('does not reinterpret an in-world Lumia dialogue label as OOC', () {
+      const text = 'Lumia: "Stay behind me."';
+      expect(wrapLumiaOocColors(text), text);
+    });
+
     test('does not depend on beauty-state JSON', () {
       // No marker, no state — the wrap still applies.
       const text = 'prose\n<lumiaooc>Lumia speaks.</lumiaooc>';
@@ -210,15 +261,11 @@ void main() {
     test('empty inner content is still wrapped (no crash)', () {
       const text = '<lumiaooc></lumiaooc>';
       final wrapped = wrapLumiaOocColors(text);
-      expect(
-        wrapped,
-        '<lumiaooc><font color="#9370DB"></font></lumiaooc>',
-      );
+      expect(wrapped, '<lumiaooc><font color="#9370DB"></font></lumiaooc>');
     });
 
     test('narrative around the block is preserved verbatim', () {
-      const text =
-          'Before block.\n<lumiaooc>note</lumiaooc>\nAfter block.';
+      const text = 'Before block.\n<lumiaooc>note</lumiaooc>\nAfter block.';
       final wrapped = wrapLumiaOocColors(text);
       expect(
         wrapped,

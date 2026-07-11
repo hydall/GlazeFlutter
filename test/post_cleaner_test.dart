@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/llm/post_cleaner_service.dart';
+import 'package:glaze_flutter/core/llm/macro_engine.dart';
 import 'package:glaze_flutter/core/models/agent_operation_record.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/core/models/persona.dart';
+import 'package:glaze_flutter/core/models/studio_config.dart';
 
 void main() {
   group('PostCleanerResult', () {
@@ -252,6 +254,27 @@ void main() {
   });
 
   group('PostCleanerService.buildCleanerPrompt', () {
+    test('includes self-contained Beauty block without a pregen brief', () {
+      final prompt = PostCleanerService.buildStudioCleanerPrompt(
+        assistantText: '«Привет», — сказала Люси.',
+        cleanerBlocks: const [
+          StudioPresetBlock(
+            id: 'cleaner_beauty',
+            section: 'cleaner',
+            content: 'BEAUTY SELF-CONTAINED {{beautyBrief}}',
+          ),
+        ],
+        macroCtx: const MacroContext(
+          charName: 'Lucy',
+          charId: 'char',
+          sessionId: 'session',
+        ),
+      );
+
+      expect(prompt, contains('BEAUTY SELF-CONTAINED'));
+      expect(prompt, isNot(contains('{{beautyBrief}}')));
+    });
+
     test('without broadcast blocks uses default editor rules', () {
       final prompt = PostCleanerService.buildCleanerPrompt(
         assistantText: 'He felt a shiver run down his spine.',

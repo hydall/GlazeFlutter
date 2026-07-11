@@ -1,30 +1,6 @@
+import '../llm/studio/studio_brief_macro_renderer.dart';
 import 'studio_config.dart';
-
-const _continuityTask = '''<continuity_context>
-Return at most 8 short, neutral facts needed to prevent a contradiction in the
-next reply. Track only demonstrated scene state: presence, location, physical
-constraints, already-made commitments, and consequences. Do not write prose,
-dialogue, options, or a scene plan.</continuity_context>''';
-
-const _sceneDirectorTask = '''<scene_direction>
-Return at most 5 neutral operational points: immediate pressure, a concrete
-consequence worth respecting, active character presence, and where to return
-control to {{user}}. Do not draft dialogue, hooks, sample lines, locations, or
-undeclared actions. Do not teleport the plot or invent a character's arrival,
-relationship, knowledge, or next decision.</scene_direction>''';
-
-const _directContract = '''<loom_direct_contract>
-Write from the character and scene directly. Never write {{user}}'s words,
-actions, thoughts, feelings, or decisions. Treat current character state as
-scoped priority; do not generalize it to unrelated people or situations.
-</loom_direct_contract>''';
-
-const _assistedContract = '''<loom_assisted_contract>
-The Continuity and Scene Direction blocks are compact reference data, not prose
-to echo or instructions to inflate. Preserve their concrete constraints. Never
-write {{user}}'s words, actions, thoughts, feelings, or decisions. Do not turn
-suggested pressure into an undeclared action, arrival, relationship, or plot
-teleport.</loom_assisted_contract>''';
+import 'studio_preset_block_groups.dart';
 
 /// Creates a local preset whose persisted blocks and controller toggles match
 /// an execution topology. Runtime gating remains a second line of defence for
@@ -65,7 +41,16 @@ StudioPreset prepareStudioPresetForMode(
 
   final blocks = <StudioPresetBlock>[];
   for (final block in source.blocks) {
-    if (block.kind == 'tracker_instruction') {
+    var candidate = block;
+    if (mode == StudioExecutionMode.direct &&
+        StudioBriefMacroRenderer.hasAnyStudioBriefMacro(block.content)) {
+      final content = StudioBriefMacroRenderer.stripStudioBriefMacros(
+        block.content,
+      );
+      if (content.isEmpty) continue;
+      candidate = block.copyWith(content: content);
+    }
+    if (candidate.kind == 'tracker_instruction') {
       if (mode == StudioExecutionMode.direct) continue;
       if (mode == StudioExecutionMode.assisted &&
           !assistedTaskIds.contains(block.id)) {
@@ -73,32 +58,23 @@ StudioPreset prepareStudioPresetForMode(
       }
     }
     if (mode != StudioExecutionMode.legacy && block.id == 'beauty_extractor') {
-      blocks.add(block.copyWith(enabled: false));
-    } else if (mode == StudioExecutionMode.assisted &&
-        block.id == 'continuity_task_universal') {
-      blocks.add(block.copyWith(content: _continuityTask));
-    } else if (mode == StudioExecutionMode.assisted &&
-        block.id == 'narrative_task_universal') {
-      blocks.add(block.copyWith(content: _sceneDirectorTask));
-    } else if (mode == StudioExecutionMode.direct &&
-        block.id == 'final_response_shape_contract') {
-      blocks.add(
-        block.copyWith(content: '${block.content}\n\n$_directContract'),
-      );
-    } else if (mode == StudioExecutionMode.assisted &&
-        block.id == 'final_response_shape_contract') {
-      blocks.add(
-        block.copyWith(content: '${block.content}\n\n$_assistedContract'),
-      );
+      blocks.add(candidate.copyWith(enabled: false));
+    } else if (mode != StudioExecutionMode.legacy &&
+        block.id == 'cleaner_beauty') {
+      // Direct/Assisted have no pregen Beauty agent. The post-cleaner owns
+      // styling and derives it from the actual response + persisted state.
+      blocks.add(candidate.copyWith(enabled: true));
     } else {
-      blocks.add(block);
+      blocks.add(candidate);
     }
   }
 
   return source.copyWith(
     id: id,
     name: name,
-    blocks: blocks,
+    blocks: mode == StudioExecutionMode.legacy
+        ? blocks
+        : normalizeStudioGroupBoundaries(blocks),
     agentEnabled: agentEnabled,
     executionMode: mode,
     updatedAt: updatedAt,

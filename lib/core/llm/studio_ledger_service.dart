@@ -422,7 +422,11 @@ class StudioLedgerService {
       );
     }
 
-    final trackerBlock = _buildTrackerBlock(currentTrackers);
+    final trackerBlock = _promptBuilder.buildCurrentStateBlock(
+      currentTrackers,
+      '$recentHistoryText\n$finalAssistantText',
+    );
+    final keyCatalog = _promptBuilder.buildExistingKeyCatalog(currentTrackers);
     final memoryBlock = _buildMemoryBlock(recentMemoryEntries);
 
     final runtimeSuffix =
@@ -430,6 +434,10 @@ class StudioLedgerService {
 <current_state>
 $trackerBlock
 </current_state>
+
+<existing_keys>
+$keyCatalog
+</existing_keys>
 
 <existing_memory>
 $memoryBlock
@@ -465,8 +473,8 @@ Ops format:
 
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
 Allowed ops: set, append_unique, delete.
-Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).
-Max value length: 2000 chars.''';
+Reuse an exact key from <current_state> for the same fact; update it with set instead of creating a synonym key.
+Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).''';
 
     return const StudioAuxPromptAssembler().assemble(
       blocks: ledgerBlocks,
@@ -474,23 +482,6 @@ Max value length: 2000 chars.''';
       macroCtx: macroCtx,
       runtimeSuffix: runtimeSuffix,
     );
-  }
-
-  String _buildTrackerBlock(List<Tracker> trackers) {
-    if (trackers.isEmpty) return '(no prior state)';
-    final ledgerTrackers = trackers
-        .where((t) => t.scope == 'ledger' || t.scope == 'chat')
-        .where(
-          (t) =>
-              t.name.startsWith('npc:') ||
-              t.name.startsWith('relationship:') ||
-              t.name.startsWith('arc:') ||
-              t.name.startsWith('world:') ||
-              t.name.startsWith('scene.'),
-        )
-        .toList();
-    if (ledgerTrackers.isEmpty) return '(no prior state)';
-    return ledgerTrackers.map((t) => '${t.name}: ${t.value}').join('\n');
   }
 
   String _buildMemoryBlock(List<MemoryEntry> entries) {
