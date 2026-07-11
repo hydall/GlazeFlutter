@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/studio_controller_ontology.dart';
+import '../../../core/llm/studio_activation_gate.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -111,6 +112,10 @@ class _StudioAgentsSheetState extends ConsumerState<StudioAgentsSheet> {
         itemCount: StudioControllerOntology.specs.length,
         itemBuilder: (context, index) {
           final spec = StudioControllerOntology.specs[index];
+          final allowedByTopology = StudioActivationGate.isControllerAllowed(
+            spec.id,
+            _preset!.executionMode,
+          );
           final isOn = spec.id == 'beauty'
               ? _preset!.blocks
                         .where((block) => block.id == 'beauty_extractor')
@@ -137,7 +142,7 @@ class _StudioAgentsSheetState extends ConsumerState<StudioAgentsSheet> {
               style: const TextStyle(fontSize: 12),
             ),
             value: isOn,
-            onChanged: (v) => _toggle(spec.id, v),
+            onChanged: allowedByTopology ? (v) => _toggle(spec.id, v) : null,
           );
         },
       ),

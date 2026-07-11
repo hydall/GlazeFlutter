@@ -53,14 +53,6 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (Migrator m) async {
       await m.createAll();
-      // New installations do not traverse onUpgrade, so seed Loom explicitly.
-      await _insertStudioLoomPresetSeeds();
-    },
-    beforeOpen: (details) async {
-      // Cloud sync can restore an older manifest that predates Loom and omits
-      // these additive system presets. Re-seed idempotently on every open so
-      // an old cloud snapshot cannot make Direct/Assisted unavailable.
-      await _insertStudioLoomPresetSeeds();
     },
     onUpgrade: (Migrator m, int from, int to) async {
       if (from < 2) {
@@ -1297,31 +1289,8 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(studioPresetRows, studioPresetRows.executionMode);
         }
       }
-      if (from < 70) {
-        // Add independent Loom topology presets. Never rewrite the legacy
-        // default or any user preset: these rows are insert-if-absent only.
-        await _insertStudioLoomPresetSeeds();
-      }
     },
   );
-
-  Future<void> _insertStudioLoomPresetSeeds() async {
-    for (final preset in studioLoomPresetSeeds()) {
-      await customStatement(
-        'INSERT OR IGNORE INTO studio_preset_rows '
-        '(preset_id, name, blocks_json, agent_enabled_json, '
-        'execution_mode, updated_at) VALUES (?, ?, ?, ?, ?, '
-        "CAST(strftime('%s','now') AS INTEGER))",
-        [
-          preset['id'],
-          preset['name'],
-          jsonEncode(preset['blocks']),
-          jsonEncode(preset['agentEnabled']),
-          preset['executionMode'],
-        ],
-      );
-    }
-  }
 
   /// Removes retired write-loop micro-memory while preserving range summaries,
   /// manual entries, Studio Ledger facts, and all MemoryBook settings.
@@ -2041,143 +2010,6 @@ PREFER
       'section': 'brief_parser',
     },
   ]);
-}
-
-/// Immutable seed rows for the two Loom execution topologies.
-///
-/// Each uses a private copy of the legacy block layout, so later edits never
-/// mutate `default` or user-created presets. Runtime enforcement comes from
-/// [StudioExecutionMode] as a second line of defense against stale agents.
-List<Map<String, dynamic>> studioLoomPresetSeeds() {
-  List<Map<String, dynamic>> blocksFor({
-    required String macroContent,
-    required String finalContract,
-    required String continuityTask,
-    required String sceneDirectorTask,
-  }) {
-    return studioPresetSeedBlocks()
-        .map((block) {
-          final copy = Map<String, dynamic>.from(block);
-          switch (copy['id']) {
-            case 'final_studio_brief_macros':
-              copy['content'] = macroContent;
-            case 'final_response_shape_contract':
-              copy['content'] = '${copy['content']}\n\n$finalContract';
-            case 'continuity_task_universal':
-              copy['content'] = continuityTask;
-            case 'narrative_task_universal':
-              copy['content'] = sceneDirectorTask;
-          }
-          return copy;
-        })
-        .toList(growable: false);
-  }
-
-  const continuity = '''
-<continuity_context>
-Return at most 8 short, neutral facts needed to prevent a contradiction in the
-next reply. Track only demonstrated scene state: presence, location, physical
-constraints, already-made commitments, and consequences. Do not use audit
-labels such as ESTABLISHED or UNKNOWN. Do not write prose, dialogue, options,
-or a scene plan.''';
-
-  const sceneDirector = '''
-<scene_direction>
-Return at most 5 neutral operational points: immediate pressure, a concrete
-consequence worth respecting, active character presence, and where to return
-control to {{user}}. Do not draft dialogue, hooks, sample lines, locations, or
-undeclared actions. Do not teleport the plot or invent a character's arrival,
-relationship, knowledge, or next decision.''';
-
-  const directContract = '''
-<loom_direct_contract>
-Write from the character and scene directly: lead with a voice, immediate
-reaction, or concrete consequence rather than a planning summary. Never write
-{{user}}'s words, actions, thoughts, feelings, or decisions. Treat the card as
-general baseline and <current_character_state> as scoped priority only; never
-generalize a scoped fact to unrelated people or situations. Use relevant
-consequences naturally, then stop once a response-worthy change has occurred.
-</loom_direct_contract>''';
-
-  const assistedContract = '''
-<loom_assisted_contract>
-The Continuity and Scene Direction blocks are compact reference data, not
-prose to echo or instructions to inflate. Preserve their concrete constraints
-without treating silence as a veto on reliable source material. Never write
-{{user}}'s words, actions, thoughts, feelings, or decisions. Do not turn a
-suggested pressure into an undeclared action, arrival, relationship, or plot
-teleport.
-</loom_assisted_contract>''';
-
-  return [
-    {
-      'id': 'studio_direct_loom_v1',
-      'name': 'Direct Loom v1',
-      'blocks': blocksFor(
-        macroContent: '',
-        finalContract: directContract,
-        continuityTask: continuity,
-        sceneDirectorTask: sceneDirector,
-      ),
-      // Explicitly disable all legacy pregen controllers. Meta is deliberately
-      // absent: Lumia remains an independent user-controlled toggle.
-      'agentEnabled': const <String, bool>{
-        'continuity': false,
-        'agency': false,
-        'narrative': false,
-        'dialogue': false,
-        'guard': false,
-        'world': false,
-      },
-      'executionMode': 'direct',
-    },
-    {
-      'id': 'studio_assisted_loom_v1',
-      'name': 'Assisted Loom v1',
-      'blocks': blocksFor(
-        macroContent: '''<studio_controller_briefs>
-<continuity_context>
-{{studio_continuity_brief}}
-</continuity_context>
-
-<scene_direction>
-{{studio_narrative_brief}}
-</scene_direction>
-
-<meta>
-{{studio_meta_brief}}
-</meta>
-</studio_controller_briefs>''',
-        finalContract: assistedContract,
-        continuityTask: continuity,
-        sceneDirectorTask: sceneDirector,
-      ),
-      // Only non-Loom legacy pregen controllers are disabled. The topology
-      // gate permits Continuity and Scene Director; Meta stays independent.
-      'agentEnabled': const <String, bool>{
-        'agency': false,
-        'dialogue': false,
-        'guard': false,
-        'world': false,
-      },
-      'executionMode': 'assisted',
-    },
-  ];
-}
-
-/// Returns the correct immutable block layout for a preset reset.
-///
-/// Legacy/custom presets reset to the legacy seed. Loom IDs reset to their own
-/// topology-specific layouts while preserving their persisted mode/toggles.
-List<Map<String, dynamic>> studioPresetSeedBlocksForPreset(String presetId) {
-  for (final seed in studioLoomPresetSeeds()) {
-    if (seed['id'] == presetId) {
-      return (seed['blocks'] as List<Map<String, dynamic>>)
-          .map(Map<String, dynamic>.from)
-          .toList(growable: false);
-    }
-  }
-  return studioPresetSeedBlocks();
 }
 
 List<Map<String, dynamic>> _applyStudioLengthContract(

@@ -20,35 +20,58 @@ void main() {
     const StudioAgent(id: 'agent_s_final', name: 'Main Responder'),
   ];
 
-  test(
-    'direct mode blocks stale pregen controllers but retains final and meta',
-    () {
-      final gated = StudioActivationGate.applyExecutionMode(
-        staleAgents,
+  test('direct mode blocks every stale pregen controller except final', () {
+    final gated = StudioActivationGate.applyExecutionMode(
+      staleAgents,
+      StudioExecutionMode.direct,
+    );
+
+    expect(gated.where((agent) => agent.enabled).map((agent) => agent.name), [
+      'Main Responder',
+    ]);
+  });
+
+  test('assisted mode permits only continuity, scene director, and final', () {
+    final gated = StudioActivationGate.applyExecutionMode(
+      staleAgents,
+      StudioExecutionMode.assisted,
+    );
+
+    expect(gated.where((agent) => agent.enabled).map((agent) => agent.name), [
+      'Continuity Controller',
+      'Narrative / Pacing / Style Controller',
+      'Main Responder',
+    ]);
+  });
+
+  test('topology reports controllers that a mode cannot enable', () {
+    expect(
+      StudioActivationGate.isControllerAllowed(
+        'beauty',
         StudioExecutionMode.direct,
-      );
-
-      expect(gated.where((agent) => agent.enabled).map((agent) => agent.name), [
-        'Meta-Weaver / OOC Policy',
-        'Main Responder',
-      ]);
-    },
-  );
-
-  test(
-    'assisted mode permits only continuity, scene director, final and meta',
-    () {
-      final gated = StudioActivationGate.applyExecutionMode(
-        staleAgents,
+      ),
+      isFalse,
+    );
+    expect(
+      StudioActivationGate.isControllerAllowed(
+        'beauty',
         StudioExecutionMode.assisted,
-      );
-
-      expect(gated.where((agent) => agent.enabled).map((agent) => agent.name), [
-        'Continuity Controller',
-        'Narrative / Pacing / Style Controller',
-        'Meta-Weaver / OOC Policy',
-        'Main Responder',
-      ]);
-    },
-  );
+      ),
+      isFalse,
+    );
+    expect(
+      StudioActivationGate.isControllerAllowed(
+        'meta',
+        StudioExecutionMode.direct,
+      ),
+      isFalse,
+    );
+    expect(
+      StudioActivationGate.isControllerAllowed(
+        'narrative',
+        StudioExecutionMode.assisted,
+      ),
+      isTrue,
+    );
+  });
 }

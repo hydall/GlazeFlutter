@@ -195,25 +195,6 @@ void main() {
       );
     });
 
-    test(
-      'new database seeds separate Loom presets without changing default',
-      () async {
-        final presets = await db.customSelect(
-          '''SELECT preset_id, name, execution_mode, agent_enabled_json
-           FROM studio_preset_rows
-           WHERE preset_id IN ('studio_direct_loom_v1',
-                               'studio_assisted_loom_v1')
-           ORDER BY preset_id''',
-        ).get();
-
-        expect(presets, hasLength(2));
-        expect(presets[0].read<String>('preset_id'), 'studio_assisted_loom_v1');
-        expect(presets[0].read<String>('execution_mode'), 'assisted');
-        expect(presets[1].read<String>('preset_id'), 'studio_direct_loom_v1');
-        expect(presets[1].read<String>('execution_mode'), 'direct');
-      },
-    );
-
     test('v67 upgrades to atomic character fact schema', () async {
       final file = File(
         '${Directory.systemTemp.path}/glaze_mig_atomic_${DateTime.now().microsecondsSinceEpoch}.db',

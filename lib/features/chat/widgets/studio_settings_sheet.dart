@@ -10,6 +10,7 @@ import '../../../core/llm/model_fetcher.dart';
 import '../../../core/llm/studio_controller_ontology.dart';
 import '../../../core/models/pipeline_settings.dart';
 import '../../../core/models/studio_config.dart';
+import '../../../core/models/studio_preset_topology.dart';
 import '../../../core/services/file_export_service.dart';
 import '../../../core/state/active_studio_preset_provider.dart';
 import '../../../core/state/db_provider.dart';
@@ -315,10 +316,9 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
           hint: switch (mode) {
             StudioExecutionMode.legacy =>
               'Keep the selected full Studio preset and all enabled controllers.',
-            StudioExecutionMode.direct =>
-              'Use Direct Loom v1: FINAL plus optional Meta, no normal pregen controllers.',
+            StudioExecutionMode.direct => 'FINAL only; no pregen controllers.',
             StudioExecutionMode.assisted =>
-              'Use Assisted Loom v1: Continuity and Scene Director before FINAL.',
+              'Continuity and Scene Director before FINAL.',
           },
           icon: current?.executionMode == mode ? Icons.check : null,
           iconColor: Theme.of(context).colorScheme.primary,
@@ -338,18 +338,34 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   Future<void> _selectStudioMode(StudioExecutionMode mode) async {
     final current = _activeStudioPreset;
     if (current?.executionMode == mode) return;
-    final presetId = switch (mode) {
-      StudioExecutionMode.legacy => 'default',
-      StudioExecutionMode.direct => 'studio_direct_loom_v1',
-      StudioExecutionMode.assisted => 'studio_assisted_loom_v1',
-    };
-    if (_studioPresets.every((preset) => preset.id != presetId)) {
-      if (mounted) {
-        GlazeToast.show(context, 'This Studio mode is not available yet.');
-      }
+    // A reduced Direct/Assisted preset cannot seed another mode: it may already
+    // lack the controller blocks the target needs. Always derive a new mode
+    // preset from the selected full Legacy preset, with `default` as fallback.
+    final source = current?.executionMode == StudioExecutionMode.legacy
+        ? current
+        : _studioPresets.where((preset) => preset.id == 'default').firstOrNull;
+    if (source == null) {
+      if (mounted) GlazeToast.show(context, 'No Studio preset to copy.');
       return;
     }
-    await _changeStudioPreset(presetId);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final modeName = switch (mode) {
+      StudioExecutionMode.legacy => 'Legacy Studio',
+      StudioExecutionMode.direct => 'Direct Loom',
+      StudioExecutionMode.assisted => 'Assisted Loom',
+    };
+    final preset = prepareStudioPresetForMode(
+      source,
+      id: 'studio_${mode.wireName}_$now',
+      name: '$modeName $now',
+      mode: mode,
+      updatedAt: now,
+    );
+    await ref.read(studioPresetRepoProvider).upsert(preset);
+    final nextPresets = await ref.read(studioPresetRepoProvider).getAll();
+    nextPresets.sort((a, b) => a.name.compareTo(b.name));
+    if (mounted) setState(() => _studioPresets = nextPresets);
+    await _changeStudioPreset(preset.id);
   }
 
   Future<void> _openStudioPresetSelector(StudioConfig config) async {

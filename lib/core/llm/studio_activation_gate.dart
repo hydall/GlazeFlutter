@@ -13,6 +13,20 @@ import 'studio_controller_ontology.dart';
 class StudioActivationGate {
   StudioActivationGate._();
 
+  /// Whether a controller belongs to [mode]'s pre-generation topology.
+  ///
+  /// This deliberately says nothing about post-generation processing: the
+  /// Post Cleaner / fact-checker switch remains an independent pipeline
+  /// setting in every Studio mode.
+  static bool isControllerAllowed(String specId, StudioExecutionMode mode) {
+    return switch (mode) {
+      StudioExecutionMode.legacy => true,
+      StudioExecutionMode.direct => specId == 'final',
+      StudioExecutionMode.assisted =>
+        specId == 'final' || specId == 'continuity' || specId == 'narrative',
+    };
+  }
+
   /// Applies an explicit preset topology to persisted runtime agents.
   /// Runtime `agents_json` can outlive a preset switch, so Direct must not
   /// rely on callers having already disabled individual pregen agents.
@@ -24,17 +38,7 @@ class StudioActivationGate {
         .map((agent) {
           final specId = StudioControllerOntology.specForAgent(agent).id;
           final isPreGen = agent.phase == 'pre_generation';
-          final disabled = switch (mode) {
-            StudioExecutionMode.direct =>
-              isPreGen && specId != 'final' && specId != 'meta',
-            StudioExecutionMode.assisted =>
-              isPreGen &&
-                  specId != 'final' &&
-                  specId != 'meta' &&
-                  specId != 'continuity' &&
-                  specId != 'narrative',
-            StudioExecutionMode.legacy => false,
-          };
+          final disabled = isPreGen && !isControllerAllowed(specId, mode);
           return disabled ? agent.copyWith(enabled: false) : agent;
         })
         .toList(growable: false);
