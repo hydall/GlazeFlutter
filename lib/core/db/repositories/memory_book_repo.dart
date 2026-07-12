@@ -141,8 +141,8 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
   /// for [sessionId]. Wraps the read-modify-write in a transaction so
   /// concurrent writes cannot interleave (database.md Rule 3).
   ///
-  /// Used by the agentic write-loop (Stage 1) to append agent-generated
-  /// drafts without racing with other memory book writes.
+  /// Used by user-directed MemoryBook draft workflows without racing with
+  /// other MemoryBook writes.
   Future<void> appendDrafts(String sessionId, List<MemoryDraft> drafts) async {
     if (drafts.isEmpty) return;
     await transaction(() async {

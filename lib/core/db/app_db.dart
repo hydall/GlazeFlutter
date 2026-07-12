@@ -798,7 +798,7 @@ class AppDatabase extends _$AppDatabase {
         // Studio preset DB: all hardcoded Studio prompts (request preset
         // layout blocks, controller ontology fallback prompts, runtime
         // envelope, final brief usage note, hard style contract, cleaner
-        // system/audit prompts, ledger prompt, agentic write-loop prompt,
+        // system/audit prompts, Ledger prompt, retired agentic write-loop
         // beauty shard instructions, cleaner rules extractor prompt, beauty
         // extractor prompt, block router prompt, brief parser fallback,
         // shard synthesizer prompts) migrate to a Drift table so the user can
@@ -882,9 +882,10 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       if (from < 56) {
-        // Migrate existing default preset: add cleaner_beauty block and
-        // update writeloop_system with anti-duplicate rules. Existing user
-        // customizations to other blocks are preserved.
+        // Historical migration: add cleaner_beauty and refresh the retired
+        // write-loop block only when the matching seed still exists. Current
+        // seeds intentionally omit that block; stored user preset JSON remains
+        // untouched when no legacy seed is available.
         try {
           final row = await customSelect(
             'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
@@ -906,12 +907,16 @@ class AppDatabase extends _$AppDatabase {
                 changed = true;
               }
             }
-            // Update writeloop_system with anti-duplicate rules.
-            for (var i = 0; i < blocks.length; i++) {
-              if (blocks[i]['id'] == 'writeloop_system') {
-                blocks[i] = seedById['writeloop_system']!;
-                changed = true;
-                break;
+            // Refresh the legacy block only for historical builds that still
+            // provide a seed. Retired current builds keep it inert.
+            final legacyWriteLoopSeed = seedById['writeloop_system'];
+            if (legacyWriteLoopSeed != null) {
+              for (var i = 0; i < blocks.length; i++) {
+                if (blocks[i]['id'] == 'writeloop_system') {
+                  blocks[i] = legacyWriteLoopSeed;
+                  changed = true;
+                  break;
+                }
               }
             }
             if (changed) {
@@ -1071,9 +1076,9 @@ class AppDatabase extends _$AppDatabase {
         // contract with TELEGRAPHIC FORMAT and ANTI-RECITE instructions.
         // Trackers now write facts (entity.attribute: value), not prose —
         // preventing the final writer from copying tracker phrasing verbatim.
-        // Also updates the write-loop prompt to enforce telegraphic values.
-        // Applies to ALL presets (default + custom) to avoid the migration 60
-        // lesson where fixes only hit one preset.
+        // Also updates the write-loop prompt for historical seeds. Applies to
+        // ALL presets (default + custom) to avoid the migration 60 lesson where
+        // fixes only hit one preset. Current seeds omit the legacy block.
         try {
           final presetRows = await customSelect(
             'SELECT preset_id, blocks_json FROM studio_preset_rows',
@@ -1116,9 +1121,9 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       if (from < 62) {
-        // Force-update writeloop_system with IDENTITY REVEAL RULE.
-        // When a character's real name is revealed, write-loop must update
-        // existing tracker keys to the new name instead of creating duplicates.
+        // Force-update writeloop_system with IDENTITY REVEAL RULE for historical
+        // seeds. Current seeds omit this retired block, leaving stored user
+        // preset JSON inert and unchanged.
         try {
           final presetRows = await customSelect(
             'SELECT preset_id, blocks_json FROM studio_preset_rows',
@@ -1361,44 +1366,10 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
-  Future<void> _replaceLegacyWriteLoopPrompts() async {
-    final rows = await customSelect(
-      'SELECT preset_id, blocks_json FROM studio_preset_rows',
-    ).get();
-    for (final row in rows) {
-      try {
-        final blocks = (jsonDecode(row.read<String>('blocks_json')) as List)
-            .cast<Map<String, dynamic>>();
-        var changed = false;
-        for (var i = 0; i < blocks.length; i++) {
-          final content = blocks[i]['content'];
-          final hasLegacyMemoryContract =
-              content is String &&
-              (content.contains('writeMemory') ||
-                  content.contains('"memories"') ||
-                  content.contains('{{existingBlock}}') ||
-                  content.contains('memory draft'));
-          if (blocks[i]['id'] == 'writeloop_system' &&
-              hasLegacyMemoryContract) {
-            blocks[i] = {
-              ...blocks[i],
-              'name': 'Tracker write-loop system prompt',
-              'content': _trackerWriteLoopPrompt,
-            };
-            changed = true;
-          }
-        }
-        if (changed) {
-          await customStatement(
-            'UPDATE studio_preset_rows SET blocks_json = ? WHERE preset_id = ?',
-            [jsonEncode(blocks), row.read<String>('preset_id')],
-          );
-        }
-      } catch (e) {
-        debugPrint('Migration 66 (tracker-only write-loop prompt) failed: $e');
-      }
-    }
-  }
+  /// Retains legacy prompt blocks as inert user preset JSON. The generic
+  /// write-loop has no runtime consumer, and migration must not rewrite user
+  /// customizations while upgrading old databases.
+  Future<void> _replaceLegacyWriteLoopPrompts() async {}
 }
 
 LazyDatabase _openConnection() {
@@ -1416,20 +1387,13 @@ LazyDatabase _openConnection() {
 /// Seed blocks for the default Studio preset, migrated from the hardcoded
 /// constants in `studio_request_preset.dart`, `studio_controller_ontology.dart`,
 /// `studio_prompt_text.dart`, `studio_ledger_prompt.dart`,
-/// `agentic_write_request_parser.dart`, `post_cleaner_service.dart`,
-/// `studio_beauty_extractor.dart`, `studio_block_router.dart`,
-/// `studio_cleaner_rules_extractor.dart`, `studio_shard_synthesizer.dart`,
-/// `beauty_shard_instruction.dart`.
+/// `post_cleaner_service.dart`, `studio_beauty_extractor.dart`,
+/// `studio_block_router.dart`, `studio_cleaner_rules_extractor.dart`,
+/// `studio_shard_synthesizer.dart`, `beauty_shard_instruction.dart`.
 ///
 /// Each block: `{id, name, kind, role, content, enabled, order, section}`.
 /// The `section` field groups blocks by pipeline stage:
-/// `pregen`, `final`, `cleaner`, `ledger`, `writeloop`, `build`, `brief_parser`.
-///
-/// IMPORTANT: keep these in sync with the Dart fallback constants until the
-/// fallbacks are removed in the cleanup PR. The resolver tries DB first, then
-/// falls back to the constant.
-const _trackerWriteLoopPrompt =
-    'You are a state-tracking agent for a roleplay conversation. Analyze the recent conversation and update only lightweight structured trackers.\n\nRecent conversation:\n{{recentHistoryText}}\n\nCurrent trackers:\n{{trackersBlock}}\n\nRules:\n- Only update trackers that CHANGED or are NEW. Do not repeat unchanged trackers.\n- Trackers hold short current state such as mood, location, inventory, relationship status, or ongoing promises.\n- Do not create MemoryBook entries or memory drafts. Long-term history is handled by MemoryBook range summaries and raw-message recall.\n- Do not duplicate Studio Ledger entity, relationship, arc, world, or scene state in chat-scope trackers.\n- Keep values short (1-5 words), factual, and non-literary.\n- If nothing changed, return an empty trackers array.';
+/// `pregen`, `final`, `cleaner`, `ledger`, `build`, `brief_parser`.
 
 List<Map<String, dynamic>> studioPresetSeedBlocks() {
   return _applyStudioLengthContract(<Map<String, dynamic>>[
@@ -1940,17 +1904,6 @@ PREFER
       'enabled': true,
       'order': 0,
       'section': 'ledger',
-    },
-    // ─── writeloop section (2 blocks) ───
-    {
-      'id': 'writeloop_system',
-      'name': 'Tracker write-loop system prompt',
-      'kind': 'instruction',
-      'role': 'system',
-      'content': _trackerWriteLoopPrompt,
-      'enabled': true,
-      'order': 0,
-      'section': 'writeloop',
     },
     // ─── build section (build-time prompts) ───
     {

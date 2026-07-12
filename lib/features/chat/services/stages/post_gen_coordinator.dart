@@ -18,7 +18,6 @@ import 'ledger_stage.dart';
 import 'memory_draft_stage.dart';
 import 'stage_context.dart';
 import 'sync_notification_stage.dart';
-import 'write_loop_stage.dart';
 
 /// Post-generation task scheduler. Replaces the old inline postGenFutures
 /// blocks in both the normal and regen paths. Implements the pipeline order
@@ -28,9 +27,8 @@ import 'write_loop_stage.dart';
 ///   3. Sync + notification (immediate, awaited)
 ///   4. Post-cleaner (fact-checker + rewrite + ext blocks + ledger)
 ///   5. Image tags — on canonical text, after cleaner
-///   6. Write-loop — on canonical text, after cleaner
-///   8. Embed (parallel fire-and-forget)
-///   9. Auto-create drafts (parallel fire-and-forget)
+///   6. Embed (parallel fire-and-forget)
+///   7. Auto-create drafts (parallel fire-and-forget)
 ///
 /// Studio OFF:
 ///   2. Sync + notification (immediate, awaited)
@@ -45,7 +43,6 @@ class PostGenCoordinator {
   final MemoryDraftStage draftStage;
   final ImageTagStage imageTagStage;
   final ExtBlocksStage extBlocksStage;
-  final WriteLoopStage writeLoopStage;
   final LedgerStage ledgerStage;
   final CleanerStage cleanerStage;
 
@@ -55,7 +52,6 @@ class PostGenCoordinator {
       draftStage = MemoryDraftStage(ctx),
       imageTagStage = ImageTagStage(ctx),
       extBlocksStage = ExtBlocksStage(ctx),
-      writeLoopStage = WriteLoopStage(ctx),
       ledgerStage = LedgerStage(ctx),
       cleanerStage = CleanerStage(
         ctx,
@@ -186,17 +182,16 @@ class PostGenCoordinator {
       return;
     }
 
-    // Studio foreground work (cleaner, canonical image work, and write-loop)
-    // retains the post-gen hold. Always release it, including errors.
+    // Studio foreground work (cleaner and canonical image work) retains the
+    // post-gen hold. Always release it, including errors.
     if (!_beginForegroundPostGen(sessionId: sessionId, genId: genId)) return;
     await notifService.onPostGenStarted();
     try {
       final postGenFutures = <Future<void>>[];
 
-      // Studio ON: cleaner runs first, then image tags + write-loop on
-      // canonical text. Ledger is launched from inside CleanerStage.
-      // Ext blocks are launched from inside CleanerStage's branches
-      // (bound to the swipe the user will see).
+      // Studio ON: cleaner runs first, then image tags on canonical text.
+      // Ledger runs inside CleanerStage. Ext blocks are launched from its
+      // branches and bind to the swipe the user will see.
       final cleanerTask = cleanerStage.run(
         sessionId: sessionId,
         messages: result.session!.messages,
@@ -228,18 +223,6 @@ class PostGenCoordinator {
             service: service,
           );
         }),
-      );
-
-      // Stage 6: Write-loop — on canonical text, after cleaner.
-      postGenFutures.add(
-        cleanerTask.then(
-          (_) => writeLoopStage.run(
-            sessionId: sessionId,
-            messages: result.session!.messages,
-            genId: genId,
-            regenTargetId: regenTargetId,
-          ),
-        ),
       );
 
       await Future.wait(postGenFutures);

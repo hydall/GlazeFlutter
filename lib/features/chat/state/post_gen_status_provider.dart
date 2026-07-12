@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/legacy.dart';
 
-/// Live state for post-generation tasks (write-loop, ledger, ext blocks).
+/// Live state for post-generation tasks (Ledger and extension blocks).
 /// Surfaced to the chat UI as a floating card so the user can see what's
 /// happening after the main generation + cleaner complete.
 class PostGenStatusState {
@@ -45,7 +45,7 @@ class PostGenStatusState {
   }) : phase = PostGenTaskPhase.error;
 }
 
-enum PostGenTask { none, writeLoop, ledger, extBlocks }
+enum PostGenTask { none, ledger, extBlocks }
 
 enum PostGenTaskPhase { idle, running, done, error }
 

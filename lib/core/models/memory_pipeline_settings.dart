@@ -9,7 +9,7 @@ part 'memory_pipeline_settings.g.dart';
 /// Nested inside [PipelineSettings] under the `memoryPipeline` field.
 ///
 /// `auxTimeoutMs` is a shared default timeout for auxiliary LLM calls
-/// (cleaner, ledger, dedup, write-loop) when no service-specific timeout is
+/// (cleaner, Ledger, dedup) when no service-specific timeout is
 /// configured. MemoryBook retrieval does not use this; it is local/vector-only.
 @freezed
 abstract class MemoryPipelineSettings with _$MemoryPipelineSettings {

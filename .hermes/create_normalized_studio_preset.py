@@ -193,7 +193,7 @@ STATE NORMALIZATION:
 - Avoid invented exact numbers. Persist precision only when explicitly stated in accepted chat.'''
 
     # Keep every intentional disabled alternative, but make ordering deterministic.
-    for section in ('cleaner', 'ledger', 'writeloop', 'build', 'brief_parser', 'pregen', 'final'):
+    for section in ('cleaner', 'ledger', 'build', 'brief_parser', 'pregen', 'final'):
         section_blocks = [b for b in blocks if b.get('section') == section]
         section_blocks.sort(key=lambda b: (b.get('order', 0), blocks.index(b)))
         for order, block in enumerate(section_blocks):

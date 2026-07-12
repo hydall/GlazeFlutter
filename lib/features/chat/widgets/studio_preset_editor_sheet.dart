@@ -13,7 +13,7 @@ import '../../studio/widgets/studio_preset_group_tile.dart';
 ///
 /// Only the 4 user-facing sections are shown: pregen (Trackers), final
 /// (Final Agent), cleaner (Post-Processing), ledger (Canon Ledger).
-/// Technical sections (writeloop, build, brief_parser) are hidden.
+/// Technical sections (build, brief_parser) are hidden.
 class StudioPresetEditorSheet extends ConsumerStatefulWidget {
   final String presetId;
 

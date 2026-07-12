@@ -1,17 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:glaze_flutter/core/llm/memory_agentic_policy.dart';
 
 void main() {
-  test('agentic mode is disabled and write-blocked by default', () {
+  test('agentic mode is disabled by default', () {
     const policy = MemoryAgenticPolicy(MemoryAgenticSettings());
 
-    final read = policy.canUse(MemoryAgenticTool.inspectContext);
-    final write = policy.canUse(MemoryAgenticTool.writeTracker);
+    final decision = policy.canUse(MemoryAgenticTool.inspectContext);
 
-    expect(read.allowed, isFalse);
-    expect(read.reason, 'agentic_disabled');
-    expect(write.allowed, isFalse);
-    expect(write.reason, 'agentic_disabled');
+    expect(decision.allowed, isFalse);
+    expect(decision.reason, 'agentic_disabled');
   });
 
   test('enabled agentic scaffold allows read-only proposal tools', () {
@@ -20,42 +18,5 @@ void main() {
     expect(policy.canUse(MemoryAgenticTool.inspectContext).allowed, isTrue);
     expect(policy.canUse(MemoryAgenticTool.proposeMemory).allowed, isTrue);
     expect(policy.canUse(MemoryAgenticTool.proposeTracker).allowed, isTrue);
-  });
-
-  test('write tools require non-read-only mode and write tool opt-in', () {
-    const readOnly = MemoryAgenticPolicy(MemoryAgenticSettings(enabled: true));
-    const writeDisabled = MemoryAgenticPolicy(
-      MemoryAgenticSettings(enabled: true, readOnly: false),
-    );
-
-    expect(
-      readOnly.canUse(MemoryAgenticTool.writeTracker).reason,
-      'agentic_read_only',
-    );
-    expect(
-      writeDisabled.canUse(MemoryAgenticTool.writeTracker).reason,
-      'write_tools_disabled',
-    );
-  });
-
-  test('write tools require explicit diff approval by default', () {
-    const policy = MemoryAgenticPolicy(
-      MemoryAgenticSettings(
-        enabled: true,
-        readOnly: false,
-        writeToolsEnabled: true,
-      ),
-    );
-
-    expect(
-      policy.canUse(MemoryAgenticTool.writeTracker).reason,
-      'diff_approval_required',
-    );
-    expect(
-      policy
-          .canUse(MemoryAgenticTool.writeTracker, explicitDiffApproved: true)
-          .allowed,
-      isTrue,
-    );
   });
 }

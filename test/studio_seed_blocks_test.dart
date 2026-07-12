@@ -24,14 +24,14 @@ void main() {
       }
     });
 
-    test('contains all 7 sections', () {
+    test('contains all 6 sections', () {
       final blocks = studioPresetSeedBlocks();
       final sections = blocks.map((b) => b['section'] as String).toSet();
       expect(sections, contains('pregen'));
       expect(sections, contains('final'));
       expect(sections, contains('cleaner'));
       expect(sections, contains('ledger'));
-      expect(sections, contains('writeloop'));
+      expect(sections, isNot(contains('writeloop')));
       expect(sections, contains('build'));
       expect(sections, contains('brief_parser'));
     });

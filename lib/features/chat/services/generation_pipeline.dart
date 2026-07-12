@@ -46,9 +46,7 @@ class GenerationOutcome {
 ///   4. clear `restorationMessage` and chat image `imgGenCancelToken`
 ///   5. sync + notification (immediate)
 ///   6. post-cleaner (Studio ON: fact-checker + rewrite + ext blocks + ledger)
-///   7. image tags (after cleaner on canonical text, or immediate if Studio off)
-///   8. write-loop (Studio ON: after cleaner on canonical text)
-///   9. embed + auto-create drafts (parallel fire-and-forget)
+///   7. embed + auto-create drafts (parallel fire-and-forget)
 ///
 /// This class is a thin orchestrator — no business logic, no state ownership.
 /// Constructor-injected dependencies: the [Ref] (for repo/provider reads),
@@ -244,8 +242,8 @@ class GenerationPipeline {
       }
 
       // Post-generation tasks: sync + notification, then (in order)
-      // cleaner → image tags → write-loop, with embed + auto-drafts in
-      // parallel. See PLAN_STUDIO_PIPELINE_SEPARATION.md §New Pipeline Order.
+      // cleaner → image tags, with embed + auto-drafts in parallel. See
+      // PLAN_STUDIO_PIPELINE_SEPARATION.md §New Pipeline Order.
       await _postGenCoordinator.run(
         result: result,
         genId: genId,

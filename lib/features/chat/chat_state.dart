@@ -5,8 +5,9 @@ class ChatState {
   final ChatSession? session;
   final bool isGenerating;
   final bool isGeneratingImage;
-  /// True while post-generation stages (cleaner, ledger, ext-blocks,
-  /// write-loop, image tags) are running. Decoupled from [isGenerating]
+
+  /// True while post-generation stages (cleaner, Ledger, ext-blocks, image
+  /// tags) are running. Decoupled from [isGenerating]
   /// (which marks the streaming window) so the message-sync layer can
   /// settle the persisted assistant message into the DOM while the Stop
   /// button stays pressable through the post-gen window.
@@ -97,9 +98,5 @@ class StreamingState {
   /// Null = normal generation path (new virtual streaming message).
   final String? targetMessageId;
 
-  const StreamingState({
-    this.text = '',
-    this.reasoning,
-    this.targetMessageId,
-  });
+  const StreamingState({this.text = '', this.reasoning, this.targetMessageId});
 }

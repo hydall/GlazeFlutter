@@ -69,7 +69,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **58**
+Current version: **70**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -99,15 +99,15 @@ Migration history:
 - v42: added Studio `profileId` / `profileName` for reusable session-bound profiles
 - v43: added Studio `builderPromptTemplate` override for editable Studio rebuild prompts
 - v44: added Studio `maxFinalHistoryMessages` INTEGER DEFAULT 15 (raised to 30 in v64) — caps trailing chat messages sent to the final Studio generator (0 = unlimited); a 60K token budget is also enforced (whichever limit is hit first); Studio trackers receive their own `StudioAgent.contextSize` (default 5, hard-cap 200) instead — see INV-ST1/INV-ST2 in `docs/INVARIANTS.md`
-- v45: added `tracker_rows` table — lightweight key-value trackers written by the post-turn write-loop and Studio trackers (e.g. 'mood: happy', 'inventory: chip in pocket'). Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades alongside `memory_book_rows`. Read live by `agentic_operations_log_dialog.dart` "Tracker values" tab.
+- v45: added `tracker_rows` table — lightweight key-value session state. Composite PK `{sessionId, name}`; indexed on `{sessionId, scope}`. Studio Ledger is the sole automatic model writer for canonical tracker state; manual canon overrides/locks use the same infrastructure. Rows are deleted in `chatRepo.deleteByCharacterId` and `characterRepo.delete` cascades and are shown in the Agentic Ops “Tracker values” tab.
 - v46: added `studio_config_rows.routing_mode` TEXT DEFAULT `'verbatim'` — controls how preset blocks become agent instructions (`verbatim` = blocks concatenated дословно, no LLM call; `compiled` = legacy LLM digest). The decomposition service (`studio_decomposition_service.dart`) was restored after Phase 2: `decompose()` produces `StudioAgent`s (trackers + one final generator) that slot into `runTrackerCycle`; `routing_mode = 'compiled'` triggers the LLM builder, `'verbatim'` concatenates blocks directly.
-- v50: added `tracker_snapshots` table — per-agent-swipe immutable snapshots of all trackers (mirrors Marinara-Engine's `game_state_snapshots`). Composite PK `{sessionId, messageId, swipeId, agentSwipeId}`; columns `trackersJson` (JSON array of `Tracker.toJson`), `committed` (0/1), `createdAt` (epoch seconds). Three indexes on `(sessionId, committed, createdAt)` for fast `getLatestCommitted` lookups. The `TrackerSnapshotRepo` (299 lines) owns all access; `tracker_rows` is kept as the write-loop's internal mutable store (LLM upserts into it, then a snapshot is taken).
+- v50: added `tracker_snapshots` table — per-agent-swipe immutable snapshots of all trackers (mirrors Marinara-Engine's `game_state_snapshots`). Composite PK `{sessionId, messageId, swipeId, agentSwipeId}`; columns `trackersJson` (JSON array of `Tracker.toJson`), `committed` (0/1), `createdAt` (epoch seconds). Three indexes on `(sessionId, committed, createdAt)` support fast `getLatestCommitted` reads. `TrackerSnapshotRepo` owns all access; snapshots preserve Ledger state for deletion, regeneration, swipe, and branch rollback.
 - v51: data migration — aggregates `tracker_rows` per session into a baseline snapshot at the sentinel anchor `(messageId='', committed=1)`. Legacy sessions that had `tracker_rows` but no snapshots get a one-time baseline so the snapshot-first read path (Phase 3) finds data immediately. The sentinel anchor is never dropped by `deleteForMessage` (only by `deleteBySessionId` / `deleteByCharacterId`).
 - v52: dropped `pipeline_settings_rows` — pipeline settings moved to a singleton in SharedPreferences (key `pipelineSettings`), per-session overrides abandoned. SharedPreferences payload unaffected.
 - v53: added `info_blocks.agentSwipeId` INTEGER DEFAULT -1 — binds ext blocks to the blue cleaned sub-swipe so blocks launched after the POST-cleaner target the cleaned text. -1 = "no agent swipe" (legacy blocks, match by `(messageId, swipeId)` only).
-- v54: added `studio_preset_rows` table — all hardcoded Studio prompts (controller ontology, runtime envelope, final brief, cleaner/ledger/write-loop prompts, beauty shard, extractors, block router, brief parser, shard synthesizers) migrate to a DB table so the user can edit them without code changes. Seeded with the current hardcoded values via a single INSERT. See `docs/PLAN_STUDIO_PRESET_DB.md`.
+- v54: added `studio_preset_rows` table — Studio prompts (controller ontology, runtime envelope, final brief, cleaner and Ledger prompts, beauty shard, extractors, block router, brief parser, shard synthesizers) migrated to a DB table so the user can edit them without code changes. Seeded with the then-current hardcoded values via a single INSERT. See `docs/PLAN_STUDIO_PRESET_DB.md`.
 - v55: Studio config overhaul — added `studio_preset_id`, `expensive_api_config_id`, `cheap_api_config_id`, `cleaner_api_config_id`; dropped `source_preset_id`, `source_preset_hash`, `routing_mode`, `agent_studio_preset_id`, `final_studio_preset_id`, `studio_preset_overrides_json`, `builder_prompt_template`, `selected_block_ids_json`, `selected_block_ids_initialized`, `build_api_config_id`, `build_model_override`. Unbinds Studio from user presets, switches to 3 API config slots + `studioPresetId`.
-- v56: data migration — adds the `cleaner_beauty` block and updates `writeloop_system` with anti-duplicate rules in the existing `default` studio preset. Missing seed blocks are appended; `writeloop_system` is force-updated from seed. Existing user customizations to other blocks are preserved.
+- v56: historical data migration — originally added `cleaner_beauty` and refreshed the then-active `writeloop_system` block. The generic write-loop is retired; current migration code adds current missing seed blocks but preserves existing user `writeloop` JSON as inert data.
 - v57: data migration — moves `cleaner_beauty` to the end of the cleaner section (`order` 99) so the LLM sees styling instructions last among preset blocks (recency effect).
 - v58: data migration — `<lumiaooc>` coloring moved out of the LLM cleaner prompt into deterministic code (`wrapLumiaOocColors` in `beauty_state_parser.dart`). Force-updates the `cleaner_beauty` and `final_lumia_ooc` blocks in the existing `default` preset from the updated seed so the old lumiaooc coloring rule and the `reserved.lumia_ooc` JSON-shape field are dropped. Existing user customizations to other blocks are preserved.
 
@@ -230,86 +230,37 @@ Do not poll; use Drift streams.
 
 ---
 
-## MemoryBook agent-generated batches (Phase 7)
+## MemoryBook compatibility cleanup (v66)
 
-`MemoryBookRows.entriesJson` and `pendingDraftsJson` are JSON TEXT blob
-columns — adding fields to `MemoryEntry` / `MemoryDraft` requires NO Drift
-schema migration, only a freezed regeneration (`dart run build_runner build`)
-plus an in-place migration in `fromJson` (see `_migrateEntryInPlace` and
-`_migrateInjectionTargetInPlace` in `lib/core/models/memory_book.dart`).
+`MemoryBookRows.entriesJson` and `pendingDraftsJson` are JSON TEXT blobs, so
+adding model fields requires no Drift schema migration. Pre-v66 builds could
+create `source: 'agentic'` entries through the generic tracker write-loop.
+That writer is retired.
 
-### Source / kind markers
+`AppDatabase.purgeRetiredAgenticMicroMemory()` is intentionally retained for
+schema upgrades and backup/cloud restores. It removes only those historical
+agentic entries/drafts and their derived embedding/catalog/entity/salience rows;
+it preserves manual entries, scan drafts, range summaries, Studio Ledger facts,
+and MemoryBook settings. Normal MemoryBook scan and approval flows remain
+user-directed and go through `MemoryBookRepo`.
 
-- `MemoryDraft.source`: `'scan_chat'` (set by `MemoryBookController.scanChat`)
-  or `'agentic'` (set by `MemoryAgenticWriteService._executeMemoryWrites` post-turn
-  write-loop) or `''` (legacy / manual).
-- `MemoryEntry.source`: propagated from `draft.source` by
-  `MemoryBookController.approveDraft` (Phase 7). Defaults to `''` for legacy
-  entries; migrated in `_migrateEntryInPlace`.
-- `MemoryEntry.kind`: `'curated'` (default) or `'agent'` (set by `approveDraft`
-  when `draft.source == 'agentic'`).
-
-### Auto-approve policy
-
-Agent drafts that pass validation are **auto-promoted to `MemoryEntry`**
-immediately — they land in the MemoryBook `entriesJson` with `kind='agent'`,
-`source='agentic'`, `messageIds=[messageId]`. The user can edit or delete
-them afterwards via the MemoryBook UI "Agent memories" tab, but no manual
-"Approve" click is required. This is the auto-approve path:
-`MemoryAgenticWriteService._executeMemoryWrites` builds `MemoryEntry`
-objects directly and calls `MemoryBookRepo.appendApprovedEntries` (not
-`appendDrafts`).
-
-Scan drafts (`source='scan_chat'`, produced by `MemoryBookController.scanChat`)
-still use the pending-drafts path: they land in `pendingDraftsJson` and the
-user explicitly approves or deletes them via the MemoryBook UI. This is
-because scan drafts are bulk-produced from a user-triggered scan, where
-review is the point of the operation.
-
-Invalid/empty/duplicate agent drafts are silently dropped (the LLM may emit
-fewer valid entries than it tried to). There is no half-approved state.
-
-The dedicated atomic repo path is `MemoryBookRepo.appendApprovedEntries`
-(transactional read-modify-write of `entriesJson` inside `db.transaction()`
-per Rule 3 above). `MemoryAgenticWriteService` never touches `entriesJson`
-directly — it always goes through `appendApprovedEntries`. The legacy
-`appendDrafts` (for scan drafts) follows the same atomic pattern.
-
-### Delete-on-message-removal
-
-Deleting an assistant message also drops the memory entries/drafts sourced
-from it: `ChatMessageService.deleteMessage` calls
-`MemoryBookRepo.deleteForMessage(sessionId, messageId)`, which atomically
-removes any `MemoryEntry` or `MemoryDraft` whose `messageIds` contains
-`messageId`. Items sourced from other messages are preserved. This mirrors
-the tracker-snapshot rollback (`TrackerSnapshotRepo.deleteForMessage`) that
-already ran on this path.
-
-### Display separation
-
-`memory_books_sheet.dart` (Phase 7.2) tabs drafts/entries by `source`:
-- **Approved** tab: `entry.source != 'agentic'` (curated + scan-promoted)
-- **Scan drafts** tab: `draft.source != 'agentic'` (bulk scan drafts)
-- **Agent memories** tab: `draft.source == 'agentic'` + `entry.source == 'agentic'`
-
-`agentic_operations_log_dialog.dart` (Phase 7.5) has a separate "Tracker
-values" tab that reads `trackerRepoProvider.getBySessionId` — live tracker
-state (scene, weather, inventory, ...) is NOT a MemoryBook entry and is NOT
-mixed with memory drafts. See INV-M6 in `docs/INVARIANTS.md`.
+Deleting an assistant message still calls
+`MemoryBookRepo.deleteForMessage(sessionId, messageId)` to retract any normal
+MemoryBook items sourced from that message.
 
 ---
 
-## Tracker snapshot rollback system (Phases 1-12)
+## Tracker snapshot rollback system
 
-`tracker_snapshots` is an immutable per-agent-swipe snapshot of all
-trackers, written once after each generation's write-loop completes and
-never mutated. Rollback is **emergent**: deleting rows makes the previous
-committed snapshot become the new latest (no explicit "restore" code path).
+`tracker_snapshots` is an immutable per-agent-swipe snapshot of canonical
+tracker state, written after Studio Ledger applies an accepted update. Rollback
+is **emergent**: deleting rows makes the preceding committed snapshot the
+latest, then `tracker_rows` is restored from it.
 
 ### Granularity
 
 Each snapshot is anchored at `(sessionId, messageId, swipeId, agentSwipeId)`:
-- `messageId` — the assistant message that triggered the write-loop.
+- `messageId` — the assistant message whose accepted state Ledger recorded.
 - `swipeId` — which swipe of that message (regen creates new swipes).
 - `agentSwipeId` — which agent sub-swipe (e.g. `'final'` vs `'cleaned'`).
 
@@ -328,17 +279,13 @@ session itself is deleted.
 
 ### Write path
 
-`MemoryAgenticWriteService.runWriteLoop` accepts `messageId`/`swipeId`/
-`agentSwipeId` and, after the LLM writes to `tracker_rows`, re-reads the
-updated trackers and upserts an immutable snapshot at that anchor via
-`TrackerSnapshotRepo.upsertTrackers`. The snapshot is initially
-`committed=0`.
+Studio Ledger applies typed tracker operations, re-reads the resulting state,
+and upserts an immutable snapshot at that anchor via
+`TrackerSnapshotRepo.upsertTrackers`. The snapshot is initially `committed=0`.
 
-`commitLatest` (Phase 6) is called by `ChatNotifier.sendMessage` just
-before the next generation starts — it marks the latest snapshot for the
-session as `committed=1`. Committed snapshots are what the read path
-surfaces; uncommitted snapshots are intermediate state from in-flight
-write-loops.
+`commitLatest` is called by `ChatNotifier.sendMessage` just before the next
+generation starts. Committed snapshots are surfaced by the read path;
+uncommitted snapshots are tentative state from the most recent Ledger pass.
 
 `post_cleaner_service.applyCleanedText` (Phase 2) clones the parent
 message's snapshot into the new `'cleaned'` agent-swipe anchor so the
@@ -346,16 +293,15 @@ cleaned sub-swipe inherits the parent's tracker state.
 
 ### Read path (snapshot-first)
 
-The 3 call sites (`prompt_payload_builder.dart`, `write_loop_stage.dart`,
-`agentic_operations_log_dialog.dart`) call `getLatestCommitted` /
-`getLatest` and fall back to `trackerRepoProvider.getBySessionId` when no
-snapshot exists (legacy sessions that haven't been re-saved since Phase 1).
+The Ledger and tracker-values UI call `getLatestCommitted` / `getLatest` and
+fall back to `trackerRepoProvider.getBySessionId` when no snapshot exists
+(legacy sessions that have not yet produced a snapshot).
 
 ### Rollback paths
 
 | User action | Repo method | Effect |
 |-------------|-------------|--------|
-| Delete a message | `ChatRepo.deleteMessage` → `trackerSnapshotRepo.deleteForMessage` + `trackerRepo.replaceForSession` + `memoryBookRepo.deleteForMessage` | All snapshots at that `messageId` are dropped; the previous committed snapshot becomes the latest. The live `tracker_rows` store is rolled back to that preceding committed snapshot so the UI "Tracker values" tab and the Studio tracker preview show the state as of the previous message (e.g. if the deleted message's write-loop recorded "put cup on shelf", that tracker value is reverted). Memory book entries/drafts whose `messageIds` contains the deleted `messageId` are also dropped. |
+| Delete a message | `ChatRepo.deleteMessage` → `trackerSnapshotRepo.deleteForMessage` + `trackerRepo.replaceForSession` + `memoryBookRepo.deleteForMessage` | All snapshots at that `messageId` are dropped; the preceding committed snapshot becomes the latest. The live `tracker_rows` store is restored from it, so Tracker values and Studio state reflect the prior accepted message. MemoryBook items whose `messageIds` contains the deleted `messageId` are also dropped. |
 | Delete a session | `chat_history_provider.deleteSession` → `deleteBySessionId` + `SyncDeletionTracker.record('tracker_snapshot', sessionId)` | All snapshots for the session are dropped; cloud sync deletion is tracked. |
 | Clear chat | `chat_session_service.clearChat` → `deleteBySessionId` (both paths) | Same as delete-session. |
 | Delete by character | `chatRepo.deleteByCharacterId` → cascade `deleteBySessionId` per session | All snapshots for all of the character's sessions are dropped. |

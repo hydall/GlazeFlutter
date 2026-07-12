@@ -244,111 +244,121 @@ void main() {
       expect(names, contains('stale'));
     });
 
-    test('v66 removes only agentic micro-memory and derived rows', () async {
-      final file = File(
-        '${Directory.systemTemp.path}/glaze_mig_agentic_${DateTime.now().microsecondsSinceEpoch}.db',
-      );
-      addTearDown(() async {
-        if (file.existsSync()) await file.delete();
-      });
+    test(
+      'v66 removes agentic micro-memory without rewriting stored presets',
+      () async {
+        final file = File(
+          '${Directory.systemTemp.path}/glaze_mig_agentic_${DateTime.now().microsecondsSinceEpoch}.db',
+        );
+        addTearDown(() async {
+          if (file.existsSync()) await file.delete();
+        });
 
-      final seeded = AppDatabase.forTesting(
-        NativeDatabase.createInBackground(file),
-      );
-      await seeded.customSelect('SELECT 1').get();
-      await seeded.customStatement(
-        '''INSERT INTO memory_book_rows
+        final seeded = AppDatabase.forTesting(
+          NativeDatabase.createInBackground(file),
+        );
+        await seeded.customSelect('SELECT 1').get();
+        await seeded.customStatement(
+          '''INSERT INTO memory_book_rows
            (session_id, entries_json, pending_drafts_json, settings_json,
             last_processed_message_count, updated_at)
            VALUES (?, ?, ?, '{}', 0, 0)''',
-        [
-          'session-1',
-          '[{"id":"agent-entry","source":"agentic"},'
-              '{"id":"range-entry","source":"scan"},'
-              '{"id":"ledger-entry","source":"studio_ledger"}]',
-          '[{"id":"agent-draft","source":"agentic"},'
-              '{"id":"scan-draft","source":"scan"}]',
-        ],
-      );
-      await seeded.customStatement(
-        '''INSERT INTO embeddings (entry_id, source_type, source_id)
+          [
+            'session-1',
+            '[{"id":"agent-entry","source":"agentic"},'
+                '{"id":"range-entry","source":"scan"},'
+                '{"id":"ledger-entry","source":"studio_ledger"}]',
+            '[{"id":"agent-draft","source":"agentic"},'
+                '{"id":"scan-draft","source":"scan"}]',
+          ],
+        );
+        await seeded.customStatement(
+          '''INSERT INTO embeddings (entry_id, source_type, source_id)
            VALUES ('agent-entry', 'memory_entry', 'memorybook_session-1'),
                   ('range-entry', 'memory_entry', 'memorybook_session-1')''',
-      );
-      await seeded.customStatement('''INSERT INTO memory_catalog_rows
+        );
+        await seeded.customStatement('''INSERT INTO memory_catalog_rows
            (id, chat_session_id, memory_entry_id)
            VALUES ('cat-agent', 'session-1', 'agent-entry'),
                   ('cat-range', 'session-1', 'range-entry')''');
-      await seeded.customStatement('''INSERT INTO memory_entity_rows
+        await seeded.customStatement('''INSERT INTO memory_entity_rows
            (id, chat_session_id, memory_entry_id, name)
            VALUES ('entity-agent', 'session-1', 'agent-entry', 'drop'),
                   ('entity-range', 'session-1', 'range-entry', 'keep')''');
-      await seeded.customStatement('''INSERT INTO memory_salience_rows
+        await seeded.customStatement('''INSERT INTO memory_salience_rows
            (id, chat_session_id, memory_entry_id)
            VALUES ('salience-agent', 'session-1', 'agent-entry'),
                   ('salience-range', 'session-1', 'range-entry')''');
-      await seeded.customStatement(
-        '''INSERT INTO studio_preset_rows
+        await seeded.customStatement(
+          '''INSERT INTO studio_preset_rows
            (preset_id, name, blocks_json, updated_at)
            VALUES (?, ?, ?, 0), (?, ?, ?, 0)''',
-        [
-          'legacy-write-loop',
-          'Legacy write-loop',
-          '[{"id":"writeloop_system","name":"Legacy",'
-              '"content":"Use writeMemory and {{existingBlock}}."}]',
-          'custom-tracker-loop',
-          'Custom tracker loop',
-          '[{"id":"writeloop_system","name":"Custom",'
-              '"content":"Track only weather changes."}]',
-        ],
-      );
-      await seeded.customStatement('PRAGMA user_version = 65');
-      await seeded.close();
+          [
+            'legacy-write-loop',
+            'Legacy write-loop',
+            '[{"id":"writeloop_system","name":"Legacy",'
+                '"content":"Use writeMemory and {{existingBlock}}."}]',
+            'custom-tracker-loop',
+            'Custom tracker loop',
+            '[{"id":"writeloop_system","name":"Custom",'
+                '"content":"Track only weather changes."}]',
+          ],
+        );
+        await seeded.customStatement('PRAGMA user_version = 65');
+        await seeded.close();
 
-      final upgraded = AppDatabase.forTesting(
-        NativeDatabase.createInBackground(file),
-      );
-      addTearDown(() async => upgraded.close());
-      await upgraded.customSelect('SELECT 1').get();
+        final upgraded = AppDatabase.forTesting(
+          NativeDatabase.createInBackground(file),
+        );
+        addTearDown(() async => upgraded.close());
+        await upgraded.customSelect('SELECT 1').get();
 
-      final row = await upgraded.customSelect(
-        '''SELECT entries_json, pending_drafts_json
+        final row = await upgraded.customSelect(
+          '''SELECT entries_json, pending_drafts_json
            FROM memory_book_rows WHERE session_id = 'session-1' ''',
-      ).getSingle();
-      expect(row.read<String>('entries_json'), contains('range-entry'));
-      expect(row.read<String>('entries_json'), contains('ledger-entry'));
-      expect(row.read<String>('entries_json'), isNot(contains('agent-entry')));
-      expect(row.read<String>('pending_drafts_json'), contains('scan-draft'));
-      expect(
-        row.read<String>('pending_drafts_json'),
-        isNot(contains('agent-draft')),
-      );
+        ).getSingle();
+        expect(row.read<String>('entries_json'), contains('range-entry'));
+        expect(row.read<String>('entries_json'), contains('ledger-entry'));
+        expect(
+          row.read<String>('entries_json'),
+          isNot(contains('agent-entry')),
+        );
+        expect(row.read<String>('pending_drafts_json'), contains('scan-draft'));
+        expect(
+          row.read<String>('pending_drafts_json'),
+          isNot(contains('agent-draft')),
+        );
 
-      for (final table in [
-        'embeddings',
-        'memory_catalog_rows',
-        'memory_entity_rows',
-        'memory_salience_rows',
-      ]) {
-        final rows = await upgraded.customSelect('SELECT * FROM $table').get();
-        expect(rows, hasLength(1), reason: table);
-      }
+        for (final table in [
+          'embeddings',
+          'memory_catalog_rows',
+          'memory_entity_rows',
+          'memory_salience_rows',
+        ]) {
+          final rows = await upgraded
+              .customSelect('SELECT * FROM $table')
+              .get();
+          expect(rows, hasLength(1), reason: table);
+        }
 
-      final presetRows = await upgraded.customSelect(
-        '''SELECT preset_id, blocks_json FROM studio_preset_rows
+        final presetRows = await upgraded.customSelect(
+          '''SELECT preset_id, blocks_json FROM studio_preset_rows
            WHERE preset_id IN ('legacy-write-loop', 'custom-tracker-loop')''',
-      ).get();
-      final presets = {
-        for (final preset in presetRows)
-          preset.read<String>('preset_id'): preset.read<String>('blocks_json'),
-      };
-      expect(presets['legacy-write-loop'], contains('state-tracking agent'));
-      expect(presets['legacy-write-loop'], isNot(contains('writeMemory')));
-      expect(
-        presets['custom-tracker-loop'],
-        contains('Track only weather changes.'),
-      );
-    });
+        ).get();
+        final presets = {
+          for (final preset in presetRows)
+            preset.read<String>('preset_id'): preset.read<String>(
+              'blocks_json',
+            ),
+        };
+        expect(presets['legacy-write-loop'], contains('writeMemory'));
+        expect(presets['legacy-write-loop'], contains('{{existingBlock}}'));
+        expect(
+          presets['custom-tracker-loop'],
+          contains('Track only weather changes.'),
+        );
+      },
+    );
 
     test(
       'post-restore purge removes reintroduced agentic micro-memory',

@@ -4,7 +4,7 @@ import '../models/api_config.dart';
 import 'aux_llm_client.dart';
 
 /// Resolves a Studio API-config slot to an [AuxApiConfig] for auxiliary LLM
-/// calls (cleaner, fact-checker, ledger, write-loop).
+/// calls (cleaner, fact-checker, Ledger).
 ///
 /// **Fail-explicit:** throws when [apiConfigId] is empty or not found in the
 /// API config list. No silent fallback to the active chat config — Studio
@@ -39,8 +39,7 @@ class StudioSlotResolver {
   }) {
     if (apiConfigId.isEmpty) {
       if (fallback != null) {
-        final model =
-            modelOverride.isNotEmpty ? modelOverride : fallback.model;
+        final model = modelOverride.isNotEmpty ? modelOverride : fallback.model;
         debugPrint(
           '[StudioSlotResolver] $errorLabel: apiConfigId is empty — '
           'falling back to active chat API config (model=$model)',
@@ -62,8 +61,7 @@ class StudioSlotResolver {
         'no active chat API config available as fallback',
       );
     }
-    final selected =
-        apiConfigs.where((c) => c.id == apiConfigId).firstOrNull;
+    final selected = apiConfigs.where((c) => c.id == apiConfigId).firstOrNull;
     if (selected == null) {
       debugPrint(
         '[StudioSlotResolver] $errorLabel: apiConfigId "$apiConfigId" '
@@ -74,8 +72,7 @@ class StudioSlotResolver {
         'does not match any saved API config',
       );
     }
-    final model =
-        modelOverride.isNotEmpty ? modelOverride : selected.model;
+    final model = modelOverride.isNotEmpty ? modelOverride : selected.model;
     debugPrint(
       '[StudioSlotResolver] resolved $errorLabel '
       'model=$model endpoint=${selected.endpoint}',

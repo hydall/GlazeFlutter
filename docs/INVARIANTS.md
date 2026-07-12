@@ -157,27 +157,17 @@ range such as `91-105` are read with a `messageRange` backfill in
 `MemoryEntry.fromJson()`. This does not rewrite the stored JSON until the book
 is saved normally.
 
-### INV-M6: Agent-generated memory batches are marked and display-separated ✅ ENFORCED (Phase 7)
+### INV-M6: Retired agentic MemoryBook artifacts are purged ✅ ENFORCED (v66)
 
-`MemoryDraft.source = 'agentic'` is set by `MemoryAgenticWriteService._executeMemoryWrites`
-when the post-turn write-loop creates a draft. `MemoryBookController.approveDraft()`
-propagates `draft.source` to `entry.source` and sets `entry.kind = 'agent'` when
-`source == 'agentic'` (else `'curated'`). The MemoryBook UI
-(`memory_books_sheet.dart`) tabs drafts/entries by source so agent-sourced
-content is shown in a dedicated "Agent memories" tab, separate from bulk scan
-drafts (`source == 'scan_chat'` or empty) and curated entries.
+The retired generic write-loop no longer creates `source = 'agentic'` MemoryBook
+entries or drafts. `AppDatabase.purgeRetiredAgenticMicroMemory()` removes only
+pre-v66 agentic artifacts and their derived embedding/catalog/entity/salience
+rows; it preserves user-curated entries, scan drafts, range summaries, Ledger
+state, and all MemoryBook settings.
 
-Auto-approve policy (Phase 7): agent drafts that pass validation land in the
-same "Agent memories" tab. Invalid/empty/duplicate agent drafts are NOT
-auto-approved — they stay as pending drafts in the same tab until the user
-approves or deletes them. The dedicated atomic repo path is
-`MemoryBookRepo.appendDrafts` (transactional); no read-modify-write of the
-MemoryBook happens outside the dedicated repo methods.
-
-Compatibility rule: `MemoryEntry.source` defaults to `''` and is migrated in
-`_migrateEntryInPlace` (`memory_book.dart`) — no Drift schema migration is
-needed because `MemoryBookRows.entriesJson` / `pendingDraftsJson` are JSON
-TEXT blob columns.
+`MemoryBookRepo` remains the exclusive repository owner for normal manual scan,
+draft approval, and user-directed MemoryBook writes. No automatic post-turn
+path writes MemoryBook entries.
 
 ---
 
@@ -334,9 +324,8 @@ non-English text. Reference for a future LLM-based approach:
 
 ## 4c. Tracker Snapshot Rollback Invariants
 
-The tracker snapshot system (Phases 1-12) provides per-agent-swipe
-rollback for tracker state by writing immutable snapshots after each
-generation's write-loop completes.
+The tracker snapshot system provides per-agent-swipe rollback for canonical
+tracker state written by Studio Ledger.
 
 ### INV-TS1: Snapshots are write-once; rollback is emergent ✅ ENFORCED (Phase 1-4)
 
@@ -345,7 +334,8 @@ generation's write-loop completes.
 writes are:
 
 - `TrackerSnapshotRepo.upsertTrackers` — insert-or-replace by composite
-  PK `(sessionId, messageId, swipeId, agentSwipeId)` (write-loop, Phase 2).
+  PK `(sessionId, messageId, swipeId, agentSwipeId)` after Ledger applies an
+  accepted canonical state update.
 - `commit` / `commitLatest` — flip `committed` 0→1 (`ChatNotifier.sendMessage`,
   Phase 6).
 - Delete methods (`deleteForMessage` / `deleteAnchor` / `deleteBySessionId`).
@@ -357,9 +347,8 @@ return the highest-`createdAt` committed row, which naturally rolls back
 when newer rows are deleted.
 
 Code refs: `lib/core/db/repositories/tracker_snapshot_repo.dart`,
-`lib/core/llm/memory_agentic_write_service.dart` (write-loop + upsert),
-`lib/features/chat/chat_message_service.dart:deleteMessage` →
-`deleteForMessage`.
+`lib/core/llm/studio_ledger_service.dart`,
+`lib/features/chat/chat_message_service.dart:deleteMessage` → `deleteForMessage`.
 
 ### INV-TS2: Sentinel anchor survives per-message deletes ✅ ENFORCED (Phase 7)
 
@@ -378,15 +367,13 @@ sentinel anchor has `messageId = ''`, so it is never matched.
 
 ### INV-TS3: Read path is snapshot-first with `tracker_rows` fallback ✅ ENFORCED (Phase 3)
 
-The 3 read call sites (`prompt_payload_builder.dart`, `write_loop_stage.dart`,
-`agentic_operations_log_dialog.dart`) call `getLatestCommitted` /
-`getLatest` first and fall back to `trackerRepoProvider.getBySessionId`
-when no snapshot exists. This keeps legacy sessions (pre-Phase-1, not yet
-re-saved) working without a forced migration of every read.
+The read call sites use `getLatestCommitted` / `getLatest` first and fall back
+to `trackerRepoProvider.getBySessionId` when no snapshot exists. This keeps
+legacy sessions (pre-snapshot, not yet re-saved) working without a forced
+migration of every read.
 
-Code ref: `lib/features/chat/services/generation_pipeline.dart:_runAgenticWriteLoop`
-— `trackers = (await snapshotRepo.getLatestCommitted(sessionId: sessionId)) ??
-   await trackerRepo.getBySessionId(sessionId)`.
+Studio Ledger reads the effective committed snapshot before applying its next
+typed canonical update; tracker UI reads the same snapshot-backed state.
 
 ### INV-TS4: Snapshot granularity is per-agent-swipe ✅ ENFORCED (Phase 1)
 

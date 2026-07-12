@@ -4,8 +4,7 @@ part 'memory_book_api_settings.freezed.dart';
 part 'memory_book_api_settings.g.dart';
 
 /// MemoryBook generation LLM settings — the model/endpoint/key used by manual
-/// MemoryBook draft generation and the agentic write-loop so both
-/// memory-writing paths share one visible model setting.
+/// MemoryBook draft generation.
 ///
 /// Nested inside [PipelineSettings] under the `memoryBookApi` field.
 ///

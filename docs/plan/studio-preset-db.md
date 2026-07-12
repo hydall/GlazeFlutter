@@ -1,5 +1,11 @@
 # Studio UI Overhaul + Memory Dedup — Master Plan
 
+> **Historical note (2026-07):** This plan documents the original Studio
+> write-loop design. The generic tracker write-loop, its prompt section, and
+> agentic MemoryBook writer have since been retired. Studio Ledger is the only
+> automatic canonical tracker writer. References below are retained as history,
+> not current architecture.
+
 > Extracted from opencode session DB (`ses_0e4610f29ffeS9YaIGKnmkeArR`), updated through commit `4b4ad0e5`.
 
 ## Goal
@@ -16,7 +22,7 @@
 - All ~15 hardcoded prompts migrate to DB (runtime + build-time)
 - Studio unbound from user presets: decomposition service, block router, shard synthesizer, beauty extractor, cleaner rules extractor all DELETED
 - `studio_block_classifier.dart` RESTORED — still needed by `studio_context_bucketizer` for `isReasoningBlock`
-- Ledger + writeloop use cheap model (same as trackers)
+- Ledger + the then-active write-loop used the cheap model (same as trackers; retired)
 - Agentic ops log kept as-is
 - StudioPreset added to cloud sync engine
 - Memory dedup: cosine > 0.85 → group candidates → one batch LLM call decides merge/drop/keep
@@ -149,7 +155,8 @@
 - `lib/core/llm/studio_message_builder.dart`: builds per-agent/final/batch message lists
 - `lib/core/llm/post_cleaner_service.dart`: cleaner system prompt + audit (seeded in DB now)
 - `lib/core/llm/studio_ledger_prompt.dart`: ledger system prompt (seeded in DB now)
-- `lib/core/llm/agentic_write_request_parser.dart`: writeloop system prompt (seeded in DB now)
+- **DELETED:** `lib/core/llm/agentic_write_request_parser.dart`: former
+  write-loop prompt source; removed when the generic writer was retired
 - `lib/core/llm/studio_ledger_service.dart`: still exists — ledger service
 - `lib/core/llm/memory_studio_service.dart`: still exists — Studio pipeline orchestration
 - `lib/core/llm/macro_engine.dart`: `MacroContext` + `replaceMacros` — 30+ macros, reuse for studio preset resolution

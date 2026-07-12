@@ -100,13 +100,8 @@ void main() {
       expect(result.contains('Msg 9'), isTrue);
     });
 
-    // NEW (patch #4 follow-up): historical replay — at regen, slice
-    // messages up to AND INCLUDING the regen target so the write-loop
-    // sees the same context the original turn saw. Mirrors Marinara's
-    // `buildHistoricalLorebookKeeperContext`. Rationale: at regen, replay
-    // against the historical slice so the write-loop sees the same context the
-    // original turn saw — append-only + LLM-sees-existing prevents duplicates
-    // idempotently, and the replay ensures parity with the original entries.
+    // Regeneration and historical analysis can bound context to the target
+    // message so the Ledger sees the relevant canonical conversation slice.
     test('upToMessageId truncates messages after the target (inclusive)', () {
       final messages = List.generate(
         20,
@@ -120,8 +115,7 @@ void main() {
       // Only messages m0..m9 are considered. With maxMessages: 10, all 10
       // are taken (no truncation by max).
       expect(result.contains('Msg 9'), isTrue);
-      // Messages after m9 are dropped — these would be the post-regen
-      // state that should NOT be visible to the write-loop at regen time.
+      // Messages after m9 are excluded from the historical context slice.
       expect(result.contains('Msg 10'), isFalse);
       expect(result.contains('Msg 19'), isFalse);
     });
@@ -174,26 +168,6 @@ void main() {
       expect(result.contains('Msg 5'), isTrue);
       expect(result.contains('Msg 14'), isTrue);
       expect(result.contains('Msg 4'), isFalse);
-    });
-  });
-
-  group('Stage 2 trigger suppression logic', () {
-    // The write-loop trigger in GenerationPipeline.run() is guarded by:
-    //   if (regenTargetId == null && result.session != null)
-    //
-    // The regen branch (regenOutcome != null) returns early at ~line 155
-    // BEFORE reaching the write-loop trigger at ~line 210, so regen/swipe
-    // paths never invoke _runAgenticWriteLoop.
-    //
-    // These tests verify the guard condition itself.
-    bool writeLoopTriggers(String? regenTargetId) => regenTargetId == null;
-
-    test('normal send (regenTargetId=null) → triggers', () {
-      expect(writeLoopTriggers(null), isTrue);
-    });
-
-    test('regen (regenTargetId != null) → suppresses', () {
-      expect(writeLoopTriggers('msg_123'), isFalse);
     });
   });
 

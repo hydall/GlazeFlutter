@@ -1,10 +1,10 @@
 import '../macro_engine.dart';
 import '../../models/studio_config.dart';
 
-/// Assembles an auxiliary-stage prompt (cleaner / ledger / writeloop) from
+/// Assembles an auxiliary-stage prompt (cleaner or ledger) from preset blocks
 /// preset blocks instead of hardcoded text.
 ///
-/// The aux stages (cleaner, ledger, writeloop) historically built their LLM
+/// The aux stages (cleaner and ledger) historically built their LLM
 /// prompts from hardcoded strings in Dart source. This assembler moves the
 /// system/instruction text into the DB-backed [StudioPreset] so the user can
 /// edit it in the preset editor, and keeps only the runtime data + output
@@ -25,7 +25,7 @@ class StudioAuxPromptAssembler {
   /// Build the full aux-stage prompt from preset blocks.
   ///
   /// [blocks] — all blocks from the StudioPreset (will be filtered by section).
-  /// [section] — the preset section to use ('cleaner', 'ledger', 'writeloop').
+  /// [section] — the preset section to use ('cleaner' or 'ledger').
   /// [macroCtx] — macro context for resolving `{{char}}`, `{{user}}`,
   ///   `{{getvar::...}}`, etc.
   /// [customReplacements] — stage-specific placeholder replacements applied
@@ -44,11 +44,12 @@ class StudioAuxPromptAssembler {
     String runtimeSuffix = '',
     Set<String> skipBlockIds = const {},
   }) {
-    final sectionBlocks = blocks
-        .where((b) => b.enabled && b.section == section)
-        .where((b) => !skipBlockIds.contains(b.id))
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final sectionBlocks =
+        blocks
+            .where((b) => b.enabled && b.section == section)
+            .where((b) => !skipBlockIds.contains(b.id))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
 
     final parts = <String>[];
     for (final block in sectionBlocks) {

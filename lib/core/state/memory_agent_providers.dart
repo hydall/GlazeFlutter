@@ -8,7 +8,6 @@ import '../llm/memory_provenance.dart';
 import '../llm/memory_cadence_service.dart';
 import '../llm/memory_post_turn_service.dart';
 import '../llm/memory_agentic_service.dart';
-import '../llm/memory_agentic_write_service.dart';
 import '../llm/memory_dedup_service.dart';
 import '../llm/memory_studio_service.dart';
 import '../llm/post_cleaner_service.dart';
@@ -50,17 +49,6 @@ final memoryAgenticServiceProvider = Provider<MemoryAgenticService>((ref) {
   return MemoryAgenticService(ref);
 });
 
-/// Agentic write-loop service (Stage 1). Trackers only.
-final memoryAgenticWriteServiceProvider = Provider<MemoryAgenticWriteService>((
-  ref,
-) {
-  return MemoryAgenticWriteService(
-    llm: const AuxLlmClient(),
-    trackerRepo: ref.read(trackerRepoProvider),
-    snapshotRepo: ref.read(trackerSnapshotRepoProvider),
-  );
-});
-
 /// Studio Mode pipeline service. Tracker-around-generator model.
 final memoryStudioServiceProvider = Provider<MemoryStudioService>((ref) {
   return MemoryStudioService(ref);
@@ -78,8 +66,8 @@ final postCleanerServiceProvider = Provider<PostCleanerService>((ref) {
 });
 
 /// Studio Ledger service (Stage 5). Runs after the POST-cleaner to extract
-/// and persist continuity state (entity/relationship/arc/world/scene) and
-/// durable MemoryBook facts from the final assistant response.
+/// and persist accepted continuity state (entity/relationship/arc/world/scene)
+/// plus scoped character knowledge facts from the final assistant response.
 /// See docs/plans/STUDIO_LEDGER_MEMORY.md.
 final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
   return StudioLedgerService(
