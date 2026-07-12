@@ -7,15 +7,15 @@ void main() {
     test('StudioConfig: defaults are correct', () {
       const config = StudioConfig(sessionId: 's1');
       expect(config.enabled, isFalse);
-      expect(config.studioPresetId, 'default');
+      expect(config.finalPresetId, '');
     });
 
-    test('studioPresetId can be overridden', () {
+    test('finalPresetId can be overridden', () {
       const config = StudioConfig(
         sessionId: 's1',
-        studioPresetId: 'custom',
+        finalPresetId: 'custom',
       );
-      expect(config.studioPresetId, 'custom');
+      expect(config.finalPresetId, 'custom');
     });
   });
 }
