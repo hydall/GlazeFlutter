@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../cloud_adapter.dart';
@@ -120,7 +121,12 @@ class SyncEngine {
       cloudManifest = SyncManifest.fromJson(
         jsonDecode(raw) as Map<String, dynamic>,
       );
-    } catch (_) {}
+    } catch (e, st) {
+      // A null cloud manifest forces a full re-push of every entry. Surface
+      // the cause so this is no longer silent — the user previously saw a full
+      // cloud re-upload with no visible reason.
+      debugPrint('[sync] cloud manifest download failed: $e\n$st');
+    }
 
     final entries = localManifest.entries.values.toList();
     final candidatePaths = cloudManifest == null
@@ -180,12 +186,21 @@ class SyncEngine {
           ? false
           : cloudSyncPathExists(cloudFilePaths, entry.path);
 
-      if (cloudEntry != null && !cloudEntry.deleted) {
-        if (cloudEntry.hash == entry.hash && cloudFileExists) {
+      // Trust the cloud manifest hash for the skip decision. A fresh folder
+      // listing only serves to repair an entry whose file is genuinely missing.
+      // Previously, when the listing came back empty or errored, every
+      // hash-matching entry was re-uploaded because file existence could not be
+      // confirmed — producing a full-cloud re-push with no duplicates. See the
+      // empty-body fall-through that this replaces.
+      if (cloudEntry != null && !cloudEntry.deleted && cloudEntry.hash == entry.hash) {
+        final listingVerifiedMissing = cloudFilePaths.isNotEmpty && !cloudFileExists;
+        if (listingVerifiedMissing) {
+          // Listing succeeded and the file is actually absent — repair it.
+          // Falls through to the push task below.
+        } else {
           hashSkippedKeys.add(entry.key);
           continue;
         }
-        if (cloudEntry.hash == entry.hash && !cloudFileExists) {}
       }
 
       tasks.add(() async {
@@ -256,7 +271,13 @@ class SyncEngine {
               .where((f) => !f.isFolder)
               .map((f) => normalizeCloudSyncPath(f.path)),
         );
-      } catch (_) {}
+      } catch (e, st) {
+        // A failed listing used to silently drop the folder from cloudFilePaths,
+        // which collapsed the skip gate and triggered a full re-push. Log it so
+        // the cause is visible; the skip logic now trusts the manifest hash
+        // regardless of listing success.
+        debugPrint('[sync] listFolder failed for "$folder": $e\n$st');
+      }
     }
     return paths;
   }
