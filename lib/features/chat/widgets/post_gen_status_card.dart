@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/post_gen_status_provider.dart';
 
 /// Floating card shown at the top of the chat while post-generation tasks
-/// (write-loop, ledger, ext blocks) are running. Auto-dismisses 2.5s after
+/// (Ledger and extension blocks) are running. Auto-dismisses 2.5s after
 /// the last task completes.
 class PostGenStatusCard extends ConsumerStatefulWidget {
   const PostGenStatusCard({super.key});
@@ -29,9 +29,9 @@ class _PostGenStatusCardState extends ConsumerState<PostGenStatusCard> {
 
     // Detect transitions: when either the phase or the task changes we
     // may need to (re)schedule the auto-dismiss.  Without tracking the
-    // task, completing a second post-gen task (e.g. Ledger after
-    // Write-loop) while the card still shows the first task's `done`
-    // phase would skip the dismiss timer — the "Ledger ok" card stuck.
+    // task, completing a second post-gen task while the card still shows the
+    // first task's `done` phase would skip the dismiss timer — leaving the
+    // later completion card stuck.
     if (_lastSeenPhase != state.phase || _lastSeenTask != state.task) {
       _lastSeenPhase = state.phase;
       _lastSeenTask = state.task;
@@ -47,23 +47,6 @@ class _PostGenStatusCardState extends ConsumerState<PostGenStatusCard> {
     final bool showSpinner;
 
     switch (state.task) {
-      case PostGenTask.writeLoop:
-        if (state.phase == PostGenTaskPhase.running) {
-          label = 'Write-loop running...';
-          icon = Icons.sync;
-          accent = cs.primary;
-          showSpinner = true;
-        } else if (state.phase == PostGenTaskPhase.done) {
-          label = state.detail ?? 'Write-loop done';
-          icon = Icons.check_circle_outline;
-          accent = Colors.green;
-          showSpinner = false;
-        } else {
-          label = 'Write-loop failed';
-          icon = Icons.error_outline;
-          accent = Colors.redAccent;
-          showSpinner = false;
-        }
       case PostGenTask.ledger:
         if (state.phase == PostGenTaskPhase.running) {
           label = 'Ledger running...';

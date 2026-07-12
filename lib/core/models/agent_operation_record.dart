@@ -1,5 +1,5 @@
 /// A single attempt inside an auxiliary LLM call (post-cleaner, ledger,
-/// tracker, or agentic search/write). Captured for the operations log UI so the
+/// tracker, or agentic search). Captured for the operations log UI so the
 /// user can see retry behaviour (502 -> retry -> 200).
 class AgentOperationAttempt {
   /// 1-based attempt number.
@@ -57,7 +57,6 @@ enum AgentOperationKind {
   memorySidecar,
   postCleaner,
   agenticSearch,
-  agenticWrite,
   classifier,
   consolidation,
   studioTracker,
@@ -69,7 +68,6 @@ enum AgentOperationKind {
     AgentOperationKind.memorySidecar => 'Memory sidecar',
     AgentOperationKind.postCleaner => 'POST-cleaner',
     AgentOperationKind.agenticSearch => 'Agentic search',
-    AgentOperationKind.agenticWrite => 'Agentic write',
     AgentOperationKind.classifier => 'Classifier',
     AgentOperationKind.consolidation => 'Consolidation',
     AgentOperationKind.studioTracker => 'Studio tracker',

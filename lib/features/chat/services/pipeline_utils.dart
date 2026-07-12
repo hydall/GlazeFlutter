@@ -2,26 +2,17 @@ import '../../../core/models/agent_operation_record.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/llm/prompt_builder.dart' show PromptPayload;
 
-/// Extracts recent conversation as plain text for the agentic write-loop
-/// prompt. Format: "Role: content" per line, last [maxMessages] messages.
+/// Extracts recent conversation as plain text for auxiliary prompt analysis.
+/// Format: "Role: content" per line, last [maxMessages] messages.
 /// Skips error, typing, and empty-content messages.
 ///
-/// Also used by [TrackerMemoryRecoveryService] to build the recent-history
-/// slice for each replayed turn during a recovery batch.
+/// Used by Studio Ledger to build its bounded recent-history context.
 String extractRecentHistoryText(
   List<ChatMessage> messages, {
   int maxMessages = 10,
 
   /// If non-null, only messages up to AND INCLUDING the one with this id
-  /// are considered. Messages after it are dropped — used at regen time
-  /// so the agentic write-loop replays against the historical slice that
-  /// existed when the original turn was generated, not the current
-  /// (post-regen) state. Mirrors Marinara's
-  /// `buildHistoricalLorebookKeeperContext`. Rationale (follow-up): at regen,
-  /// replay the write-loop against the historical slice that existed when the
-  /// original turn was generated, not the current post-regen state. Append-only
-  /// + LLM-sees-existing already prevent duplicates idempotently; this replay
-  /// further ensures regen produces the same entries as the original turn.
+  /// are considered. Messages after it are dropped.
   String? upToMessageId,
 }) {
   // Truncate to the historical slice first if requested.
@@ -76,19 +67,6 @@ AgentOperationStatus cleanerStatusToOp(String status) {
     'aborted' => AgentOperationStatus.aborted,
     'timeout' => AgentOperationStatus.timeout,
     'error' => AgentOperationStatus.error,
-    _ => AgentOperationStatus.error,
-  };
-}
-
-/// Maps a [MemoryWriteLoopResult] status string to the operations-log enum.
-AgentOperationStatus agenticWriteStatusToOp(String status) {
-  return switch (status) {
-    'ok' => AgentOperationStatus.ok,
-    'disabled' => AgentOperationStatus.disabled,
-    'aborted' => AgentOperationStatus.aborted,
-    'timeout' => AgentOperationStatus.timeout,
-    'error' => AgentOperationStatus.httpError,
-    'invalid_output' => AgentOperationStatus.invalidOutput,
     _ => AgentOperationStatus.error,
   };
 }

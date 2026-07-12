@@ -35,7 +35,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
   final bool isGenerating;
   final bool isGeneratingImage;
 
-  /// True while post-generation stages (cleaner, ledger, write-loop, etc.)
+  /// True while post-generation stages (cleaner, Ledger, image tags, etc.)
   /// are running. Keeps the Stop button pressable through the post-gen
   /// window without gating the message sync (which keys on [isGenerating]).
   final bool isPostGenRunning;

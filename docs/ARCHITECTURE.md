@@ -828,12 +828,10 @@ section documents both.
    non-empty). See `lib/core/llm/memory_consolidation_service.dart` +
    `lib/core/llm/sidecar_llm_client.dart`.
 
-3. **JSON-retry in agentic write-loop** —
-   `AgenticWriteRequestParser.askLlmForWrites` silently caught JSON parse
-   errors and returned `response: null` (silent memory loss). Now retries
-   ONCE with a strict JSON reminder on unparseable first response. Mirrors
-   Marinara's `buildInvalidJsonRetryMessages`.
-   See `lib/core/llm/agentic_write_request_parser.dart`.
+3. **Retired generic tracker write-loop** — the former JSON-retry parser and
+   generic tracker writer were removed because they competed with Studio Ledger
+   in the same tracker keyspace. Studio Ledger is now the sole automatic writer
+   of canonical tracker state; MemoryBook remains user-directed.
 
 4. **`reindexAll` copy-paste bug** —
    `MemoryBookController.reindexAll` had `vectorSearchEnabled ? 'content' : 'content'`
@@ -926,7 +924,7 @@ not oversights:
 | `ExtensionPresets` | `extension_presets_repository.dart` | v20 |
 | `InfoBlocks` | `info_blocks_repository.dart` | v20; v22 adds `status` TEXT (default `'done'`) + `order` INTEGER (default 0); v27 adds `swipe_id` |
 | `StudioConfigRows` | `studio_config_repo.dart` | v36; reusable Studio profiles, v42 adds `profileId`/`profileName` for session-to-profile binding, v43 `builderPromptTemplate`, v44 `maxFinalHistoryMessages`, v46 `routingMode` |
-| `TrackerRows` | `tracker_repo.dart` | v45; lightweight key-value trackers (e.g. 'mood: happy'). Composite PK `{sessionId, name}`. Write-loop's internal mutable store — LLM upserts into it, then a snapshot is taken. |
+| `TrackerRows` | `tracker_repo.dart` | v45; lightweight key-value canonical session state (e.g. `world:location`). Composite PK `{sessionId, name}`. Studio Ledger is the sole automatic writer; snapshots provide lifecycle-safe rollback. |
 | `TrackerSnapshots` | `tracker_snapshot_repo.dart` | v50; per-agent-swipe immutable snapshots of all trackers (mirrors Marinara-Engine's `game_state_snapshots`). Composite PK `{sessionId, messageId, swipeId, agentSwipeId}`; `trackersJson`, `committed`, `createdAt`. See INV-TS1–7 in `docs/INVARIANTS.md`. |
 
 ### Write Rule
@@ -958,7 +956,7 @@ All service implementations live under `lib/features/cloud_sync/services/`.
 - `widgets/sync_sheet.dart` — Sync UI sheet
 
 ### What Is Synced
-Characters, sessions, presets, API configs, personas, lorebooks, theme presets, Studio profiles, active preset, selected app settings, extension presets/settings, info-block rows, and tracker snapshots (Phase 9 — per-session collection pattern, same as info blocks). **Not synced:** generation state, UI state, embedding vectors, debug traces, `tracker_rows` (legacy mutable store, kept as write-loop internal).
+Characters, sessions, presets, API configs, personas, lorebooks, theme presets, Studio profiles, active preset, selected app settings, extension presets/settings, info-block rows, and tracker snapshots (Phase 9 — per-session collection pattern, same as info blocks). **Not synced:** generation state, UI state, embedding vectors, debug traces, and live `tracker_rows` (the local materialization restored from committed tracker snapshots).
 
 ---
 

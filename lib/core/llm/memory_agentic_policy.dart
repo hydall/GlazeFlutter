@@ -1,9 +1,4 @@
-enum MemoryAgenticTool {
-  inspectContext,
-  proposeMemory,
-  proposeTracker,
-  writeTracker,
-}
+enum MemoryAgenticTool { inspectContext, proposeMemory, proposeTracker }
 
 class MemoryAgenticSettings {
   final bool enabled;
@@ -53,14 +48,5 @@ class MemoryAgenticPolicy {
     return const MemoryAgenticToolDecision.allow();
   }
 
-  static bool _isWriteTool(MemoryAgenticTool tool) {
-    switch (tool) {
-      case MemoryAgenticTool.inspectContext:
-      case MemoryAgenticTool.proposeMemory:
-      case MemoryAgenticTool.proposeTracker:
-        return false;
-      case MemoryAgenticTool.writeTracker:
-        return true;
-    }
-  }
+  static bool _isWriteTool(MemoryAgenticTool tool) => false;
 }

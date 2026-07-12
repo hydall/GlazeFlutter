@@ -19,8 +19,7 @@ part 'pipeline_settings.g.dart';
 /// - [ledger] — Studio Ledger cadence, temperature, and token limits.
 /// - [memoryPipeline] — Memory dedup threshold, auxiliary LLM fallback config
 ///   (`aux*`), and consolidation LLM config.
-/// - [memoryBookApi] — MemoryBook generation LLM (model/endpoint/key) shared by
-///   manual draft generation and the agentic write-loop.
+/// - [memoryBookApi] — MemoryBook draft-generation LLM (model/endpoint/key).
 ///
 /// Singleton global, persisted in SharedPreferences under the 'pipelineSettings'
 /// key (see `pipeline_settings_provider.dart`). Previously per-session in the

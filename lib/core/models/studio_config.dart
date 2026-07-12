@@ -95,7 +95,7 @@ abstract class StudioPresetBlock with _$StudioPresetBlock {
 }
 
 /// A complete Studio preset: a flat list of [StudioPresetBlock]s grouped by
-/// `section` (`pregen`, `final`, `cleaner`, `ledger`, `writeloop`, `build`,
+/// `section` (`pregen`, `final`, `cleaner`, `ledger`, `build`,
 /// `brief_parser`). Stored in `studio_preset_rows` as a JSON blob.
 @freezed
 abstract class StudioPreset with _$StudioPreset {

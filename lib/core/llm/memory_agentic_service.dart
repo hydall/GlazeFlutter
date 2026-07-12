@@ -22,8 +22,8 @@ import 'memory_selector.dart';
 /// Agentic read is now a separate pre-generation tracker concern (wired in
 /// Phase 5+); until then this service is effectively disabled.
 ///
-/// The write-loop (trackers + memory drafts) lives in
-/// [MemoryAgenticWriteService] — separated per CODE_STYLE (one class = one job).
+/// Agentic retrieval is currently disabled until it is wired as a bounded
+/// pre-generation concern.
 class MemoryAgenticService {
   MemoryAgenticService(Ref ref);
 

@@ -45,9 +45,8 @@ export 'ledger/ledger_op_applier.dart';
 // can read them but must not promote their contents to canon unless supported
 // by the final assistant text, visible accepted chat, or existing canon.
 //
-// Durable facts (path B to MemoryBook) were removed — Studio Ledger canon
-// lives exclusively in tracker_rows → <studio_session_state>. MemoryBook
-// is reserved for manual-scan and agentic-write-loop entries only.
+// Ledger canon lives in tracker_rows → <studio_session_state>. MemoryBook
+// remains a separate, user-controlled long-term range-summary workflow.
 //
 // Failure behaviour:
 //   - Ledger failure MUST NOT fail chat generation.

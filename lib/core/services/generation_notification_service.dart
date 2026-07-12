@@ -217,7 +217,7 @@ class GenerationNotificationService {
   }
 
   /// Acquire an additional foreground hold for post-generation tasks
-  /// (write-loop, post-cleaner, ledger, extension blocks). These run
+  /// (post-cleaner, Ledger, extension blocks, image tags). These run
   /// fire-and-forget AFTER [onGenerationCompleted] releases the generation
   /// hold. Without this, the OS may suspend the app mid-task when the screen
   /// turns off, causing crashes.

@@ -27,8 +27,8 @@ class AuxApiConfig {
 ///
 /// Provides transport (`callOnce`, `callOnceWithLog`, `callStreamWithLog`) and
 /// timeout resolution. API config resolution is handled by callers:
-/// - Studio services (cleaner, fact-checker, ledger, write-loop) use
-///   [StudioSlotResolver] to resolve the Studio cleaner slot.
+/// - Studio services (cleaner, fact-checker, Ledger) use [StudioSlotResolver]
+///   to resolve the Studio cleaner slot.
 /// - MemoryBook services (drafts, dedup) resolve `MemoryBookApiSettings`
 ///   inline.
 ///
@@ -164,9 +164,8 @@ class AuxLlmClient {
   /// accumulated text (which starts at `''` on a fresh attempt).
   ///
   /// Used by the POST-cleaner to stream its rewrite into the chat bubble
-  /// instead of replacing the text in one shot. Reranker / agentic-write /
-  /// auditor keep using [callOnceWithLog] (non-streaming) because they need
-  /// the full structured response before acting.
+  /// instead of replacing the text in one shot. Reranker and auditor keep
+  /// using [callOnceWithLog] (non-streaming) because they need the full
   Future<AuxCallOutcome> callStreamWithLog({
     required AuxApiConfig config,
     required String prompt,

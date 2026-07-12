@@ -1537,7 +1537,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
               top: messageListTop + memoryTopReserve + 56,
               child: const StudioStatusCard(),
             ),
-            // Post-gen tasks (write-loop, ledger, ext blocks) live status.
+            // Post-generation tasks (Ledger and extension blocks) live status.
             Positioned(
               left: 12,
               right: 12,

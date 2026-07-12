@@ -210,7 +210,7 @@ void main() {
     test('toJson/fromJson roundtrip preserves all fields', () {
       final rec = AgentOperationRecord(
         id: 'r3',
-        kind: AgentOperationKind.agenticWrite,
+        kind: AgentOperationKind.studioLedger,
         status: AgentOperationStatus.httpError,
         sessionId: 's1',
         messageId: 'm1',
@@ -235,7 +235,7 @@ void main() {
       final json = rec.toJson();
       final restored = AgentOperationRecord.fromJson(json);
       expect(restored.id, 'r3');
-      expect(restored.kind, AgentOperationKind.agenticWrite);
+      expect(restored.kind, AgentOperationKind.studioLedger);
       expect(restored.status, AgentOperationStatus.httpError);
       expect(restored.sessionId, 's1');
       expect(restored.messageId, 'm1');

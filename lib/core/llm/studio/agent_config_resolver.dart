@@ -17,7 +17,8 @@ import '../studio_api_config_resolver.dart';
 ///   postCleanerModel for post-processing trackers, studioTrackerModelOverride
 ///   for pre-gen trackers. The final generator intentionally does not read
 ///   PipelineSettings.memoryBookApi.generationModel because that field belongs
-///   to MemoryBook generation / agentic write-loop routing.
+///   to MemoryBook draft generation.
+
 class AgentConfigResolver {
   final Future<List<ApiConfig>> Function() _loadApiConfigs;
   final ApiConfig? Function() _readActiveApiConfig;
@@ -99,7 +100,8 @@ class AgentConfigResolver {
           .copyWithSampling(
             topP: pipeline.studioAgent.studioTrackerTopP,
             topK: pipeline.studioAgent.studioTrackerTopK,
-            frequencyPenalty: pipeline.studioAgent.studioTrackerFrequencyPenalty,
+            frequencyPenalty:
+                pipeline.studioAgent.studioTrackerFrequencyPenalty,
             presencePenalty: pipeline.studioAgent.studioTrackerPresencePenalty,
             omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
             omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,

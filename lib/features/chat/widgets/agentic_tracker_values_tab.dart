@@ -47,7 +47,8 @@ class _AgenticTrackerValuesTabState
   }
 
   String? _sessionIdOf(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<AgenticSessionScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<AgenticSessionScope>();
     return scope?.sessionId;
   }
 
@@ -124,10 +125,9 @@ class _AgenticTrackerValuesTabState
                     padding: const EdgeInsets.all(24),
                     child: Text(
                       'No tracker values recorded yet for this session.\n\n'
-                      'Trackers are written by the post-turn write-loop and the '
-                      'memory tracker. They hold lightweight state (scene, '
-                      'weather, relationship, ...) injected into later prompts '
-                      'via macros.',
+                      'Studio Ledger records accepted session state such as '
+                      'scene, world, relationships, and character context. '
+                      'Manual canon overrides and locks can also appear here.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: context.cs.onSurfaceVariant,
