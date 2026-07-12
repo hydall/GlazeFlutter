@@ -48,6 +48,7 @@ class ChatBridgeController {
   int currentGreetingTotal = 0;
   bool isGenerating = false;
   bool isGeneratingImage = false;
+  bool isPostGenRunning = false;
   final Set<String> _coveredMemoryIds = {};
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
@@ -88,6 +89,7 @@ class ChatBridgeController {
     charAvatarDataUrl: _charAvatarUrl,
     personaAvatarDataUrl: _personaAvatarUrl,
     isGenerating: isGenerating,
+    isPostGenRunning: isPostGenRunning,
     coveredMemoryIds: _coveredMemoryIds,
     pendingMemoryIds: _pendingMemoryIds,
     draftMemoryIds: _draftMemoryIds,

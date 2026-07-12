@@ -10,6 +10,7 @@ import '../../core/models/chat_message.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/utils/time_helpers.dart';
 import '../image_gen/services/image_tag_markup.dart';
+import 'services/image_gen_processor.dart';
 import 'chat_generation_service.dart';
 import 'chat_session_service.dart';
 import 'chat_state.dart';
@@ -18,6 +19,9 @@ class ImageRecoveryService {
   final Ref _ref;
   final String _charId;
   final void Function(CancelToken?) _setImgGenCancelToken;
+  final CancelToken? Function() getImgGenCancelToken;
+  final int Function() startImageOperation;
+  final bool Function(int genId) isCurrentGeneration;
   final void Function(AsyncValue<ChatState>) _setState;
   final AsyncValue<ChatState> Function() _getState;
 
@@ -25,6 +29,9 @@ class ImageRecoveryService {
     required this._ref,
     required this._charId,
     required this._setImgGenCancelToken,
+    required this.getImgGenCancelToken,
+    required this.startImageOperation,
+    required this.isCurrentGeneration,
     required this._setState,
     required this._getState,
   });
@@ -38,7 +45,9 @@ class ImageRecoveryService {
 
       if (msg.swipes.isNotEmpty) {
         final swipeIdx = msg.swipeId;
-        if (swipeIdx >= 0 && swipeIdx < msg.swipes.length && msg.content != msg.swipes[swipeIdx]) {
+        if (swipeIdx >= 0 &&
+            swipeIdx < msg.swipes.length &&
+            msg.content != msg.swipes[swipeIdx]) {
           final fixedSwipes = List<String>.from(msg.swipes);
           fixedSwipes[swipeIdx] = msg.content;
           currentMsg = msg.copyWith(swipes: fixedSwipes);
@@ -75,23 +84,40 @@ class ImageRecoveryService {
   }
 
   static String cleanStuckImgGenTags(String text) {
-    if (!ImgGenPatterns.imgGenRegex.hasMatch(text) && !ImgGenPatterns.htmlIigTagRegex.hasMatch(text) && !ImgGenPatterns.htmlIigTagDoubleRegex.hasMatch(text) && !ImgGenPatterns.imgSrcGenRegex.hasMatch(text)) return text;
+    if (!ImgGenPatterns.imgGenRegex.hasMatch(text) &&
+        !ImgGenPatterns.htmlIigTagRegex.hasMatch(text) &&
+        !ImgGenPatterns.htmlIigTagDoubleRegex.hasMatch(text) &&
+        !ImgGenPatterns.imgSrcGenRegex.hasMatch(text)) {
+      return text;
+    }
     var result = text;
-    result = result.replaceAll(ImgGenPatterns.imgSrcGenRegex, '[IMG:ERROR:${jsonEncode({'error': 'Generation interrupted'})}]');
+    result = result.replaceAll(
+      ImgGenPatterns.imgSrcGenRegex,
+      '[IMG:ERROR:${jsonEncode({'error': 'Generation interrupted'})}]',
+    );
     result = result.replaceAllMapped(ImgGenPatterns.htmlIigTagRegex, (m) {
       final instruction = m.group(1) ?? '';
-      final errorJson = jsonEncode({'error': 'Generation interrupted', 'instruction': instruction});
+      final errorJson = jsonEncode({
+        'error': 'Generation interrupted',
+        'instruction': instruction,
+      });
       return '[IMG:ERROR:$errorJson]';
     });
     result = result.replaceAllMapped(ImgGenPatterns.htmlIigTagDoubleRegex, (m) {
       final instruction = m.group(1) ?? '';
-      final errorJson = jsonEncode({'error': 'Generation interrupted', 'instruction': instruction});
+      final errorJson = jsonEncode({
+        'error': 'Generation interrupted',
+        'instruction': instruction,
+      });
       return '[IMG:ERROR:$errorJson]';
     });
     result = result.replaceAllMapped(ImgGenPatterns.imgGenRegex, (m) {
       final instruction = m.group(1) ?? '';
       final errorJson = instruction.isNotEmpty
-          ? jsonEncode({'error': 'Generation interrupted', 'instruction': instruction})
+          ? jsonEncode({
+              'error': 'Generation interrupted',
+              'instruction': instruction,
+            })
           : jsonEncode({'error': 'Generation interrupted'});
       return '[IMG:ERROR:$errorJson]';
     });
@@ -100,16 +126,25 @@ class ImageRecoveryService {
 
   static String replaceFirstImgErrorOrGen(String text, String resultPath) {
     if (ImgGenPatterns.imgErrorRegex.hasMatch(text)) {
-      return text.replaceFirst(ImgGenPatterns.imgErrorRegex, '[IMG:RESULT:$resultPath]');
+      return text.replaceFirst(
+        ImgGenPatterns.imgErrorRegex,
+        '[IMG:RESULT:$resultPath]',
+      );
     }
     if (ImgGenPatterns.imgGenHtmlRegex.hasMatch(text)) {
-      return text.replaceFirst(ImgGenPatterns.imgGenHtmlRegex, '[IMG:RESULT:$resultPath]');
+      return text.replaceFirst(
+        ImgGenPatterns.imgGenHtmlRegex,
+        '[IMG:RESULT:$resultPath]',
+      );
     }
     if (text.contains('[IMG:GEN]')) {
       return text.replaceFirst('[IMG:GEN]', '[IMG:RESULT:$resultPath]');
     }
     if (ImgGenPatterns.imgGenRegex.hasMatch(text)) {
-      return text.replaceFirst(ImgGenPatterns.imgGenRegex, '[IMG:RESULT:$resultPath]');
+      return text.replaceFirst(
+        ImgGenPatterns.imgGenRegex,
+        '[IMG:RESULT:$resultPath]',
+      );
     }
     return text;
   }
@@ -142,8 +177,13 @@ class ImageRecoveryService {
 
   Future<void> retryImageGeneration() async {
     final current = _getState().value;
-    if (current == null || current.session == null) return;
-    if (current.isGeneratingImage) return;
+    if (current == null ||
+        current.session == null ||
+        current.isGenerating ||
+        current.isPostGenRunning ||
+        current.isGeneratingImage) {
+      return;
+    }
 
     final session = current.session!;
     final lastIdx = session.messages.length - 1;
@@ -151,43 +191,88 @@ class ImageRecoveryService {
     final lastMsg = session.messages[lastIdx];
     if (lastMsg.role != 'assistant') return;
 
-    final hasRetryableContent = ImageTagMarkup.hasImageGenTags(lastMsg.content)
-        || lastMsg.content.contains('[IMG:ERROR:')
-        || lastMsg.content.contains('[IMG:RESULT:');
+    final hasRetryableContent =
+        ImageTagMarkup.hasImageGenTags(lastMsg.content) ||
+        lastMsg.content.contains('[IMG:ERROR:') ||
+        lastMsg.content.contains('[IMG:RESULT:');
     if (!hasRetryableContent) return;
 
     final resetContent = ImageTagMarkup.resetErrorTags(lastMsg.content);
-    if (resetContent == lastMsg.content && !ImageTagMarkup.hasImageGenTags(resetContent)) return;
+    if (resetContent == lastMsg.content &&
+        !ImageTagMarkup.hasImageGenTags(resetContent)) {
+      return;
+    }
 
     final newMessages = List<ChatMessage>.from(session.messages);
     final swipeIdx = lastMsg.swipeId;
-    final updatedSwipes = lastMsg.swipes.isNotEmpty && swipeIdx >= 0 && swipeIdx < lastMsg.swipes.length
+    final updatedSwipes =
+        lastMsg.swipes.isNotEmpty &&
+            swipeIdx >= 0 &&
+            swipeIdx < lastMsg.swipes.length
         ? (List<String>.from(lastMsg.swipes)..[swipeIdx] = resetContent)
         : lastMsg.swipes;
-    newMessages[lastIdx] = lastMsg.copyWith(content: resetContent, swipes: updatedSwipes);
+    newMessages[lastIdx] = lastMsg.copyWith(
+      content: resetContent,
+      swipes: updatedSwipes,
+    );
     final resetSession = session.copyWith(
       messages: newMessages,
       updatedAt: currentTimestampSeconds(),
     );
-    _setState(AsyncData(current.copyWith(session: resetSession, isGeneratingImage: true)));
-
+    final genId = startImageOperation();
     final imgCancelToken = CancelToken();
     _setImgGenCancelToken(imgCancelToken);
-
-    final genService = _ref.read(chatGenerationServiceProvider);
-    await genService.processImageTags(
-      currentState: _getState().value!,
-      charId: _charId,
-      cancelToken: imgCancelToken,
-      onStateUpdate: (s) { _setState(AsyncData(s)); },
+    _setState(
+      AsyncData(
+        current.copyWith(session: resetSession, isGeneratingImage: true),
+      ),
     );
 
-    _setImgGenCancelToken(null);
+    final sessionId = resetSession.id;
+    bool ownsOperation() =>
+        isCurrentGeneration(genId) &&
+        identical(getImgGenCancelToken(), imgCancelToken);
+    void mergeUpdate(ChatState update) {
+      final merged = ImageGenProcessor.mergeOwnedStateUpdate(
+        liveState: _getState().value,
+        update: update,
+        sessionId: sessionId,
+        ownsOperation: ownsOperation(),
+      );
+      if (merged != null) _setState(AsyncData(merged));
+    }
+
+    try {
+      final genService = _ref.read(chatGenerationServiceProvider);
+      await genService.processImageTags(
+        currentState: current.copyWith(
+          session: resetSession,
+          isGeneratingImage: true,
+        ),
+        charId: _charId,
+        cancelToken: imgCancelToken,
+        isCurrentOperation: ownsOperation,
+        onStateUpdate: mergeUpdate,
+      );
+    } finally {
+      final wasOwner = ownsOperation();
+      if (identical(getImgGenCancelToken(), imgCancelToken)) {
+        _setImgGenCancelToken(null);
+      }
+      final liveState = _getState().value;
+      if (wasOwner && liveState != null) {
+        _setState(AsyncData(liveState.copyWith(isGeneratingImage: false)));
+      }
+    }
   }
 
   Future<void> retryImageGenerationForMessage(int messageIndex) async {
     final current = _getState().value;
-    if (current == null || current.session == null || current.isGenerating || current.isGeneratingImage) {
+    if (current == null ||
+        current.session == null ||
+        current.isGenerating ||
+        current.isPostGenRunning ||
+        current.isGeneratingImage) {
       return;
     }
     if (messageIndex < 0 || messageIndex >= current.messages.length) return;
@@ -205,31 +290,59 @@ class ImageRecoveryService {
     }
 
     final newMessages = List<ChatMessage>.from(current.messages);
-    newMessages[messageIndex] = msg.copyWith(content: resetContent, swipes: updatedSwipes);
+    newMessages[messageIndex] = msg.copyWith(
+      content: resetContent,
+      swipes: updatedSwipes,
+    );
     final resetSession = current.session!.copyWith(
       messages: newMessages,
       updatedAt: currentTimestampSeconds(),
     );
 
-    _setState(AsyncData(current.copyWith(session: resetSession, isGeneratingImage: true)));
-
+    final genId = startImageOperation();
     final imgCancelToken = CancelToken();
     _setImgGenCancelToken(imgCancelToken);
-
-    final genService = _ref.read(chatGenerationServiceProvider);
-    await genService.processImageTags(
-      currentState: _getState().value!,
-      charId: _charId,
-      cancelToken: imgCancelToken,
-      onStateUpdate: (updatedState) {
-        _setState(AsyncData(updatedState));
-      },
+    _setState(
+      AsyncData(
+        current.copyWith(session: resetSession, isGeneratingImage: true),
+      ),
     );
 
-    _setImgGenCancelToken(null);
-    final finalState = _getState().value;
-    if (finalState != null) {
-      _setState(AsyncData(finalState.copyWith(isGeneratingImage: false)));
+    final sessionId = resetSession.id;
+    bool ownsOperation() =>
+        isCurrentGeneration(genId) &&
+        identical(getImgGenCancelToken(), imgCancelToken);
+    void mergeUpdate(ChatState update) {
+      final merged = ImageGenProcessor.mergeOwnedStateUpdate(
+        liveState: _getState().value,
+        update: update,
+        sessionId: sessionId,
+        ownsOperation: ownsOperation(),
+      );
+      if (merged != null) _setState(AsyncData(merged));
+    }
+
+    try {
+      final genService = _ref.read(chatGenerationServiceProvider);
+      await genService.processImageTags(
+        currentState: current.copyWith(
+          session: resetSession,
+          isGeneratingImage: true,
+        ),
+        charId: _charId,
+        cancelToken: imgCancelToken,
+        isCurrentOperation: ownsOperation,
+        onStateUpdate: mergeUpdate,
+      );
+    } finally {
+      final wasOwner = ownsOperation();
+      if (identical(getImgGenCancelToken(), imgCancelToken)) {
+        _setImgGenCancelToken(null);
+      }
+      final liveState = _getState().value;
+      if (wasOwner && liveState != null) {
+        _setState(AsyncData(liveState.copyWith(isGeneratingImage: false)));
+      }
     }
   }
 
@@ -244,7 +357,8 @@ class ImageRecoveryService {
     final generatedDir = Directory(p.join(imageStorage.baseDir, 'generated'));
     if (!await generatedDir.exists()) return;
 
-    final files = await generatedDir.list()
+    final files = await generatedDir
+        .list()
         .where((f) => f is File && p.extension(f.path).toLowerCase() == '.png')
         .cast<File>()
         .toList();
@@ -264,10 +378,14 @@ class ImageRecoveryService {
       }
     }
 
-    final unclaimed = files.where((f) => !claimedPaths.contains(f.path)).toList()
-      ..sort((a, b) => b.lastAccessedSync().compareTo(a.lastAccessedSync()));
+    final unclaimed =
+        files.where((f) => !claimedPaths.contains(f.path)).toList()..sort(
+          (a, b) => b.lastAccessedSync().compareTo(a.lastAccessedSync()),
+        );
 
-    final candidates = unclaimed.length > 20 ? unclaimed.sublist(0, 20) : unclaimed;
+    final candidates = unclaimed.length > 20
+        ? unclaimed.sublist(0, 20)
+        : unclaimed;
 
     if (candidates.isEmpty) return;
 
@@ -300,7 +418,10 @@ class ImageRecoveryService {
     }
 
     final newMessages = List<ChatMessage>.from(current.messages);
-    newMessages[msgIdx] = msg.copyWith(content: updatedContent, swipes: updatedSwipes);
+    newMessages[msgIdx] = msg.copyWith(
+      content: updatedContent,
+      swipes: updatedSwipes,
+    );
     final updatedSession = current.session!.copyWith(
       messages: newMessages,
       updatedAt: currentTimestampSeconds(),

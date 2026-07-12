@@ -10,6 +10,7 @@ import 'package:glaze_flutter/core/db/repositories/tracker_repo.dart';
 import 'package:glaze_flutter/core/db/repositories/tracker_snapshot_repo.dart';
 import 'package:glaze_flutter/core/llm/studio_ledger_export_parser.dart';
 import 'package:glaze_flutter/core/llm/studio_ledger_prompt.dart';
+import 'package:glaze_flutter/core/llm/prompt/ledger_tracker_loader.dart';
 import 'package:glaze_flutter/core/llm/prompt_payload_builder.dart'
     show kCompileStudioSessionStateForTest;
 import 'package:glaze_flutter/core/models/memory_book.dart';
@@ -21,6 +22,10 @@ import 'package:glaze_flutter/core/state/db_provider.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 AppDatabase _db() => AppDatabase.forTesting(NativeDatabase.memory());
+
+final _ledgerTrackerLoaderProvider = Provider<LedgerTrackerLoader>(
+  (ref) => LedgerTrackerLoader(ref),
+);
 
 const _validJson = '''
 {
@@ -659,6 +664,142 @@ Ledger text.
         expect(live!.value, 'wary');
       },
     );
+  });
+
+  // ── Ledger prompt tracker authority ─────────────────────────────────────
+  group('LedgerTrackerLoader — prompt authority', () {
+    late AppDatabase db;
+    late ProviderContainer container;
+    late TrackerRepo trackerRepo;
+    late TrackerSnapshotRepo snapshotRepo;
+    late LedgerTrackerLoader loader;
+
+    setUp(() {
+      db = _db();
+      container = ProviderContainer(
+        overrides: [appDbProvider.overrideWithValue(db)],
+      );
+      trackerRepo = container.read(trackerRepoProvider);
+      snapshotRepo = container.read(trackerSnapshotRepoProvider);
+      loader = container.read(_ledgerTrackerLoaderProvider);
+    });
+
+    tearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    test('next Ledger prompt excludes a tentative snapshot', () async {
+      const sessionId = 'sess_ledger_prompt_authority';
+      const key = 'npc:Lucy.attitude_to_user';
+
+      await snapshotRepo.upsertTrackers(
+        sessionId: sessionId,
+        messageId: 'accepted_turn',
+        swipeId: 0,
+        agentSwipeId: 0,
+        trackers: _makeTrackers(sessionId, {key: 'wary'}),
+        committed: true,
+      );
+      await trackerRepo.upsertValue(
+        sessionId,
+        key,
+        'tentative trust',
+        scope: 'ledger',
+      );
+      await snapshotRepo.upsertTrackers(
+        sessionId: sessionId,
+        messageId: 'tentative_turn',
+        swipeId: 0,
+        agentSwipeId: 0,
+        trackers: _makeTrackers(sessionId, {key: 'tentative trust'}),
+      );
+
+      final prompt = const StudioLedgerPrompt().build(
+        finalAssistantText: 'Lucy watches the door.',
+        recentHistoryText: '',
+        currentTrackers: await loader.loadEffectiveLedgerTrackers(sessionId),
+        recentMemoryEntries: const [],
+      );
+
+      expect(prompt, contains('$key: wary'));
+      expect(prompt, isNot(contains('tentative trust')));
+    });
+
+    test(
+      'tentative state becomes a Ledger prompt base only after commit',
+      () async {
+        const sessionId = 'sess_ledger_prompt_commit';
+        const key = 'npc:Lucy.attitude_to_user';
+
+        await trackerRepo.upsertValue(
+          sessionId,
+          key,
+          'tentative trust',
+          scope: 'ledger',
+        );
+        await snapshotRepo.upsertTrackers(
+          sessionId: sessionId,
+          messageId: 'tentative_turn',
+          swipeId: 0,
+          agentSwipeId: 0,
+          trackers: _makeTrackers(sessionId, {key: 'tentative trust'}),
+        );
+
+        final beforeCommit = const StudioLedgerPrompt().build(
+          finalAssistantText: 'Lucy watches the door.',
+          recentHistoryText: '',
+          currentTrackers: await loader.loadEffectiveLedgerTrackers(sessionId),
+          recentMemoryEntries: const [],
+        );
+        expect(beforeCommit, isNot(contains('tentative trust')));
+
+        await snapshotRepo.commit(
+          sessionId: sessionId,
+          messageId: 'tentative_turn',
+          swipeId: 0,
+          agentSwipeId: 0,
+        );
+
+        final afterCommit = const StudioLedgerPrompt().build(
+          finalAssistantText: 'Lucy watches the door.',
+          recentHistoryText: '',
+          currentTrackers: await loader.loadEffectiveLedgerTrackers(sessionId),
+          recentMemoryEntries: const [],
+        );
+        expect(afterCommit, contains('$key: tentative trust'));
+      },
+    );
+
+    test('live manual override supersedes the committed prompt base', () async {
+      const sessionId = 'sess_ledger_prompt_override';
+      const key = 'npc:Lucy.attitude_to_user';
+
+      await snapshotRepo.upsertTrackers(
+        sessionId: sessionId,
+        messageId: 'accepted_turn',
+        swipeId: 0,
+        agentSwipeId: 0,
+        trackers: _makeTrackers(sessionId, {key: 'wary'}),
+        committed: true,
+      );
+      await trackerRepo.upsertValue(
+        sessionId,
+        'canon_override:$key',
+        'hostile; user-corrected',
+        scope: 'ledger',
+      );
+
+      final prompt = const StudioLedgerPrompt().build(
+        finalAssistantText: 'Lucy watches the door.',
+        recentHistoryText: '',
+        currentTrackers: await loader.loadEffectiveLedgerTrackers(sessionId),
+        recentMemoryEntries: const [],
+      );
+
+      expect(prompt, contains('$key: hostile; user-corrected'));
+      expect(prompt, isNot(contains('$key: wary')));
+    });
   });
 
   // ── _compileStudioSessionState tests ─────────────────────────────────────

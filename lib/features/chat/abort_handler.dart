@@ -7,12 +7,10 @@ import '../../core/models/chat_message.dart';
 import '../../core/services/generation_notification_service.dart';
 import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
+import '../extensions/services/extension_post_gen_service.dart';
 import 'chat_provider.dart' show streamingStateProvider;
 import 'state/post_cleaner_state_provider.dart'
-    show
-        PostCleanerState,
-        cleanerCancelTokenProvider,
-        postCleanerStateProvider;
+    show PostCleanerState, cleanerCancelTokenProvider, postCleanerStateProvider;
 import 'state/studio_cycle_state_provider.dart';
 import 'chat_session_service.dart';
 import 'chat_state.dart';
@@ -97,7 +95,9 @@ class AbortHandler {
   void abortGeneration() {
     if (!_ref.mounted) return;
     _activeGenId++;
-    final StreamingState partialStreaming = _ref.read(streamingStateProvider(_charId));
+    final StreamingState partialStreaming = _ref.read(
+      streamingStateProvider(_charId),
+    );
     _cancelToken?.cancel();
     _cancelToken = null;
     _imgGenCancelToken?.cancel();
@@ -109,23 +109,27 @@ class AbortHandler {
       cleanerToken.cancel('User aborted post-gen');
     }
     _ref.read(cleanerCancelTokenProvider.notifier).state = null;
+    _ref.read(extensionPostGenServiceProvider).cancelBlocks();
     _ref.read(postCleanerStateProvider.notifier).state =
         const PostCleanerState.idle();
     clearStreaming();
     clearStudioCycle();
 
     final current = _getState().value;
-    if (current != null &&
-        (current.isGenerating || current.isPostGenRunning)) {
+    if (current != null && (current.isGenerating || current.isPostGenRunning)) {
       final restorationSnapshot = _restorationMessage;
       final abortGenId = _activeGenId;
       // Phase 1: unblock UI immediately. Clear both the streaming flag and
       // the post-gen flag so gates re-open and the Stop button reverts.
-      _setState(AsyncData(current.copyWith(
-        isGenerating: false,
-        isGeneratingImage: false,
-        isPostGenRunning: false,
-      )));
+      _setState(
+        AsyncData(
+          current.copyWith(
+            isGenerating: false,
+            isGeneratingImage: false,
+            isPostGenRunning: false,
+          ),
+        ),
+      );
 
       // Phase 2: heavier restore/persist work is deferred to avoid first-abort jank.
       // Guard: if a new generation started (genId bumped again), skip restoration
@@ -133,7 +137,11 @@ class AbortHandler {
       scheduleMicrotask(() {
         if (!_ref.mounted) return;
         if (_activeGenId != abortGenId) return;
-        _finalizeAbortWithPartial(current, partialStreaming, restorationSnapshot);
+        _finalizeAbortWithPartial(
+          current,
+          partialStreaming,
+          restorationSnapshot,
+        );
       });
     } else if (current != null && current.isGeneratingImage) {
       _setState(AsyncData(current.copyWith(isGeneratingImage: false)));
@@ -159,8 +167,22 @@ class AbortHandler {
       final idx = current.messages.indexWhere((m) => m.id == regenId);
       if (idx >= 0) {
         final String partialText = partialStreaming.text;
-        final keptSwipes = List<String>.from(restoration.swipes.isNotEmpty ? restoration.swipes : [restoration.content]);
-        final keptSwipesMeta = List<Map<String, dynamic>>.from(restoration.swipesMeta.isNotEmpty ? restoration.swipesMeta : [<String, dynamic>{'genTime': restoration.genTime, 'reasoning': restoration.reasoning, 'tokens': restoration.tokens}]);
+        final keptSwipes = List<String>.from(
+          restoration.swipes.isNotEmpty
+              ? restoration.swipes
+              : [restoration.content],
+        );
+        final keptSwipesMeta = List<Map<String, dynamic>>.from(
+          restoration.swipesMeta.isNotEmpty
+              ? restoration.swipesMeta
+              : [
+                  <String, dynamic>{
+                    'genTime': restoration.genTime,
+                    'reasoning': restoration.reasoning,
+                    'tokens': restoration.tokens,
+                  },
+                ],
+        );
         if (partialText.isNotEmpty) {
           keptSwipes.add(partialText);
           keptSwipesMeta.add(<String, dynamic>{});
@@ -171,12 +193,16 @@ class AbortHandler {
           swipeId: partialText.isNotEmpty ? newSwipeId : restoration.swipeId,
           swipes: keptSwipes,
           swipesMeta: keptSwipesMeta,
-          reasoning: partialText.isNotEmpty ? partialStreaming.reasoning : restoration.reasoning,
+          reasoning: partialText.isNotEmpty
+              ? partialStreaming.reasoning
+              : restoration.reasoning,
           genTime: partialText.isNotEmpty ? null : restoration.genTime,
           tokens: partialText.isNotEmpty ? null : restoration.tokens,
           isTyping: false,
           isError: false,
-          swipeDirection: partialText.isNotEmpty ? 'right' : restoration.swipeDirection,
+          swipeDirection: partialText.isNotEmpty
+              ? 'right'
+              : restoration.swipeDirection,
         );
         final updatedMessages = [...current.messages];
         updatedMessages[idx] = updated;
@@ -188,25 +214,38 @@ class AbortHandler {
           _persistSession(updatedSession);
           ChatSessionService.updateCache(updatedSession);
         }
-        _setState(AsyncData(ChatState(
-          session: updatedSession ?? current.session,
-          isGenerating: false,
-          isGeneratingImage: false,
-          regenTargetId: null,
-        )));
+        _setState(
+          AsyncData(
+            ChatState(
+              session: updatedSession ?? current.session,
+              isGenerating: false,
+              isGeneratingImage: false,
+              isPostGenRunning: false,
+              regenTargetId: null,
+            ),
+          ),
+        );
       } else {
-        _setState(AsyncData(ChatState(
-          session: current.session,
-          isGenerating: false,
-          isGeneratingImage: false,
-          regenTargetId: null,
-        )));
+        _setState(
+          AsyncData(
+            ChatState(
+              session: current.session,
+              isGenerating: false,
+              isGeneratingImage: false,
+              isPostGenRunning: false,
+              regenTargetId: null,
+            ),
+          ),
+        );
       }
       return;
     }
 
     if (restoration != null) {
-      final restoredMessages = <ChatMessage>[...(current.session?.messages ?? const <ChatMessage>[]), restoration];
+      final restoredMessages = <ChatMessage>[
+        ...(current.session?.messages ?? const <ChatMessage>[]),
+        restoration,
+      ];
       final restoredSession = current.session?.copyWith(
         messages: restoredMessages,
         updatedAt: currentTimestampSeconds(),
@@ -215,21 +254,29 @@ class AbortHandler {
         _persistSession(restoredSession);
         ChatSessionService.updateCache(restoredSession);
       }
-      _setState(AsyncData(current.copyWith(
-        session: restoredSession ?? current.session,
-        isGenerating: false,
-        isGeneratingImage: false,
-      )));
+      _setState(
+        AsyncData(
+          current.copyWith(
+            session: restoredSession ?? current.session,
+            isGenerating: false,
+            isGeneratingImage: false,
+            isPostGenRunning: false,
+          ),
+        ),
+      );
       return;
     }
 
     final String partialText = partialStreaming.text;
     final String? partialReasoning = partialStreaming.reasoning;
-    final bool hasPartial = partialText.isNotEmpty || (partialReasoning != null && partialReasoning.isNotEmpty);
+    final bool hasPartial =
+        partialText.isNotEmpty ||
+        (partialReasoning != null && partialReasoning.isNotEmpty);
 
     final currentMessages = current.session?.messages ?? const <ChatMessage>[];
     final lastMsg = currentMessages.isNotEmpty ? currentMessages.last : null;
-    final bool lastIsEmptyAssistant = lastMsg != null &&
+    final bool lastIsEmptyAssistant =
+        lastMsg != null &&
         lastMsg.role == 'assistant' &&
         lastMsg.content.isEmpty &&
         (lastMsg.reasoning == null || lastMsg.reasoning!.isEmpty);
@@ -258,13 +305,21 @@ class AbortHandler {
         _persistSession(updatedSession);
         ChatSessionService.updateCache(updatedSession);
       }
-      _setState(AsyncData(current.copyWith(
-        session: updatedSession ?? current.session,
-        isGenerating: false,
-        isGeneratingImage: false,
-      )));
+      _setState(
+        AsyncData(
+          current.copyWith(
+            session: updatedSession ?? current.session,
+            isGenerating: false,
+            isGeneratingImage: false,
+            isPostGenRunning: false,
+          ),
+        ),
+      );
     } else if (lastIsEmptyAssistant) {
-      final trimmedMessages = currentMessages.sublist(0, currentMessages.length - 1);
+      final trimmedMessages = currentMessages.sublist(
+        0,
+        currentMessages.length - 1,
+      );
       final trimmedSession = current.session?.copyWith(
         messages: trimmedMessages,
         updatedAt: currentTimestampSeconds(),
@@ -273,13 +328,26 @@ class AbortHandler {
         _persistSession(trimmedSession);
         ChatSessionService.updateCache(trimmedSession);
       }
-      _setState(AsyncData(current.copyWith(
-        session: trimmedSession ?? current.session,
-        isGenerating: false,
-        isGeneratingImage: false,
-      )));
+      _setState(
+        AsyncData(
+          current.copyWith(
+            session: trimmedSession ?? current.session,
+            isGenerating: false,
+            isGeneratingImage: false,
+            isPostGenRunning: false,
+          ),
+        ),
+      );
     } else {
-      _setState(AsyncData(current.copyWith(isGenerating: false, isGeneratingImage: false)));
+      _setState(
+        AsyncData(
+          current.copyWith(
+            isGenerating: false,
+            isGeneratingImage: false,
+            isPostGenRunning: false,
+          ),
+        ),
+      );
     }
   }
 }

@@ -368,6 +368,23 @@ void main() {
 
       expect(map['isGenerating'], isTrue);
     });
+
+    test('keeps post-gen state separate from stream generation state', () {
+      const postGenContext = ChatMessageMapperContext(
+        isGenerating: false,
+        isPostGenRunning: true,
+      );
+      final message = ChatMessage(
+        id: 'msg1',
+        role: 'assistant',
+        content: 'Hello',
+      );
+
+      final map = ChatMessageMapper.toMap(message, postGenContext);
+
+      expect(map['isGenerating'], isFalse);
+      expect(map['isPostGenRunning'], isTrue);
+    });
   });
 
   group('ChatMessageMapper - Memory Coverage', () {

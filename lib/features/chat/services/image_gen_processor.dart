@@ -18,12 +18,14 @@ class ImageGenProcessor {
   final Ref _ref;
   final String _charId;
   final CancelToken? _cancelToken;
+  final bool Function()? isCurrentOperation;
   final void Function(ChatState) _onStateUpdate;
 
   ImageGenProcessor({
     required this._ref,
     required this._charId,
     this._cancelToken,
+    this.isCurrentOperation,
     required this._onStateUpdate,
   });
 
@@ -59,7 +61,10 @@ class ImageGenProcessor {
       if (apiList.isEmpty) return;
       final activeId = _ref.read(activeApiPresetIdProvider);
       apiConfig = activeId != null
-          ? apiList.firstWhere((c) => c.id == activeId, orElse: () => apiList.first)
+          ? apiList.firstWhere(
+              (c) => c.id == activeId,
+              orElse: () => apiList.first,
+            )
           : apiList.first;
     }
 
@@ -71,17 +76,24 @@ class ImageGenProcessor {
     final connections = _ref.read(personaConnectionsProvider);
     final activePersonaId = _ref.read(activePersonaIdProvider);
     final persona = getEffectivePersona(
-      personas, _charId, session.id, activePersonaId, connections,
+      personas,
+      _charId,
+      session.id,
+      activePersonaId,
+      connections,
     );
 
     final recentContexts = _collectRecentImageContexts(session.messages);
+    var latestSession = session;
+    if (!_ownsOperation) return;
 
     debugPrint('[IMGGEN] → setting isGeneratingImage=true');
-    _onStateUpdate(currentState.copyWith(session: session, isGeneratingImage: true));
+    _onStateUpdate(
+      currentState.copyWith(session: latestSession, isGeneratingImage: true),
+    );
 
-    String updatedContent;
     try {
-      updatedContent = await service.processMessageImages(
+      final updatedContent = await service.processMessageImages(
         text: lastMsg.content,
         settings: imgGenSettings,
         llmEndpoint: apiConfig.endpoint,
@@ -92,67 +104,125 @@ class ImageGenProcessor {
         recentImageContexts: recentContexts,
         cancelToken: _cancelToken,
         onUpdate: (updatedText) {
-          final newMessages = List<ChatMessage>.from(session.messages);
-          final swipeIdx = lastMsg.swipeId;
-          final updatedSwipes = lastMsg.swipes.isNotEmpty && swipeIdx >= 0 && swipeIdx < lastMsg.swipes.length
-              ? (List<String>.from(lastMsg.swipes)..[swipeIdx] = updatedText)
-              : lastMsg.swipes;
-          newMessages[lastIdx] = lastMsg.copyWith(content: updatedText, swipes: updatedSwipes);
-          final updatedSession = session.copyWith(
-            messages: newMessages,
-            updatedAt: currentTimestampSeconds(),
+          // A cancellation may race an image provider's progress callback.
+          // Ownership checks at the caller prevent callbacks from an old
+          // operation from reaching a replacement generation.
+          if (!_ownsOperation) return;
+          latestSession = _replaceLastMessage(
+            session,
+            lastIdx,
+            lastMsg,
+            updatedText,
           );
-          _onStateUpdate(currentState.copyWith(session: updatedSession));
+          _onStateUpdate(
+            currentState.copyWith(
+              session: latestSession,
+              isGeneratingImage: true,
+            ),
+          );
         },
         onError: (error) {
           debugPrint('[IMGGEN] onError: $error');
-          GlazeToast.showWithoutContext('Image gen: $error', isError: true, duration: 4000);
+          GlazeToast.showWithoutContext(
+            'Image gen: $error',
+            isError: true,
+            duration: 4000,
+          );
         },
       );
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) {
-        _onStateUpdate(currentState.copyWith(session: session, isGeneratingImage: false));
+
+      if (!_ownsOperation) return;
+
+      if (_cancelToken?.isCancelled == true) {
+        var cancelContent = updatedContent;
+        int idx = 0;
+        while (ImageTagMarkup.hasImageGenTags(cancelContent)) {
+          cancelContent = ImageTagMarkup.replaceTagWithError(
+            cancelContent,
+            idx,
+            'Cancelled by user',
+          );
+          idx++;
+        }
+        latestSession = _replaceLastMessage(
+          session,
+          lastIdx,
+          lastMsg,
+          cancelContent,
+        );
         return;
       }
-      _onStateUpdate(currentState.copyWith(session: session, isGeneratingImage: false));
-      rethrow;
-    } catch (e) {
-      _onStateUpdate(currentState.copyWith(session: session, isGeneratingImage: false));
-      rethrow;
-    }
 
-    if (_cancelToken?.isCancelled == true) {
-      var cancelContent = updatedContent;
-      int idx = 0;
-      while (ImageTagMarkup.hasImageGenTags(cancelContent)) {
-        cancelContent = ImageTagMarkup.replaceTagWithError(cancelContent, idx, 'Cancelled by user');
-        idx++;
+      latestSession = _replaceLastMessage(
+        session,
+        lastIdx,
+        lastMsg,
+        updatedContent,
+      );
+      await _ref.read(chatRepoProvider).put(latestSession);
+      ChatSessionService.updateCache(latestSession);
+    } on DioException catch (e) {
+      if (!CancelToken.isCancel(e)) rethrow;
+    } finally {
+      // This must run even when the final repository write fails. The caller
+      // accepts this update only while the originating operation still owns
+      // the active generation/session.
+      if (_ownsOperation) {
+        _onStateUpdate(
+          currentState.copyWith(
+            session: latestSession,
+            isGeneratingImage: false,
+          ),
+        );
       }
-      final newMessages = List<ChatMessage>.from(session.messages);
-      final cancelSwipeIdx = lastMsg.swipeId;
-      final cancelSwipes = lastMsg.swipes.isNotEmpty && cancelSwipeIdx >= 0 && cancelSwipeIdx < lastMsg.swipes.length
-          ? (List<String>.from(lastMsg.swipes)..[cancelSwipeIdx] = cancelContent)
-          : lastMsg.swipes;
-      newMessages[lastIdx] = lastMsg.copyWith(content: cancelContent, swipes: cancelSwipes);
-      final finalSession = session.copyWith(messages: newMessages, updatedAt: currentTimestampSeconds());
-      _onStateUpdate(currentState.copyWith(session: finalSession, isGeneratingImage: false));
-      return;
+    }
+  }
+
+  static ChatState? mergeOwnedStateUpdate({
+    required ChatState? liveState,
+    required ChatState update,
+    required String sessionId,
+    required bool ownsOperation,
+  }) {
+    if (!ownsOperation ||
+        liveState == null ||
+        liveState.session?.id != sessionId ||
+        update.session?.id != sessionId) {
+      return null;
     }
 
+    return liveState.copyWith(
+      session: update.session,
+      isGeneratingImage: update.isGeneratingImage,
+    );
+  }
+
+  ChatSession _replaceLastMessage(
+    ChatSession session,
+    int lastIdx,
+    ChatMessage lastMsg,
+    String content,
+  ) {
     final newMessages = List<ChatMessage>.from(session.messages);
-    final finalSwipeIdx = lastMsg.swipeId;
-    final finalSwipes = lastMsg.swipes.isNotEmpty && finalSwipeIdx >= 0 && finalSwipeIdx < lastMsg.swipes.length
-        ? (List<String>.from(lastMsg.swipes)..[finalSwipeIdx] = updatedContent)
+    final swipeIdx = lastMsg.swipeId;
+    final updatedSwipes =
+        lastMsg.swipes.isNotEmpty &&
+            swipeIdx >= 0 &&
+            swipeIdx < lastMsg.swipes.length
+        ? (List<String>.from(lastMsg.swipes)..[swipeIdx] = content)
         : lastMsg.swipes;
-    newMessages[lastIdx] = lastMsg.copyWith(content: updatedContent, swipes: finalSwipes);
-    final finalSession = session.copyWith(
+    newMessages[lastIdx] = lastMsg.copyWith(
+      content: content,
+      swipes: updatedSwipes,
+    );
+    return session.copyWith(
       messages: newMessages,
       updatedAt: currentTimestampSeconds(),
     );
-    await _ref.read(chatRepoProvider).put(finalSession);
-    ChatSessionService.updateCache(finalSession);
-    _onStateUpdate(currentState.copyWith(session: finalSession, isGeneratingImage: false));
   }
+
+  bool get _ownsOperation =>
+      isCurrentOperation?.call() ?? !(_cancelToken?.isCancelled ?? false);
 
   List<String> _collectRecentImageContexts(List<ChatMessage> messages) {
     final contexts = <String>[];

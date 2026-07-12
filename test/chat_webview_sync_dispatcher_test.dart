@@ -38,6 +38,71 @@ void main() {
       },
     );
 
+    test(
+      'refreshes last assistant controls on stream-to-post-gen transition',
+      () {
+        final bridge = _FakeBridge()..isGenerating = true;
+        final message = _assistant('a1');
+        final dispatcher = ChatWebViewSyncDispatcher(
+          state: ChatWebViewSyncState()..wasGenerating = true,
+        );
+
+        dispatcher.dispatch(
+          bridge: bridge,
+          old: _fields(isGenerating: true, messages: [message]),
+          current: _fields(
+            isGenerating: false,
+            isPostGenRunning: true,
+            messages: [message],
+          ),
+          oldMessages: [message],
+          newMessages: [message],
+          streamingId: '__streaming__',
+          onSyncExtBlockPanels: () async {},
+          appendMessage: (_) async {},
+          buildStreamingPlaceholder: () => _assistant('__streaming__'),
+        );
+
+        expect(bridge.isGenerating, isFalse);
+        expect(bridge.isPostGenRunning, isTrue);
+        expect(bridge.updatedMessages, [message]);
+        expect(bridge.updatedIsLast, [true]);
+        expect(bridge.lastMessageIds, ['a1']);
+        expect(bridge.evalCalls.single, contains('setGenerating(false)'));
+        expect(bridge.evalCalls.single, contains('setPostGenRunning(true)'));
+      },
+    );
+
+    test('refreshes last assistant controls when post-gen settles', () {
+      final bridge = _FakeBridge()..isPostGenRunning = true;
+      final message = _assistant('a1');
+      final dispatcher = ChatWebViewSyncDispatcher(
+        state: ChatWebViewSyncState(),
+      );
+
+      dispatcher.dispatch(
+        bridge: bridge,
+        old: _fields(
+          isGenerating: false,
+          isPostGenRunning: true,
+          messages: [message],
+        ),
+        current: _fields(isGenerating: false, messages: [message]),
+        oldMessages: [message],
+        newMessages: [message],
+        streamingId: '__streaming__',
+        onSyncExtBlockPanels: () async {},
+        appendMessage: (_) async {},
+        buildStreamingPlaceholder: () => _assistant('__streaming__'),
+      );
+
+      expect(bridge.isPostGenRunning, isFalse);
+      expect(bridge.updatedMessages, [message]);
+      expect(bridge.updatedIsLast, [true]);
+      expect(bridge.lastMessageIds, ['a1']);
+      expect(bridge.evalCalls.single, contains('setPostGenRunning(false)'));
+    });
+
     test('syncs overlay blur regions only when they change', () {
       final dispatcher = ChatWebViewSyncDispatcher(
         state: ChatWebViewSyncState(),
@@ -101,6 +166,7 @@ ChatMessage _user(String id) =>
 ChatWebViewWidgetFields _fields({
   required bool isGenerating,
   required List<ChatMessage> messages,
+  bool isPostGenRunning = false,
   List<ChatOverlayBlurRegion> blurRegions = const [],
 }) => ChatWebViewWidgetFields(
   blurRegions: blurRegions,
@@ -148,7 +214,7 @@ ChatWebViewWidgetFields _fields({
   sessionId: 's1',
   isGenerating: isGenerating,
   isGeneratingImage: false,
-  isPostGenRunning: false,
+  isPostGenRunning: isPostGenRunning,
   regenTargetId: null,
   greetingTotal: 0,
   messages: messages,
@@ -162,7 +228,14 @@ class _FakeBridge implements ChatBridgeController {
   @override
   bool isGeneratingImage = false;
 
+  @override
+  bool isPostGenRunning = false;
+
   final List<List<ChatOverlayBlurRegion>> overlayBlurCalls = [];
+  final List<String> evalCalls = [];
+  final List<ChatMessage> updatedMessages = [];
+  final List<bool> updatedIsLast = [];
+  final List<String?> lastMessageIds = [];
 
   @override
   Future<void> setOverlayBlurRegions(
@@ -172,10 +245,27 @@ class _FakeBridge implements ChatBridgeController {
   }
 
   @override
-  Future<void> evalJs(String _) async {}
+  Future<void> evalJs(String source) async {
+    evalCalls.add(source);
+  }
 
   @override
-  Future<void> setLastMessage(String? _) async {}
+  Future<void> removeMessage(String _) async {}
+
+  @override
+  Future<void> updateMessage(
+    ChatMessage message, {
+    bool isStreamingUpdate = false,
+    bool isLast = false,
+  }) async {
+    updatedMessages.add(message);
+    updatedIsLast.add(isLast);
+  }
+
+  @override
+  Future<void> setLastMessage(String? messageId) async {
+    lastMessageIds.add(messageId);
+  }
 
   @override
   Future<void> setIdentity({

@@ -56,12 +56,14 @@ class ChatGenerationService {
     required ChatState currentState,
     required String charId,
     CancelToken? cancelToken,
+    bool Function()? isCurrentOperation,
     required void Function(ChatState) onStateUpdate,
   }) async {
     return ImageGenProcessor(
       ref: _ref,
       charId: charId,
       cancelToken: cancelToken,
+      isCurrentOperation: isCurrentOperation,
       onStateUpdate: onStateUpdate,
     ).process(currentState);
   }

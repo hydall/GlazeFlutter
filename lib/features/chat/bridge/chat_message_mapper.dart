@@ -18,6 +18,10 @@ abstract class ChatMessageMapperContext with _$ChatMessageMapperContext {
     String? charAvatarDataUrl,
     String? personaAvatarDataUrl,
     required bool isGenerating,
+
+    /// Post-stream work is active. This is intentionally distinct from
+    /// [isGenerating], which covers only the main response stream.
+    @Default(false) bool isPostGenRunning,
     @Default({}) Set<String> coveredMemoryIds,
     @Default({}) Set<String> pendingMemoryIds,
     @Default({}) Set<String> draftMemoryIds,
@@ -166,6 +170,7 @@ class ChatMessageMapper {
       if (triggeredRegexes.isNotEmpty)
         'triggeredRegexes': _triggeredToJson(triggeredRegexes),
       'isGenerating': ctx.isGenerating,
+      'isPostGenRunning': ctx.isPostGenRunning,
     };
   }
 

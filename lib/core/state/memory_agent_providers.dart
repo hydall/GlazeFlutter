@@ -12,6 +12,7 @@ import '../llm/memory_agentic_write_service.dart';
 import '../llm/memory_dedup_service.dart';
 import '../llm/memory_studio_service.dart';
 import '../llm/post_cleaner_service.dart';
+import '../llm/prompt/ledger_tracker_loader.dart';
 import '../llm/studio_ledger_service.dart';
 import '../models/api_config.dart';
 import 'db_provider.dart';
@@ -87,6 +88,7 @@ final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
     bookRepo: ref.read(memoryBookRepoProvider),
     snapshotRepo: ref.read(trackerSnapshotRepoProvider),
     knowledgeFactRepo: ref.read(characterKnowledgeFactRepoProvider),
+    ledgerTrackerLoader: LedgerTrackerLoader(ref),
   );
 });
 

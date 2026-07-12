@@ -638,10 +638,36 @@ void main() {
       expect(bridgeControllerJs, contains('new GenTimer('));
     });
 
-    test('setGenerating delegates to _genTimer.start/stop', () {
-      expect(bridgeControllerJs, contains('this._genTimer.start()'));
-      expect(bridgeControllerJs, contains('this._genTimer.stop()'));
+    test('setGenerating delegates to generation activity reconciliation', () {
+      final marker = 'setGenerating(value) {';
+      final idx = bridgeControllerJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeControllerJs, idx);
+      expect(body, contains('this._syncGenerationActivity()'));
     });
+
+    test('post-gen activity keeps the generation timer active separately', () {
+      expect(bridgeControllerJs, contains('setPostGenRunning(value)'));
+      final marker = '_syncGenerationActivity() {';
+      final idx = bridgeControllerJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeControllerJs, idx);
+      expect(body, contains('this.isGenerating || this.isPostGenRunning'));
+      expect(body, contains('this._genTimer.start()'));
+      expect(body, contains('this._genTimer.stop()'));
+    });
+
+    test(
+      'message controls keep post-gen activity separate from stream gating',
+      () {
+        final marker = '_syncMessageControls(section, msg) {';
+        final idx = bridgeControllerJs.indexOf(marker);
+        expect(idx, isNot(-1));
+        final body = _extractBlockBody(bridgeControllerJs, idx);
+        expect(body, isNot(contains('hasGenerationActivity')));
+        expect(body, isNot(contains('isPostGenRunning')));
+      },
+    );
   });
 
   // ─── renderMessage always returns array (Phase 3.6) ────────────────────────

@@ -22,9 +22,7 @@ import 'stages/stage_context.dart';
 // Re-export for backward compatibility (tracker_memory_recovery_service,
 // test files).
 export 'pipeline_utils.dart'
-    show
-        extractRecentHistoryText,
-        selectStudioLedgerTextAfterCleaner;
+    show extractRecentHistoryText, selectStudioLedgerTextAfterCleaner;
 
 /// Result of [GenerationPipeline.run] when the regen target's id did not
 /// match what the service wrote back (e.g. a stale completion after a new
@@ -100,13 +98,18 @@ class GenerationPipeline {
     ctx.abortHandler.clearStreaming();
 
     final notifService = GenerationNotificationService.instance;
-    final charRepo = ctx.ref.read(characterRepoProvider);
-    final character = await charRepo.getById(ctx.charId);
-    if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return null;
-    await notifService.onGenerationStarted(character?.name ?? 'Unknown');
-    if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return null;
 
     try {
+      final charRepo = ctx.ref.read(characterRepoProvider);
+      final character = await charRepo.getById(ctx.charId);
+      if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) {
+        return null;
+      }
+      await notifService.onGenerationStarted(character?.name ?? 'Unknown');
+      if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) {
+        return null;
+      }
+
       final service = ctx.ref.read(chatGenerationServiceProvider);
       final result = await service.generate(
         session: session,
@@ -132,12 +135,21 @@ class GenerationPipeline {
         return null;
       }
 
-      if (result.session != null) {
-        await ctx.ref.read(chatRepoProvider).put(result.session!);
-        if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return null;
-        ChatSessionService.updateCache(result.session!);
-        ctx.ref.invalidate(chatHistoryProvider);
+      if (result.session == null) {
+        await _handlePipelineError(
+          StateError('Generation completed without a chat session'),
+          genId,
+          notifService,
+        );
+        return null;
       }
+
+      await ctx.ref.read(chatRepoProvider).put(result.session!);
+      if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) {
+        return null;
+      }
+      ChatSessionService.updateCache(result.session!);
+      ctx.ref.invalidate(chatHistoryProvider);
 
       // Regen vs normal-result dispatch.
       final regenMsg = regenTargetId != null && result.session != null
@@ -159,14 +171,13 @@ class GenerationPipeline {
       if (regenOutcome != null) {
         // INV-EG1: extensions + image tags must run after successful regen too.
         if (regenSucceeded && result.session != null) {
-          // Flip isGenerating off (streaming window ended) but mark
-          // isPostGenRunning so the Stop button stays pressable and new
-          // generations stay blocked through the post-gen window.
-          ctx.setState(AsyncData(result.copyWith(
-            isGenerating: false,
-            isPostGenRunning: true,
-            regenTargetId: null,
-          )));
+          // The stream has ended. The coordinator acquires
+          // isPostGenRunning only if it finds a foreground post-gen task.
+          ctx.setState(
+            AsyncData(
+              result.copyWith(isGenerating: false, regenTargetId: null),
+            ),
+          );
           await _postGenCoordinator.run(
             result: result.copyWith(isGenerating: false, regenTargetId: null),
             genId: genId,
@@ -223,18 +234,12 @@ class GenerationPipeline {
       }
       ctx.abortHandler.clearStreaming();
 
-      // Streaming window ended — flip isGenerating off so the persisted
-      // assistant message is appended to the WebView DOM (message sync
-      // gates on isGenerating). Set isPostGenRunning so the Stop button
-      // stays pressable and new generations stay blocked through the
-      // post-gen window (cleaner, ledger, ext blocks, write-loop).
+      // The text stream is complete. PostGenCoordinator acquires the
+      // foreground post-gen flag only for real foreground work.
       if (ctx.ref.mounted) {
         final pre = ctx.getState().value;
         if (pre != null && pre.session?.id == result.session?.id) {
-          ctx.setState(AsyncData(pre.copyWith(
-            isGenerating: false,
-            isPostGenRunning: true,
-          )));
+          ctx.setState(AsyncData(pre.copyWith(isGenerating: false)));
         }
       }
 
@@ -289,8 +294,7 @@ class GenerationPipeline {
       return;
     }
     final current = ctx.getState().value;
-    if (current != null &&
-        (current.isGenerating || current.isPostGenRunning)) {
+    if (current != null && (current.isGenerating || current.isPostGenRunning)) {
       final restoration = ctx.abortHandler.restorationMessage;
       if (restoration != null) {
         final msgs = <ChatMessage>[
@@ -320,11 +324,13 @@ class GenerationPipeline {
         );
       } else {
         ctx.setState(
-          AsyncData(current.copyWith(
-            isGenerating: false,
-            isPostGenRunning: false,
-            error: e.toString(),
-          )),
+          AsyncData(
+            current.copyWith(
+              isGenerating: false,
+              isPostGenRunning: false,
+              error: e.toString(),
+            ),
+          ),
         );
       }
       ctx.abortHandler.restorationMessage = null;

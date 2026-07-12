@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../image_gen_processor.dart';
 import '../../chat_generation_service.dart';
 import '../../chat_state.dart';
 import 'stage_context.dart';
@@ -28,14 +29,23 @@ class ImageTagStage {
         currentState: result,
         charId: ctx.charId,
         cancelToken: imgCancelToken,
-        onStateUpdate: (s) {
-          if (ctx.abortHandler.isCurrentGen(genId)) ctx.setState(AsyncData(s));
+        isCurrentOperation: () =>
+            ctx.abortHandler.isCurrentGen(genId) &&
+            identical(ctx.abortHandler.imgGenCancelToken, imgCancelToken),
+        onStateUpdate: (update) {
+          final merged = ImageGenProcessor.mergeOwnedStateUpdate(
+            liveState: ctx.getState().value,
+            update: update,
+            sessionId: result.session!.id,
+            ownsOperation:
+                ctx.abortHandler.isCurrentGen(genId) &&
+                identical(ctx.abortHandler.imgGenCancelToken, imgCancelToken),
+          );
+          if (merged != null) ctx.setState(AsyncData(merged));
         },
       );
     } catch (e) {
-      debugPrint(
-        '[ImageTagStage] processImageTags failed (continuing): $e',
-      );
+      debugPrint('[ImageTagStage] processImageTags failed (continuing): $e');
     } finally {
       if (identical(ctx.abortHandler.imgGenCancelToken, imgCancelToken)) {
         ctx.abortHandler.imgGenCancelToken = null;
