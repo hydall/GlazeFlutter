@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/character.dart';
+import '../../../../core/models/chat_message.dart';
 import '../../../../core/services/generation_notification_service.dart';
+import '../../../image_gen/services/image_tag_markup.dart';
 import '../../../../core/state/db_provider.dart';
 import '../../chat_generation_service.dart';
 import '../../chat_state.dart';
@@ -47,18 +50,71 @@ class PostGenCoordinator {
   final CleanerStage cleanerStage;
 
   PostGenCoordinator(this.ctx)
-      : syncStage = SyncNotificationStage(ctx),
-        embedStage = ChatEmbedStage(ctx),
-        draftStage = MemoryDraftStage(ctx),
-        imageTagStage = ImageTagStage(ctx),
-        extBlocksStage = ExtBlocksStage(ctx),
-        writeLoopStage = WriteLoopStage(ctx),
-        ledgerStage = LedgerStage(ctx),
-        cleanerStage = CleanerStage(
-          ctx,
-          extBlocks: ExtBlocksStage(ctx),
-          ledger: LedgerStage(ctx),
+    : syncStage = SyncNotificationStage(ctx),
+      embedStage = ChatEmbedStage(ctx),
+      draftStage = MemoryDraftStage(ctx),
+      imageTagStage = ImageTagStage(ctx),
+      extBlocksStage = ExtBlocksStage(ctx),
+      writeLoopStage = WriteLoopStage(ctx),
+      ledgerStage = LedgerStage(ctx),
+      cleanerStage = CleanerStage(
+        ctx,
+        extBlocks: ExtBlocksStage(ctx),
+        ledger: LedgerStage(ctx),
+      );
+
+  void _runInBackground(Future<void> task, String label) {
+    unawaited(
+      task.catchError((Object error, StackTrace stackTrace) {
+        debugPrint(
+          '[PostGenCoordinator] background $label failed: '
+          '$error\n$stackTrace',
         );
+      }),
+    );
+  }
+
+  bool _beginForegroundPostGen({
+    required String sessionId,
+    required int genId,
+  }) {
+    if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) {
+      return false;
+    }
+    final current = ctx.getState().value;
+    if (current == null || current.session?.id != sessionId) return false;
+    if (!current.isPostGenRunning) {
+      ctx.setState(
+        AsyncData(
+          current.copyWith(isGenerating: false, isPostGenRunning: true),
+        ),
+      );
+    }
+    return true;
+  }
+
+  bool _hasForegroundImageWork(ChatSession session) {
+    if (session.messages.isEmpty) return false;
+    final lastMessage = session.messages.last;
+    return (lastMessage.role == 'assistant' ||
+            lastMessage.role == 'character') &&
+        ImageTagMarkup.hasImageGenTags(lastMessage.content);
+  }
+
+  void _launchExtensionBlocksInBackground({
+    required ChatSession session,
+    required Character? character,
+  }) {
+    if (character == null) return;
+    _runInBackground(
+      extBlocksStage.launchForSwipe(
+        session: session,
+        character: character,
+        agentSwipeId: -1,
+      ),
+      'extension blocks',
+    );
+  }
 
   Future<void> run({
     required ChatState result,
@@ -82,12 +138,21 @@ class PostGenCoordinator {
     );
     if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
 
-    // Keep the foreground service alive for post-gen tasks so the OS
-    // doesn't suspend the app (screen off) while cleaner, write-loop,
-    // ledger, or extension blocks are still running.
-    await notifService.onPostGenStarted();
+    // Embed and auto-draft work is intentionally background work: neither
+    // changes the visible assistant turn nor needs to own the Send/Stop lock.
+    // Keep errors observable without letting a stalled auxiliary task block chat.
+    _runInBackground(
+      embedStage.run(
+        sessionId: sessionId,
+        messages: result.session!.messages,
+        genId: genId,
+      ),
+      'chat embedding',
+    );
+    _runInBackground(draftStage.run(result.session), 'memory auto-draft');
 
-    // Determine Studio status to branch the post-gen sequence.
+    // Determine Studio status before acquiring the foreground post-gen hold.
+    // A disabled/no-op ordinary path must not retain that hold.
     var studioEnabled = false;
     try {
       final studioConfig = await ctx.ref
@@ -101,24 +166,33 @@ class PostGenCoordinator {
     }
     if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
 
-    final postGenFutures = <Future<void>>[];
+    if (!studioEnabled) {
+      // Ordinary chat does not need a post-gen hold merely to discover that
+      // image generation is disabled or the reply has no [IMG:GEN] tag.
+      // ExtBlocks are auxiliary and never own the send/Stop lifecycle.
+      _launchExtensionBlocksInBackground(
+        session: result.session!,
+        character: character,
+      );
+      if (!_hasForegroundImageWork(result.session!)) return;
+      if (!_beginForegroundPostGen(sessionId: sessionId, genId: genId)) return;
 
-    // Stage 8 / 5: Embed raw chat-message chunks (parallel fire-and-forget,
-    // independent of cleaner — operates on raw message text, not the cleaned
-    // swipe). Pairs with MessageRecallService cosine search.
-    postGenFutures.add(
-      embedStage.run(
-        sessionId: sessionId,
-        messages: result.session!.messages,
-        genId: genId,
-      ),
-    );
+      await notifService.onPostGenStarted();
+      try {
+        await imageTagStage.run(result: result, genId: genId, service: service);
+      } finally {
+        await notifService.onPostGenFinished();
+      }
+      return;
+    }
 
-    // Stage 9 / 6: Auto-create memory drafts (parallel fire-and-forget,
-    // no LLM — just a planner over the MemoryBook).
-    postGenFutures.add(draftStage.run(result.session));
+    // Studio foreground work (cleaner, canonical image work, and write-loop)
+    // retains the post-gen hold. Always release it, including errors.
+    if (!_beginForegroundPostGen(sessionId: sessionId, genId: genId)) return;
+    await notifService.onPostGenStarted();
+    try {
+      final postGenFutures = <Future<void>>[];
 
-    if (studioEnabled) {
       // Studio ON: cleaner runs first, then image tags + write-loop on
       // canonical text. Ledger is launched from inside CleanerStage.
       // Ext blocks are launched from inside CleanerStage's branches
@@ -136,9 +210,18 @@ class PostGenCoordinator {
       // the session from DB so image tags bind to the cleaned swipe.
       postGenFutures.add(
         cleanerTask.then((_) async {
-          if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) return;
-          final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
-          if (refreshed == null) return;
+          if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) {
+            return;
+          }
+          final refreshed = await ctx.ref
+              .read(chatRepoProvider)
+              .getById(sessionId);
+          if (!ctx.ref.mounted || !ctx.abortHandler.isCurrentGen(genId)) {
+            return;
+          }
+          if (refreshed == null) {
+            return;
+          }
           await imageTagStage.run(
             result: ChatState(session: refreshed),
             genId: genId,
@@ -149,39 +232,19 @@ class PostGenCoordinator {
 
       // Stage 6: Write-loop — on canonical text, after cleaner.
       postGenFutures.add(
-        cleanerTask.then((_) => writeLoopStage.run(
-              sessionId: sessionId,
-              messages: result.session!.messages,
-              genId: genId,
-              regenTargetId: regenTargetId,
-            )),
-      );
-    } else {
-      // Studio OFF: image tags + ext blocks run immediately (no cleaner).
-      postGenFutures.add(
-        imageTagStage.run(
-          result: result,
-          genId: genId,
-          service: service,
+        cleanerTask.then(
+          (_) => writeLoopStage.run(
+            sessionId: sessionId,
+            messages: result.session!.messages,
+            genId: genId,
+            regenTargetId: regenTargetId,
+          ),
         ),
       );
-      if (character != null) {
-        postGenFutures.add(
-          extBlocksStage.launchForSwipe(
-            session: result.session!,
-            character: character,
-            agentSwipeId: -1,
-          ),
-        );
-      }
-    }
 
-    // Track all post-gen tasks and release the foreground hold when
-    // they all complete (success or failure). Returned future resolves
-    // after every post-gen task settles so the caller can keep
-    // `isGenerating` true for the whole post-gen window.
-    await Future.wait(postGenFutures).whenComplete(() {
-      notifService.onPostGenFinished();
-    });
+      await Future.wait(postGenFutures);
+    } finally {
+      await notifService.onPostGenFinished();
+    }
   }
 }

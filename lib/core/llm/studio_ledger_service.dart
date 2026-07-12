@@ -17,6 +17,7 @@ import '../utils/id_generator.dart';
 import 'aux_llm_client.dart';
 import 'ledger/ledger_op_applier.dart';
 import 'macro_engine.dart';
+import 'prompt/ledger_tracker_loader.dart';
 import 'studio/studio_aux_prompt_assembler.dart';
 import 'studio_ledger_export_parser.dart';
 import 'studio_ledger_prompt.dart';
@@ -35,7 +36,7 @@ export 'ledger/ledger_op_applier.dart';
 //   2. POST-cleaner runs if enabled.
 //   3. User auto InfBlocks run if configured.
 //   4. Studio Ledger runs on final cleaned text. ← this service
-//   5. Visible ledger stored as internal diagnostics.
+//   5. Visible ledger returned for internal diagnostics.
 //   6. Export parsed and validated.
 //   7. Entity/relationship/arc/world/scene state written to tracker namespace.
 //   8. Snapshot of tracker state saved for rollback/swipe safety.
@@ -50,7 +51,7 @@ export 'ledger/ledger_op_applier.dart';
 //
 // Failure behaviour:
 //   - Ledger failure MUST NOT fail chat generation.
-//   - On export-parse failure, store visible ledger only.
+//   - On export-parse failure, return the visible ledger without writes.
 //   - On LLM failure, keep previous ledger. No writes.
 //   - Cancelled/aborted: clean up, no writes.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ class StudioLedgerService {
   final MemoryBookRepo _bookRepo;
   final TrackerSnapshotRepo _snapshotRepo;
   final CharacterKnowledgeFactRepo _knowledgeFactRepo;
+  final LedgerTrackerLoader _ledgerTrackerLoader;
   final StudioLedgerExportParser _parser;
   final StudioLedgerPrompt _promptBuilder;
   final LedgerOpApplier _opApplier;
@@ -108,6 +110,7 @@ class StudioLedgerService {
     required this._bookRepo,
     required this._snapshotRepo,
     required this._knowledgeFactRepo,
+    required this._ledgerTrackerLoader,
   }) : _parser = const StudioLedgerExportParser(),
        _promptBuilder = const StudioLedgerPrompt(),
        _opApplier = const LedgerOpApplier();
@@ -156,8 +159,9 @@ class StudioLedgerService {
         return LedgerRunResult.aborted;
       }
 
-      // ── 2. Load context for prompt (current trackers, recent memory) ────
-      final currentTrackers = await _trackerRepo.getBySessionId(sessionId);
+      // ── 2. Load prompt base (committed canon + live manual overrides) ────
+      final promptTrackers = await _ledgerTrackerLoader
+          .loadEffectiveLedgerTrackers(sessionId);
       final book = await _bookRepo.getBySessionId(sessionId);
       final recentEntries =
           book?.entries.where((e) => e.status == 'active').take(20).toList() ??
@@ -171,7 +175,7 @@ class StudioLedgerService {
       final prompt = _buildLedgerPrompt(
         finalAssistantText: finalAssistantText,
         recentHistoryText: recentHistoryText,
-        currentTrackers: currentTrackers,
+        currentTrackers: promptTrackers,
         recentMemoryEntries: recentEntries,
         ledgerBlocks: ledgerBlocks,
         macroCtx: macroCtx,

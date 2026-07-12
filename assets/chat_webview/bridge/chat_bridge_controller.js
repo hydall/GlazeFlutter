@@ -18,6 +18,7 @@ export class Bridge {
     this._requestCounter = 0;
     this.isGenerating = false;
     this.isGeneratingImage = false;
+    this.isPostGenRunning = false;
     this._genTimer = new GenTimer(renderer);
     this._imgGenTimer = new ImgGenTimer();
     this._updateBatcher = new MessageUpdateBatcher();
@@ -91,8 +92,17 @@ export class Bridge {
   }
 
   setGenerating(value) {
-    this.isGenerating = value;
-    if (value) {
+    this.isGenerating = !!value;
+    this._syncGenerationActivity();
+  }
+
+  setPostGenRunning(value) {
+    this.isPostGenRunning = !!value;
+    this._syncGenerationActivity();
+  }
+
+  _syncGenerationActivity() {
+    if (this.isGenerating || this.isPostGenRunning) {
       this._genTimer.start();
     } else {
       this._genTimer.stop();

@@ -115,28 +115,6 @@ class ChatWebViewSyncDispatcher {
     }
 
     if (state.wasGenerating && !current.isGenerating) {
-      final finishedRegenId = old.regenTargetId;
-      if (finishedRegenId != null) {
-        final finalMsg = newMessages
-            .where((m) => m.id == finishedRegenId)
-            .firstOrNull;
-        if (finalMsg != null) {
-          // Pass isLast:true so _executeUpdateMessage restores data-is-last
-          // on the char section. setLastMessage(null) clears it at generation
-          // start; without this the swipe gesture handler sees isLast=false
-          // and blocks subsequent left-swipe-to-regenerate gestures.
-          bridge.updateMessage(finalMsg, isLast: true);
-        }
-      } else {
-        // Fresh generation (no regenTargetId): restore data-is-last on the
-        // last char message so subsequent swipe-to-regenerate still works.
-        final lastCharMsg = newMessages.lastWhereOrNull(
-          (m) => m.role == 'assistant' || m.role == 'character',
-        );
-        if (lastCharMsg != null) {
-          bridge.updateMessage(lastCharMsg, isLast: true);
-        }
-      }
       if (!state.regenStreamingSent) {
         bridge.removeMessage(streamingId);
       }
@@ -324,46 +302,63 @@ class ChatWebViewSyncDispatcher {
     }
   }
 
-  /// Reconcile the WebView's generation flags against [current]
-  /// **level-triggered**, not edge-triggered. `bridge.isGenerating` /
-  /// `bridge.isGeneratingImage` mirror what the JS side last received, so
-  /// comparing against them (instead of the previous widget config) means a
-  /// rising/falling edge that Riverpod coalesced into a single rebuild — or a
-  /// dispatch skipped while the bridge was not ready / mid session-switch — is
-  /// caught up on the next dispatch instead of being lost forever.
+  /// Reconcile the WebView's stream and post-generation state
+  /// **level-triggered**, not edge-triggered. The two flags deliberately stay
+  /// separate: message controls use the stream flag to distinguish a live
+  /// reply from post-generation work, while JS combines them internally for
+  /// activity-only UI such as the generation timer and scroll header.
   ///
-  /// A lost falling edge would otherwise leave JS `isGenerating` stuck `true`:
-  /// `updateHeader` early-returns permanently (frozen hide-on-scroll header)
-  /// and `GenTimer` never stops (endless gen-time animation). A lost rising
-  /// edge renders the just-sent user message with `isGenerating:false` and a
-  /// stray Regenerate button. [old] is unused but kept for signature parity
-  /// with the sibling `_maybeApply*` helpers.
+  /// Comparing against the bridge's last received values (rather than only the
+  /// previous widget) catches an edge that was missed while the bridge was not
+  /// ready or during a session switch. A lost falling edge would otherwise
+  /// leave JS activity stuck on; a lost rising edge can render an actionable
+  /// Regenerate control while a response is running.
   void _maybeApplyGeneratingState({
     required ChatBridgeController bridge,
     required ChatWebViewWidgetFields old,
     required ChatWebViewWidgetFields current,
   }) {
-    // The JS side gets a combined "anything in flight" flag so the
-    // GenTimer / header hide-on-scroll stay active through the post-gen
-    // window (cleaner, ledger, write-loop) even though the streaming
-    // window (isGenerating) has already ended.
-    final jsGenerating = current.isGenerating || current.isPostGenRunning;
-    if (jsGenerating == bridge.isGenerating &&
-        current.isGeneratingImage == bridge.isGeneratingImage) {
+    final streamChanged = current.isGenerating != bridge.isGenerating;
+    final postGenChanged = current.isPostGenRunning != bridge.isPostGenRunning;
+    final imageChanged = current.isGeneratingImage != bridge.isGeneratingImage;
+    if (!streamChanged && !postGenChanged && !imageChanged) {
       return;
     }
-    bridge.isGenerating = jsGenerating;
+
+    bridge.isGenerating = current.isGenerating;
+    bridge.isPostGenRunning = current.isPostGenRunning;
     bridge.isGeneratingImage = current.isGeneratingImage;
     bridge.evalJs(
-      'if (window.bridge) { window.bridge.setGenerating($jsGenerating); window.bridge.isGeneratingImage = ${current.isGeneratingImage}; }',
+      'if (window.bridge) { '
+      'window.bridge.setGenerating(${current.isGenerating}); '
+      'window.bridge.setPostGenRunning(${current.isPostGenRunning}); '
+      'window.bridge.isGeneratingImage = ${current.isGeneratingImage}; '
+      '}',
     );
-    final anyGenerating = jsGenerating || current.isGeneratingImage;
-    if (!anyGenerating && current.messages.isNotEmpty) {
+
+    if (!current.isGenerating &&
+        !current.isGeneratingImage &&
+        current.messages.isNotEmpty) {
       bridge.setLastMessage(
         lastUserMessageId(current.messages) ?? current.messages.last.id,
       );
-    } else if (jsGenerating) {
+    } else if (current.isGenerating) {
       bridge.setLastMessage(null);
+    }
+
+    // Stream/post-gen state changes do not necessarily alter the message list,
+    // so ChatMessageSync will not update its final assistant bubble. Explicitly
+    // refresh it with the new, separate flags so its Stop/Guided/Regenerate
+    // controls always reconcile at the stream → post-gen → settled boundaries.
+    if ((old.isGenerating != current.isGenerating ||
+            old.isPostGenRunning != current.isPostGenRunning) &&
+        current.messages.isNotEmpty) {
+      final lastAssistant = current.messages.lastWhereOrNull(
+        (message) => message.role == 'assistant' || message.role == 'character',
+      );
+      if (lastAssistant != null) {
+        bridge.updateMessage(lastAssistant, isLast: !current.isGenerating);
+      }
     }
   }
 

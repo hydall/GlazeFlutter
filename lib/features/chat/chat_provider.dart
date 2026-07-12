@@ -126,6 +126,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     setImgGenCancelToken: (t) {
       _abortHandler.imgGenCancelToken = t;
     },
+    getImgGenCancelToken: () => _abortHandler.imgGenCancelToken,
+    startImageOperation: _abortHandler.nextGenId,
+    isCurrentGeneration: _abortHandler.isCurrentGen,
     setState: (s) {
       state = s;
     },
@@ -295,24 +298,40 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     // the chain in the background and persists its own InfoBlocks.
     unawaited(_dispatchAfterUserBlocks(updatedSession));
 
-    final charRepo = ref.read(characterRepoProvider);
-    final character = await charRepo.getById(arg);
-    if (!ref.mounted) return;
-    if (character != null) {
-      final talkativeness = character.extensions['talkativeness'];
-      if (talkativeness is num && talkativeness < 1.0) {
-        final roll = DateTime.now().microsecond % 100 / 100.0;
-        if (roll > talkativeness) {
-          _abortHandler.clearStreaming();
-          state = AsyncData(
-            current.copyWith(session: updatedSession, isGenerating: false),
-          );
-          return;
+    try {
+      final charRepo = ref.read(characterRepoProvider);
+      final character = await charRepo.getById(arg);
+      if (!ref.mounted) return;
+      if (character != null) {
+        final talkativeness = character.extensions['talkativeness'];
+        if (talkativeness is num && talkativeness < 1.0) {
+          final roll = DateTime.now().microsecond % 100 / 100.0;
+          if (roll > talkativeness) {
+            _abortHandler.clearStreaming();
+            state = AsyncData(
+              current.copyWith(session: updatedSession, isGenerating: false),
+            );
+            return;
+          }
         }
       }
-    }
 
-    await _runGeneration(updatedSession, current, guidanceText: guidanceText);
+      await _runGeneration(updatedSession, current, guidanceText: guidanceText);
+    } catch (e, st) {
+      debugPrint('[ChatNotifier] send setup failed: $e\n$st');
+      if (!ref.mounted) return;
+      final latest = state.value;
+      if (latest?.session?.id == updatedSession.id) {
+        state = AsyncData(
+          latest!.copyWith(
+            isGenerating: false,
+            isGeneratingImage: false,
+            isPostGenRunning: false,
+            error: e.toString(),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _dispatchAfterUserBlocks(ChatSession session) async {
@@ -504,7 +523,14 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
       ChatSessionService.updateCache(finalSession);
       _invalidateHistory();
-      state = AsyncData(current.copyWith(session: finalSession));
+      state = AsyncData(
+        current.copyWith(
+          session: finalSession,
+          isGenerating: false,
+          isGeneratingImage: false,
+          isPostGenRunning: false,
+        ),
+      );
     } else {
       state = AsyncData(result);
     }

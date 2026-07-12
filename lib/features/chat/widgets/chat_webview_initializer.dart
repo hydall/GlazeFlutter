@@ -160,6 +160,11 @@ class ChatWebViewInitializer {
     );
     // Persona/char identity can resolve while theme and assets load above.
     await _setIdentity();
+    // Set bridge state before mapping messages below. The mapper carries the
+    // stream and post-gen flags independently to every message control.
+    bridge.isGenerating = input.isGenerating;
+    bridge.isPostGenRunning = input.isPostGenRunning;
+    bridge.isGeneratingImage = input.isGeneratingImage;
     await bridge.setMessages(
       input.messages,
       visibleStartIndex: input.visibleStartIndex,
@@ -189,12 +194,13 @@ class ChatWebViewInitializer {
     }
     await bridge.setSelectionMode(input.isSelectionMode);
     await bridge.scrollToBottom();
-    final initialAnyGen =
-        input.isGenerating || input.isGeneratingImage || input.isPostGenRunning;
-    bridge.isGenerating = initialAnyGen;
     unawaited(
       bridge.evalJs(
-        'if (window.bridge) window.bridge.isGenerating = $initialAnyGen;',
+        'if (window.bridge) { '
+        'window.bridge.setGenerating(${input.isGenerating}); '
+        'window.bridge.setPostGenRunning(${input.isPostGenRunning}); '
+        'window.bridge.isGeneratingImage = ${input.isGeneratingImage}; '
+        '}',
       ),
     );
     onReady();
