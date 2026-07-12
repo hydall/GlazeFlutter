@@ -105,7 +105,7 @@ void main() {
       expect(config.expensiveApiConfigId, '');
       expect(config.cheapApiConfigId, '');
       expect(config.cleanerApiConfigId, '');
-      expect(config.studioPresetId, 'default');
+      expect(config.finalPresetId, '');
     });
 
     test('copyWith updates config fields', () {
@@ -114,12 +114,12 @@ void main() {
         expensiveApiConfigId: 'exp-1',
         cheapApiConfigId: 'cheap-1',
         cleanerApiConfigId: 'clean-1',
-        studioPresetId: 'custom-preset',
+        finalPresetId: 'custom-preset',
       );
       expect(updated.expensiveApiConfigId, 'exp-1');
       expect(updated.cheapApiConfigId, 'cheap-1');
       expect(updated.cleanerApiConfigId, 'clean-1');
-      expect(updated.studioPresetId, 'custom-preset');
+      expect(updated.finalPresetId, 'custom-preset');
     });
 
     test('StudioAgent has no promptShard/modelSource/model/modelOverride', () {
