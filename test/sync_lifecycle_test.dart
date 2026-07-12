@@ -329,6 +329,7 @@ class FakeCloudAdapter implements CloudAdapter {
   /// When true, [listFolder] returns paths without the `/Glaze` prefix (Dropbox-style).
   bool stripGlazePrefixInList = false;
   bool omitFilesFromList = false;
+  bool listFolderThrows = false;
   bool requireEnsuredParentForUpload = false;
   final uploadFailures = <String>{};
 
@@ -392,6 +393,7 @@ class FakeCloudAdapter implements CloudAdapter {
   @override
   Future<List<CloudFileInfo>> listFolder(String path) async {
     listFolderCalls.add(path);
+    if (listFolderThrows) throw Exception('listFolder failed: $path');
     if (omitFilesFromList) return [];
     return files.keys.where((k) => k.startsWith(path) && !k.endsWith('/')).map((
       k,
@@ -1331,6 +1333,72 @@ void main() {
         isTrue,
       );
       expect(firstTaskProgress(progressList).total, greaterThan(0));
+    },
+  );
+
+  test(
+    'Push skips upload when cloud manifest hash matches but listFolder is empty',
+    () async {
+      // Regression: previously, when the manifest hash matched but a fresh
+      // folder listing came back empty (provider propagation lag, a transient
+      // listFolder error, or any cause), every hash-matching entry fell through
+      // an empty `if` body and was re-uploaded — a full-cloud re-push with no
+      // duplicates. The fix trusts the manifest hash unless the listing
+      // positively confirms the file is absent.
+      final world = SyncWorld();
+
+      await world.characters.put(makeChar('c1', name: 'Alpha'));
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      // Cloud files and the cloud manifest are intact (hash matches), but the
+      // provider returns an empty listing — simulating a failed/lagging
+      // listFolder without wiping actual data.
+      world.cloud.omitFilesFromList = true;
+
+      final progressList = <SyncProgress>[];
+      await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
+
+      final initial = firstTaskProgress(progressList);
+      expect(
+        initial.total,
+        equals(0),
+        reason:
+            'Manifest hash match must skip even when the file listing is empty; '
+            'the listing is only consulted to repair genuinely missing files.',
+      );
+      expect(initial.message, contains('Nothing to push'));
+    },
+  );
+
+  test(
+    'Push skips upload when cloud manifest hash matches but listFolder throws',
+    () async {
+      // Same regression class as above, but via a thrown listing error instead
+      // of an empty result. The swallow in _loadCloudFilePathsForEntries must
+      // not collapse the skip gate.
+      final world = SyncWorld();
+
+      await world.characters.put(makeChar('c1', name: 'Alpha'));
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      world.cloud.listFolderThrows = true;
+
+      final progressList = <SyncProgress>[];
+      await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
+
+      final initial = firstTaskProgress(progressList);
+      expect(
+        initial.total,
+        equals(0),
+        reason:
+            'A failed listFolder must not force a re-upload of entries whose '
+            'cloud manifest hash already matches.',
+      );
+      expect(initial.message, contains('Nothing to push'));
     },
   );
 
