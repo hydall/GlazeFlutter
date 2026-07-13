@@ -16,9 +16,14 @@ class ThemeBridgeCommands {
     );
   }
 
-  Future<void> setBackgroundImage(String? src, int blur, double opacity) {
+  Future<void> setBackgroundImage(
+    String? src,
+    int blur,
+    double opacity,
+    double dim,
+  ) {
     if (src == null || src.isEmpty) {
-      return _host.evalJs('window.bridge?.setBackgroundImage(null, 0, 1)');
+      return _host.evalJs('window.bridge?.setBackgroundImage(null, 0, 1, 0)');
     }
     String url;
     if (src.startsWith('data:') ||
@@ -34,7 +39,7 @@ class ThemeBridgeCommands {
     // handle.
     final encoded = jsonEncode(url);
     return _host.evalJs(
-      'window.bridge?.setBackgroundImage($encoded, $blur, $opacity)',
+      'window.bridge?.setBackgroundImage($encoded, $blur, $opacity, $dim)',
     );
   }
 

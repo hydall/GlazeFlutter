@@ -66,6 +66,18 @@ class InputBridgeCommands {
     return _host.evalJs('window.bridge?.setPanelInset(${px.toStringAsFixed(1)})');
   }
 
+  /// On-screen keyboard overlap, sourced from Flutter's `MediaQuery.viewInsets`
+  /// (smooth / IME-synced on Android adjustResize). Pushed on the rising and
+  /// falling edge with [animate] true so the WebView plays a single eased
+  /// transition in sync with the platform keyboard, then once more with
+  /// [animate] false as an exact settle correction. Replaces the WebView's own
+  /// laggy `visualViewport` measurement for positioning the input bar.
+  Future<void> setKeyboardInset(double px, {bool animate = false}) {
+    return _host.evalJs(
+      'window.bridge?.setKeyboardInset(${px.toStringAsFixed(1)}, $animate)',
+    );
+  }
+
   /// Clears the compose field / guidance / image after a validated send.
   Future<void> clearInput() {
     return _host.evalJs('window.bridge?.clearInput()');

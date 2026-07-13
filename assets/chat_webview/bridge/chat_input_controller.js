@@ -45,7 +45,9 @@ export class InputController {
     this._isDrawerOpen = false;
     this._isQuickRepliesOpen = false;
     this._panelInset = 0; // native drawer height, pushed by Flutter
-    this._kbOverlap = 0; // visualViewport keyboard overlap
+    this._kbOverlap = 0; // visualViewport keyboard overlap (fallback source)
+    this._kbInsetFlutter = 0; // keyboard overlap pushed by Flutter (authoritative)
+    this._kbFlutterActive = false; // Flutter has taken over keyboard geometry
     this._draftDebounce = null;
 
     this._bar = document.getElementById('chat-input-bar');
@@ -137,6 +139,23 @@ export class InputController {
   setPanelInset(px) {
     this._panelInset = Math.max(0, px || 0);
     this._relayout();
+  }
+
+  /// On-screen keyboard overlap, pushed by Flutter from MediaQuery.viewInsets
+  /// (authoritative once it fires — see chat_screen.dart _ChatBody). Flutter
+  /// pushes a single predicted end-value on the rising/falling edge with
+  /// [animate] true (the bar's CSS transition + the list's scrollTop ease play
+  /// it out over ~250 ms, in sync with the platform keyboard), then a final
+  /// exact correction with [animate] false once the inset settles. Because the
+  /// value arrives already de-jittered from Flutter, we never touch the
+  /// per-frame visualViewport path here, which was late/coarse on Android
+  /// WebView and produced the out-of-sync, delayed slide. If Flutter never
+  /// fires (viewInsets not tracking the WebView keyboard on some platform),
+  /// [_kbFlutterActive] stays false and visualViewport keeps driving.
+  setKeyboardInset(px, animate) {
+    this._kbFlutterActive = true;
+    this._kbInsetFlutter = Math.max(0, px || 0);
+    this._relayout(!!animate);
   }
 
   clearInput() {
@@ -399,22 +418,37 @@ export class InputController {
     const open = overlap > 80;
     if (overlap === this._kbOverlap) return;
     this._kbOverlap = overlap;
-    this._relayout();
+    // When Flutter drives the keyboard geometry, visualViewport is only kept
+    // as the open/close signal for the native keyboard<->drawer swap; it must
+    // not re-lay-out (it would fight / cancel Flutter's in-flight animated
+    // re-pin with a late, coarse value — the very jank we're removing).
+    if (!this._kbFlutterActive) this._relayout();
     this._send('onKeyboardInset', [JSON.stringify({ height: overlap, open })]);
   }
 
-  _relayout() {
+  _relayout(animate) {
     if (!this._bar) return;
-    const overlap = Math.max(this._kbOverlap, this._panelInset);
+    const kb = this._kbFlutterActive ? this._kbInsetFlutter : this._kbOverlap;
+    const overlap = Math.max(kb, this._panelInset);
     const root = document.documentElement.style;
+    // Bar position: fixed against the full viewport, so it must clear the whole
+    // keyboard/drawer overlap. Driven per keyboard edge from Flutter → smooth.
     root.setProperty('--bottom-overlap', overlap + 'px');
     this._bar.classList.toggle('kb-open', overlap > 0);
     const barHeight = this._bar.offsetHeight;
     root.setProperty('--input-bar-height', barHeight + 'px');
-    // Reuse the bridge's battle-tested scroll re-pin / animation logic to keep
-    // the last message clear of the (now WebView-owned) input bar.
+    // List scroll area: only needs to clear the bar + native drawer. Under
+    // Android `adjustResize` the WebView viewport ALREADY shrinks by the
+    // keyboard height, so folding the Flutter keyboard inset in here would
+    // double-count — the padding + the animated `scrollTop += paddingDiff`
+    // re-pin fire on top of the OS resize and launch the last message up under
+    // the status bar. Keep the keyboard term out of the list padding when
+    // Flutter drives it (it stays in --bottom-overlap for the bar). The
+    // visualViewport fallback (desktop / no Flutter keyboard, where the
+    // viewport does not resize) still folds the overlap in as before.
+    const listOverlap = this._kbFlutterActive ? this._panelInset : overlap;
     if (this.bridge && typeof this.bridge.setBottomPadding === 'function') {
-      this.bridge.setBottomPadding(barHeight + overlap);
+      this.bridge.setBottomPadding(barHeight + listOverlap, !!animate);
     }
   }
 }

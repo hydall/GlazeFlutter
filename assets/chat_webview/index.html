@@ -6,6 +6,10 @@
   <title>Glaze Chat</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* Kill the mobile WebView tap-highlight square on every tappable element
+       (header + input-bar buttons especially; role="button" divs). Inherited,
+       so setting it on the root covers the whole tree. */
+    html { -webkit-tap-highlight-color: transparent; }
     html, body { background: transparent;
       color: var(--text-color, #e0e0e0);
       font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif);

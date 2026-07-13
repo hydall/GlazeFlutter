@@ -199,12 +199,16 @@ class ChatWebViewSyncDispatcher {
         current.bgBlur != old.bgBlur ||
         current.bgOpacity != old.bgOpacity ||
         current.bgDim != old.bgDim) {
+      // Dim is baked into the background image (blur + dim) by
+      // setBackgroundImage now, so it no longer needs a separate --bg-dim push:
+      // a live dim overlay makes #bg-layer a backdrop root, which flattens the
+      // header / input-bar glass blur.
       bridge.setBackgroundImage(
         current.bgImagePath,
         current.bgBlur.toInt(),
         current.bgOpacity,
+        current.bgDim,
       );
-      bridge.applyTheme({'bg-dim': current.bgDim.toStringAsFixed(2)});
     }
   }
 

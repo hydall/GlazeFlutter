@@ -149,6 +149,7 @@ export class Bridge {
   /* ---------- Chat input bar (delegates to InputController) ---------- */
   setInputState(opts) { this._input?.setInputState(opts); }
   setPanelInset(px) { this._input?.setPanelInset(px); }
+  setKeyboardInset(px, animate) { this._input?.setKeyboardInset(px, animate); }
   clearInput() { this._input?.clearInput(); }
   blurInput() { this._input?.blurInput(); }
   focusInput() { this._input?.focusInput(); }
@@ -952,7 +953,7 @@ export class Bridge {
     this._editController.stopEdit(messageId);
   }
 
-  setBackgroundImage(url, blur, opacity) {
+  setBackgroundImage(url, blur, opacity, dim) {
     // Duplicate the app background inside the WebView so its own
     // backdrop-filter blur regions have real pixels to sample — CSS
     // backdrop-filter can't see the natively-composited Flutter layer
@@ -966,6 +967,7 @@ export class Bridge {
     // strips under the Flutter glass and the bubbles' element-blur would
     // silently go flat whenever bg blur is enabled.
     let bg = document.getElementById('bg-layer');
+    const d = Math.max(0, Math.min(1, Number(dim) || 0));
     if (!url) {
       this._bgBlurToken = null;
       if (bg) {
@@ -984,47 +986,57 @@ export class Bridge {
     bg.style.opacity = op;
 
     const b = Math.max(0, Number(blur) || 0);
-    if (b <= 0) {
+    // Nothing to bake → plain image; no dim overlay.
+    if (b <= 0 && d <= 0) {
       this._bgBlurToken = null;
+      bg.style.setProperty('--bg-dim', '0');
       bg.style.backgroundImage = `url("${url}")`;
       bg.style.filter = '';
       bg.style.inset = '0';
       return;
     }
 
-    const cacheKey = `${b}|${url}`;
+    const cacheKey = `${b}|${d}|${url}`;
     if (this._bgBlurCache && this._bgBlurCache.key === cacheKey) {
       this._bgBlurToken = null;
-      this._applyPreBlurredBg(bg, this._bgBlurCache.dataUrl);
+      this._applyBakedBg(bg, this._bgBlurCache.dataUrl);
       return;
     }
 
-    // Immediate placeholder while the canvas render is in flight — and the
-    // permanent fallback when canvas 2D filters are unsupported. CSS blur on
-    // an inset:0 layer bleeds transparent (darkened) edges, unlike Flutter's
-    // TileMode.clamp; overscan so the fringe falls outside the viewport.
+    // Immediate fallback while the canvas bake is in flight — and the permanent
+    // fallback when canvas 2D filters are unsupported: live CSS blur plus the
+    // ::after dim overlay (driven by an inline --bg-dim so it matches d exactly).
+    // CSS blur on an inset:0 layer bleeds transparent (darkened) edges, unlike
+    // Flutter's TileMode.clamp; overscan so the fringe falls outside the viewport.
+    bg.style.setProperty('--bg-dim', String(d));
     bg.style.backgroundImage = `url("${url}")`;
-    bg.style.filter = `blur(${b}px)`;
-    bg.style.inset = `-${b * 2}px`;
+    bg.style.filter = b > 0 ? `blur(${b}px)` : '';
+    bg.style.inset = b > 0 ? `-${b * 2}px` : '0';
 
     const token = cacheKey;
     this._bgBlurToken = token;
-    this._preBlurImage(url, b).then((dataUrl) => {
+    this._bakeBackground(url, b, d).then((dataUrl) => {
       if (!dataUrl) return; // canvas filter unsupported/failed → keep fallback
       this._bgBlurCache = { key: cacheKey, dataUrl };
       if (this._bgBlurToken !== token) return; // superseded by a newer call
       const layer = document.getElementById('bg-layer');
       if (!layer || layer.style.display === 'none') return;
-      this._applyPreBlurredBg(layer, dataUrl);
+      this._applyBakedBg(layer, dataUrl);
     });
   }
 
-  // Swap #bg-layer to the pre-blurred image with no live CSS filter.
-  // #bg-layer transitions `filter` 0.3s; suppress it for the swap so the
-  // baked blur + decaying live blur don't visibly stack.
-  _applyPreBlurredBg(layer, dataUrl) {
+  // Swap #bg-layer to the fully-baked image (blur + dim composited into the
+  // pixels) with no live CSS filter, and switch the ::after dim overlay off
+  // (inline --bg-dim:0). This keeps #bg-layer a plain painted layer — a CSS
+  // `filter` or a semi-transparent dim overlay makes it a backdrop root that is
+  // excluded from the header / input-bar backdrop-filter sampling, which is why
+  // their glass blur went flat when a dimmed/blurred bg was set.
+  // #bg-layer transitions `filter` 0.3s; suppress it for the swap so the baked
+  // blur + decaying live blur don't visibly stack.
+  _applyBakedBg(layer, dataUrl) {
     const prevTransition = layer.style.transition;
     layer.style.transition = 'none';
+    layer.style.setProperty('--bg-dim', '0');
     layer.style.backgroundImage = `url("${dataUrl}")`;
     layer.style.filter = '';
     layer.style.inset = '0';
@@ -1032,11 +1044,11 @@ export class Bridge {
     layer.style.transition = prevTransition;
   }
 
-  // Renders [url] blurred into an offscreen canvas, once, at a capped working
-  // resolution. Resolves to a data URL, or null when canvas 2D filters are
-  // unavailable (older WKWebView) or the render fails — callers keep the live
-  // CSS-filter fallback in that case.
-  _preBlurImage(url, blur) {
+  // Renders [url] into an offscreen canvas with the blur AND the dim baked into
+  // the pixels, once, at a capped working resolution. Resolves to a data URL, or
+  // null when canvas 2D filters are unavailable (older WKWebView) or the render
+  // fails — callers keep the live CSS-filter + ::after-dim fallback in that case.
+  _bakeBackground(url, blur, dim) {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -1056,22 +1068,32 @@ export class Bridge {
           // The blur destroys detail anyway, so a capped resolution keeps
           // the canvas + data URL small; scale the radius to match.
           const scale = Math.min(1, 1536 / Math.max(iw, ih));
-          const scaledBlur = Math.max(0.5, blur * scale);
           canvas.width = Math.max(1, Math.round(iw * scale));
           canvas.height = Math.max(1, Math.round(ih * scale));
-          // Overscan: draw expanded by 2×blur per side so the transparent
-          // blurred fringe lands outside the canvas and edges stay clamped
-          // (Flutter TileMode.clamp equivalent), at the cost of a slight
-          // zoom-crop.
-          const pad = Math.ceil(scaledBlur * 2);
-          ctx.filter = `blur(${scaledBlur}px)`;
-          ctx.drawImage(
-            img,
-            -pad,
-            -pad,
-            canvas.width + pad * 2,
-            canvas.height + pad * 2,
-          );
+          if (blur > 0) {
+            const scaledBlur = Math.max(0.5, blur * scale);
+            // Overscan: draw expanded by 2×blur per side so the transparent
+            // blurred fringe lands outside the canvas and edges stay clamped
+            // (Flutter TileMode.clamp equivalent), at the cost of a slight
+            // zoom-crop.
+            const pad = Math.ceil(scaledBlur * 2);
+            ctx.filter = `blur(${scaledBlur}px)`;
+            ctx.drawImage(
+              img,
+              -pad,
+              -pad,
+              canvas.width + pad * 2,
+              canvas.height + pad * 2,
+            );
+            ctx.filter = 'none';
+          } else {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          }
+          // Bake the dim on top so #bg-layer needs no live dim overlay.
+          if (dim > 0) {
+            ctx.fillStyle = `rgba(0, 0, 0, ${dim})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
           // WebP keeps the alpha channel (PNG wallpapers) unlike JPEG;
           // engines without a WebP encoder silently return PNG instead.
           resolve(canvas.toDataURL('image/webp', 0.9));

@@ -387,6 +387,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           bgImagePath: widget.bgImagePath,
           bgBlur: widget.bgBlur,
           bgOpacity: widget.bgOpacity,
+          bgDim: widget.bgDim,
           bgNoiseOpacity: widget.bgNoiseOpacity,
           bgNoiseIntensity: widget.bgNoiseIntensity,
           chatFontName: widget.chatFontName,
@@ -972,6 +973,17 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     final b = _bridge;
     if (b == null || !_ready) return Future.value();
     return b.setPanelInset(px);
+  }
+
+  /// Pushes the on-screen keyboard overlap (Flutter `MediaQuery.viewInsets`) so
+  /// the in-WebView input bar lifts in sync with the platform keyboard. See
+  /// [ChatBridgeController.setKeyboardInset]: [animate] eases the transition on
+  /// the rising/falling edge, then a non-animated call corrects to the exact
+  /// settled height.
+  Future<void> setKeyboardInset(double px, {bool animate = false}) {
+    final b = _bridge;
+    if (b == null || !_ready) return Future.value();
+    return b.setKeyboardInset(px, animate: animate);
   }
 
   /// Clears the compose field / guidance / image after a validated send.

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -456,12 +457,48 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   void didUpdateWidget(covariant _ChatBody oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.keyboardHeight != widget.keyboardHeight) {
+      _pushKeyboardInsetEdge(oldWidget.keyboardHeight, widget.keyboardHeight);
       _keyboardSettled = false;
       _keyboardSettleTimer?.cancel();
       _keyboardSettleTimer = Timer(const Duration(milliseconds: 100), () {
         if (!mounted) return;
+        // Settle correction: push the exact final inset (no animation). A no-op
+        // in JS when the rising-edge prediction was already right; otherwise it
+        // snaps the small residual. See ChatBridgeController.setKeyboardInset.
+        _webViewStateKey.currentState?.setKeyboardInset(
+          widget.keyboardHeight,
+          animate: false,
+        );
         setState(() => _keyboardSettled = true);
       });
+    }
+  }
+
+  // Below this the inset is treated as "keyboard down" — filters out the tiny
+  // residual insets Android can report while the IME is fully collapsed.
+  static const double _kKeyboardEdgeThreshold = 80;
+
+  /// Drives the in-WebView input bar from Flutter's per-frame keyboard inset.
+  /// Pushes a single predicted end-value on the rising/falling edge with
+  /// `animate: true`; intermediate animation frames are ignored (the WebView is
+  /// already easing toward the predicted end). Restores the smooth, IME-synced
+  /// behaviour that the visualViewport-based measurement lost — see
+  /// [ChatDrawerController] for why the compose field / keyboard are now
+  /// WebView-owned.
+  void _pushKeyboardInsetEdge(double oldKb, double newKb) {
+    final st = _webViewStateKey.currentState;
+    if (st == null) return;
+    final wasDown = oldKb <= _kKeyboardEdgeThreshold;
+    final nowDown = newKb <= _kKeyboardEdgeThreshold;
+    if (wasDown && !nowDown) {
+      // Rising edge: predict the final height from the last measured keyboard so
+      // the bar and list animate straight to the end instead of chasing the
+      // slowly-growing live inset.
+      final predicted = math.max(newKb, widget.drawerCtrl.lastKeyboardHeight);
+      st.setKeyboardInset(predicted, animate: true);
+    } else if (!wasDown && nowDown) {
+      // Falling edge: animate back down to the resting position.
+      st.setKeyboardInset(0, animate: true);
     }
   }
 
@@ -801,7 +838,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           notifier.abortGeneration();
         }
       },
-      onInputImpersonate: () => notifier.regenerateLastAssistant(),
+      // Impersonation (the AI composing a message AS the user) is not
+      // implemented in the Flutter port yet: presets carry an impersonation
+      // prompt but no generation path consumes it. The empty-field send button
+      // used to mis-fire regenerateLastAssistant() here — regenerating the
+      // character's last reply, which is NOT impersonation — so leave it a
+      // no-op until the feature is built.
+      // TODO(impersonation): generate a user-role message and stream it into
+      // the compose draft (parity with Vue Glaze), instead of no-op.
+      onInputImpersonate: () {},
       onInputDraftChanged: (text) => notifier.saveDraft(text),
       onInputFocus: (focused) {
         // The WebView owns the compose field's focus now; the controller closes

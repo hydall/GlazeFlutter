@@ -29,6 +29,7 @@ class ChatWebViewInitInput {
     required this.bgImagePath,
     required this.bgBlur,
     required this.bgOpacity,
+    required this.bgDim,
     required this.bgNoiseOpacity,
     required this.bgNoiseIntensity,
     required this.chatFontName,
@@ -72,6 +73,7 @@ class ChatWebViewInitInput {
   final String? bgImagePath;
   final double bgBlur;
   final double bgOpacity;
+  final double bgDim;
   final double bgNoiseOpacity;
   final double bgNoiseIntensity;
   final String? chatFontName;
@@ -151,6 +153,7 @@ class ChatWebViewInitializer {
       input.bgImagePath,
       input.bgBlur.toInt(),
       input.bgOpacity,
+      input.bgDim,
     );
     await bridge.setBackgroundNoise(
       input.bgNoiseOpacity,

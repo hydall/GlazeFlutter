@@ -621,8 +621,13 @@ class ChatBridgeController {
   // Theme
   Future<void> setBackgroundNoise(double opacity, double intensity) =>
       theme.setBackgroundNoise(opacity, intensity);
-  Future<void> setBackgroundImage(String? src, int blur, double opacity) =>
-      theme.setBackgroundImage(src, blur, opacity);
+  Future<void> setBackgroundImage(
+    String? src,
+    int blur,
+    double opacity,
+    double dim,
+  ) =>
+      theme.setBackgroundImage(src, blur, opacity, dim);
   Future<void> setChatFont({
     String? fontName,
     String? fontDataUrl,
@@ -714,6 +719,8 @@ class ChatBridgeController {
     virtualKeyboardSend: virtualKeyboardSend,
   );
   Future<void> setPanelInset(double px) => input.setPanelInset(px);
+  Future<void> setKeyboardInset(double px, {bool animate = false}) =>
+      input.setKeyboardInset(px, animate: animate);
   Future<void> clearInput() => input.clearInput();
   Future<void> blurInput() => input.blurInput();
   Future<void> focusInput() => input.focusInput();
