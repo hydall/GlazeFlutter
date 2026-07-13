@@ -102,6 +102,7 @@ class AnthropicChatTransport implements ChatTransport {
             cancelToken: cancelToken,
             onUpdate: onUpdate,
             onComplete: onComplete,
+            omitReasoning: request.omitReasoning,
           );
         } else {
           await _oneShotResponse(
@@ -111,6 +112,7 @@ class AnthropicChatTransport implements ChatTransport {
             prefill: built.prefill,
             cancelToken: cancelToken,
             onComplete: onComplete,
+            omitReasoning: request.omitReasoning,
           );
         }
         return; // success — no retry needed
@@ -272,6 +274,7 @@ class AnthropicChatTransport implements ChatTransport {
     CancelToken? cancelToken,
     ChatTransportOnUpdate? onUpdate,
     ChatTransportOnComplete? onComplete,
+    bool omitReasoning = false,
   }) async {
     final response = await _dio.post<ResponseBody>(
       url,
@@ -335,6 +338,9 @@ class AnthropicChatTransport implements ChatTransport {
                   onUpdate?.call(text, null);
                 }
               } else if (deltaType == 'thinking_delta') {
+                // When omitReasoning is set, skip native thinking deltas so
+                // inline  parsing is not suppressed by _hasExternalReasoning.
+                if (omitReasoning) continue;
                 final reasoning = delta?['thinking'] as String? ?? '';
                 if (reasoning.isNotEmpty) {
                   fullReasoning += reasoning;
@@ -425,6 +431,7 @@ class AnthropicChatTransport implements ChatTransport {
     required String? prefill,
     CancelToken? cancelToken,
     ChatTransportOnComplete? onComplete,
+    bool omitReasoning = false,
   }) async {
     final response = await _dio.post<dynamic>(
       url,
@@ -469,6 +476,7 @@ class AnthropicChatTransport implements ChatTransport {
           final t = part['text'];
           if (t is String) textBuf.write(t);
         } else if (type == 'thinking') {
+          if (omitReasoning) continue;
           final t = part['thinking'];
           if (t is String) reasoningBuf.write(t);
         }

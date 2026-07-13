@@ -81,6 +81,7 @@ class OpenAiChatTransport implements ChatTransport {
             cancelToken,
             onUpdate,
             onComplete,
+            omitReasoning: request.omitReasoning,
           );
         } else {
           await _oneShotResponse(
@@ -89,6 +90,7 @@ class OpenAiChatTransport implements ChatTransport {
             body,
             cancelToken,
             onComplete,
+            omitReasoning: request.omitReasoning,
           );
         }
         return; // success — no retry needed
@@ -175,8 +177,9 @@ class OpenAiChatTransport implements ChatTransport {
     Map<String, dynamic> body,
     CancelToken? cancelToken,
     ChatTransportOnUpdate? onUpdate,
-    ChatTransportOnComplete? onComplete,
-  ) async {
+    ChatTransportOnComplete? onComplete, {
+    bool omitReasoning = false,
+  }) async {
     final response = await _dio.post<ResponseBody>(
       url,
       options: Options(
@@ -266,9 +269,14 @@ class OpenAiChatTransport implements ChatTransport {
             final delta = choice?['delta'];
 
             final contentDelta = delta?['content'] as String? ?? '';
-            final reasoningDelta =
-                delta?['reasoning_content'] as String? ??
-                delta?['reasoning'] as String?;
+            // When omitReasoning is set, skip native reasoning_content so
+            // inline <think> parsing in StreamAccumulator is not suppressed
+            // by _hasExternalReasoning. The provider may still emit the
+            // field, but we discard it on the response side.
+            final reasoningDelta = omitReasoning
+                ? null
+                : (delta?['reasoning_content'] as String? ??
+                      delta?['reasoning'] as String?);
 
             if (contentDelta.isNotEmpty) {
               fullText += contentDelta;
@@ -343,8 +351,9 @@ class OpenAiChatTransport implements ChatTransport {
     String apiKey,
     Map<String, dynamic> body,
     CancelToken? cancelToken,
-    ChatTransportOnComplete? onComplete,
-  ) async {
+    ChatTransportOnComplete? onComplete, {
+    bool omitReasoning = false,
+  }) async {
     final response = await _dio.post<dynamic>(
       url,
       options: Options(
@@ -379,7 +388,7 @@ class OpenAiChatTransport implements ChatTransport {
         final agg = _aggregateSseString(trimmed);
         onComplete?.call(
           agg.$1,
-          agg.$2.isEmpty ? null : agg.$2,
+          (omitReasoning || agg.$2.isEmpty) ? null : agg.$2,
           rawResponseJson: rawResponseJson,
         );
         return;
@@ -407,7 +416,9 @@ class OpenAiChatTransport implements ChatTransport {
     final reasoningRaw = message is Map<String, dynamic>
         ? (message['reasoning_content'] ?? message['reasoning'])
         : null;
-    final reasoning = reasoningRaw is String ? reasoningRaw : null;
+    final reasoning = omitReasoning
+        ? null
+        : (reasoningRaw is String ? reasoningRaw : null);
 
     onComplete?.call(
       content,
