@@ -188,6 +188,7 @@ class GeminiChatTransport implements ChatTransport {
             cancelToken: cancelToken,
             onUpdate: onUpdate,
             onComplete: onComplete,
+            omitReasoning: request.omitReasoning,
           );
         } else {
           await _oneShotResponse(
@@ -196,6 +197,7 @@ class GeminiChatTransport implements ChatTransport {
             built.body,
             cancelToken: cancelToken,
             onComplete: onComplete,
+            omitReasoning: request.omitReasoning,
           );
         }
         return; // success — no retry needed
@@ -223,6 +225,7 @@ class GeminiChatTransport implements ChatTransport {
     CancelToken? cancelToken,
     ChatTransportOnUpdate? onUpdate,
     ChatTransportOnComplete? onComplete,
+    bool omitReasoning = false,
   }) async {
     final response = await _dio.post<ResponseBody>(
       url,
@@ -281,6 +284,10 @@ class GeminiChatTransport implements ChatTransport {
                   final text = p['text'];
                   if (text is! String || text.isEmpty) continue;
                   final isThought = p['thought'] == true;
+                  // When omitReasoning is set, discard thought parts entirely
+                  // so StreamAccumulator's _hasExternalReasoning stays false
+                  // and inline  parsing is not suppressed.
+                  if (isThought && omitReasoning) continue;
                   if (isThought) {
                     fullReasoning += text;
                     onUpdate?.call('', text);
@@ -346,6 +353,7 @@ class GeminiChatTransport implements ChatTransport {
     Map<String, dynamic> body, {
     CancelToken? cancelToken,
     ChatTransportOnComplete? onComplete,
+    bool omitReasoning = false,
   }) async {
     final response = await _dio.post<dynamic>(
       url,
@@ -391,6 +399,7 @@ class GeminiChatTransport implements ChatTransport {
           final text = p['text'];
           if (text is! String) continue;
           if (p['thought'] == true) {
+            if (omitReasoning) continue;
             reasoningBuf.write(text);
           } else {
             textBuf.write(text);
