@@ -160,7 +160,7 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
   /// for [sessionId]. Wraps the read-modify-write in a transaction so
   /// concurrent writes cannot interleave (database.md Rule 3).
   ///
-  /// Used by trusted durable-fact writers such as Studio Ledger recovery.
+  /// Callers must validate [entries] before appending them.
   Future<void> appendApprovedEntries(
     String sessionId,
     List<MemoryEntry> entries,

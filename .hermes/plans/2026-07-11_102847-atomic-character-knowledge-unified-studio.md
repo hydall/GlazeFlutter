@@ -236,17 +236,16 @@ The Studio/Ledger implementation must not create, render, or mutate an evolved s
 - Modify: `lib/core/llm/studio_ledger_prompt.dart`
 - Modify: `lib/core/llm/studio_ledger_service.dart`
 - Modify: `lib/core/llm/ledger/ledger_op_applier.dart`
-- Modify or retire: `lib/core/llm/ledger/durable_fact_writer.dart`
+- Retire: `lib/core/llm/ledger/durable_fact_writer.dart`
 - Test: `test/studio_ledger_test.dart`
 
-**Contract change:** add a `knowledgeFacts` array to `<glaze_memory_export>` while retaining existing `ops` and `durableFacts` for compatibility.
+**Contract change:** keep `ops`, add a `knowledgeFacts` array to `<glaze_memory_export>`, and retire the unsupported `durableFacts` field.
 
 Example shape to encode in the prompt/tests:
 
 ```json
 {
   "ops": [],
-  "durableFacts": [],
   "knowledgeFacts": [
     {
       "knowerKey": "entity:lucy",
@@ -278,7 +277,7 @@ Example shape to encode in the prompt/tests:
    - Use `supersedesId` only when correcting a known injected fact ID.
 4. Inject current relevant fact IDs into the ledger prompt so the model can reference supersession targets; do not inject the whole database.
 5. In `StudioLedgerService`, after parsed tracker ops, write `knowledgeFacts` as `tentative` using the same `(messageId, swipeId, agentSwipeId)` anchor.
-6. Wire the currently parsed `durableFacts` to `DurableFactWriter.writeDurableFacts` if it is still a supported feature; today the service parses them but does not write them. Keep this fix separate from character facts so failures cannot cross-contaminate.
+6. `durableFacts` is not a supported feature: the parsed output was never written and legacy `studio_ledger` MemoryBook entries are excluded from injection. The orphaned writer and export contract were removed; keep `ops` and `knowledgeFacts` as the Ledger persistence paths.
 7. Ensure cancellation/current-generation checks occur before both fact and snapshot writes.
 8. Return an explicit `applied` / `skipped_locked` / `skipped_duplicate` / `rejected` result from ledger application. The current `StudioLedgerService` increments `opsApplied` even when `LedgerOpApplier` made no change; do not repeat that diagnostic bug for atomic facts, and correct the existing counter while touching this path.
 9. Run:
