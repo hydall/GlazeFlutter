@@ -656,13 +656,21 @@ PromptResult _assembleMessages({
   // higher authority in the context window.
   // Rationale: canon state is injected as hidden/system prompt only, never as
   // a chat message. It overrides character-card baseline when conflicting.
+  // Skip the hard block if the preset already handles studio state via the
+  // {{studio_state}} macro — the expanded content carries the
+  // <studio_session_state> marker. (Mirrors the {{memory}} dedup at INV-PS5.)
   if (payload.studioSessionStateContent != null &&
       payload.studioSessionStateContent!.isNotEmpty) {
-    injectStudioSessionStateBlock(
-      messages,
-      attributionBlocks,
-      payload.studioSessionStateContent!,
+    final hasStudioStateBlock = messages.any(
+      (m) => m.content.contains('<studio_session_state>'),
     );
+    if (!hasStudioStateBlock) {
+      injectStudioSessionStateBlock(
+        messages,
+        attributionBlocks,
+        payload.studioSessionStateContent!,
+      );
+    }
   }
 
   final lorebookReserve = calculateLorebookReserve(payload);
