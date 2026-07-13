@@ -141,7 +141,6 @@ lib/
 │   │   │   └── excerpt_scorer.dart          # Excerpt scoring helpers
 │   │   ├── ledger/                   # Studio Ledger specialists (extracted Phase 7)
 │   │   │   ├── ledger_op_applier.dart       # Ledger op application
-│   │   │   ├── durable_fact_writer.dart     # Durable fact writing
 │   │   │   ├── visible_ledger_store.dart    # Visible ledger storage
 │   │   │   └── ledger_provenance.dart       # Ledger provenance builder
 │   │   └── shared/                   # Shared utilities across services

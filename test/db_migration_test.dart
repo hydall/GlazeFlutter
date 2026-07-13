@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,7 +78,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 70);
+      expect(version, 71);
     });
 
     test(
@@ -113,7 +115,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 70);
+        expect(version.first.read<int>('user_version'), 71);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },
@@ -143,12 +145,12 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 70);
+      expect(version.read<int>('user_version'), 71);
     });
 
     test('current schema includes atomic character fact tables', () async {
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.read<int>('user_version'), 70);
+      expect(version.read<int>('user_version'), 71);
 
       final factColumns = await db
           .customSelect("PRAGMA table_info('character_knowledge_fact_rows')")
@@ -195,6 +197,76 @@ void main() {
       );
     });
 
+    test('v70 refreshes only the default Ledger prompt block', () async {
+      final file = File(
+        '${Directory.systemTemp.path}/glaze_mig_ledger_${DateTime.now().microsecondsSinceEpoch}.db',
+      );
+      addTearDown(() async {
+        if (file.existsSync()) await file.delete();
+      });
+
+      final seeded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      await seeded.customSelect('SELECT 1').get();
+      final staleBlocks = [
+        {
+          'id': 'ledger_system',
+          'name': 'Ledger system prompt',
+          'kind': 'instruction',
+          'role': 'system',
+          'content': 'Promote facts into durableFacts.',
+          'enabled': true,
+          'order': 0,
+          'section': 'ledger',
+        },
+        {
+          'id': 'custom_block',
+          'name': 'Custom block',
+          'kind': 'instruction',
+          'role': 'system',
+          'content': 'keep this customization',
+          'enabled': true,
+          'order': 1,
+          'section': 'ledger',
+        },
+      ];
+      await seeded.customStatement(
+        'INSERT INTO studio_preset_rows '
+        '(preset_id, name, blocks_json, updated_at) VALUES (?, ?, ?, ?)',
+        ['default', 'Default Studio Preset', jsonEncode(staleBlocks), 1],
+      );
+      await seeded.customStatement('PRAGMA user_version = 70');
+      await seeded.close();
+
+      final upgraded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      addTearDown(() async => upgraded.close());
+      await upgraded.customSelect('SELECT 1').get();
+
+      final version = await upgraded
+          .customSelect('PRAGMA user_version')
+          .getSingle();
+      expect(version.read<int>('user_version'), 71);
+      final row = await upgraded
+          .customSelect(
+            'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
+            variables: [Variable.withString('default')],
+          )
+          .getSingle();
+      final blocks = (jsonDecode(row.read<String>('blocks_json')) as List)
+          .cast<Map<String, dynamic>>();
+      final ledger = blocks.singleWhere(
+        (block) => block['id'] == 'ledger_system',
+      );
+      final custom = blocks.singleWhere(
+        (block) => block['id'] == 'custom_block',
+      );
+      expect(ledger['content'], isNot(contains('durableFacts')));
+      expect(custom['content'], 'keep this customization');
+    });
+
     test('v67 upgrades to atomic character fact schema', () async {
       final file = File(
         '${Directory.systemTemp.path}/glaze_mig_atomic_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -219,7 +291,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 70);
+      expect(version.read<int>('user_version'), 71);
       final check = await upgraded.customSelect('PRAGMA integrity_check').get();
       expect(check.single.read<String>('integrity_check'), 'ok');
     });

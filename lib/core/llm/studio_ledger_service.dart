@@ -460,19 +460,19 @@ to write, include it with empty arrays. Do not omit it under any circumstance.
 
 Required response template (follow this exact structure):
 <glaze_memory_export>
-{"ops":[],"durableFacts":[]}
+{"ops":[],"knowledgeFacts":[]}
 </glaze_memory_export>
 <studio_ledger>
 Compact continuity snapshot here.
 </studio_ledger>
 
 The <glaze_memory_export> block MUST come first, before <studio_ledger>.
-It must contain a single JSON object with "ops" and "durableFacts" arrays.
-When there are no state changes or durable facts, output empty arrays —
+It must contain a single JSON object with "ops" and "knowledgeFacts" arrays.
+When there are no state changes or knowledge facts, output empty arrays —
 do NOT skip the block.
 
 Ops format:
-{"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"durableFacts":[{"title":"…","content":"…","keys":["…"],"entities":["…"]}]}
+{"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"knowledgeFacts":[]}
 
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
 Allowed ops: set, append_unique, delete.
@@ -502,8 +502,7 @@ Allowed eventState: planned, suggested, threatened, attempted, completed, failed
   bool _isNoWriteLedgerOutput(LedgerParseResult parseResult) {
     final reason = parseResult.rejectionReason ?? '';
     if (reason == 'no <glaze_memory_export> block found') return true;
-    if (reason ==
-        'empty export (no ops, no durable facts, no knowledge facts)') {
+    if (reason == 'empty export (no ops or knowledge facts)') {
       return true;
     }
     return false;

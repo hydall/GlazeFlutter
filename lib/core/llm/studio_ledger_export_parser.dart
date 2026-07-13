@@ -23,7 +23,7 @@ import '../models/studio_ledger_export.dart';
 //   - Reject unknown namespace prefixes.
 //   - Reject malformed JSON.
 //   - Skip locked fields (done at write-time by TrackerRepo).
-//   - Ignore empty exports (no ops AND no durableFacts).
+//   - Ignore empty exports (no ops AND no knowledge facts).
 //   - Quarantine bad exports, return null.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -145,16 +145,13 @@ class StudioLedgerExportParser {
     final validatedFacts = _validateKnowledgeFacts(export.knowledgeFacts);
 
     // Ignore completely empty exports.
-    final isEmpty =
-        validatedOps.isEmpty &&
-        export.durableFacts.isEmpty &&
-        validatedFacts.isEmpty;
+    final isEmpty = validatedOps.isEmpty && validatedFacts.isEmpty;
     if (isEmpty) {
       return LedgerParseResult(
         visibleLedger: visibleLedger,
         rejectionReason: rejectedOps.isNotEmpty
-            ? 'all ops rejected, no durable facts or knowledge facts'
-            : 'empty export (no ops, no durable facts, no knowledge facts)',
+            ? 'all ops rejected, no knowledge facts'
+            : 'empty export (no ops or knowledge facts)',
       );
     }
 
@@ -202,7 +199,6 @@ class StudioLedgerExportParser {
       'sceneState': _normalizeSceneState(json['sceneState']),
       'entities': _normalizeEntities(json['entities']),
       'arcState': _normalizeArcState(json['arcState']),
-      'durableFacts': _normalizeDurableFacts(json['durableFacts']),
       'knowledgeFacts': _normalizeKnowledgeFacts(json['knowledgeFacts']),
       'ops': _normalizeOps(json['ops']),
     };
@@ -257,7 +253,6 @@ class StudioLedgerExportParser {
               'attitudeToUser': '',
               'knowledge': <String>[],
               'boundaries': <String>[],
-              'durableFacts': <String>[],
               'cardOverrides': <String>[],
             };
           }
@@ -269,7 +264,6 @@ class StudioLedgerExportParser {
             'attitudeToUser': _stringValue(map['attitudeToUser']),
             'knowledge': _stringList(map['knowledge']),
             'boundaries': _stringList(map['boundaries']),
-            'durableFacts': _stringList(map['durableFacts']),
             'cardOverrides': _stringList(map['cardOverrides']),
           };
         })
@@ -306,33 +300,6 @@ class StudioLedgerExportParser {
           };
         })
         .where((item) => (item['id'] as String).isNotEmpty)
-        .toList();
-  }
-
-  List<Map<String, dynamic>> _normalizeDurableFacts(dynamic value) {
-    return _listItems(value)
-        .map((item) {
-          final map = _asMap(item);
-          if (map == null) {
-            final content = _stringValue(item);
-            return {
-              'title': content,
-              'content': content,
-              'keys': <String>[],
-              'entities': <String>[],
-            };
-          }
-          return {
-            'title': _stringValue(map['title']),
-            'content': _stringValue(map['content']),
-            'keys': _stringList(map['keys']),
-            'entities': _stringList(map['entities']),
-          };
-        })
-        .where((item) {
-          return (item['title'] as String).isNotEmpty &&
-              (item['content'] as String).isNotEmpty;
-        })
         .toList();
   }
 

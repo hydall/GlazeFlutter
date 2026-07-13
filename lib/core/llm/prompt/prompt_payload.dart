@@ -83,7 +83,7 @@ class PromptPayload {
   /// visible window are NOT excluded. Studio tracker briefs are compact
   /// JSON — they never carry the source messages themselves, so
   /// deduplicating MemoryBook entries against visible messages wastes
-  /// durable facts that the tracker would otherwise leverage. Default
+  /// memory context that the tracker would otherwise leverage. Default
   /// false = legacy source-window exclusion applies.
   final bool disableSourceWindowExclusion;
 

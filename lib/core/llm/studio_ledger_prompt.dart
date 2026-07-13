@@ -10,7 +10,7 @@ import '../models/tracker.dart';
 // Based on the Studio Ledger prompt contract: the ledger is an internal
 // continuity/state extractor that maintains session-canon facts for future
 // generations. It does NOT write story prose. It preserves prior state unless
-// contradicted, promotes only durable facts, distinguishes event states
+// contradicted, distinguishes event states
 // (planned/suggested/threatened/attempted/completed/failed/cancelled/unknown),
 // and never converts threats/plans/questions/offers/pending choices into
 // completed facts. Returns <studio_ledger> + <glaze_memory_export> JSON,
@@ -75,19 +75,19 @@ to write, include it with empty arrays. Do not omit it under any circumstance.
 
 Required response template (follow this exact structure):
 <glaze_memory_export>
-{"ops":[],"durableFacts":[]}
+{"ops":[],"knowledgeFacts":[]}
 </glaze_memory_export>
 <studio_ledger>
 Compact continuity snapshot here.
 </studio_ledger>
 
 The <glaze_memory_export> block MUST come first, before <studio_ledger>.
-It must contain a single JSON object with "ops" and "durableFacts" arrays.
-When there are no state changes or durable facts, output empty arrays —
+It must contain a single JSON object with "ops" and "knowledgeFacts" arrays.
+When there are no state changes or knowledge facts, output empty arrays —
 do NOT skip the block.
 
 Ops format:
-{"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"durableFacts":[{"title":"…","content":"…","keys":["…"],"entities":["…"]}],"knowledgeFacts":[{"knowerKey":"entity:lucy","knowerName":"Lucy","subjectKey":"entity:danvi","subjectName":"Danvi","factClass":"relationship","scopeKey":"relationship:danvi","predicate":"trusts","object":"Trusts Danvi.","epistemicState":"confirmed","confidence":0.9,"importance":0.8,"entities":["Lucy"],"topics":["trust"],"supersedesId":null}]}
+{"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"knowledgeFacts":[{"knowerKey":"entity:lucy","knowerName":"Lucy","subjectKey":"entity:danvi","subjectName":"Danvi","factClass":"relationship","scopeKey":"relationship:danvi","predicate":"trusts","object":"Trusts Danvi.","epistemicState":"confirmed","confidence":0.9,"importance":0.8,"entities":["Lucy"],"topics":["trust"],"supersedesId":null}]}
 
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
 Allowed ops: set, append_unique, delete.
@@ -189,7 +189,6 @@ Use the final assistant response, latest user message, previous ledger, recent c
 
 Rules:
 - Preserve prior state unless contradicted by the final response.
-- Promote only durable, future-relevant facts into durableFacts.
 - Temporary posture/outfit/props stay in the visible ledger unless they became important.
 - Do not create quests unless an explicit task/goal exists.
 - Do not create persona stats unless already tracked.

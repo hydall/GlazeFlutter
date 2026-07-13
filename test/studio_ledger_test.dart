@@ -48,7 +48,6 @@ const _validJson = '''
       "attitudeToUser": "wary but familiar",
       "knowledge": ["Danvi knows her role in David's fate"],
       "boundaries": [],
-      "durableFacts": ["Lucy accepted a shared ride with Danvi."],
       "cardOverrides": ["Do not treat Danvi as a random newcomer to Lucy."]
     }
   ],
@@ -60,14 +59,6 @@ const _validJson = '''
       "summary": "Danvi knows Lucy's role in David's fate.",
       "doNotReopen": true,
       "cardOverride": "Treat David's fate as resolved backstory.",
-      "entities": ["Lucyna Kushinada", "Danvi"]
-    }
-  ],
-  "durableFacts": [
-    {
-      "title": "Lucy accepts fragile alliance",
-      "content": "Lucy accepted a shared ride with Danvi despite distrust.",
-      "keys": ["Lucy", "Danvi", "alliance"],
       "entities": ["Lucyna Kushinada", "Danvi"]
     }
   ],
@@ -156,6 +147,8 @@ void main() {
       expect(prompt, contains('<existing_keys>'));
       expect(prompt, contains('npc:Rebecca.attitude_to_user'));
       expect(prompt, contains('from <current_state> or <existing_keys>'));
+      expect(prompt, contains('"knowledgeFacts"'));
+      expect(prompt, isNot(contains('durableFacts')));
       expect(prompt, isNot(contains('Max value length')));
     });
   });
@@ -167,7 +160,6 @@ void main() {
       final result = parser.parse(_rawResponse);
       expect(result.export, isNotNull);
       expect(result.export!.ops, hasLength(3));
-      expect(result.export!.durableFacts, hasLength(1));
       expect(result.visibleLedger, contains('fragile alliance'));
       expect(result.wasRejected, isFalse);
     });
@@ -192,7 +184,6 @@ $_validJson
 <glaze_memory_export>
 {
   "ops": [],
-  "durableFacts": [],
   "knowledgeFacts": [
     {
       "knowerKey": "entity:lucy",
@@ -254,16 +245,7 @@ Ledger text.
   "entities": [
     {
       "name": "Lucy",
-      "knowledge": [{"fact":"Danvi knows"}],
-      "durableFacts": ["accepted a ride"]
-    }
-  ],
-  "durableFacts": [
-    {
-      "title": ["Shared", "ride"],
-      "content": {"fact":"Lucy accepted the ride"},
-      "keys": [{"key":"Lucy"}],
-      "entities": ["Lucy"]
+      "knowledge": [{"fact":"Danvi knows"}]
     }
   ],
   "ops": [
@@ -285,7 +267,6 @@ Ledger text.
       expect(result.export!.ops.single.value, 'Danvi knows; Lucy reacted');
       expect(result.export!.sceneState!.time, 'night; late');
       expect(result.export!.sceneState!.presentEntities, hasLength(2));
-      expect(result.export!.durableFacts, hasLength(1));
     });
 
     test('missing export block returns null export', () {
@@ -306,8 +287,7 @@ Ledger text.
       "evidence": "test",
       "eventState": "completed"
     }
-  ],
-  "durableFacts": []
+  ]
 }
 </glaze_memory_export>
 ''';
@@ -328,8 +308,7 @@ Ledger text.
       "evidence": "test",
       "eventState": "completed"
     }
-  ],
-  "durableFacts": []
+  ]
 }
 </glaze_memory_export>
 ''';
@@ -343,19 +322,18 @@ Ledger text.
       final longOpBlock =
           '<glaze_memory_export>\n'
           '{"ops":[{"op":"set","key":"npc:Lucy.knowledge","value":"$longVal",'
-          '"evidence":"test","eventState":"completed"}],"durableFacts":[]}\n'
+          '"evidence":"test","eventState":"completed"}]}\n'
           '</glaze_memory_export>';
       final result = parser.parse(longOpBlock);
       expect(result.wasRejected, isFalse);
       expect(result.export?.ops.single.value, longVal);
     });
 
-    test('ignores empty export (no ops and no durableFacts)', () {
+    test('ignores empty export (no ops or knowledge facts)', () {
       const empty = '''
 <glaze_memory_export>
 {
-  "ops": [],
-  "durableFacts": []
+  "ops": []
 }
 </glaze_memory_export>
 ''';
@@ -480,8 +458,8 @@ Ledger text.
     );
   });
 
-  // ── MemoryBookRepo durable facts tests ────────────────────────────────────
-  group('MemoryBookRepo — studio_ledger durable facts', () {
+  // ── MemoryBookRepo sync ingress tests ───────────────────────────────────────
+  group('MemoryBookRepo — sync ingress', () {
     late AppDatabase db;
     late MemoryBookRepo repo;
     late ProviderContainer container;
@@ -494,34 +472,6 @@ Ledger text.
       repo = container.read(memoryBookRepoProvider);
       addTearDown(container.dispose);
       addTearDown(() => db.close());
-    });
-
-    // Test 3
-    test('durable facts write to MemoryBook with kind=studio_ledger', () async {
-      const sessionId = 'sess_mem';
-      final book = MemoryBook(
-        id: 'memorybook_$sessionId',
-        sessionId: sessionId,
-      );
-      await repo.put(book);
-
-      final entry = MemoryEntry(
-        id: 'e1',
-        title: 'Lucy accepts fragile alliance',
-        content: 'Lucy accepted a shared ride with Danvi despite distrust.',
-        keys: ['Lucy', 'Danvi', 'alliance'],
-        kind: 'studio_ledger',
-        source: 'studio_ledger',
-        importance: 7,
-        sourceHash: 'abc123',
-      );
-      await repo.appendApprovedEntries(sessionId, [entry]);
-
-      final loaded = await repo.getBySessionId(sessionId);
-      expect(loaded, isNotNull);
-      expect(loaded!.entries, hasLength(1));
-      expect(loaded.entries.first.kind, 'studio_ledger');
-      expect(loaded.entries.first.sourceHash, 'abc123');
     });
 
     test('sync ingress drops retired agentic entries and drafts', () async {
@@ -544,39 +494,6 @@ Ledger text.
       final loaded = await repo.getBySessionId(sessionId);
       expect(loaded!.entries.map((entry) => entry.id), ['range-entry']);
       expect(loaded.pendingDrafts.map((draft) => draft.id), ['scan-draft']);
-    });
-
-    // Test 4
-    test('repeated durable facts are deduped by sourceHash', () async {
-      const sessionId = 'sess_dedup';
-      final book = MemoryBook(
-        id: 'memorybook_$sessionId',
-        sessionId: sessionId,
-      );
-      await repo.put(book);
-
-      final entry = MemoryEntry(
-        id: 'e2',
-        title: 'Lucy alliance',
-        content: 'Lucy accepted a shared ride.',
-        keys: ['Lucy'],
-        kind: 'studio_ledger',
-        source: 'studio_ledger',
-        importance: 6,
-        sourceHash: 'hash_xyz',
-      );
-      await repo.appendApprovedEntries(sessionId, [entry]);
-
-      final loaded1 = await repo.getBySessionId(sessionId);
-      final existingHashes = loaded1!.entries.map((e) => e.sourceHash).toSet();
-
-      // Simulate dedup: only append if hash not present.
-      if (!existingHashes.contains('hash_xyz')) {
-        await repo.appendApprovedEntries(sessionId, [entry]);
-      }
-
-      final loaded2 = await repo.getBySessionId(sessionId);
-      expect(loaded2!.entries, hasLength(1));
     });
   });
 
@@ -951,7 +868,6 @@ Ledger text.
 <glaze_memory_export>
 {
   "ops": [],
-  "durableFacts": [],
   "sceneState": {"time": "12:00", "date": "01-01-2077",
     "location": "bar", "immediateThread": "idle",
     "presentEntities": [], "activeTensions": []}

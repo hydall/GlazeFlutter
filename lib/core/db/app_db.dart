@@ -47,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 70;
+  int get schemaVersion => 71;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1294,6 +1294,44 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(studioPresetRows, studioPresetRows.executionMode);
         }
       }
+      if (from < 71) {
+        // Remove the retired durableFacts contract from the default Ledger
+        // prompt while preserving customizations to every other preset block.
+        try {
+          final row = await customSelect(
+            'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
+            variables: [Variable.withString('default')],
+          ).getSingleOrNull();
+          if (row != null) {
+            final blocksJson = row.read<String>('blocks_json');
+            final blocks = (jsonDecode(blocksJson) as List<dynamic>)
+                .cast<Map<String, dynamic>>();
+            final seedBlocks = studioPresetSeedBlocks();
+            final ledgerSeed = seedBlocks.firstWhere(
+              (block) => block['id'] == 'ledger_system',
+            );
+            var changed = false;
+            for (var i = 0; i < blocks.length; i++) {
+              if (blocks[i]['id'] == 'ledger_system') {
+                blocks[i] = ledgerSeed;
+                changed = true;
+                break;
+              }
+            }
+            if (changed) {
+              await customStatement(
+                'UPDATE studio_preset_rows SET blocks_json = ?, '
+                "updated_at = CAST(strftime('%s','now') AS INTEGER) "
+                'WHERE preset_id = ?',
+                [jsonEncode(blocks), 'default'],
+              );
+            }
+          }
+        } catch (e) {
+          debugPrint('Migration 71 (retire Ledger durable facts) failed: $e');
+          rethrow;
+        }
+      }
     },
   );
 
@@ -1900,7 +1938,7 @@ PREFER
       'kind': 'instruction',
       'role': 'system',
       'content':
-          'You are Studio Ledger, an internal continuity and state extractor.\nYou do not write story prose.\nYou maintain session-canon facts for future generations.\n\nUse the final assistant response, latest user message, previous ledger, recent chat, current state, and existing memory.\n\nRules:\n- Preserve prior state unless contradicted by the final response.\n- Promote only durable, future-relevant facts into durableFacts.\n- Temporary posture/outfit/props stay in the visible ledger unless they became important.\n- Do not create quests unless an explicit task/goal exists.\n- Do not create persona stats unless already tracked.\n- Do not infer romance/trust jumps without evidence in the final response.\n- Session state overrides character-card baseline.\n- If an arc from the card is resolved in session canon, mark it completed with do_not_reopen=true.\n- Never write future events as facts.\n- Pending user choices are hooks, not completed events.\n- Do not convert threats, plans, questions, offers, or pending choices into completed facts.\n- Distinguish planned, suggested, threatened, attempted, completed, failed, cancelled, and unknown event states.\n- Do not mark an entity present only because it is mentioned.\n- Do not mark an entity absent unless it explicitly leaves, dies, is left behind, or the scene changes.\n- Return <studio_ledger> plus <glaze_memory_export> JSON.\n- Prefer patch ops in the ops list for persistence. Do not rewrite the whole world state.\n- Keep entity/relationship/arc/world state compact. Update current truth; do not create a history log.\n- Never output ledger text as story prose or a chat message.\n- Entity state keys: npc:Name.relationship_to_user, npc:Name.attitude_to_user, npc:Name.knowledge, npc:Name.boundaries, npc:Name.card_overrides\n- Relationship keys: relationship:A:B.relationship, relationship:A:B.attitude, relationship:A:B.knowledge\n- Arc keys: arc:id.status, arc:id.summary, arc:id.do_not_reopen, arc:id.card_override\n- World/scene keys: world:location, world:time, world:date, world:active_threats, scene.present_entities, scene.absent_backstory_entities',
+          'You are Studio Ledger, an internal continuity and state extractor.\nYou do not write story prose.\nYou maintain session-canon facts for future generations.\n\nUse the final assistant response, latest user message, previous ledger, recent chat, current state, and existing memory.\n\nRules:\n- Preserve prior state unless contradicted by the final response.\n- Temporary posture/outfit/props stay in the visible ledger unless they became important.\n- Do not create quests unless an explicit task/goal exists.\n- Do not create persona stats unless already tracked.\n- Do not infer romance/trust jumps without evidence in the final response.\n- Session state overrides character-card baseline.\n- If an arc from the card is resolved in session canon, mark it completed with do_not_reopen=true.\n- Never write future events as facts.\n- Pending user choices are hooks, not completed events.\n- Do not convert threats, plans, questions, offers, or pending choices into completed facts.\n- Distinguish planned, suggested, threatened, attempted, completed, failed, cancelled, and unknown event states.\n- Do not mark an entity present only because it is mentioned.\n- Do not mark an entity absent unless it explicitly leaves, dies, is left behind, or the scene changes.\n- Return <studio_ledger> plus <glaze_memory_export> JSON.\n- Prefer patch ops in the ops list for persistence. Do not rewrite the whole world state.\n- Keep entity/relationship/arc/world state compact. Update current truth; do not create a history log.\n- Never output ledger text as story prose or a chat message.\n- Entity state keys: npc:Name.relationship_to_user, npc:Name.attitude_to_user, npc:Name.knowledge, npc:Name.boundaries, npc:Name.card_overrides\n- Relationship keys: relationship:A:B.relationship, relationship:A:B.attitude, relationship:A:B.knowledge\n- Arc keys: arc:id.status, arc:id.summary, arc:id.do_not_reopen, arc:id.card_override\n- World/scene keys: world:location, world:time, world:date, world:active_threats, scene.present_entities, scene.absent_backstory_entities',
       'enabled': true,
       'order': 0,
       'section': 'ledger',

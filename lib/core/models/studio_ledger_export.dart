@@ -9,12 +9,12 @@ part 'studio_ledger_export.g.dart';
 // These represent the machine-readable <glaze_memory_export> JSON that the
 // Studio Ledger LLM emits after each final assistant response. The ledger
 // produces a structured "ops" patch list and optional human-readable sections
-// (sceneState, entities, arcState, durableFacts) for diagnostics.
+// (sceneState, entities, arcState) for diagnostics.
 //
 // See docs/rules/database.md for the tracker namespace schema.
 // The export produces a structured "ops" patch list (authoritative for state
-// writes) and optional human-readable sections (sceneState, entities, arcState,
-// durableFacts) for diagnostics. Persistence prefers validated patch operations
+// writes) and optional human-readable sections (sceneState, entities, arcState)
+// for diagnostics. Persistence prefers validated patch operations
 // so the model cannot accidentally rewrite or drop the whole state tree.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -90,7 +90,6 @@ abstract class LedgerEntity with _$LedgerEntity {
     @Default('') String attitudeToUser,
     @Default([]) List<String> knowledge,
     @Default([]) List<String> boundaries,
-    @Default([]) List<String> durableFacts,
     @Default([]) List<String> cardOverrides,
   }) = _LedgerEntity;
 
@@ -114,20 +113,6 @@ abstract class LedgerArcState with _$LedgerArcState {
 
   factory LedgerArcState.fromJson(Map<String, dynamic> json) =>
       _$LedgerArcStateFromJson(json);
-}
-
-/// One durable fact entry (to be written to MemoryBook).
-@freezed
-abstract class LedgerDurableFact with _$LedgerDurableFact {
-  const factory LedgerDurableFact({
-    required String title,
-    required String content,
-    @Default([]) List<String> keys,
-    @Default([]) List<String> entities,
-  }) = _LedgerDurableFact;
-
-  factory LedgerDurableFact.fromJson(Map<String, dynamic> json) =>
-      _$LedgerDurableFactFromJson(json);
 }
 
 /// One atomic character-state delta emitted by the existing Studio Ledger.
@@ -158,7 +143,7 @@ abstract class LedgerKnowledgeFact with _$LedgerKnowledgeFact {
 /// The full machine-readable export from Studio Ledger.
 ///
 /// [ops] is the authoritative patch list — persistence uses only ops.
-/// Other sections (sceneState, entities, arcState, durableFacts) are
+/// Other sections (sceneState, entities, arcState) are
 /// diagnostic / prompt-readability aids.
 @freezed
 abstract class StudioLedgerExport with _$StudioLedgerExport {
@@ -166,7 +151,6 @@ abstract class StudioLedgerExport with _$StudioLedgerExport {
     LedgerSceneState? sceneState,
     @Default([]) List<LedgerEntity> entities,
     @Default([]) List<LedgerArcState> arcState,
-    @Default([]) List<LedgerDurableFact> durableFacts,
     @Default([]) List<LedgerKnowledgeFact> knowledgeFacts,
     @Default([]) List<LedgerOp> ops,
   }) = _StudioLedgerExport;
