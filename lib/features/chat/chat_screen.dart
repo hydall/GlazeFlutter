@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,8 +47,6 @@ import 'state/chat_body_selectors.dart';
 import 'state/memory_activity_provider.dart';
 import 'bridge/chat_overlay_blur_region.dart';
 import 'widgets/chat_blur_region_tracker.dart';
-import 'widgets/chat_header.dart';
-import 'widgets/chat_input_bar.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_activity_card.dart';
 import 'widgets/post_cleaner_status_card.dart';
@@ -58,6 +54,8 @@ import 'widgets/post_gen_status_card.dart';
 import 'widgets/studio_status_card.dart';
 import 'widgets/quick_replies_panel.dart';
 import 'widgets/chat_webview_widget.dart';
+import 'widgets/chat_input_ui_state.dart';
+import '../../shared/widgets/fullscreen_editor.dart';
 import 'widgets/triggered_items_sheet.dart';
 import 'widgets/webview_callbacks.dart';
 import '../../core/models/chat_message.dart';
@@ -124,7 +122,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   // least once. After that, an in-chat session switch overlays a spinner
   // instead of destroying the body, so the WebView is never recreated.
   bool _everBuiltBody = false;
-  bool _isHeaderHidden = false;
   late final ChatDrawerController _drawerCtrl;
   late final ChatSearchDelegate _search;
 
@@ -142,7 +139,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         await prefs.setDouble(kKeyboardHeightPref, h);
       },
     );
+    // Seed the drawer height from the last measured keyboard so the magic /
+    // quick-replies panel opens at the right size on the first tap.
+    unawaited(_drawerCtrl.restoreKeyboardHeight());
     _search = ChatSearchDelegate();
+    // The header now lives inside the WebView; toggling search mode must rebuild
+    // this screen so `hideHeader` (native search bar) and the WebView's
+    // `isSearchActive` flag both follow the delegate.
+    _search.addListener(_onSearchChanged);
     if (widget.forceNewSession || widget.initialSessionIndex != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _applySessionPreference();
@@ -153,8 +157,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   void dispose() {
     _drawerCtrl.dispose();
+    _search.removeListener(_onSearchChanged);
     _search.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Back-gesture precedence, shared by the scaffold's `onBack` (hardware /
+  /// swipe back) and the in-WebView header's back button. Dismisses any open
+  /// overlay before navigating up.
+  void _handleBack() {
+    // The compose field lives in the WebView now; ask it to blur (dismiss the
+    // on-screen keyboard) before any drawer close / navigation.
+    if (_drawerCtrl.requestBlurIfFocused()) {
+      return;
+    }
+    // Covers both the open magic drawer / quick replies panel and the brief
+    // keyboard→drawer transition window; closeDrawer handles both.
+    if (_drawerCtrl.drawerOpen || _drawerCtrl.switchingToDrawer) {
+      _drawerCtrl.closeDrawer();
+      return;
+    }
+    if (_search.showSearch) {
+      _search.closeSearch();
+      return;
+    }
+    context.go('/');
   }
 
   Future<void> _applySessionPreference() async {
@@ -216,13 +247,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  void _onScrollDirection(ScrollDirection direction) {
-    if (direction == ScrollDirection.reverse && !_isHeaderHidden) {
-      setState(() => _isHeaderHidden = true);
-    } else if (direction == ScrollDirection.forward && _isHeaderHidden) {
-      setState(() => _isHeaderHidden = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +263,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ? customSessionName
               : 'Session #${session.sessionIndex + 1}')
         : 'status_connecting'.tr();
-    final sessionIndex = chatState?.session?.sessionIndex ?? 0;
 
     final appSettings = ref.watch(appSettingsProvider).value;
     final virtualKeyboardSend = appSettings?.virtualKeyboardSend ?? false;
@@ -247,22 +270,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final batterySaver = appSettings?.batterySaver ?? false;
     _drawerCtrl.setBatterySaverMode(batterySaver);
 
+    // The on-screen keyboard is now WebView-owned (the compose field lives in
+    // the WebView). Flutter's viewInsets no longer track it reliably, so the
+    // keyboard↔drawer swap is driven by the WebView's onKeyboardInset reports
+    // (see ChatDrawerController.handleWebViewKeyboard). This value is still read
+    // for the blur-region settle gate below.
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
-    _drawerCtrl.handleKeyboardFrame(keyboardHeight);
-
-    if (_drawerCtrl.switchingToDrawer && keyboardHeight == 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _drawerCtrl.checkSwitchingTransition(keyboardHeight);
-      });
-    }
-
-    if (keyboardHeight > 0 &&
-        _drawerCtrl.drawerOpen &&
-        !_drawerCtrl.switchingToDrawer) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _drawerCtrl.checkDrawerCollision(keyboardHeight);
-      });
-    }
 
     return SessionLifecycleTracker(
       charId: charId,
@@ -277,11 +290,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       child: GlazeScaffold(
         extendBodyBehindHeader: true,
         resizeToAvoidBottomInset: false,
-        // The body is a full-screen chat WebView; the header's glass blur is
-        // reproduced by an in-WebView CSS strip (mirrored via the 'header'
-        // blur region in _measureBlurRegions), so drop the Flutter blur pass.
+        // The body is a full-screen chat WebView that now owns the whole
+        // header (avatar + name + session + back/search buttons) as a real
+        // backdrop-filter strip. The native app bar is only shown for the
+        // search text field (kept native for the platform keyboard); the rest
+        // of the time it is hidden and the WebView header takes over.
         headerBlurViaWebView: true,
-        hideHeader: _isHeaderHidden,
+        hideHeader: !_search.showSearch,
         title: title,
         titleWidget: _search.showSearch
             ? TextField(
@@ -312,43 +327,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   _search.search(q, chatState?.messages ?? []);
                 },
               )
-            : (character != null
-                  ? ChatHeader(
-                      character: character,
-                      sessionName: sessionName,
-                      currentSessionIndex: sessionIndex,
-                    )
-                  : null),
-        onBack: () {
-          // Dismiss any open overlay first; only navigate up when nothing is
-          // open. Order mirrors the precedence the back gesture should follow.
-          if (_drawerCtrl.inputFocus.hasFocus) {
-            _drawerCtrl.inputFocus.unfocus();
-            return;
-          }
-          // Covers both the open magic drawer / quick replies panel and the
-          // brief keyboard→drawer transition window; closeDrawer handles both.
-          if (_drawerCtrl.drawerOpen || _drawerCtrl.switchingToDrawer) {
-            _drawerCtrl.closeDrawer();
-            return;
-          }
-          if (_search.showSearch) {
-            _search.closeSearch();
-            return;
-          }
-          context.go('/');
-        },
-        actions: _search.showSearch
-            ? const []
-            : [
-                IconButton(
-                  icon: const Icon(Icons.search),
-                  color: context.cs.primary,
-                  onPressed: () {
-                    _search.openSearch();
-                  },
-                ),
-              ],
+            : null,
+        onBack: _handleBack,
+        actions: const [],
         body: chatStateAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
@@ -386,11 +367,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   drawerCtrl: _drawerCtrl,
                   search: _search,
                   keyboardHeight: keyboardHeight,
-                  onScrollDirection: _onScrollDirection,
+                  sessionName: sessionName,
+                  onHeaderBack: _handleBack,
                   virtualKeyboardSend: virtualKeyboardSend,
                   enterToSend: enterToSend,
                   targetMessageId: widget.targetMessageId,
-                  isHeaderHidden: _isHeaderHidden,
                 ),
                 if (awaitingTargetSession)
                   const Positioned.fill(
@@ -413,14 +394,16 @@ class _ChatBody extends ConsumerStatefulWidget {
   final ChatDrawerController drawerCtrl;
   final ChatSearchDelegate search;
   final double keyboardHeight;
-  final ValueChanged<ScrollDirection>? onScrollDirection;
+
+  /// Session display name shown as the in-WebView header subtitle.
+  final String sessionName;
+
+  /// Back-gesture handler shared with the scaffold, invoked by the
+  /// in-WebView header's back button.
+  final VoidCallback onHeaderBack;
   final bool virtualKeyboardSend;
   final bool enterToSend;
   final String? targetMessageId;
-
-  /// Mirrors the scaffold's hide-on-scroll header state so the header's
-  /// WebView blur region is dropped while the header is slid away.
-  final bool isHeaderHidden;
 
   const _ChatBody({
     required this.charId,
@@ -428,11 +411,11 @@ class _ChatBody extends ConsumerStatefulWidget {
     required this.drawerCtrl,
     required this.search,
     required this.keyboardHeight,
-    this.onScrollDirection,
+    required this.sessionName,
+    required this.onHeaderBack,
     this.virtualKeyboardSend = false,
     this.enterToSend = true,
     this.targetMessageId,
-    this.isHeaderHidden = false,
   });
 
   @override
@@ -441,14 +424,6 @@ class _ChatBody extends ConsumerStatefulWidget {
 
 class _ChatBodyState extends ConsumerState<_ChatBody>
     with WidgetsBindingObserver {
-  double _inputBarHeight = 130.0;
-  final GlobalKey _inputBarKey = GlobalKey();
-
-  /// Last bottom inset (input bar + keyboard/drawer) pushed to the WebView.
-  /// Cached so it can be re-asserted on app resume — see
-  /// [didChangeAppLifecycleState].
-  double _lastMessageListBottom = 0;
-
   /// Measured height of the floating [MemoryActivityCard] (0 when hidden) so
   /// the message list reserves room at the *top* for it — otherwise the card
   /// floats under the header and covers the first visible messages.
@@ -456,7 +431,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   final GlobalKey _memoryCardKey = GlobalKey();
 
   final _selectionCtrl = ChatMessageSelectionController();
-  bool _showScrollToBottom = false;
   bool _showMemoryActivity = false;
   final GlobalKey<ChatWebViewWidgetState> _webViewStateKey = GlobalKey();
 
@@ -468,9 +442,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   List<ChatOverlayBlurRegion> _blurRegions = const [];
   bool _blurMeasureScheduled = false;
 
-  /// `MediaQuery.padding.top` captured in build for the analytic header rect.
-  double _blurSafeTop = 0;
-
   /// Keyboard-inset settle tracking for the WebView-bound bottom inset.
   /// While the keyboard animates, the WebView receives the predicted end
   /// value once (per-frame `setBottomPadding` pushes relayout the whole
@@ -479,14 +450,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// and the actual value is pushed as a correction — a no-op in JS when
   /// the prediction was right.
   bool _keyboardSettled = true;
-  bool _keyboardRising = false;
   Timer? _keyboardSettleTimer;
 
   @override
   void didUpdateWidget(covariant _ChatBody oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.keyboardHeight != widget.keyboardHeight) {
-      _keyboardRising = widget.keyboardHeight > oldWidget.keyboardHeight;
       _keyboardSettled = false;
       _keyboardSettleTimer?.cancel();
       _keyboardSettleTimer = Timer(const Duration(milliseconds: 100), () {
@@ -500,6 +469,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Let the drawer controller dismiss the WebView-owned keyboard (there is no
+    // Flutter FocusNode to unfocus) — e.g. on the back gesture. The closure
+    // resolves the WebView state lazily, so it is safe to set before build.
+    widget.drawerCtrl.onRequestBlurInput =
+        () => _webViewStateKey.currentState?.blurInput();
     // Re-measure when the input bar swaps tracked elements (e.g. entering
     // search/selection mode) without this widget rebuilding.
     _blurRegistry.addListener(_scheduleBlurMeasure);
@@ -533,44 +507,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
 
   void _checkHeight() {
     if (!mounted) return;
-    var changed = false;
-    var nextInputBarHeight = _inputBarHeight;
-    var nextMemoryCardHeight = _memoryCardHeight;
-
-    final inputCtx = _inputBarKey.currentContext;
-    if (inputCtx != null) {
-      final size = inputCtx.size;
-      if (size != null && size.height != _inputBarHeight && size.height > 0) {
-        nextInputBarHeight = size.height;
-        changed = true;
-      }
-    }
-
-    // The memory card is only mounted while visible. When it is absent its
-    // reserved top height collapses back to 0 so the list reclaims the space.
+    // The input bar now lives in the WebView (it owns its own height); only the
+    // floating memory card is still measured on the Flutter side so the message
+    // list reserves top room for it.
     final memoryHeight = _memoryCardKey.currentContext?.size?.height ?? 0.0;
     if (memoryHeight != _memoryCardHeight) {
-      nextMemoryCardHeight = memoryHeight;
-      changed = true;
+      setState(() => _memoryCardHeight = memoryHeight);
     }
-
-    if (changed) {
-      setState(() {
-        _inputBarHeight = nextInputBarHeight;
-        _memoryCardHeight = nextMemoryCardHeight;
-      });
-    }
-  }
-
-  Future<void> _scrollToBottom() async {
-    final webViewState = _webViewStateKey.currentState;
-    if (webViewState != null) {
-      // Mirror Vue: the scroll-to-bottom button animates smoothly (the JS side
-      // falls back to an instant jump when more than 3000px away).
-      await webViewState.scrollToBottom(smooth: true);
-    }
-    if (!mounted) return;
-    setState(() => _showScrollToBottom = false);
   }
 
   void _showImageViewer(BuildContext context, String imageUrl) {
@@ -827,9 +770,94 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     return false;
   }
 
+  /// Wires the in-WebView input bar's gestures to the same chatProvider actions
+  /// and drawer controls the native ChatInputBar used to drive (Phase 2).
+  InputCallbacks _buildInputCallbacks() {
+    final notifier = ref.read(chatProvider(widget.charId).notifier);
+    return InputCallbacks(
+      onInputSend: (text, guidance, imageDataUrl) {
+        // Prerequisites (persona / API): on failure keep the composed text —
+        // the WebView is NOT told to clear, so nothing is lost.
+        if (!_ensurePersonaSelected() || !_ensureApiSelected()) return;
+        final g = (guidance != null && guidance.isNotEmpty) ? guidance : null;
+        if (imageDataUrl != null && imageDataUrl.isNotEmpty) {
+          notifier.sendMessage(
+            text,
+            guidanceText: g,
+            imageDataUrl: imageDataUrl,
+          );
+        } else {
+          if (text.trim().isEmpty) return;
+          notifier.sendMessage(text, guidanceText: g);
+        }
+        _webViewStateKey.currentState?.clearInput();
+      },
+      onInputStop: () {
+        if (widget.state.isGeneratingImage &&
+            !widget.state.isGenerating &&
+            !widget.state.isPostGenRunning) {
+          notifier.abortImageGeneration();
+        } else {
+          notifier.abortGeneration();
+        }
+      },
+      onInputImpersonate: () => notifier.regenerateLastAssistant(),
+      onInputDraftChanged: (text) => notifier.saveDraft(text),
+      onInputFocus: (focused) {
+        // The WebView owns the compose field's focus now; the controller closes
+        // the native drawer when the user returns to typing (the focus side of
+        // the keyboard↔drawer swap).
+        widget.drawerCtrl.setInputFocused(focused);
+      },
+      onKeyboardInset: (height, open) {
+        // WebView (visualViewport) keyboard geometry: persists the height and
+        // drives the swap / collision handling.
+        widget.drawerCtrl.handleWebViewKeyboard(height, open);
+      },
+      onFullScreenEditor: (text) async {
+        await FullscreenEditorScreen.show(
+          context,
+          title: 'chat_message_title'.tr(),
+          initialValue: text,
+          hintText: 'chat_placeholder'.tr(),
+          onChanged: (value) {
+            _webViewStateKey.currentState?.applyDraft(value);
+            notifier.saveDraft(value);
+          },
+        );
+      },
+      onMagicDrawer: () => widget.drawerCtrl.toggleDrawer(),
+      onQuickReplies: () =>
+          widget.drawerCtrl.toggleDrawer(panel: DrawerPanel.quickReplies),
+      onSearchNext: widget.search.onSearchNext,
+      onSearchPrev: widget.search.onSearchPrev,
+      onCancelSelection: () =>
+          setState(() => _selectionCtrl.clearSelection()),
+      onHideSelected: () async {
+        await _selectionCtrl.hideSelected(
+          ref,
+          widget.charId,
+          widget.state.messages,
+        );
+        if (mounted) setState(() {});
+      },
+      onDeleteSelected: () async {
+        await _selectionCtrl.deleteSelected(
+          ref,
+          widget.charId,
+          widget.state.messages,
+        );
+        if (mounted) setState(() {});
+      },
+      onScrollToBottomTap: () =>
+          _webViewStateKey.currentState?.scrollToBottom(smooth: true),
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.drawerCtrl.onRequestBlurInput = null;
     _keyboardSettleTimer?.cancel();
     _blurRegistry.dispose();
     super.dispose();
@@ -858,53 +886,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     if (!_keyboardSettled || widget.drawerCtrl.isDrawerAnimating) return;
     final box = _webViewStateKey.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return;
-    final origin = box.localToGlobal(Offset.zero);
-    final regions = <ChatOverlayBlurRegion>[
-      // The floating header is not a descendant (it lives in GlazeScaffold's
-      // stack), but its geometry is fixed: SafeArea + fromLTRB(16, 10, 16, 0)
-      // + 56px GlazeAppBar with radius 20 (glaze_scaffold.dart).
-      if (!widget.isHeaderHidden)
-        ChatOverlayBlurRegion(
-          id: 'header',
-          rect: Rect.fromLTWH(
-            16 - origin.dx,
-            _blurSafeTop + 10 - origin.dy,
-            box.size.width - 32,
-            56,
-          ),
-          radius: 20,
-        ),
-      ..._blurRegistry.measure(box),
-    ];
+    // The header no longer needs a mirrored blur region: it lives inside the
+    // WebView now and draws its own backdrop-filter strip (see #chat-header in
+    // styles.css). Only the input-bar overlays are still measured here.
+    final regions = <ChatOverlayBlurRegion>[..._blurRegistry.measure(box)];
     regions.sort((a, b) => a.id.compareTo(b.id));
     if (!listEquals(regions, _blurRegions)) {
       setState(() => _blurRegions = regions);
     }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
-    // The native WebView freezes its JS while the app is backgrounded, so a
-    // bottom-inset change pushed during the background transition (e.g. the
-    // keyboard hiding) can be dropped. If the app then resumes with the
-    // keyboard re-opening at the same height, Dart's bottomInset is unchanged
-    // so the per-frame diff in the sync dispatcher never re-pushes it — leaving
-    // stale, oversized reserved space under the input bar. Re-assert the
-    // current inset once now and again after the keyboard settles; the JS side
-    // no-ops when the padding already matches.
-    void resync() {
-      if (!mounted) return;
-      unawaited(
-        _webViewStateKey.currentState?.applyBottomInset(
-              _lastMessageListBottom,
-            ) ??
-            Future<void>.value(),
-      );
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => resync());
-    Future<void>.delayed(const Duration(milliseconds: 400), resync);
   }
 
   @override
@@ -917,8 +906,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     );
     ref.listen<String?>(editingMessageIdProvider(widget.charId), (prev, next) {
       if (next != null) {
-        if (widget.drawerCtrl.inputFocus.hasFocus) {
-          widget.drawerCtrl.inputFocus.unfocus();
+        if (widget.drawerCtrl.inputFocused) {
+          _webViewStateKey.currentState?.blurInput();
         }
         if (_selectionCtrl.isSelectionMode ||
             _selectionCtrl.selectedMessageIds.isNotEmpty) {
@@ -937,8 +926,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     );
     final batterySaver = appSettings?.batterySaver ?? false;
     final safeBottom = MediaQuery.paddingOf(context).bottom;
-    final messageListTop = MediaQuery.paddingOf(context).top + 10 + 56;
-    _blurSafeTop = MediaQuery.paddingOf(context).top;
+    final safeTop = MediaQuery.paddingOf(context).top;
+    final messageListTop = safeTop + 10 + 56;
 
     final bgBlur = preset.bgBlur > 0 ? preset.bgBlur : 0.0;
     final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
@@ -1011,12 +1000,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         final progress = widget.drawerCtrl.drawerAnim.value;
         final bool drawerActive =
             widget.drawerCtrl.drawerOpen || widget.drawerCtrl.switchingToDrawer;
-        final targetDrawerInset = drawerActive
-            ? widget.drawerCtrl.activeDrawerHeight * progress
-            : 0.0;
-        final panelHeight = math.max(targetDrawerInset, widget.keyboardHeight);
-        final factor = math.min(1.0, panelHeight / math.max(1.0, safeBottom));
-        final effectiveBottomInset = panelHeight + (safeBottom * (1 - factor));
         // The memory activity card floats under the header (top of the chat).
         // Hidden entirely when memory books are disabled globally.
         final showMemoryCard =
@@ -1033,48 +1016,19 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         final memoryTopReserve = showMemoryCard ? _memoryCardHeight + 8 : 0.0;
         final effectiveTopInset = messageListTop + memoryTopReserve;
 
-        final messageListBottom = _inputBarHeight + effectiveBottomInset;
-
-        // WebView-bound inset: the *end value* of the current transition,
-        // not the per-frame animated one. Pushing the animated value would
-        // relayout the whole in-WebView message list on every keyboard/
-        // drawer frame (see setBottomPadding in chat_bridge_controller.js).
-        // The Flutter overlays below keep following the animation; only the
-        // WebView padding jumps once, then gets corrected on settle (see
-        // didUpdateWidget). While the keyboard rises, the end value is
-        // predicted from the persisted last keyboard height; while it
-        // lowers, the end value is 0 (or the drawer height when switching).
-        final drawerTargetInset = drawerActive
-            ? widget.drawerCtrl.activeDrawerHeight
-            : 0.0;
-        final keyboardTargetInset = _keyboardSettled
-            ? widget.keyboardHeight
-            : (_keyboardRising
-                  ? math.max(
-                      widget.keyboardHeight,
-                      widget.drawerCtrl.lastKeyboardHeight,
-                    )
-                  : 0.0);
-        final targetPanelHeight = math.max(
-          drawerTargetInset,
-          keyboardTargetInset,
-        );
-        final targetFactor = math.min(
-          1.0,
-          targetPanelHeight / math.max(1.0, safeBottom),
-        );
-        final webViewBottomInset =
-            _inputBarHeight +
-            targetPanelHeight +
-            (safeBottom * (1 - targetFactor));
-        _lastMessageListBottom = webViewBottomInset;
-        final showScrollBtn = _showScrollToBottom && !widget.search.showSearch;
-
-        final animatedBottomPanelInset =
-            panelHeight + (safeBottom * (1 - factor));
         final renderDrawer =
             !isDesktopLayout(context) &&
             (widget.drawerCtrl.drawerOpen || progress > 0.001);
+
+        // The WebView owns its own bottom padding: it measures the in-WebView
+        // input bar and lifts it above the *keyboard* itself (visualViewport).
+        // Flutter therefore pushes only the native drawer height — never the
+        // keyboard inset, which would double-count with the WebView's own lift.
+        // On desktop the drawer isn't a bottom panel (`renderDrawer` false), so
+        // it contributes no inset there.
+        final panelInset = (renderDrawer && drawerActive)
+            ? widget.drawerCtrl.activeDrawerHeight
+            : 0.0;
 
         // The overlays move with every rebuild here (keyboard, drawer
         // animation, input growth), so re-measure their rects post-frame.
@@ -1085,16 +1039,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
             Positioned.fill(
               child: NotificationListener<UserScrollNotification>(
                 onNotification: (notification) {
-                  // Do NOT drive the header from Flutter scroll notifications.
-                  // The chat list is an InAppWebView platform view whose internal
-                  // scroll never bubbles here — the only notifications this can
-                  // catch are from stray Flutter scrollables inside the subtree
-                  // (panels, overlays, dropdowns). Forwarding those flipped
-                  // `_isHeaderHidden` out of band while JS still believed the
-                  // opposite, and since JS only emits header events on
-                  // transitions (edge-triggered) it never corrected the desync,
-                  // leaving the header frozen. JS `onHeaderScroll` is the single
-                  // source of truth (see ScrollCallbacks.onHeaderScroll below).
+                  // The header lives inside the WebView and hides itself on
+                  // scroll; Flutter no longer reacts to scroll notifications
+                  // here. The chat list is an InAppWebView platform view whose
+                  // internal scroll never bubbles up anyway — the only
+                  // notifications this could catch are from stray Flutter
+                  // scrollables inside the subtree (panels, overlays), which we
+                  // deliberately ignore.
                   return false;
                 },
                 child: RepaintBoundary(
@@ -1106,8 +1057,45 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                     isGeneratingImage: widget.state.isGeneratingImage,
                     isPostGenRunning: widget.state.isPostGenRunning,
                     regenTargetId: widget.state.regenTargetId,
-                    bottomInset: webViewBottomInset,
                     topInset: effectiveTopInset,
+                    panelInset: panelInset,
+                    sessionName: widget.sessionName,
+                    safeTop: safeTop,
+                    isSearchActive: widget.search.showSearch,
+                    initialDraft: widget.state.session?.draft ?? '',
+                    inputState: ChatInputUiState(
+                      safeBottom: safeBottom,
+                      placeholder: 'chat_placeholder'.tr(),
+                      guidancePlaceholder: 'guidance_placeholder'.tr(),
+                      isGenerating:
+                          widget.state.isGenerating ||
+                          widget.state.isGeneratingImage ||
+                          widget.state.isPostGenRunning,
+                      isEditing: isEditingMessage,
+                      isDrawerOpen:
+                          (widget.drawerCtrl.drawerOpen ||
+                              widget.drawerCtrl.switchingToDrawer) &&
+                          widget.drawerCtrl.activePanel == DrawerPanel.magic,
+                      isQuickRepliesOpen:
+                          (widget.drawerCtrl.drawerOpen ||
+                              widget.drawerCtrl.switchingToDrawer) &&
+                          widget.drawerCtrl.activePanel ==
+                              DrawerPanel.quickReplies,
+                      isSelectionMode: _selectionCtrl.isSelectionMode,
+                      showSearch: widget.search.showSearch,
+                      searchLabel: widget.search.matchCount > 0
+                          ? '${widget.search.searchCurrentIndex + 1} of ${widget.search.matchCount} matches'
+                          : 'search_no_results'.tr(),
+                      selectionLabel:
+                          '${_selectionCtrl.selectedMessageIds.length} ${'selected_count'.tr()}',
+                      selectedCount: _selectionCtrl.selectedMessageIds.length,
+                      allSelectedHidden: _selectionCtrl.allSelectedHidden(
+                        widget.state.messages,
+                      ),
+                      enterToSend: widget.enterToSend,
+                      virtualKeyboardSend: widget.virtualKeyboardSend,
+                    ),
+                    inputActions: _buildInputCallbacks(),
                     blurRegions: (batterySaver || preset.elementBlur <= 0)
                         ? const <ChatOverlayBlurRegion>[]
                         : _blurRegions,
@@ -1317,8 +1305,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                           editingMessageIdProvider(widget.charId),
                         );
                         if (activeEditingId == id &&
-                            widget.drawerCtrl.inputFocus.hasFocus) {
-                          widget.drawerCtrl.inputFocus.unfocus();
+                            widget.drawerCtrl.inputFocused) {
+                          _webViewStateKey.currentState?.blurInput();
                         }
                       },
                     ),
@@ -1358,20 +1346,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       onImgDownload: _downloadImage,
                       onImgOptions: _showImageOptionsSheet,
                     ),
-                    scrollActions: ScrollCallbacks(
-                      onHeaderScroll: (hidden) {
-                        if (widget.onScrollDirection == null) return;
-                        widget.onScrollDirection!(
-                          hidden
-                              ? ScrollDirection.reverse
-                              : ScrollDirection.forward,
-                        );
-                      },
-                      onScrollToBottomVisibility: (visible) {
-                        if (!mounted || _showScrollToBottom == visible) return;
-                        setState(() => _showScrollToBottom = visible);
-                      },
-                    ),
+                    // Hide-on-scroll (header) and the scroll-to-bottom button
+                    // are both owned by the WebView now, so Flutter wires no
+                    // scroll callbacks.
                     miscActions: MiscCallbacks(
                       onStop: () {
                         final notifier = ref.read(
@@ -1400,6 +1377,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       onImageClick: (imageUrl) {
                         _showImageViewer(context, imageUrl);
                       },
+                      onHeaderBack: widget.onHeaderBack,
+                      onHeaderSearch: () => widget.search.openSearch(),
                     ),
                     isSelectionMode: _selectionCtrl.isSelectionMode,
                     searchQuery: widget.search.searchQuery,
@@ -1426,70 +1405,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                 ),
               ),
             ),
-            // Bottom gradient for fade effect under the input area
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: messageListBottom + 40,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [Colors.black54, Colors.transparent],
-                      stops: [0.0, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 16,
-              bottom: messageListBottom + 16,
-              child: IgnorePointer(
-                // Mirror Vue ChatInput (`v-if="!isSearchMode"`): the
-                // scroll-to-bottom button is suppressed while searching.
-                ignoring: !showScrollBtn,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  opacity: showScrollBtn ? 1 : 0,
-                  child: AnimatedSlide(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutCubic,
-                    offset: showScrollBtn ? Offset.zero : const Offset(0, 0.2),
-                    child: GestureDetector(
-                      onTap: _scrollToBottom,
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: context.cs.surface.withValues(alpha: 0.9),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.08),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.22),
-                              blurRadius: 18,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: context.cs.primary,
-                          size: 26,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            // The bottom fade gradient and scroll-to-bottom button now live
+            // inside the WebView alongside the input bar (Phase 2).
             // Memory activity card: floats under the header, over the chat.
             if (showMemoryCard)
               Positioned(
@@ -1576,192 +1493,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                   _scrollToTargetMessage(id),
                             ),
                     ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: animatedBottomPanelInset,
-                    child: ChatBlurRegionScope(
-                      registry: _blurRegistry,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          NotificationListener<SizeChangedLayoutNotification>(
-                            onNotification: (n) {
-                              WidgetsBinding.instance.addPostFrameCallback(
-                                (_) => _checkHeight(),
-                              );
-                              return true;
-                            },
-                            child: SizeChangedLayoutNotifier(
-                              child: Container(
-                                key: _inputBarKey,
-                                child: Builder(
-                                  builder: (context) {
-                                    final allSelectedHidden = _selectionCtrl
-                                        .allSelectedHidden(
-                                          widget.state.messages,
-                                        );
-                                    return ChatInputBar(
-                                      focusNode: widget.drawerCtrl.inputFocus,
-                                      initialDraft:
-                                          widget.state.session?.draft ?? '',
-                                      batterySaver:
-                                          appSettings?.batterySaver ?? false,
-                                      onDraftChanged: (text) {
-                                        ref
-                                            .read(
-                                              chatProvider(
-                                                widget.charId,
-                                              ).notifier,
-                                            )
-                                            .saveDraft(text);
-                                      },
-                                      showSearchControls:
-                                          widget.search.showSearch,
-                                      searchQuery: widget.search.searchQuery,
-                                      searchMatchCount:
-                                          widget.search.matchCount,
-                                      searchCurrentIndex:
-                                          widget.search.searchCurrentIndex,
-                                      onSearchNext: widget.search.onSearchNext,
-                                      onSearchPrev: widget.search.onSearchPrev,
-                                      isEditingMessage: isEditingMessage,
-                                      isSelectionMode:
-                                          _selectionCtrl.isSelectionMode,
-                                      selectedCount: _selectionCtrl
-                                          .selectedMessageIds
-                                          .length,
-                                      allSelectedHidden: allSelectedHidden,
-                                      onCancelSelection: () {
-                                        setState(() {
-                                          _selectionCtrl.clearSelection();
-                                        });
-                                      },
-                                      onHideSelected: () async {
-                                        await _selectionCtrl.hideSelected(
-                                          ref,
-                                          widget.charId,
-                                          widget.state.messages,
-                                        );
-                                        if (mounted) setState(() {});
-                                      },
-                                      onDeleteSelected: () async {
-                                        await _selectionCtrl.deleteSelected(
-                                          ref,
-                                          widget.charId,
-                                          widget.state.messages,
-                                        );
-                                        if (mounted) setState(() {});
-                                      },
-                                      isDrawerOpen:
-                                          (widget.drawerCtrl.drawerOpen ||
-                                              widget
-                                                  .drawerCtrl
-                                                  .switchingToDrawer) &&
-                                          widget.drawerCtrl.activePanel ==
-                                              DrawerPanel.magic,
-                                      isQuickRepliesOpen:
-                                          (widget.drawerCtrl.drawerOpen ||
-                                              widget
-                                                  .drawerCtrl
-                                                  .switchingToDrawer) &&
-                                          widget.drawerCtrl.activePanel ==
-                                              DrawerPanel.quickReplies,
-                                      virtualKeyboardSend:
-                                          widget.virtualKeyboardSend,
-                                      enterToSend: widget.enterToSend,
-                                      canSend: () =>
-                                          _ensurePersonaSelected() &&
-                                          _ensureApiSelected(),
-                                      onSend: (text) {
-                                        if (text.trim().isEmpty) return;
-                                        ref
-                                            .read(
-                                              chatProvider(
-                                                widget.charId,
-                                              ).notifier,
-                                            )
-                                            .sendMessage(text);
-                                      },
-                                      onSendWithGuidance: (text, guidance) {
-                                        if (text.trim().isEmpty) return;
-                                        ref
-                                            .read(
-                                              chatProvider(
-                                                widget.charId,
-                                              ).notifier,
-                                            )
-                                            .sendMessage(
-                                              text,
-                                              guidanceText: guidance,
-                                            );
-                                      },
-                                      onSendWithImage:
-                                          (text, guidanceText, imageDataUrl) {
-                                            ref
-                                                .read(
-                                                  chatProvider(
-                                                    widget.charId,
-                                                  ).notifier,
-                                                )
-                                                .sendMessage(
-                                                  text,
-                                                  guidanceText: guidanceText,
-                                                  imageDataUrl: imageDataUrl,
-                                                );
-                                          },
-                                      isGenerating: widget.state.isGenerating,
-                                      isGeneratingImage:
-                                          widget.state.isGeneratingImage,
-                                      isPostGenRunning:
-                                          widget.state.isPostGenRunning,
-                                      onStop:
-                                          (widget.state.isGenerating ||
-                                              widget.state.isGeneratingImage ||
-                                              widget.state.isPostGenRunning)
-                                          ? () {
-                                              final notifier = ref.read(
-                                                chatProvider(
-                                                  widget.charId,
-                                                ).notifier,
-                                              );
-                                              if (widget
-                                                      .state
-                                                      .isGeneratingImage &&
-                                                  !widget.state.isGenerating &&
-                                                  !widget
-                                                      .state
-                                                      .isPostGenRunning) {
-                                                notifier.abortImageGeneration();
-                                              } else {
-                                                notifier.abortGeneration();
-                                              }
-                                            }
-                                          : null,
-                                      onMagicDrawer: () => widget.drawerCtrl
-                                          .toggleDrawer(context),
-                                      onQuickReplies: () =>
-                                          widget.drawerCtrl.toggleDrawer(
-                                            context,
-                                            panel: DrawerPanel.quickReplies,
-                                          ),
-                                      onImpersonate: () => ref
-                                          .read(
-                                            chatProvider(
-                                              widget.charId,
-                                            ).notifier,
-                                          )
-                                          .regenerateLastAssistant(),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),

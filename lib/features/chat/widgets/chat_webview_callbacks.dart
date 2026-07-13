@@ -26,6 +26,7 @@ class ChatWebViewCallbacks {
     required this.imageGenActions,
     required this.scrollActions,
     required this.miscActions,
+    this.inputActions = const InputCallbacks(),
   });
 
   final WidgetRef ref;
@@ -35,6 +36,7 @@ class ChatWebViewCallbacks {
   final ImageGenCallbacks imageGenActions;
   final ScrollCallbacks scrollActions;
   final MiscCallbacks miscActions;
+  final InputCallbacks inputActions;
 
   /// Resolve a message id to its index in the current chat messages
   /// list, then forward to `messageActions.onMessageContext`.
@@ -143,6 +145,14 @@ class ChatWebViewCallbacks {
     miscActions.onStop?.call();
   }
 
+  void onHeaderBack() {
+    miscActions.onHeaderBack?.call();
+  }
+
+  void onHeaderSearch() {
+    miscActions.onHeaderSearch?.call();
+  }
+
   void onLinkClick(String url) {
     launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
@@ -150,4 +160,27 @@ class ChatWebViewCallbacks {
   void onLoadMore() {
     ref.read(chatProvider(charId).notifier).loadOlderMessages();
   }
+
+  // ── In-WebView input bar (Phase 2) ──────────────────────────────────────
+  void onInputSend(String text, String? guidance, String? imageDataUrl) {
+    inputActions.onInputSend?.call(text, guidance, imageDataUrl);
+  }
+
+  void onInputStop() => inputActions.onInputStop?.call();
+  void onInputImpersonate() => inputActions.onInputImpersonate?.call();
+  void onInputDraftChanged(String text) =>
+      inputActions.onInputDraftChanged?.call(text);
+  void onInputFocus(bool focused) => inputActions.onInputFocus?.call(focused);
+  void onKeyboardInset(double height, bool open) =>
+      inputActions.onKeyboardInset?.call(height, open);
+  void onFullScreenEditor(String text) =>
+      inputActions.onFullScreenEditor?.call(text);
+  void onMagicDrawer() => inputActions.onMagicDrawer?.call();
+  void onQuickReplies() => inputActions.onQuickReplies?.call();
+  void onSearchNext() => inputActions.onSearchNext?.call();
+  void onSearchPrev() => inputActions.onSearchPrev?.call();
+  void onCancelSelection() => inputActions.onCancelSelection?.call();
+  void onHideSelected() => inputActions.onHideSelected?.call();
+  void onDeleteSelected() => inputActions.onDeleteSelected?.call();
+  void onScrollToBottomTap() => inputActions.onScrollToBottomTap?.call();
 }

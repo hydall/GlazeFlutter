@@ -90,16 +90,63 @@ class ScrollCallbacks {
   const ScrollCallbacks({this.onHeaderScroll, this.onScrollToBottomVisibility});
 }
 
+/// Callbacks for the in-WebView input bar (Phase 2). The compose field +
+/// buttons live in the WebView; these forward gestures to the chat provider
+/// and drawer controls the native ChatInputBar used to drive.
+class InputCallbacks {
+  final void Function(String text, String? guidance, String? imageDataUrl)?
+  onInputSend;
+  final ImgVoidCallback? onInputStop;
+  final ImgVoidCallback? onInputImpersonate;
+  final void Function(String text)? onInputDraftChanged;
+  final void Function(bool focused)? onInputFocus;
+  final void Function(double height, bool open)? onKeyboardInset;
+  final void Function(String text)? onFullScreenEditor;
+  final ImgVoidCallback? onMagicDrawer;
+  final ImgVoidCallback? onQuickReplies;
+  final ImgVoidCallback? onSearchNext;
+  final ImgVoidCallback? onSearchPrev;
+  final ImgVoidCallback? onCancelSelection;
+  final ImgVoidCallback? onHideSelected;
+  final ImgVoidCallback? onDeleteSelected;
+  final ImgVoidCallback? onScrollToBottomTap;
+
+  const InputCallbacks({
+    this.onInputSend,
+    this.onInputStop,
+    this.onInputImpersonate,
+    this.onInputDraftChanged,
+    this.onInputFocus,
+    this.onKeyboardInset,
+    this.onFullScreenEditor,
+    this.onMagicDrawer,
+    this.onQuickReplies,
+    this.onSearchNext,
+    this.onSearchPrev,
+    this.onCancelSelection,
+    this.onHideSelected,
+    this.onDeleteSelected,
+    this.onScrollToBottomTap,
+  });
+}
+
 class MiscCallbacks {
   final ImgVoidCallback? onStop;
   final SelectionActionCallback? onSelectionAction;
   final ImageClickCallback? onImageClick;
   final SelectionChangeCallback? onSelectionChange;
 
+  /// In-WebView header buttons (the header now lives inside the chat WebView):
+  /// back navigates up, search enters the native search bar.
+  final ImgVoidCallback? onHeaderBack;
+  final ImgVoidCallback? onHeaderSearch;
+
   const MiscCallbacks({
     this.onStop,
     this.onSelectionAction,
     this.onImageClick,
     this.onSelectionChange,
+    this.onHeaderBack,
+    this.onHeaderSearch,
   });
 }

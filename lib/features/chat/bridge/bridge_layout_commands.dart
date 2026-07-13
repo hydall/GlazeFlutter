@@ -17,9 +17,9 @@ class LayoutBridgeCommands {
     );
   }
 
-  Future<void> setBottomPadding(double px) {
+  Future<void> setBottomPadding(double px, {bool animate = false}) {
     return _host.evalJs(
-      'window.bridge?.setBottomPadding(${px.toStringAsFixed(1)})',
+      'window.bridge?.setBottomPadding(${px.toStringAsFixed(1)}, $animate)',
     );
   }
 
@@ -27,6 +27,34 @@ class LayoutBridgeCommands {
     return _host.evalJs(
       'window.bridge?.setTopPadding(${px.toStringAsFixed(1)})',
     );
+  }
+
+  /// Pushes the in-WebView header content (avatar + character name + session
+  /// name) and the top safe-area inset. The avatar is resolved to a servable
+  /// URL via the same [ChatBridgeController.setAvatarUrl] path the message
+  /// avatars use, so a `file://` path becomes a scheme the WebView can load.
+  Future<void> setHeader({
+    String? charName,
+    String? sessionName,
+    String? charColor,
+    String? charAvatarPath,
+    double safeTop = 0,
+  }) {
+    _host.setAvatarUrl(charAvatarPath, isChar: true);
+    final payload = jsonEncode({
+      'charName': charName,
+      'sessionName': sessionName,
+      'charColor': charColor,
+      'charAvatarUrl': _host.charAvatarUrl,
+      'safeTop': safeTop,
+    });
+    return _host.evalJs('window.bridge?.setHeader($payload)');
+  }
+
+  /// Hides the in-WebView header while the native search bar is shown (the
+  /// search text field stays native to keep the platform soft keyboard).
+  Future<void> setSearchMode(bool on) {
+    return _host.evalJs('window.bridge?.setSearchMode($on)');
   }
 
   /// Syncs the rects of Flutter glass overlays (header, input pill, ...) so

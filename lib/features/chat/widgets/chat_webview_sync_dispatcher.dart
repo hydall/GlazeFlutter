@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 import '../../../core/models/chat_message.dart';
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_overlay_blur_region.dart';
+import 'chat_input_ui_state.dart';
 import 'chat_message_sync.dart'
     show chatMessageListsIdentical, lastUserMessageId;
 
@@ -100,6 +101,10 @@ class ChatWebViewSyncDispatcher {
     _maybeApplyMessageSettings(bridge: bridge, old: old, current: current);
     _maybeApplySearch(bridge: bridge, old: old, current: current);
     _maybeApplyInsets(bridge: bridge, old: old, current: current);
+    _maybeApplyHeader(bridge: bridge, old: old, current: current);
+    if (current.inputState != old.inputState) {
+      applyInputStateToBridge(bridge, current.inputState);
+    }
 
     _maybeApplyGeneratingState(bridge: bridge, old: old, current: current);
 
@@ -283,13 +288,44 @@ class ChatWebViewSyncDispatcher {
     }
   }
 
+  /// Pushes the in-WebView header content when the character identity, the
+  /// session name or the safe-area inset changes, and toggles the header's
+  /// search-mode visibility. The header lives inside the WebView now; these
+  /// mirror what the native ChatHeader used to derive from the same data.
+  void _maybeApplyHeader({
+    required ChatBridgeController bridge,
+    required ChatWebViewWidgetFields old,
+    required ChatWebViewWidgetFields current,
+  }) {
+    if (current.charName != old.charName ||
+        current.charColor != old.charColor ||
+        current.charAvatarPath != old.charAvatarPath ||
+        current.sessionName != old.sessionName ||
+        current.safeTop != old.safeTop) {
+      bridge.setHeader(
+        charName: current.charName,
+        sessionName: current.sessionName,
+        charColor: current.charColor,
+        charAvatarPath: current.charAvatarPath,
+        safeTop: current.safeTop,
+      );
+    }
+    if (current.isSearchActive != old.isSearchActive) {
+      bridge.setSearchMode(current.isSearchActive);
+    }
+  }
+
   void _maybeApplyInsets({
     required ChatBridgeController bridge,
     required ChatWebViewWidgetFields old,
     required ChatWebViewWidgetFields current,
   }) {
-    if (current.bottomInset != old.bottomInset) {
-      bridge.setBottomPadding(current.bottomInset);
+    if (current.panelInset != old.panelInset) {
+      // The WebView owns its own bottom padding now (it measures the in-WebView
+      // input bar and lifts it above the keyboard/drawer itself — see
+      // chat_input_controller.js). Flutter only reports the native drawer /
+      // keyboard panel height so the input bar clears it.
+      bridge.setPanelInset(current.panelInset);
     }
     if (current.topInset != old.topInset) {
       bridge.setTopPadding(current.topInset);
@@ -423,6 +459,11 @@ class ChatWebViewWidgetFields {
     required this.bgNoiseIntensity,
     required this.bottomInset,
     required this.topInset,
+    this.panelInset = 0,
+    this.sessionName,
+    this.safeTop = 0,
+    this.isSearchActive = false,
+    this.inputState = const ChatInputUiState(),
     this.blurRegions = const [],
     required this.searchQuery,
     required this.searchCurrentIndex,
@@ -475,6 +516,11 @@ class ChatWebViewWidgetFields {
   final double bgNoiseIntensity;
   final double bottomInset;
   final double topInset;
+  final double panelInset;
+  final String? sessionName;
+  final double safeTop;
+  final bool isSearchActive;
+  final ChatInputUiState inputState;
 
   /// Rects of Flutter glass overlays (header, input pill, buttons) mirrored
   /// into the WebView as backdrop-blur strips. WebView-local coordinates.

@@ -23,6 +23,7 @@ import 'chat_webview_ext_block_callbacks.dart';
 import 'chat_webview_initializer.dart';
 import 'chat_webview_panel_refresher.dart';
 import 'chat_webview_surface.dart';
+import 'chat_input_ui_state.dart';
 import 'chat_webview_sync_dispatcher.dart';
 import 'webview_callbacks.dart';
 
@@ -54,6 +55,24 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final bool isPostGenRunning;
   final double bottomInset;
   final double topInset;
+
+  /// Height of the native drawer / keyboard panel (end value). Pushed to the
+  /// WebView (`setPanelInset`) so its own input bar lifts above the native
+  /// magic / quick-replies drawer. The WebView owns the rest of the bottom
+  /// padding now (input bar height + keyboard overlap).
+  final double panelInset;
+
+  /// Session display name shown as the header subtitle (e.g. a custom name
+  /// or "Session #N"). The header now lives inside the WebView.
+  final String? sessionName;
+
+  /// Top safe-area inset (status bar / notch) in logical pixels, pushed to the
+  /// WebView so the in-WebView header clears the status bar.
+  final double safeTop;
+
+  /// True while the native search bar is shown — hides the in-WebView header
+  /// (the search text input stays native to keep the platform keyboard).
+  final bool isSearchActive;
 
   /// Rects of the Flutter glass overlays (header, input pill, buttons) in
   /// WebView-local coordinates. Synced into the WebView (blurs the messages
@@ -104,6 +123,15 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final ImageGenCallbacks imageGenActions;
   final ScrollCallbacks scrollActions;
   final MiscCallbacks miscActions;
+  final InputCallbacks inputActions;
+
+  /// Reactive state for the in-WebView input bar (Phase 2).
+  final ChatInputUiState inputState;
+
+  /// Draft text pushed to the WebView on initial load only. Later draft changes
+  /// flow WebView→Flutter (debounced) and back only on session switch /
+  /// fullscreen-editor save via [ChatWebViewWidgetState.applyDraft].
+  final String initialDraft;
 
   const ChatWebViewWidget({
     super.key,
@@ -128,6 +156,10 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.isPostGenRunning = false,
     this.bottomInset = 0,
     this.topInset = 0,
+    this.panelInset = 0,
+    this.sessionName,
+    this.safeTop = 0,
+    this.isSearchActive = false,
     this.blurRegions = const [],
     this.searchQuery,
     this.searchCurrentIndex = 0,
@@ -168,6 +200,9 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.imageGenActions = const ImageGenCallbacks(),
     this.scrollActions = const ScrollCallbacks(),
     this.miscActions = const MiscCallbacks(),
+    this.inputActions = const InputCallbacks(),
+    this.inputState = const ChatInputUiState(),
+    this.initialDraft = '',
   });
 
   @override
@@ -369,6 +404,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           memoryDrafts: widget.memoryDrafts,
           bottomInset: widget.bottomInset,
           topInset: widget.topInset,
+          sessionName: widget.sessionName,
+          safeTop: widget.safeTop,
+          isSearchActive: widget.isSearchActive,
+          inputState: widget.inputState,
+          initialDraft: widget.initialDraft,
           blurRegions: widget.blurRegions,
           searchQuery: widget.searchQuery,
           searchCurrentIndex: widget.searchCurrentIndex,
@@ -466,6 +506,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       imageGenActions: widget.imageGenActions,
       scrollActions: widget.scrollActions,
       miscActions: widget.miscActions,
+      inputActions: widget.inputActions,
     );
     bridge.onMessageContext = callbacks.onMessageContext;
     bridge.onSwipe = callbacks.onSwipe;
@@ -492,6 +533,23 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     bridge.onImgOptions = callbacks.onImgOptions;
     bridge.onImgCancel = callbacks.onImgCancel;
     bridge.onStop = callbacks.onStop;
+    bridge.onHeaderBack = callbacks.onHeaderBack;
+    bridge.onHeaderSearch = callbacks.onHeaderSearch;
+    bridge.onInputSend = callbacks.onInputSend;
+    bridge.onInputStop = callbacks.onInputStop;
+    bridge.onInputImpersonate = callbacks.onInputImpersonate;
+    bridge.onInputDraftChanged = callbacks.onInputDraftChanged;
+    bridge.onInputFocus = callbacks.onInputFocus;
+    bridge.onKeyboardInset = callbacks.onKeyboardInset;
+    bridge.onFullScreenEditor = callbacks.onFullScreenEditor;
+    bridge.onMagicDrawer = callbacks.onMagicDrawer;
+    bridge.onQuickReplies = callbacks.onQuickReplies;
+    bridge.onSearchNext = callbacks.onSearchNext;
+    bridge.onSearchPrev = callbacks.onSearchPrev;
+    bridge.onCancelSelection = callbacks.onCancelSelection;
+    bridge.onHideSelected = callbacks.onHideSelected;
+    bridge.onDeleteSelected = callbacks.onDeleteSelected;
+    bridge.onScrollToBottomTap = callbacks.onScrollToBottomTap;
     bridge.onLinkClick = callbacks.onLinkClick;
     bridge.onLoadMore = callbacks.onLoadMore;
 
@@ -663,6 +721,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       bgNoiseIntensity: w.bgNoiseIntensity,
       bottomInset: w.bottomInset,
       topInset: w.topInset,
+      panelInset: w.panelInset,
+      sessionName: w.sessionName,
+      safeTop: w.safeTop,
+      isSearchActive: w.isSearchActive,
+      inputState: w.inputState,
       blurRegions: w.blurRegions,
       searchQuery: w.searchQuery,
       searchCurrentIndex: w.searchCurrentIndex,
@@ -900,6 +963,45 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     final b = _bridge;
     if (b == null) return Future.value();
     return b.scrollToMessage(id, highlight: highlight);
+  }
+
+  // ── In-WebView input bar imperative controls (Phase 2) ──────────────────
+  /// Native-drawer height pushed to the WebView so its input bar lifts above
+  /// the native magic / quick-replies panel.
+  Future<void> setPanelInset(double px) {
+    final b = _bridge;
+    if (b == null || !_ready) return Future.value();
+    return b.setPanelInset(px);
+  }
+
+  /// Clears the compose field / guidance / image after a validated send.
+  Future<void> clearInput() {
+    final b = _bridge;
+    if (b == null || !_ready) return Future.value();
+    return b.clearInput();
+  }
+
+  /// Dismisses the WebView input's keyboard (used before opening the native
+  /// drawer — the keyboard↔drawer swap).
+  Future<void> blurInput() {
+    final b = _bridge;
+    if (b == null || !_ready) return Future.value();
+    return b.blurInput();
+  }
+
+  Future<void> focusInput() {
+    final b = _bridge;
+    if (b == null || !_ready) return Future.value();
+    return b.focusInput();
+  }
+
+  /// Pushes [text] into the compose field. Only used on discrete events
+  /// (session switch, fullscreen-editor save) — never on every keystroke, to
+  /// avoid overwriting the field mid-typing (see [ChatInputUiState]).
+  Future<void> applyDraft(String text) {
+    final b = _bridge;
+    if (b == null || !_ready) return Future.value();
+    return b.setInputState(draft: text);
   }
 
   Future<void> setSearch(String q, int i) {

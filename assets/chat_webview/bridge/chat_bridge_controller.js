@@ -8,6 +8,7 @@ import { EditController } from './edit_controller.js';
 import { SwipeGestureHandler } from './swipe_gesture_handler.js';
 import { InteractionDispatch } from './interaction_dispatch.js';
 import { PanelHost } from './panel_host.js';
+import { InputController } from './chat_input_controller.js';
 import { ICON } from '../renderer/icon_library.js';
 
 export class Bridge {
@@ -38,6 +39,10 @@ export class Bridge {
       () => this.isGenerating,
       () => this.disableSwipeRegeneration,
     );
+    this._headerReady = false;
+    this._headerScrollHidden = false;
+    this._setupHeaderControls();
+    this._input = new InputController(this);
     this._setupScrollListener();
     this._setupInteractionListener();
     this._setupGlazeRequestRelay();
@@ -89,6 +94,88 @@ export class Bridge {
         avatar.textContent = (newName.charAt(0) || '?').toUpperCase();
       }
     });
+  }
+
+  /* ---------- Chat header (avatar + name + session) ---------- */
+
+  /// Populates the in-WebView header. Called from Flutter whenever the active
+  /// character, avatar, session name or safe-area inset changes. Once data has
+  /// arrived the header is revealed (the initial `hidden` class is dropped).
+  setHeader(opts) {
+    opts = opts || {};
+    const header = document.getElementById('chat-header');
+    if (!header) return;
+    if ('safeTop' in opts) {
+      document.documentElement.style.setProperty(
+        '--safe-top', (opts.safeTop || 0) + 'px');
+    }
+    const name = opts.charName || '';
+    const nameEl = document.getElementById('chat-header-name');
+    const sessEl = document.getElementById('chat-header-session');
+    const avEl = document.getElementById('chat-header-avatar');
+    if (nameEl) nameEl.textContent = name;
+    if (sessEl && 'sessionName' in opts) sessEl.textContent = opts.sessionName || '';
+    if (avEl) {
+      const url = 'charAvatarUrl' in opts ? opts.charAvatarUrl : this._charAvatarUrl;
+      if (url) {
+        avEl.style.backgroundImage = `url("${url}")`;
+        avEl.textContent = '';
+        avEl.style.color = '';
+        avEl.style.backgroundColor = '';
+      } else {
+        let color = opts.charColor || null;
+        if (color && color.charAt(0) !== '#') color = '#' + color;
+        avEl.style.backgroundImage = 'none';
+        avEl.textContent = name ? name.charAt(0).toUpperCase() : '?';
+        avEl.style.color = color || 'var(--vk-blue)';
+        // 8-digit hex alpha ≈ 0.2, mirroring the native avatar tint.
+        avEl.style.backgroundColor = color
+          ? color + '33'
+          : 'rgba(var(--vk-blue-rgb), 0.2)';
+      }
+    }
+    this._headerReady = true;
+    header.setAttribute('aria-hidden', 'false');
+    if (!this._headerScrollHidden) header.classList.remove('hidden');
+  }
+
+  /// Toggles the header out of view while the native search bar is shown
+  /// (the search text input stays native to keep the platform keyboard).
+  setSearchMode(on) {
+    const header = document.getElementById('chat-header');
+    if (header) header.classList.toggle('search-mode', !!on);
+  }
+
+  /* ---------- Chat input bar (delegates to InputController) ---------- */
+  setInputState(opts) { this._input?.setInputState(opts); }
+  setPanelInset(px) { this._input?.setPanelInset(px); }
+  clearInput() { this._input?.clearInput(); }
+  blurInput() { this._input?.blurInput(); }
+  focusInput() { this._input?.focusInput(); }
+
+  /// Fans a scroll-to-bottom visibility change out to both Flutter (legacy
+  /// listeners) and the in-WebView scroll button owned by the InputController.
+  _emitScrollBtnVisible(visible) {
+    this._sendToFlutter('onScrollToBottomVisibility', [visible]);
+    this._input?.setScrollToBottomVisible(visible);
+  }
+
+  _setupHeaderControls() {
+    const back = document.getElementById('chat-header-back');
+    const search = document.getElementById('chat-header-search');
+    if (back) {
+      back.addEventListener('click', () => this._sendToFlutter('onHeaderBack', []));
+    }
+    if (search) {
+      search.addEventListener('click', () => this._sendToFlutter('onHeaderSearch', []));
+    }
+  }
+
+  _applyHeaderScrollHidden(hidden) {
+    this._headerScrollHidden = hidden;
+    if (!this._headerReady) return;
+    const header = document.getElementById('chat-header');
+    if (header) header.classList.toggle('hidden', hidden);
   }
 
   setGenerating(value) {
@@ -200,7 +287,7 @@ export class Bridge {
       const show = distanceFromBottom > 100;
       if (lastShowScrollToBottom === show) return;
       lastShowScrollToBottom = show;
-      this._sendToFlutter('onScrollToBottomVisibility', [show]);
+      this._emitScrollBtnVisible(show);
     };
 
     const updateHeader = () => {
@@ -218,11 +305,13 @@ export class Bridge {
       if (st > headerLastTop + 3 && st > 50) {
         if (!headerHidden) {
           headerHidden = true;
+          this._applyHeaderScrollHidden(true);
           this._sendToFlutter('onHeaderScroll', [true]);
         }
       } else if (st < headerLastTop - 3) {
         if (headerHidden) {
           headerHidden = false;
+          this._applyHeaderScrollHidden(false);
           this._sendToFlutter('onHeaderScroll', [false]);
         }
       }
@@ -576,7 +665,7 @@ export class Bridge {
   scrollToBottom(behavior = 'auto') {
     this.virtualList.scrollToBottom(behavior);
     requestAnimationFrame(() => {
-      this._sendToFlutter('onScrollToBottomVisibility', [false]);
+      this._emitScrollBtnVisible(false);
     });
   }
   scrollToMessage(messageId, highlight = false) { this.virtualList.scrollToMessage(messageId, highlight); }
@@ -642,7 +731,7 @@ export class Bridge {
     toggleClass('hide-char-name', theme['show-char-name'] === '0');
   }
 
-  setBottomPadding(px) {
+  setBottomPadding(px, animate = false) {
     const container = document.getElementById('chat-container') || document.body;
     const prevPadding = parseFloat(container.style.paddingBottom) || 0;
     const paddingDiff = px - prevPadding;
@@ -664,29 +753,77 @@ export class Bridge {
     // Lock the virtual-scroll window logic while we programmatically re-pin so
     // the inset-follow does not fight onContainerScroll / the pin tracker.
     const vl = this.virtualList;
-    if (vl) {
-      vl.isProgrammaticScrolling = true;
+    if (vl) vl.isProgrammaticScrolling = true;
+    // Any in-flight inset animation is stale now (a newer target arrived).
+    if (this._insetAnim) {
+      cancelAnimationFrame(this._insetAnim);
+      this._insetAnim = null;
+    }
+
+    const unlockSoon = () => {
       clearTimeout(this._bottomPadUnlockTimer);
       this._bottomPadUnlockTimer = setTimeout(() => {
-        vl.isProgrammaticScrolling = false;
+        if (vl) vl.isProgrammaticScrolling = false;
       }, 120);
-    }
+    };
 
-    container.style.paddingBottom = px + 'px';
-
-    // Reading scrollHeight forces a synchronous layout flush so the new padding
-    // is reflected before we adjust the offset.
-    if (wasAtBottom) {
-      container.scrollTop = container.scrollHeight - container.clientHeight;
-    } else {
-      container.scrollTop += paddingDiff;
-    }
-
-    requestAnimationFrame(() => {
+    const pingVisibility = () => {
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
-      this._sendToFlutter('onScrollToBottomVisibility', [distanceFromBottom > 100]);
-    });
+      this._emitScrollBtnVisible(distanceFromBottom > 100);
+    };
+
+    // Instant path (init / app-resume reconcile): apply padding + re-pin in one
+    // frame. Reading scrollHeight forces a synchronous layout flush so the new
+    // padding is reflected before we adjust the offset.
+    if (!animate) {
+      container.style.paddingBottom = px + 'px';
+      if (wasAtBottom) {
+        container.scrollTop = container.scrollHeight - container.clientHeight;
+      } else {
+        container.scrollTop += paddingDiff;
+      }
+      unlockSoon();
+      requestAnimationFrame(pingVisibility);
+      return;
+    }
+
+    // Animated path (keyboard / drawer transition): Flutter pushes only the end
+    // inset once — we ease scrollTop toward it inside JS instead of jumping. The
+    // padding change is a single relayout; the per-frame work is scrollTop only
+    // (compositor scroll, no message-list relayout — same cost as a finger drag).
+    //
+    // endScroll = startScroll + paddingDiff holds in both directions: opening
+    // (paddingDiff > 0) slides content up above the rising bar; closing
+    // (paddingDiff < 0) slides it down after the descending bar.
+    const opening = paddingDiff > 0;
+    // Opening: grow padding NOW so there is room to scroll into. Closing: keep
+    // the larger padding until the slide ends, else the browser clamps scrollTop
+    // to the smaller max and the content jumps (the very teleport we're killing).
+    if (opening) container.style.paddingBottom = px + 'px';
+
+    const startScroll = container.scrollTop;
+    const endScroll = Math.max(0, startScroll + paddingDiff);
+    const duration = 250;
+    const t0 = performance.now();
+    const ease = (t) => 1 - Math.pow(1 - t, 3); // easeOutCubic ≈ decelerate
+
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / duration);
+      container.scrollTop = startScroll + (endScroll - startScroll) * ease(t);
+      if (t < 1) {
+        this._insetAnim = requestAnimationFrame(step);
+        return;
+      }
+      this._insetAnim = null;
+      if (!opening) container.style.paddingBottom = px + 'px';
+      if (wasAtBottom) {
+        container.scrollTop = container.scrollHeight - container.clientHeight;
+      }
+      unlockSoon();
+      pingVisibility();
+    };
+    this._insetAnim = requestAnimationFrame(step);
   }
 
   setTopPadding(px) {

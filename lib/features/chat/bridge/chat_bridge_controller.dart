@@ -18,6 +18,7 @@ import 'bridge_message_commands.dart';
 import 'bridge_theme_commands.dart';
 import 'bridge_identity_commands.dart';
 import 'bridge_layout_commands.dart';
+import 'bridge_input_commands.dart';
 import 'bridge_memory_commands.dart';
 import 'chat_overlay_blur_region.dart';
 
@@ -62,6 +63,7 @@ class ChatBridgeController {
   late final ThemeBridgeCommands theme = ThemeBridgeCommands(this);
   late final IdentityBridgeCommands identity = IdentityBridgeCommands(this);
   late final LayoutBridgeCommands layout = LayoutBridgeCommands(this);
+  late final InputBridgeCommands input = InputBridgeCommands(this);
   late final MemoryBridgeCommands memory = MemoryBridgeCommands(this);
 
   ChatBridgeController(this._controller, {JsBridgeService? jsBridgeService})
@@ -214,7 +216,37 @@ class ChatBridgeController {
   void Function()? onReady;
   void Function()? onLoadMore;
   void Function(bool hidden)? onHeaderScroll;
+
+  /// Called when the user taps the in-WebView header's back / search buttons
+  /// (the header now lives inside the chat WebView; these forward to the same
+  /// Flutter back and search-mode handling the native app bar used to drive).
+  void Function()? onHeaderBack;
+  void Function()? onHeaderSearch;
   void Function(bool visible)? onScrollToBottomVisibility;
+
+  // In-WebView input bar callbacks (Phase 2). The compose field + buttons live
+  // in the WebView now; these forward user gestures to the same chatProvider
+  // actions / drawer controls the native ChatInputBar used to drive.
+  void Function(String text, String? guidance, String? imageDataUrl)?
+  onInputSend;
+  void Function()? onInputStop;
+  void Function()? onInputImpersonate;
+  void Function(String text)? onInputDraftChanged;
+  void Function(bool focused)? onInputFocus;
+
+  /// Reported by the WebView when the on-screen keyboard overlap changes
+  /// (visualViewport). Drives the keyboard↔drawer swap in place of the native
+  /// TextField's `MediaQuery.viewInsets`.
+  void Function(double height, bool open)? onKeyboardInset;
+  void Function(String text)? onFullScreenEditor;
+  void Function()? onMagicDrawer;
+  void Function()? onQuickReplies;
+  void Function()? onSearchNext;
+  void Function()? onSearchPrev;
+  void Function()? onCancelSelection;
+  void Function()? onHideSelected;
+  void Function()? onDeleteSelected;
+  void Function()? onScrollToBottomTap;
   void Function(String url)? onLinkClick;
   void Function(String url)? onImageClick;
   void Function(String src)? onImgDownload;
@@ -328,6 +360,30 @@ class ChatBridgeController {
         onStop?.call();
       case 'onImgCancel':
         onImgCancel?.call();
+      case 'onHeaderBack':
+        onHeaderBack?.call();
+      case 'onHeaderSearch':
+        onHeaderSearch?.call();
+      case 'onInputStop':
+        onInputStop?.call();
+      case 'onInputImpersonate':
+        onInputImpersonate?.call();
+      case 'onMagicDrawer':
+        onMagicDrawer?.call();
+      case 'onQuickReplies':
+        onQuickReplies?.call();
+      case 'onSearchNext':
+        onSearchNext?.call();
+      case 'onSearchPrev':
+        onSearchPrev?.call();
+      case 'onCancelSelection':
+        onCancelSelection?.call();
+      case 'onHideSelected':
+        onHideSelected?.call();
+      case 'onDeleteSelected':
+        onDeleteSelected?.call();
+      case 'onScrollToBottomTap':
+        onScrollToBottomTap?.call();
     }
   }
 
@@ -339,6 +395,8 @@ class ChatBridgeController {
         onHeaderScroll?.call(v);
       case 'onScrollToBottomVisibility':
         onScrollToBottomVisibility?.call(v);
+      case 'onInputFocus':
+        onInputFocus?.call(v);
     }
   }
 
@@ -364,6 +422,10 @@ class ChatBridgeController {
         onExtBlocksRunAll?.call(s);
       case 'onRerunCleaner':
         onRerunCleaner?.call(s);
+      case 'onInputDraftChanged':
+        onInputDraftChanged?.call(s);
+      case 'onFullScreenEditor':
+        onFullScreenEditor?.call(s);
     }
   }
 
@@ -414,6 +476,17 @@ class ChatBridgeController {
               : <String, dynamic>{};
           if (panelId.isEmpty) return;
           onPanelEvent?.call(panelId, '', event, payload);
+        case 'onInputSend':
+          onInputSend?.call(
+            data['text'] as String? ?? '',
+            data['guidance'] as String?,
+            data['imageDataUrl'] as String?,
+          );
+        case 'onKeyboardInset':
+          onKeyboardInset?.call(
+            (data['height'] as num?)?.toDouble() ?? 0.0,
+            data['open'] as bool? ?? false,
+          );
       }
     } catch (_) {}
   }
@@ -588,8 +661,62 @@ class ChatBridgeController {
   // Layout
   Future<void> setSearch({required String query, int activeIndex = -1}) =>
       layout.setSearch(query: query, activeIndex: activeIndex);
-  Future<void> setBottomPadding(double px) => layout.setBottomPadding(px);
+  Future<void> setBottomPadding(double px, {bool animate = false}) =>
+      layout.setBottomPadding(px, animate: animate);
   Future<void> setTopPadding(double px) => layout.setTopPadding(px);
+  Future<void> setHeader({
+    String? charName,
+    String? sessionName,
+    String? charColor,
+    String? charAvatarPath,
+    double safeTop = 0,
+  }) => layout.setHeader(
+    charName: charName,
+    sessionName: sessionName,
+    charColor: charColor,
+    charAvatarPath: charAvatarPath,
+    safeTop: safeTop,
+  );
+  Future<void> setSearchMode(bool on) => layout.setSearchMode(on);
+  Future<void> setInputState({
+    double? safeBottom,
+    String? draft,
+    String? placeholder,
+    String? guidancePlaceholder,
+    bool? isGenerating,
+    bool? isEditing,
+    bool? isDrawerOpen,
+    bool? isQuickRepliesOpen,
+    bool? isSelectionMode,
+    bool? showSearch,
+    String? searchLabel,
+    String? selectionLabel,
+    int? selectedCount,
+    bool? allSelectedHidden,
+    bool? enterToSend,
+    bool? virtualKeyboardSend,
+  }) => input.setInputState(
+    safeBottom: safeBottom,
+    draft: draft,
+    placeholder: placeholder,
+    guidancePlaceholder: guidancePlaceholder,
+    isGenerating: isGenerating,
+    isEditing: isEditing,
+    isDrawerOpen: isDrawerOpen,
+    isQuickRepliesOpen: isQuickRepliesOpen,
+    isSelectionMode: isSelectionMode,
+    showSearch: showSearch,
+    searchLabel: searchLabel,
+    selectionLabel: selectionLabel,
+    selectedCount: selectedCount,
+    allSelectedHidden: allSelectedHidden,
+    enterToSend: enterToSend,
+    virtualKeyboardSend: virtualKeyboardSend,
+  );
+  Future<void> setPanelInset(double px) => input.setPanelInset(px);
+  Future<void> clearInput() => input.clearInput();
+  Future<void> blurInput() => input.blurInput();
+  Future<void> focusInput() => input.focusInput();
   Future<void> setOverlayBlurRegions(List<ChatOverlayBlurRegion> regions) =>
       layout.setOverlayBlurRegions(regions);
   Future<void> startEdit(String id) => layout.startEdit(id);

@@ -45,6 +45,397 @@
      0 = off (default, matches current mobile look). Set via applyTheme(). */
   --text-bg-opacity: 0;
   --text-bg-padding: 0px;
+  /* Top safe-area inset (status bar / notch), pushed from Flutter via
+     setHeader() since env(safe-area-inset-top) is unreliable inside the
+     platform WebView. Keeps the header clear of the status bar. */
+  --safe-top: 0px;
+  /* Bottom safe-area inset, pushed from Flutter (mirrors --safe-top). */
+  --safe-bottom: 0px;
+  /* Keyboard/drawer overlap under the input bar, in px. The larger of the
+     visualViewport keyboard overlap and the native-drawer inset Flutter
+     pushes via setPanelInset(). Set by chat_input_controller.js. */
+  --bottom-overlap: 0px;
+}
+
+/* ============================================================
+ * Chat header (avatar + name + session + back/search buttons).
+ * Ported into the WebView from the Flutter ChatHeader so the whole
+ * header lives in one place with a real backdrop-filter (replacing
+ * the old mirrored 'header' blur region). Geometry mirrors the old
+ * native app bar: SafeArea + 16/10 padding + 56px glass bar, r=20.
+ * ============================================================ */
+#chat-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  padding: calc(var(--safe-top) + 10px) 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 56px;
+  box-sizing: content-box;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The glass strip is the header itself; give it the blur + border on a
+   child-free flex row via a pseudo-backdrop layer so text stays crisp. */
+#chat-header::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: calc(var(--safe-top) + 10px);
+  height: 56px;
+  border-radius: 20px;
+  background-color: rgba(var(--ui-bg-rgb), var(--element-opacity, 0.8));
+  backdrop-filter: blur(var(--element-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--element-blur, 12px));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  z-index: -1;
+}
+
+/* Hidden: initial (pre-data) and hide-on-scroll / search-mode states. */
+#chat-header.hidden,
+#chat-header.search-mode {
+  transform: translateY(-140%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chat-header-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--vk-blue);
+  transition: background-color 0.2s;
+}
+.chat-header-btn:active {
+  background-color: rgba(var(--vk-blue-rgb), 0.12);
+}
+.chat-header-btn svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+.chat-header-avatar {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+}
+
+.chat-header-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.chat-header-name {
+  color: var(--text-black);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: var(--letter-spacing, 0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-header-session {
+  margin-top: 2px;
+  color: var(--text-gray);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: var(--letter-spacing, 0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================
+ * Chat input bar (compose + buttons + guidance + image + modes).
+ * Ported into the WebView from the Flutter ChatInputBar. Uses a
+ * <textarea> (not contenteditable) since the native input had no live
+ * markdown preview — keeps caret/paste/IME behaviour native. Sits above
+ * the keyboard/drawer overlap; the message list padding is driven by the
+ * controller measuring this bar's height (setBottomPadding).
+ * ============================================================ */
+#chat-input-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--bottom-overlap, 0px);
+  padding: 0 16px;
+  padding-bottom: 16px;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: bottom 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* When nothing overlaps (idle), reserve the bottom safe area too. */
+#chat-input-bar:not(.kb-open) {
+  padding-bottom: calc(16px + var(--safe-bottom, 0px));
+}
+#chat-input-bar.hidden {
+  transform: translateY(140%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Mode visibility: normal shows pill + buttons; search/selection show
+   only their alt pill. */
+#chat-input-bar.mode-normal #input-search,
+#chat-input-bar.mode-normal #input-selection,
+#chat-input-bar.mode-search #input-pill,
+#chat-input-bar.mode-search #input-buttons,
+#chat-input-bar.mode-search #input-guidance,
+#chat-input-bar.mode-search #input-image-preview,
+#chat-input-bar.mode-selection #input-pill,
+#chat-input-bar.mode-selection #input-buttons,
+#chat-input-bar.mode-selection #input-guidance,
+#chat-input-bar.mode-selection #input-image-preview {
+  display: none;
+}
+
+/* Compose pill (and the alt pills share the glass look). */
+.input-pill {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  border-radius: 28px;
+  background-color: rgba(var(--ui-bg-rgb), var(--element-opacity, 0.8));
+  backdrop-filter: blur(var(--element-blur, 20px));
+  -webkit-backdrop-filter: blur(var(--element-blur, 20px));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  box-sizing: border-box;
+}
+
+#chat-input-field {
+  flex: 1;
+  width: 100%;
+  max-height: 150px;
+  min-height: 24px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-black);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  letter-spacing: var(--letter-spacing, 0);
+  padding: 16px 18px;
+  overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+#chat-input-field::-webkit-scrollbar { display: none; }
+#chat-input-field::placeholder { color: var(--text-gray); }
+#chat-input-field:disabled { opacity: 1; }
+
+/* Alt pills (search / selection) */
+.input-alt-pill {
+  gap: 6px;
+  padding: 0 8px 0 16px;
+}
+.input-alt-lead {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  fill: var(--vk-blue);
+}
+.input-alt-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-black);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.input-icon-btn {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--text-gray);
+  transition: background-color 0.2s;
+}
+.input-icon-btn:active { background-color: rgba(255, 255, 255, 0.08); }
+.input-icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.input-icon-btn.input-icon-danger { color: #ff5a5a; }
+.input-icon-btn.disabled { opacity: 0.3; pointer-events: none; }
+#input-sel-cancel { color: var(--vk-blue); }
+
+/* Attached image preview */
+#input-image-preview {
+  position: relative;
+  align-self: flex-start;
+  max-width: 150px;
+  max-height: 150px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+}
+#input-image-preview.hidden { display: none; }
+#input-image-img { display: block; width: 100%; height: auto; object-fit: contain; }
+#input-image-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+#input-image-remove svg { width: 14px; height: 14px; fill: #fff; }
+
+/* Guidance inline field */
+#input-guidance {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background-color: rgba(255, 165, 0, 0.08);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+}
+#input-guidance.hidden { display: none; }
+.input-guidance-icon {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  fill: rgba(255, 165, 0, 0.7);
+}
+#input-guidance-field {
+  flex: 1;
+  width: 100%;
+  max-height: 80px;
+  min-height: 22px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #ffa500;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+#input-guidance-field::-webkit-scrollbar { display: none; }
+#input-guidance-field::placeholder { color: rgba(255, 165, 0, 0.5); }
+
+/* Buttons row */
+#input-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.input-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.input-circle-btn {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--vk-blue);
+  background-color: rgba(var(--ui-bg-rgb), var(--element-opacity, 0.8));
+  backdrop-filter: blur(var(--element-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--element-blur, 12px));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  transition: transform 0.08s ease;
+}
+.input-circle-btn:active { transform: scale(0.85); }
+.input-circle-btn svg { width: 20px; height: 20px; fill: currentColor; }
+.input-circle-btn.active { color: #ffbf47; }
+.input-circle-btn.active-guidance { color: #ffa500; }
+
+.input-send-btn {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  background-color: var(--vk-blue);
+  transition: transform 0.08s ease;
+}
+.input-send-btn:active { transform: scale(0.85); }
+.input-send-btn svg { width: 20px; height: 20px; fill: #fff; }
+
+/* Scroll-to-bottom button (floats above the input bar). */
+#scroll-to-bottom {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--bottom-overlap, 0px) + var(--input-bar-height, 120px) + 8px);
+  width: 44px;
+  height: 44px;
+  z-index: 140;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--vk-blue);
+  background-color: rgba(var(--ui-bg-rgb), 0.9);
+  backdrop-filter: blur(var(--element-blur, 20px));
+  -webkit-backdrop-filter: blur(var(--element-blur, 20px));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+#scroll-to-bottom svg { width: 26px; height: 26px; fill: currentColor; }
+#scroll-to-bottom.hidden {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
 }
 
 /* ============================================================

@@ -9,6 +9,7 @@ import '../../../core/state/character_provider.dart';
 import '../../../core/state/persona_resolution.dart';
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_overlay_blur_region.dart';
+import 'chat_input_ui_state.dart';
 
 /// Snapshot of the [ChatWebViewWidget] fields needed by
 /// [ChatWebViewInitializer]. Pure data — no `BuildContext` or
@@ -45,6 +46,11 @@ class ChatWebViewInitInput {
     required this.memoryDrafts,
     required this.bottomInset,
     required this.topInset,
+    this.sessionName,
+    this.safeTop = 0,
+    this.isSearchActive = false,
+    this.inputState = const ChatInputUiState(),
+    this.initialDraft = '',
     this.blurRegions = const [],
     required this.searchQuery,
     required this.searchCurrentIndex,
@@ -83,6 +89,11 @@ class ChatWebViewInitInput {
   final List<dynamic> memoryDrafts;
   final double bottomInset;
   final double topInset;
+  final String? sessionName;
+  final double safeTop;
+  final bool isSearchActive;
+  final ChatInputUiState inputState;
+  final String initialDraft;
   final List<ChatOverlayBlurRegion> blurRegions;
   final String? searchQuery;
   final int searchCurrentIndex;
@@ -177,11 +188,27 @@ class ChatWebViewInitializer {
           .map((e) => {'messageIds': e.messageIds})
           .toList(),
     );
-    if (input.bottomInset > 0) {
-      await bridge.setBottomPadding(input.bottomInset);
-    }
+    // The WebView owns its bottom padding (input bar height + overlap); the
+    // InputController pushes it on its first setInputState below. Only the top
+    // inset (header space) is Flutter-driven.
     if (input.topInset > 0) {
       await bridge.setTopPadding(input.topInset);
+    }
+    // Populate + reveal the in-WebView header (avatar + name + session name).
+    await bridge.setHeader(
+      charName: input.charName,
+      sessionName: input.sessionName,
+      charColor: input.charColor,
+      charAvatarPath: input.charAvatarPath,
+      safeTop: input.safeTop,
+    );
+    if (input.isSearchActive) {
+      await bridge.setSearchMode(true);
+    }
+    // Populate + reveal the in-WebView input bar, then seed the initial draft.
+    await applyInputStateToBridge(bridge, input.inputState);
+    if (input.initialDraft.isNotEmpty) {
+      await bridge.setInputState(draft: input.initialDraft);
     }
     if (input.blurRegions.isNotEmpty) {
       await bridge.setOverlayBlurRegions(input.blurRegions);
