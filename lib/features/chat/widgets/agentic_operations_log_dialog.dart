@@ -5,6 +5,7 @@ import '../../../core/models/agent_operation_record.dart';
 import '../../../shared/theme/app_colors.dart';
 import 'agentic_operations_tab.dart';
 import 'agentic_last_turn_tab.dart';
+import 'agentic_snapshots_tab.dart';
 import 'agentic_tracker_values_tab.dart';
 import 'post_cleaner_diff_dialog.dart';
 
@@ -37,7 +38,7 @@ class _AgenticOperationsLogDialogState
         width: 720,
         height: 560,
         child: DefaultTabController(
-          length: 3,
+          length: 4,
           child: Column(
             children: [
               Padding(
@@ -73,6 +74,10 @@ class _AgenticOperationsLogDialogState
                     icon: Icon(Icons.warning_amber_outlined, size: 16),
                     text: 'Last turn',
                   ),
+                  Tab(
+                    icon: Icon(Icons.history_edu_outlined, size: 16),
+                    text: 'Snapshots',
+                  ),
                 ],
                 tabAlignment: TabAlignment.fill,
               ),
@@ -84,6 +89,7 @@ class _AgenticOperationsLogDialogState
                       AgenticOperationsTab(),
                       AgenticTrackerValuesTab(),
                       AgenticLastTurnTab(),
+                      AgenticSnapshotsTab(),
                     ],
                   ),
                 ),

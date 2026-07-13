@@ -69,6 +69,10 @@ final postCleanerServiceProvider = Provider<PostCleanerService>((ref) {
 /// and persist accepted continuity state (entity/relationship/arc/world/scene)
 /// plus scoped character knowledge facts from the final assistant response.
 /// See docs/plans/STUDIO_LEDGER_MEMORY.md.
+final ledgerTrackerLoaderProvider = Provider<LedgerTrackerLoader>((ref) {
+  return LedgerTrackerLoader(ref);
+});
+
 final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
   return StudioLedgerService(
     llm: const AuxLlmClient(),
@@ -76,7 +80,7 @@ final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
     bookRepo: ref.read(memoryBookRepoProvider),
     snapshotRepo: ref.read(trackerSnapshotRepoProvider),
     knowledgeFactRepo: ref.read(characterKnowledgeFactRepoProvider),
-    ledgerTrackerLoader: LedgerTrackerLoader(ref),
+    ledgerTrackerLoader: ref.read(ledgerTrackerLoaderProvider),
   );
 });
 
