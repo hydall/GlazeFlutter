@@ -208,6 +208,27 @@
   pointer-events: none;
 }
 
+/* ------------------------------------------------------------------
+ * Pan lock for the fixed shell chrome.
+ * On this Android WebView the on-screen keyboard shrinks the *visual*
+ * viewport (resizes-visual) while the layout viewport stays full, so a
+ * touch-drag that starts on the fixed header / input bar / compose field
+ * scrolls the visual viewport — carrying the header + input out of view and
+ * exposing the container bottom. `touch-action: none` stops the browser from
+ * turning a drag on this chrome into a viewport pan. Taps, focus, typing,
+ * text selection and the message list's own scroll are unaffected (the list
+ * is #chat-container, not listed here). A long draft is still reachable via
+ * the caret. This targets the pan without touching the visualViewport
+ * keyboard-follow (which broke under a document-level position:fixed lock).
+ * ------------------------------------------------------------------ */
+#chat-header,
+#chat-input-bar,
+#scroll-to-bottom,
+#chat-input-field,
+#input-guidance-field {
+  touch-action: none;
+}
+
 /* Mode visibility: normal shows pill + buttons; search/selection show
    only their alt pill. */
 #chat-input-bar.mode-normal #input-search,

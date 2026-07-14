@@ -88,5 +88,12 @@ InAppWebViewSettings chatWebViewInAppSettings({bool isInspectable = true}) {
     allowUniversalAccessFromFileURLs: false,
     mixedContentMode: chatWebViewMixedContentMode(),
     webViewAssetLoader: chatWebViewAssetLoader(),
+    // Kill the native Android over-scroll stretch/glow on the WebView's root
+    // scroller. When the soft keyboard is open the page overflows the visual
+    // viewport, and dragging on the fixed header/input over-scrolled the whole
+    // shell (the Material stretch "squish"), sliding the header/input out of
+    // view. NEVER removes that edge effect; the in-page #chat-container still
+    // scrolls normally. Paired with `overscroll-behavior` in the WebView CSS.
+    overScrollMode: OverScrollMode.NEVER,
   );
 }
