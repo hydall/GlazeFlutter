@@ -437,16 +437,20 @@ export class InputController {
     this._bar.classList.toggle('kb-open', overlap > 0);
     const barHeight = this._bar.offsetHeight;
     root.setProperty('--input-bar-height', barHeight + 'px');
-    // List scroll area: only needs to clear the bar + native drawer. Under
-    // Android `adjustResize` the WebView viewport ALREADY shrinks by the
-    // keyboard height, so folding the Flutter keyboard inset in here would
-    // double-count — the padding + the animated `scrollTop += paddingDiff`
-    // re-pin fire on top of the OS resize and launch the last message up under
-    // the status bar. Keep the keyboard term out of the list padding when
-    // Flutter drives it (it stays in --bottom-overlap for the bar). The
-    // visualViewport fallback (desktop / no Flutter keyboard, where the
-    // viewport does not resize) still folds the overlap in as before.
-    const listOverlap = this._kbFlutterActive ? this._panelInset : overlap;
+    // List scroll area must reserve the FULL bottom overlap (keyboard + native
+    // drawer), same as the bar. Glaze parity: its WebView is full-screen and the
+    // on-screen keyboard OVERLAYS it (Capacitor `overlays-content`), so Glaze
+    // pushes the messages container up by the keyboard height and reserves that
+    // space in the scroll area (ChatView.vue: container `marginBottom`, list
+    // `padding-bottom`). Here the WebView is likewise never resized —
+    // `resizeToAvoidBottomInset: false` keeps the Flutter body (and thus the
+    // WebView) full-height and lets the keyboard overlay it — so `adjustResize`
+    // does NOT shrink the viewport. If the list padding left the keyboard term
+    // out, the bottom `keyboardHeight` of the chat would sit behind the keyboard
+    // and never reserve space (the "no padding" bug). Fold the whole overlap in;
+    // #chat-container's clientHeight is unchanged (containerHeightDiff = 0 in
+    // setBottomPadding), so the re-pin is a clean `scrollTop += paddingDiff`.
+    const listOverlap = overlap;
     if (this.bridge && typeof this.bridge.setBottomPadding === 'function') {
       this.bridge.setBottomPadding(barHeight + listOverlap, !!animate);
     }
