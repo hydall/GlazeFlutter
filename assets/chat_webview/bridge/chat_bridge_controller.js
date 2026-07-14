@@ -970,12 +970,18 @@ export class Bridge {
     const d = Math.max(0, Math.min(1, Number(dim) || 0));
     if (!url) {
       this._bgBlurToken = null;
+      this._bgParams = null;
       if (bg) {
         bg.style.display = 'none';
         bg.style.backgroundImage = '';
       }
+      // Wallpaper cleared: the grain (if any) rides its own layer again.
+      this._renderStandaloneNoise();
       return;
     }
+    // Remember the inputs so setBackgroundNoise can re-bake the grain into
+    // #bg-layer without Flutter re-pushing the (possibly huge) data URI.
+    this._bgParams = { url, blur, opacity, dim };
     if (!bg) {
       bg = document.createElement('div');
       bg.id = 'bg-layer';
@@ -986,17 +992,32 @@ export class Bridge {
     bg.style.opacity = op;
 
     const b = Math.max(0, Number(blur) || 0);
-    // Nothing to bake → plain image; no dim overlay.
-    if (b <= 0 && d <= 0) {
+    const nOp = Math.max(0, Math.min(1, this._noiseOpacity || 0));
+    const nInt = Math.max(
+      0,
+      Math.min(2, this._noiseIntensity == null ? 1 : this._noiseIntensity),
+    );
+
+    // Nothing to bake (no blur, no dim, no grain) → plain image.
+    if (b <= 0 && d <= 0 && nOp <= 0) {
       this._bgBlurToken = null;
       bg.style.setProperty('--bg-dim', '0');
       bg.style.backgroundImage = `url("${url}")`;
       bg.style.filter = '';
       bg.style.inset = '0';
+      this._renderStandaloneNoise();
       return;
     }
 
-    const cacheKey = `${b}|${d}|${url}`;
+    // From here the grain is baked into #bg-layer, so the standalone grain layer
+    // must stay hidden: it would otherwise double the noise, and its sub-1
+    // opacity keeps it out of the glass's backdrop sampling anyway — which is
+    // why the header / input blur went flat under heavy dimming, with nothing
+    // textured left to sample once dim+blur flattened the wallpaper.
+    const noiseLayer = document.getElementById('bg-noise-layer');
+    if (noiseLayer) noiseLayer.style.display = 'none';
+
+    const cacheKey = `${b}|${d}|${nOp}|${nInt}|${url}`;
     if (this._bgBlurCache && this._bgBlurCache.key === cacheKey) {
       this._bgBlurToken = null;
       this._applyBakedBg(bg, this._bgBlurCache.dataUrl);
@@ -1015,8 +1036,13 @@ export class Bridge {
 
     const token = cacheKey;
     this._bgBlurToken = token;
-    this._bakeBackground(url, b, d).then((dataUrl) => {
-      if (!dataUrl) return; // canvas filter unsupported/failed → keep fallback
+    this._bakeBackground(url, b, d, nOp, nInt).then((dataUrl) => {
+      if (!dataUrl) {
+        // Canvas unsupported/failed: fall back to the standalone grain layer so
+        // the wallpaper still carries some texture under the live-filter path.
+        this._renderStandaloneNoise();
+        return;
+      }
       this._bgBlurCache = { key: cacheKey, dataUrl };
       if (this._bgBlurToken !== token) return; // superseded by a newer call
       const layer = document.getElementById('bg-layer');
@@ -1048,7 +1074,7 @@ export class Bridge {
   // the pixels, once, at a capped working resolution. Resolves to a data URL, or
   // null when canvas 2D filters are unavailable (older WKWebView) or the render
   // fails — callers keep the live CSS-filter + ::after-dim fallback in that case.
-  _bakeBackground(url, blur, dim) {
+  _bakeBackground(url, blur, dim, noiseOpacity, noiseIntensity) {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -1057,6 +1083,15 @@ export class Bridge {
         return;
       }
       const img = new Image();
+      // The wallpaper is served from the loopback file server, a different
+      // origin than the chat page (file:// on Windows, app-assets on Android).
+      // Request it as an anonymous CORS fetch (the file server answers with
+      // Access-Control-Allow-Origin: *) so the canvas stays untainted and
+      // toDataURL() below can read it back. Without this the bake throws on
+      // cross-origin wallpapers and #bg-layer is stuck on the live-`filter`
+      // fallback, which excludes it from the header / input-bar glass sampling
+      // and flattens their blur. Harmless for same-origin and data: URLs.
+      img.crossOrigin = 'anonymous';
       img.onload = () => {
         try {
           const iw = img.naturalWidth;
@@ -1094,6 +1129,22 @@ export class Bridge {
             ctx.fillStyle = `rgba(0, 0, 0, ${dim})`;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
           }
+          // Bake the grain over the dim so the sampled backdrop keeps
+          // high-frequency detail the header / input-bar glass can blur — even
+          // when heavy dimming would otherwise flatten it to a solid color and
+          // leave the glass nothing to frost.
+          if (noiseOpacity > 0) {
+            const pattern = ctx.createPattern(
+              this._noiseCanvas(noiseIntensity),
+              'repeat',
+            );
+            if (pattern) {
+              ctx.globalAlpha = noiseOpacity;
+              ctx.fillStyle = pattern;
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.globalAlpha = 1;
+            }
+          }
           // WebP keeps the alpha channel (PNG wallpapers) unlike JPEG;
           // engines without a WebP encoder silently return PNG instead.
           resolve(canvas.toDataURL('image/webp', 0.9));
@@ -1107,7 +1158,41 @@ export class Bridge {
   }
 
   setBackgroundNoise(opacity, intensity) {
+    this._noiseOpacity = Math.max(0, Math.min(1, opacity || 0));
+    this._noiseIntensity = Math.max(
+      0,
+      Math.min(2, intensity == null ? 1 : intensity),
+    );
+
+    // With a wallpaper active the grain is baked straight into #bg-layer (see
+    // setBackgroundImage) so the header / input-bar glass can sample it. Re-bake
+    // with the new grain and keep the standalone layer hidden to avoid doubling.
+    if (this._bgParams && this._bgParams.url) {
+      const existing = document.getElementById('bg-noise-layer');
+      if (existing) existing.style.display = 'none';
+      const p = this._bgParams;
+      this.setBackgroundImage(p.url, p.blur, p.opacity, p.dim);
+      return;
+    }
+
+    // No wallpaper → the grain rides on its own fixed layer over the flat color
+    // background.
+    this._renderStandaloneNoise();
+  }
+
+  // Build / update / hide the standalone #bg-noise-layer from the stored grain
+  // settings. Used when there is no wallpaper to bake the grain into, and as the
+  // fallback when the canvas bake is unavailable.
+  _renderStandaloneNoise() {
     let noise = document.getElementById('bg-noise-layer');
+    const op = Math.max(0, Math.min(1, this._noiseOpacity || 0));
+    if (op <= 0) {
+      if (noise) {
+        noise.style.display = 'none';
+        noise.style.backgroundImage = '';
+      }
+      return;
+    }
     if (!noise) {
       noise = document.createElement('div');
       noise.id = 'bg-noise-layer';
@@ -1118,13 +1203,10 @@ export class Bridge {
         document.body.insertBefore(noise, document.body.firstChild);
       }
     }
-    const op = Math.max(0, Math.min(1, opacity || 0));
-    if (op <= 0) {
-      noise.style.display = 'none';
-      noise.style.backgroundImage = '';
-      return;
-    }
-    const i = Math.max(0, Math.min(2, intensity == null ? 1 : intensity));
+    const i = Math.max(
+      0,
+      Math.min(2, this._noiseIntensity == null ? 1 : this._noiseIntensity),
+    );
     noise.style.display = 'block';
     noise.style.opacity = op;
     noise.style.backgroundImage = `url("${this._noiseTile(i)}")`;
@@ -1135,6 +1217,20 @@ export class Bridge {
     if (!this._noiseCache) this._noiseCache = new Map();
     const key = intensity.toFixed(2);
     const hit = this._noiseCache.get(key);
+    if (hit) return hit;
+    const url = this._noiseCanvas(intensity).toDataURL('image/png');
+    this._noiseCache.set(key, url);
+    return url;
+  }
+
+  // 128×128 grain tile as an offscreen canvas (cached by intensity). Reused both
+  // as a repeating CSS background (via toDataURL in _noiseTile) and as a canvas
+  // pattern baked straight into the wallpaper in _bakeBackground, so both grain
+  // paths share one stable tile.
+  _noiseCanvas(intensity) {
+    if (!this._noiseCanvasCache) this._noiseCanvasCache = new Map();
+    const key = intensity.toFixed(2);
+    const hit = this._noiseCanvasCache.get(key);
     if (hit) return hit;
     const size = 128;
     const canvas = document.createElement('canvas');
@@ -1150,9 +1246,8 @@ export class Bridge {
       data[p + 3] = Math.round(a * 255);
     }
     ctx.putImageData(img, 0, 0);
-    const url = canvas.toDataURL('image/png');
-    this._noiseCache.set(key, url);
-    return url;
+    this._noiseCanvasCache.set(key, canvas);
+    return canvas;
   }
 
   setPerformanceMode(enabled) {

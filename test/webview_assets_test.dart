@@ -778,6 +778,49 @@ void main() {
       );
     });
   });
+
+  group('background-blur bake CORS (chat_bridge_controller.js)', () {
+    test('_bakeBackground requests the wallpaper as an anonymous CORS fetch',
+        () {
+      final idx = bridgeControllerJs.indexOf('_bakeBackground(');
+      final body = _extractBlockBody(bridgeControllerJs, idx);
+      expect(
+        body,
+        contains("img.crossOrigin = 'anonymous'"),
+        reason:
+            'The wallpaper is cross-origin to the chat page; without crossOrigin '
+            'the canvas taints, toDataURL() throws, and #bg-layer is stuck on the '
+            'live-filter fallback (a backdrop root) that flattens the header / '
+            'input-bar glass blur.',
+      );
+      // crossOrigin must be set before the src assignment kicks off the load.
+      expect(
+        body.indexOf("img.crossOrigin = 'anonymous'") <
+            body.indexOf('img.src = url'),
+        isTrue,
+        reason: 'crossOrigin must be set before img.src to affect the fetch',
+      );
+    });
+
+    test('_bakeBackground bakes the grain into the wallpaper pixels', () {
+      final idx = bridgeControllerJs.indexOf('_bakeBackground(');
+      final body = _extractBlockBody(bridgeControllerJs, idx);
+      expect(
+        body,
+        contains('createPattern'),
+        reason:
+            'The grain must be baked into #bg-layer so the header / input-bar '
+            'glass samples high-frequency detail even under heavy dimming; a '
+            'separate sub-1-opacity noise layer leaves the glass nothing to '
+            'frost.',
+      );
+      expect(
+        bridgeControllerJs,
+        contains('_bakeBackground(url, b, d, nOp, nInt)'),
+        reason: 'setBackgroundImage must pass the grain params into the bake',
+      );
+    });
+  });
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────

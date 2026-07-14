@@ -311,6 +311,15 @@ Future<void> _serveGlazeDataFile(HttpRequest request) async {
   }
 
   request.response.headers.contentType = _contentTypeFor(file.path);
+  // Allow the WebView to read these pixels back off a <canvas>. The chat page
+  // origin (file:// on Windows, the app-assets origin on Android) differs from
+  // this loopback file server, so a wallpaper fetched here is cross-origin.
+  // The background-blur bake (chat_bridge_controller.js) draws the wallpaper to
+  // a canvas and calls toDataURL(); without CORS that taints the canvas, the
+  // bake throws, and #bg-layer stays on the live-`filter` fallback — a backdrop
+  // root that the header / input-bar glass can no longer sample, flattening
+  // their blur. The paired `img.crossOrigin` is set on the bake image.
+  request.response.headers.set('Access-Control-Allow-Origin', '*');
   await request.response.addStream(file.openRead());
   await request.response.close();
 }

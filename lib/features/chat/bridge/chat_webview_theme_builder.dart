@@ -74,6 +74,11 @@ class ChatWebViewThemeBuilder {
       'bg-color': _colorHex(cs.surface),
       'text-color': _colorHex(cs.onSurface),
       'ui-bg-rgb': _colorRgb(cs.surface),
+      // Accent hex. The chat header / input controls (buttons, send, scroll-to-
+      // bottom, search lead, selection cancel) all read `var(--vk-blue)`; without
+      // this the CSS `:root` default (#7996CE) stuck on every theme even though
+      // `--vk-blue-rgb` was pushed. Keep both in lockstep with the accent.
+      'vk-blue': _colorHex(primary),
       'vk-blue-rgb': _colorRgb(primary),
       'primary-rgb': _colorRgb(primary),
       'user-bubble-color-rgb': _colorRgb(glaze.userBubble),
