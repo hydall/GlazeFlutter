@@ -104,7 +104,7 @@ class _HeroCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   const _VersionBadge(),
-                  if (buildDate.isNotEmpty || buildFruit.isNotEmpty) ...[
+                  if (buildDate.isNotEmpty || buildBranch.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     if (buildDate.isNotEmpty)
                       Text(
@@ -114,9 +114,9 @@ class _HeroCard extends StatelessWidget {
                           color: cs.onSurfaceVariant.withValues(alpha: 0.55),
                         ),
                       ),
-                    if (buildFruit.isNotEmpty)
+                    if (buildBranch.isNotEmpty)
                       Text(
-                        buildFruit,
+                        buildBranch,
                         style: TextStyle(
                           fontSize: 11,
                           color: cs.onSurfaceVariant.withValues(alpha: 0.55),

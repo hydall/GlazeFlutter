@@ -2,13 +2,21 @@ name: Build Release
 
 on:
   workflow_dispatch:
+    # The branch to build is chosen with GitHub's native "Use workflow from"
+    # branch selector (a dropdown of all available branches). Its value is
+    # exposed as github.ref_name and used for checkout, the in-app build label
+    # and the Telegram message.
     inputs:
-      branch:
-        description: 'Branch to build'
+      post_to_telegram:
+        description: 'Post build to Telegram'
         required: false
-        default: ''
+        default: true
+        type: boolean
       notify_people:
-        description: 'Ping people in Telegram'
+        # NOTE: GitHub's workflow_dispatch form cannot show/hide an input based
+        # on another one, so this toggle is always visible. It only has an
+        # effect when "Post build to Telegram" above is enabled.
+        description: 'Mention people in Telegram (only if posting is enabled)'
         required: false
         default: false
         type: boolean
@@ -21,16 +29,16 @@ jobs:
   metadata:
     runs-on: ubuntu-latest
     outputs:
-      version:     ${{ steps.meta.outputs.version }}
-      build_date:  ${{ steps.meta.outputs.build_date }}
-      build_fruit: ${{ steps.meta.outputs.build_fruit }}
-      file_slug:   ${{ steps.meta.outputs.file_slug }}
-      commits:     ${{ steps.meta.outputs.commits }}
-      git_sha:     ${{ steps.meta.outputs.git_sha }}
+      version:      ${{ steps.meta.outputs.version }}
+      build_date:   ${{ steps.meta.outputs.build_date }}
+      build_branch: ${{ steps.meta.outputs.build_branch }}
+      file_slug:    ${{ steps.meta.outputs.file_slug }}
+      commits:      ${{ steps.meta.outputs.commits }}
+      git_sha:      ${{ steps.meta.outputs.git_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || github.ref_name }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Compute metadata
@@ -38,14 +46,16 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | sed 's/+.*//' | sed 's/-.*//')
           BUILD_DATE=$(date -u '+%d/%m/%Y %H:%M')
-          FRUITS=(Apple Apricot Avocado Banana Blueberry Cherry Coconut Fig Grape Guava Kiwi Lemon Lime Lychee Mango Melon Nectarine Orange Papaya Peach Pear Pineapple Plum Pomelo Raspberry Strawberry Tangerine Watermelon)
-          BUILD_FRUIT=${FRUITS[$RANDOM % ${#FRUITS[@]}]}
-          FILE_SLUG="G-$(date -u '+%d%m%Y-%H%M')-$BUILD_FRUIT"
+          BUILD_BRANCH="${{ github.ref_name }}"
+          # Branch names may contain "/" or spaces which are unsafe in file
+          # names, so build a sanitised slug for the artifact file name.
+          SAFE_BRANCH=$(echo "$BUILD_BRANCH" | sed 's#[/ ]#-#g')
+          FILE_SLUG="G-$(date -u '+%d%m%Y-%H%M')-$SAFE_BRANCH"
 
-          echo "version=$VERSION"         >> $GITHUB_OUTPUT
-          echo "build_date=$BUILD_DATE"   >> $GITHUB_OUTPUT
-          echo "build_fruit=$BUILD_FRUIT" >> $GITHUB_OUTPUT
-          echo "file_slug=$FILE_SLUG"     >> $GITHUB_OUTPUT
+          echo "version=$VERSION"           >> $GITHUB_OUTPUT
+          echo "build_date=$BUILD_DATE"      >> $GITHUB_OUTPUT
+          echo "build_branch=$BUILD_BRANCH"  >> $GITHUB_OUTPUT
+          echo "file_slug=$FILE_SLUG"        >> $GITHUB_OUTPUT
           echo "git_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
           # Commits since last build tag
@@ -84,7 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || github.ref_name }}
+          ref: ${{ github.ref_name }}
 
       - name: Create .env from secrets
         run: |
@@ -138,7 +148,7 @@ jobs:
           flutter build apk --release --no-pub --target-platform android-arm64
           "--dart-define=APP_VERSION=${{ needs.metadata.outputs.version }}"
           "--dart-define=BUILD_DATE=${{ needs.metadata.outputs.build_date }}"
-          "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}"
+          "--dart-define=BUILD_BRANCH=${{ needs.metadata.outputs.build_branch }}"
           "--dart-define=BUILD_COMMIT=${{ needs.metadata.outputs.git_sha }}"
 
       - name: Rename APK
@@ -157,7 +167,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || github.ref_name }}
+          ref: ${{ github.ref_name }}
 
       - name: Create .env from secrets
         shell: bash
@@ -191,7 +201,7 @@ jobs:
           flutter build windows --release --no-pub
           "--dart-define=APP_VERSION=${{ needs.metadata.outputs.version }}"
           "--dart-define=BUILD_DATE=${{ needs.metadata.outputs.build_date }}"
-          "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}"
+          "--dart-define=BUILD_BRANCH=${{ needs.metadata.outputs.build_branch }}"
           "--dart-define=BUILD_COMMIT=${{ needs.metadata.outputs.git_sha }}"
 
       - name: Upload Windows
@@ -208,7 +218,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || github.ref_name }}
+          ref: ${{ github.ref_name }}
 
       - name: Create .env from secrets
         run: |
@@ -255,7 +265,7 @@ jobs:
           flutter build ios --release --no-codesign --no-pub \
             "--dart-define=APP_VERSION=${{ needs.metadata.outputs.version }}" \
             "--dart-define=BUILD_DATE=${{ needs.metadata.outputs.build_date }}" \
-            "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}" \
+            "--dart-define=BUILD_BRANCH=${{ needs.metadata.outputs.build_branch }}" \
             "--dart-define=BUILD_COMMIT=${{ needs.metadata.outputs.git_sha }}"
           echo "=== AFTER flutter build ios ==="
           find build/ios -type f -name "*.app" -o -name "*.ipa" 2>/dev/null | head -20 || true
@@ -290,7 +300,8 @@ jobs:
   notify:
     needs: [metadata, build-android, build-ios]
     runs-on: ubuntu-latest
-    if: success()
+    # Only post to Telegram when the "Post build to Telegram" toggle is on.
+    if: ${{ success() && github.event.inputs.post_to_telegram == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -316,7 +327,7 @@ jobs:
           NOTIFY_PEOPLE: ${{ github.event.inputs.notify_people || 'true' }}
           VERSION:      ${{ needs.metadata.outputs.version }}
           BUILD_DATE:   ${{ needs.metadata.outputs.build_date }}
-          BUILD_FRUIT:  ${{ needs.metadata.outputs.build_fruit }}
+          BUILD_BRANCH: ${{ needs.metadata.outputs.build_branch }}
           FILE_SLUG:    ${{ needs.metadata.outputs.file_slug }}
           COMMITS:      ${{ needs.metadata.outputs.commits }}
         run: |
@@ -331,7 +342,7 @@ jobs:
           fi
 
           TEXT=$(printf 'Новый дев-билд:\n\n%s\n%s\n%s%s%s' \
-            "$VERSION" "$BUILD_DATE" "$BUILD_FRUIT" \
+            "$VERSION" "$BUILD_DATE" "$BUILD_BRANCH" \
             "$COMMITS_SECTION" "$MENTIONS_SECTION")
 
           MSG_ID=$(curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
