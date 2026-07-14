@@ -37,7 +37,7 @@ const Set<String> kAllowedNamespacePrefixes = {
 };
 
 /// Allowed op codes.
-const Set<String> kAllowedOpCodes = {'set', 'append_unique', 'delete'};
+const Set<String> kAllowedOpCodes = {'set', 'delete'};
 
 /// Allowed event-state tokens (empty string = unset, allowed).
 const Set<String> kAllowedEventStates = {
@@ -471,9 +471,15 @@ class StudioLedgerExportParser {
       return 'empty key';
     }
 
-    // For set / append_unique: value must not be empty.
+    final keyReason = _validateCurrentStateKey(op.key);
+    if (keyReason != null) return keyReason;
+
+    // For set: value must not be empty and must remain a compact current value.
     if (op.op != 'delete' && op.value.trim().isEmpty) {
       return 'empty value for op "${op.op}"';
+    }
+    if (op.value.length > 1200) {
+      return 'current-state value exceeds 1200 characters';
     }
 
     // Unknown event state.
@@ -481,6 +487,62 @@ class StudioLedgerExportParser {
       return 'unknown eventState "${op.eventState}"';
     }
 
+    return null;
+  }
+
+  String? _validateCurrentStateKey(String key) {
+    if (key.startsWith('npc:')) {
+      final match = RegExp(r'^npc:([^.:][^.]*?)\.([a-z_]+)$').firstMatch(key);
+      if (match == null) return 'malformed npc key "$key"';
+      const fields = {
+        'relationship_to_user',
+        'attitude_to_user',
+        'trust_to_user',
+        'boundaries',
+        'card_overrides',
+        'location',
+        'current_emotional_residue',
+        'current_goal',
+        'persistent_condition',
+      };
+      if (!fields.contains(match.group(2))) {
+        return 'non-current or unknown npc field "${match.group(2)}"';
+      }
+    } else if (key.startsWith('relationship:')) {
+      final match = RegExp(
+        r'^relationship:([^.:][^:]*):([^.:][^.]*?)\.([a-z_]+)$',
+      ).firstMatch(key);
+      if (match == null) return 'malformed relationship key "$key"';
+      const fields = {
+        'trust',
+        'status',
+        'relationship',
+        'attitude',
+        'boundaries',
+        'card_override',
+      };
+      if (!fields.contains(match.group(3))) {
+        return 'non-current or unknown relationship field "${match.group(3)}"';
+      }
+    } else if (key.startsWith('arc:')) {
+      if (!RegExp(
+        r'^arc:([^.:][^.]*?)\.(status|title|summary|do_not_reopen|card_override)$',
+      ).hasMatch(key)) {
+        return 'malformed or unknown arc key "$key"';
+      }
+    } else if (key.startsWith('world:')) {
+      if (!RegExp(
+        r'^world:(location|time|date|active_threats|current_conditions)$',
+      ).hasMatch(key)) {
+        return 'unknown world key "$key"';
+      }
+    } else if (key.startsWith('scene.')) {
+      if (!RegExp(
+        r'^scene\.(present_entities|absent_backstory_entities|immediate_thread|active_tensions)$',
+      ).hasMatch(key)) {
+        return 'unknown scene key "$key"';
+      }
+    }
     return null;
   }
 }

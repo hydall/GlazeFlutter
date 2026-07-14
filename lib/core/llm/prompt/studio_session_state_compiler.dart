@@ -97,7 +97,13 @@ String? compileStudioSessionState(
       if (dotIdx < 0) continue;
       final name = rest.substring(0, dotIdx);
       final field = rest.substring(dotIdx + 1);
-      npcMap.putIfAbsent(name, () => {})[field] = v;
+      // Legacy `knowledge` values were historical concatenations. Durable
+      // propositions now live in character_knowledge_fact_rows and are
+      // projected separately, so never let these blobs consume current-state
+      // budget or crowd out relationships/world state.
+      if (field != 'knowledge') {
+        npcMap.putIfAbsent(name, () => {})[field] = v;
+      }
     } else if (k.startsWith('relationship:')) {
       final rest = k.substring('relationship:'.length);
       final dotIdx = rest.indexOf('.');
@@ -227,9 +233,10 @@ String? compileStudioSessionState(
   buf.writeln('<studio_session_state>');
   buf.writeln(
     'These are established facts from this chat. They override character-card '
-    'baseline when conflicting. Source-material knowledge may fill gaps, but '
-    'must not contradict this session state, the character card, or supplied '
-    'lore. A fact missing from the card is not automatically unknown.',
+    'baseline when conflicting. MemoryBook/raw-chat evidence is lower than this '
+    'current state but higher than a conflicting card baseline. Source-material '
+    'knowledge may fill gaps and an omitted card fact is not automatically '
+    'unknown.',
   );
 
   // ── Present / Absent section (plan §Present Characters + Test 21) ────────
@@ -257,16 +264,9 @@ String? compileStudioSessionState(
     }
   }
 
-  if (filteredNpc.isNotEmpty) {
-    for (final name in filteredNpc.keys.toList()..sort()) {
-      buf.writeln('\n$name:');
-      final fields = filteredNpc[name]!;
-      for (final field in fields.keys.toList()..sort()) {
-        buf.writeln('- $field: ${fields[field]}');
-      }
-    }
-  }
-
+  // Relationship truth and card-regression guards precede descriptive NPC
+  // state so the hard cap can never discard established trust in favor of a
+  // long mood/boundary description.
   if (filteredRel.isNotEmpty) {
     buf.writeln('\nRelationships:');
     for (final pair in filteredRel.keys.toList()..sort()) {
@@ -318,6 +318,32 @@ String? compileStudioSessionState(
         if (summary.isNotEmpty) {
           buf.writeln('- ${f['title'] ?? id}: $summary');
         }
+      }
+    }
+  }
+
+  if (filteredNpc.isNotEmpty) {
+    const priority = [
+      'trust_to_user',
+      'relationship_to_user',
+      'card_overrides',
+      'boundaries',
+      'attitude_to_user',
+      'current_emotional_residue',
+      'current_goal',
+      'persistent_condition',
+      'location',
+    ];
+    for (final name in filteredNpc.keys.toList()..sort()) {
+      buf.writeln('\n$name:');
+      final fields = filteredNpc[name]!;
+      final ordered = [
+        ...priority.where(fields.containsKey),
+        ...fields.keys.where((field) => !priority.contains(field)).toList()
+          ..sort(),
+      ];
+      for (final field in ordered) {
+        buf.writeln('- $field: ${fields[field]}');
       }
     }
   }

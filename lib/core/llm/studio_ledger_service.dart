@@ -12,6 +12,7 @@ import '../models/character_knowledge_fact.dart';
 import '../models/memory_book.dart';
 import '../models/pipeline_settings.dart';
 import '../models/studio_config.dart';
+import '../models/studio_ledger_export.dart';
 import '../models/tracker.dart';
 import '../utils/id_generator.dart';
 import 'aux_llm_client.dart';
@@ -254,16 +255,7 @@ class StudioLedgerService {
         'rejection=${parseResult.rejectionReason ?? "none"}',
       );
 
-      if (!parseResult.hasExport) {
-        if (_isNoWriteLedgerOutput(parseResult)) {
-          return LedgerRunResult(
-            status: 'ok',
-            visibleLedger: parseResult.visibleLedger,
-            elapsedMs: sw.elapsedMilliseconds,
-            attempts: outcome.attempts,
-            model: config.model,
-          );
-        }
+      if (!parseResult.hasExport && !_isNoWriteLedgerOutput(parseResult)) {
         return LedgerRunResult(
           status: 'error',
           visibleLedger: parseResult.visibleLedger,
@@ -279,8 +271,13 @@ class StudioLedgerService {
       }
 
       // ── 6. Apply ops to tracker namespace ───────────────────────────────
-      final export = parseResult.export!;
+      final export = parseResult.export ?? const StudioLedgerExport();
       var opsApplied = 0;
+
+      // A rejected regeneration may have left different tentative values in
+      // tracker_rows. Always rebuild model-owned state from committed canon
+      // before applying this anchor's patch.
+      await _trackerRepo.replaceLedgerState(sessionId, promptTrackers);
 
       for (final op in export.ops) {
         if (token.isCancelled || isStillCurrent?.call() == false) break;
@@ -307,41 +304,43 @@ class StudioLedgerService {
       // Atomic facts use the same tentative assistant-swipe anchor as the
       // tracker snapshot. They become visible only when the next user turn
       // commits that anchor.
-      if (export.knowledgeFacts.isNotEmpty &&
-          token.isCancelled == false &&
-          isStillCurrent?.call() != false) {
+      if (token.isCancelled == false && isStillCurrent?.call() != false) {
         try {
-          await _knowledgeFactRepo.insertAllTentative(
-            export.knowledgeFacts
-                .map(
-                  (fact) => CharacterKnowledgeFact(
-                    id: generateId(),
-                    chatSessionId: sessionId,
-                    knowerKey: fact.knowerKey,
-                    knowerName: fact.knowerName,
-                    subjectKey: fact.subjectKey,
-                    subjectName: fact.subjectName,
-                    factClass: CharacterKnowledgeFactClass.fromWireName(
-                      fact.factClass,
-                    ),
-                    scopeKey: fact.scopeKey,
-                    predicate: fact.predicate,
-                    object: fact.object,
-                    epistemicState:
-                        CharacterKnowledgeEpistemicState.fromWireName(
-                          fact.epistemicState,
-                        ),
-                    confidence: fact.confidence,
-                    importance: fact.importance,
-                    entities: fact.entities,
-                    topics: fact.topics,
-                    sourceMessageId: messageId,
-                    sourceSwipeId: swipeId,
-                    sourceAgentSwipeId: agentSwipeId,
-                    supersedesId: fact.supersedesId,
+          final facts = export.knowledgeFacts
+              .map(
+                (fact) => CharacterKnowledgeFact(
+                  id: generateId(),
+                  chatSessionId: sessionId,
+                  knowerKey: fact.knowerKey,
+                  knowerName: fact.knowerName,
+                  subjectKey: fact.subjectKey,
+                  subjectName: fact.subjectName,
+                  factClass: CharacterKnowledgeFactClass.fromWireName(
+                    fact.factClass,
                   ),
-                )
-                .toList(growable: false),
+                  scopeKey: fact.scopeKey,
+                  predicate: fact.predicate,
+                  object: fact.object,
+                  epistemicState: CharacterKnowledgeEpistemicState.fromWireName(
+                    fact.epistemicState,
+                  ),
+                  confidence: fact.confidence,
+                  importance: fact.importance,
+                  entities: fact.entities,
+                  topics: fact.topics,
+                  sourceMessageId: messageId,
+                  sourceSwipeId: swipeId,
+                  sourceAgentSwipeId: agentSwipeId,
+                  supersedesId: fact.supersedesId,
+                ),
+              )
+              .toList(growable: false);
+          await _knowledgeFactRepo.replaceTentativeAnchor(
+            sessionId: sessionId,
+            messageId: messageId,
+            swipeId: swipeId,
+            agentSwipeId: agentSwipeId,
+            facts: facts,
           );
         } catch (e) {
           debugPrint('[StudioLedger] knowledge fact write failed: $e');
@@ -475,7 +474,10 @@ Ops format:
 {"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"knowledgeFacts":[]}
 
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
-Allowed ops: set, append_unique, delete.
+Allowed ops: set, delete. Every set REPLACES the complete current value.
+Never append history to a state value. Keep each value under 1200 characters.
+Never write npc:*.knowledge or relationship:*.knowledge; durable propositions belong in knowledgeFacts.
+Relationship trust/status/attitude and card overrides are current state and must be updated with set whenever they change.
 Reuse an exact key from <current_state> or <existing_keys> for the same fact; update it with set instead of creating a synonym key.
 Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).''';
 

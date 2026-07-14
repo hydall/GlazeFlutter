@@ -37,8 +37,8 @@ void main() {
 
       expect(content, contains('<current_character_state>'));
       expect(content, contains('[relationship:danvi]'));
-      expect(content, isNot(contains('[relationship:david]')));
-      expect(content, contains('ONLY within their stated scope'));
+      expect(content, contains('[relationship:david]'));
+      expect(content, contains('within their stated scope'));
     },
   );
 
@@ -50,5 +50,14 @@ void main() {
 
     expect(content, contains('High'));
     expect(content, isNot(contains('Low')));
+  });
+
+  test('keeps current relationship truth without a literal context match', () {
+    final content = compileCharacterKnowledgeProjection([
+      fact(id: 'trust', subject: 'Danvi', importance: 0.9),
+    ], latestUserText: 'Продолжаю разговор как обычно.');
+
+    expect(content, contains('[relationship:danvi]'));
+    expect(content, contains('override conflicting base-card traits'));
   });
 }

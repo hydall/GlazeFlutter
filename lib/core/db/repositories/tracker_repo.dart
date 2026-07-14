@@ -113,6 +113,37 @@ class TrackerRepo {
     });
   }
 
+  /// Replaces only model-owned Ledger rows from a committed base while keeping
+  /// chat trackers, diagnostics, and live user-owned canon controls intact.
+  Future<void> replaceLedgerState(
+    String sessionId,
+    List<Tracker> committedBase,
+  ) async {
+    await db.transaction(() async {
+      final liveControls = await getBySessionAndScope(sessionId, 'ledger');
+      final controls = liveControls.where(
+        (tracker) =>
+            tracker.name.startsWith('canon_override:') ||
+            tracker.name.startsWith('canon_lock:'),
+      );
+      await (db.delete(db.trackerRows)
+            ..where((row) => row.sessionId.equals(sessionId))
+            ..where((row) => row.scope.equals('ledger')))
+          .go();
+      final byName = <String, Tracker>{
+        for (final tracker in committedBase)
+          if (tracker.scope == 'ledger' &&
+              !tracker.name.startsWith('canon_override:') &&
+              !tracker.name.startsWith('canon_lock:'))
+            tracker.name: tracker,
+        for (final tracker in controls) tracker.name: tracker,
+      };
+      for (final tracker in byName.values) {
+        await upsert(tracker);
+      }
+    });
+  }
+
   Stream<List<Tracker>> watchBySessionId(String sessionId) {
     return (db.select(db.trackerRows)
           ..where((t) => t.sessionId.equals(sessionId))

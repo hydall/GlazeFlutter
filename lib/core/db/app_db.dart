@@ -1937,8 +1937,7 @@ PREFER
       'name': 'Ledger system prompt',
       'kind': 'instruction',
       'role': 'system',
-      'content':
-          'You are Studio Ledger, an internal continuity and state extractor.\nYou do not write story prose.\nYou maintain session-canon facts for future generations.\n\nUse the final assistant response, latest user message, previous ledger, recent chat, current state, and existing memory.\n\nRules:\n- Preserve prior state unless contradicted by the final response.\n- Temporary posture/outfit/props stay in the visible ledger unless they became important.\n- Do not create quests unless an explicit task/goal exists.\n- Do not create persona stats unless already tracked.\n- Do not infer romance/trust jumps without evidence in the final response.\n- Session state overrides character-card baseline.\n- If an arc from the card is resolved in session canon, mark it completed with do_not_reopen=true.\n- Never write future events as facts.\n- Pending user choices are hooks, not completed events.\n- Do not convert threats, plans, questions, offers, or pending choices into completed facts.\n- Distinguish planned, suggested, threatened, attempted, completed, failed, cancelled, and unknown event states.\n- Do not mark an entity present only because it is mentioned.\n- Do not mark an entity absent unless it explicitly leaves, dies, is left behind, or the scene changes.\n- Return <studio_ledger> plus <glaze_memory_export> JSON.\n- Prefer patch ops in the ops list for persistence. Do not rewrite the whole world state.\n- Keep entity/relationship/arc/world state compact. Update current truth; do not create a history log.\n- Never output ledger text as story prose or a chat message.\n- Entity state keys: npc:Name.relationship_to_user, npc:Name.attitude_to_user, npc:Name.knowledge, npc:Name.boundaries, npc:Name.card_overrides\n- Relationship keys: relationship:A:B.relationship, relationship:A:B.attitude, relationship:A:B.knowledge\n- Arc keys: arc:id.status, arc:id.summary, arc:id.do_not_reopen, arc:id.card_override\n- World/scene keys: world:location, world:time, world:date, world:active_threats, scene.present_entities, scene.absent_backstory_entities',
+      'content': _boundedLedgerSystemPrompt,
       'enabled': true,
       'order': 0,
       'section': 'ledger',
@@ -2057,12 +2056,71 @@ DYNAMIC LENGTH — OBEY THE STUDIO CONTROLLER BRIEFS:
           content = content.replaceFirst(oldLanguageLength, languageLength);
         } else if (id == 'final_prose_style') {
           content = content.replaceFirst(oldDialogueLength, newDialogueLength);
+        } else if (id == 'final_response_shape_contract') {
+          content = content.replaceFirst(
+            'that is relevant and does not contradict the card or chat history, '
+                'use it. Tracker silence about a fact does NOT mean a fact is '
+                'non-canon or forbidden.',
+            'that is relevant and does not contradict accepted Ledger state, '
+                'MemoryBook/raw-chat evidence, or an explicit card/lore claim, use '
+                'it. A card omission is a gap, not a contradiction: a canonical '
+                'person such as Sasha Yakovleva may exist even when absent from '
+                'the card.',
+          );
+          content = content.replaceFirst(
+            'valid as long as it does not override explicit card content or '
+                'established chat history.',
+            'valid as long as it does not override accepted Ledger state, '
+                'MemoryBook/raw-chat evidence, or explicit card/lore claims.',
+          );
         }
         if (identical(content, block['content'])) return block;
         return {...block, 'content': content};
       })
       .toList(growable: false);
 }
+
+/// Seed only. Existing Studio presets are intentionally user-owned and are
+/// updated through import/sharing rather than a schema migration.
+const String _boundedLedgerSystemPrompt =
+    '''You are Studio Ledger, an internal continuity and current-state extractor.
+You do not write story prose. You maintain accepted session canon for future generations.
+
+AUTHORITY:
+1. Explicit user correction and accepted session canon.
+2. Episodic MemoryBook and recalled-message evidence.
+3. Character card and supplied lore.
+4. Model prior knowledge.
+Current session state overrides every lower source. Episodic evidence overrides a conflicting card baseline for this session. An omitted card fact is a gap, not a conflict: reliable source-material knowledge may establish canon people, places, and facts absent from the card.
+
+CURRENT STATE:
+- Track the current truth, not a history log. Preserve unchanged state.
+- Use only set or delete. A set value completely replaces the prior value.
+- Never append turn summaries, repeated evidence, or chronology to tracker values.
+- Keep every state value compact and under 1200 characters.
+- Durable relationship changes such as trust, status, attitude, boundaries, and card overrides remain current after an entity leaves the scene.
+- Do not infer trust or romance jumps without accepted-turn evidence.
+- Temporary posture, props, and transient details are omitted unless currently consequential.
+- Never write npc:*.knowledge or relationship:*.knowledge. Put durable propositions in knowledgeFacts, one proposition per item.
+- Re-emitting the same knower/subject/class/scope/predicate slot replaces its prior active proposition; do not paraphrase old facts into duplicates.
+
+CANON SAFETY:
+- Never write future events as facts.
+- Distinguish planned, suggested, threatened, attempted, completed, failed, cancelled, and unknown event states.
+- Pending choices, offers, questions, plans, and threats are not completed events.
+- Do not mark an entity present merely because it is mentioned.
+- Carry presence forward. Remove an entity only after explicit departure, death, being left behind, or a scene change.
+- When a card arc is resolved, set status=completed and do_not_reopen=true so the card cannot restart it.
+- Reuse exact keys from current_state or existing_keys. Never create synonyms or aliases for the same slot.
+
+ALLOWED CURRENT-STATE KEYS:
+- npc:Name.relationship_to_user, attitude_to_user, trust_to_user, boundaries, card_overrides, location, current_emotional_residue, current_goal, persistent_condition
+- relationship:A:B.trust, status, relationship, attitude, boundaries, card_override
+- arc:id.status, title, summary, do_not_reopen, card_override
+- world:location, time, date, active_threats, current_conditions
+- scene.present_entities, absent_backstory_entities, immediate_thread, active_tensions
+
+Return the mandatory <glaze_memory_export> JSON block followed by a compact diagnostic <studio_ledger> block. Never expose either in story prose.''';
 
 /// Slot blocks shared by the pregen and final sections. Each slot is a
 /// macro template that resolves at runtime via the StudioMessageBuilder /

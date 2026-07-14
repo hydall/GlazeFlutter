@@ -90,7 +90,7 @@ Ops format:
 {"ops":[{"op":"set","key":"npc:Name.field","value":"…","evidence":"…","eventState":"completed"},…],"knowledgeFacts":[{"knowerKey":"entity:lucy","knowerName":"Lucy","subjectKey":"entity:danvi","subjectName":"Danvi","factClass":"relationship","scopeKey":"relationship:danvi","predicate":"trusts","object":"Trusts Danvi.","epistemicState":"confirmed","confidence":0.9,"importance":0.8,"entities":["Lucy"],"topics":["trust"],"supersedesId":null}]}
 
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
-Allowed ops: set, append_unique, delete.
+Allowed ops: set, delete. Every set replaces the complete current value.
 Do not write npc:*.knowledge — use knowledgeFacts instead.
 Allowed eventState: planned, suggested, threatened, attempted, completed, failed, cancelled, unknown (or omit).
 Allowed factClass: knowledge, relationship, behavior_change, commitment, goal, persistent_condition, identity_development.
@@ -112,8 +112,9 @@ knowledgeFacts rules:
         .where((t) => t.scope == 'ledger' || t.scope == 'chat')
         .where(
           (t) =>
-              t.name.startsWith('npc:') ||
-              t.name.startsWith('relationship:') ||
+              (t.name.startsWith('npc:') && !t.name.endsWith('.knowledge')) ||
+              (t.name.startsWith('relationship:') &&
+                  !t.name.endsWith('.knowledge')) ||
               t.name.startsWith('arc:') ||
               t.name.startsWith('world:') ||
               t.name.startsWith('scene.'),
@@ -195,13 +196,13 @@ Rules:
 - Do not infer romance/trust jumps without evidence in the final response.
 - Session state overrides character-card baseline.
 - Source priority is: explicit user correction and established session canon;
-  then character card and supplied lore; then tracker state; then model
-  knowledge of the source material.
+  then episodic MemoryBook/raw recall; then character card and supplied lore;
+  then model knowledge of the source material.
 - Source-material knowledge is allowed to fill genuine gaps. Absence from the
   character card does NOT mean a known canon person or fact is unknown.
-- Model knowledge must not contradict or rewrite the character card, supplied
-  lore, explicit user corrections, or established session canon. When unsure,
-  omit the claim instead of recording it as session fact.
+- Model knowledge must not contradict explicit session canon, episodic evidence,
+  or explicit card/lore claims. An omitted card fact is a gap, not a conflict.
+  When unsure, omit the claim instead of recording it as session fact.
 - A model-known source fact becomes session canon only after it is stated in an
   accepted user/assistant turn. The Ledger may then persist it with evidence.
 - A retcon invalidates only the fact or condition it identifies. It does not
@@ -220,8 +221,9 @@ Rules:
 - Reuse an exact key from <current_state> or <existing_keys> when it represents the same fact. Update it with set; do not create a synonym key.
 - Keep entity/relationship/arc/world state compact. Update current truth; do not create a history log.
 - Never output ledger text as story prose or a chat message.
-- Entity state keys: npc:Name.relationship_to_user, npc:Name.attitude_to_user, npc:Name.knowledge, npc:Name.boundaries, npc:Name.card_overrides
-- Relationship keys: relationship:A:B.relationship, relationship:A:B.attitude, relationship:A:B.knowledge
+- Entity state keys: npc:Name.relationship_to_user, npc:Name.attitude_to_user, npc:Name.trust_to_user, npc:Name.boundaries, npc:Name.card_overrides, npc:Name.location, npc:Name.current_emotional_residue, npc:Name.current_goal, npc:Name.persistent_condition
+- Relationship keys: relationship:A:B.trust, relationship:A:B.status, relationship:A:B.relationship, relationship:A:B.attitude, relationship:A:B.boundaries, relationship:A:B.card_override
+- Never write npc:*.knowledge or relationship:*.knowledge. Use knowledgeFacts.
 - Arc keys: arc:id.status, arc:id.summary, arc:id.do_not_reopen, arc:id.card_override
 - World/scene keys: world:location, world:time, world:date, world:active_threats, scene.present_entities, scene.absent_backstory_entities''';
 }

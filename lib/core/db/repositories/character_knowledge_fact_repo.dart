@@ -17,25 +17,29 @@ class CharacterKnowledgeFactRepo {
 
   /// Replaying a Ledger export replaces only the facts at its exact anchor.
   /// This makes retry safe without imposing a false global uniqueness rule.
-  Future<void> insertAllTentative(List<CharacterKnowledgeFact> facts) async {
-    if (facts.isEmpty) return;
-    final anchor = facts.first;
+  Future<void> replaceTentativeAnchor({
+    required String sessionId,
+    required String messageId,
+    required int swipeId,
+    required int agentSwipeId,
+    required List<CharacterKnowledgeFact> facts,
+  }) async {
     if (facts.any(
       (fact) =>
-          fact.chatSessionId != anchor.chatSessionId ||
-          fact.sourceMessageId != anchor.sourceMessageId ||
-          fact.sourceSwipeId != anchor.sourceSwipeId ||
-          fact.sourceAgentSwipeId != anchor.sourceAgentSwipeId,
+          fact.chatSessionId != sessionId ||
+          fact.sourceMessageId != messageId ||
+          fact.sourceSwipeId != swipeId ||
+          fact.sourceAgentSwipeId != agentSwipeId,
     )) {
       throw ArgumentError('A tentative batch must share one source anchor.');
     }
 
     await db.transaction(() async {
       await _deleteAnchor(
-        sessionId: anchor.chatSessionId,
-        messageId: anchor.sourceMessageId,
-        swipeId: anchor.sourceSwipeId,
-        agentSwipeId: anchor.sourceAgentSwipeId,
+        sessionId: sessionId,
+        messageId: messageId,
+        swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
       );
       for (final fact in facts) {
         await db
@@ -51,44 +55,110 @@ class CharacterKnowledgeFactRepo {
     });
   }
 
+  Future<void> insertAllTentative(List<CharacterKnowledgeFact> facts) async {
+    if (facts.isEmpty) return;
+    final anchor = facts.first;
+    await replaceTentativeAnchor(
+      sessionId: anchor.chatSessionId,
+      messageId: anchor.sourceMessageId,
+      swipeId: anchor.sourceSwipeId,
+      agentSwipeId: anchor.sourceAgentSwipeId,
+      facts: facts,
+    );
+  }
+
   Future<void> activateAnchor({
     required String sessionId,
     required String messageId,
     required int swipeId,
     required int agentSwipeId,
-  }) => _setAnchorLifecycle(
-    sessionId: sessionId,
-    messageId: messageId,
-    swipeId: swipeId,
-    agentSwipeId: agentSwipeId,
-    lifecycle: CharacterKnowledgeFactLifecycle.active,
-  );
+  }) async {
+    await db.transaction(() async {
+      final incoming = await getBySourceAnchor(
+        sessionId: sessionId,
+        messageId: messageId,
+        swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
+      );
+      for (final fact in incoming) {
+        final activeRows = await _activeQuery(sessionId).get();
+        final previous = activeRows
+            .map(_fromRow)
+            .where(
+              (candidate) =>
+                  candidate.id != fact.id &&
+                  semanticSlotKey(candidate) == semanticSlotKey(fact),
+            )
+            .toList();
+        for (final old in previous) {
+          await (db.update(
+            db.characterKnowledgeFactRows,
+          )..where((row) => row.id.equals(old.id))).write(
+            CharacterKnowledgeFactRowsCompanion(
+              lifecycle: const Value('superseded'),
+              updatedAt: Value(currentTimestampSeconds()),
+            ),
+          );
+        }
+        await (db.update(
+          db.characterKnowledgeFactRows,
+        )..where((row) => row.id.equals(fact.id))).write(
+          CharacterKnowledgeFactRowsCompanion(
+            supersedesId: Value(
+              previous.isEmpty ? fact.supersedesId : previous.first.id,
+            ),
+            lifecycle: const Value('active'),
+            updatedAt: Value(currentTimestampSeconds()),
+          ),
+        );
+      }
+    });
+  }
 
   Future<void> retractAnchor({
     required String sessionId,
     required String messageId,
     required int swipeId,
     required int agentSwipeId,
-  }) => _setAnchorLifecycle(
-    sessionId: sessionId,
-    messageId: messageId,
-    swipeId: swipeId,
-    agentSwipeId: agentSwipeId,
-    lifecycle: CharacterKnowledgeFactLifecycle.retracted,
-  );
+  }) async {
+    await db.transaction(() async {
+      final facts = await getBySourceAnchor(
+        sessionId: sessionId,
+        messageId: messageId,
+        swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
+      );
+      await _setAnchorLifecycle(
+        sessionId: sessionId,
+        messageId: messageId,
+        swipeId: swipeId,
+        agentSwipeId: agentSwipeId,
+        lifecycle: CharacterKnowledgeFactLifecycle.retracted,
+      );
+      await _reactivatePredecessors(facts);
+    });
+  }
 
   /// Retracts every fact generated for a deleted message, including all of its
   /// green/blue swipes. Rows remain as provenance tombstones.
-  Future<void> retractForMessage(String sessionId, String messageId) {
-    return (db.update(db.characterKnowledgeFactRows)
-          ..where((row) => row.chatSessionId.equals(sessionId))
-          ..where((row) => row.sourceMessageId.equals(messageId)))
-        .write(
-          CharacterKnowledgeFactRowsCompanion(
-            lifecycle: const Value('retracted'),
-            updatedAt: Value(currentTimestampSeconds()),
-          ),
-        );
+  Future<void> retractForMessage(String sessionId, String messageId) async {
+    await db.transaction(() async {
+      final rows =
+          await (db.select(db.characterKnowledgeFactRows)
+                ..where((row) => row.chatSessionId.equals(sessionId))
+                ..where((row) => row.sourceMessageId.equals(messageId)))
+              .get();
+      await (db.update(db.characterKnowledgeFactRows)
+            ..where((row) => row.chatSessionId.equals(sessionId))
+            ..where((row) => row.sourceMessageId.equals(messageId)))
+          .write(
+            CharacterKnowledgeFactRowsCompanion(
+              lifecycle: const Value('retracted'),
+              updatedAt: Value(currentTimestampSeconds()),
+            ),
+          );
+      await _reactivatePredecessors(rows.map(_fromRow));
+    });
   }
 
   Future<void> supersede(
@@ -173,6 +243,10 @@ class CharacterKnowledgeFactRepo {
               ..where((row) => row.sourceMessageId.isIn(messageIds)))
             .get();
     final copiedIds = rows.map((row) => row.id).toSet();
+    final copiedSupersededIds = rows
+        .map((row) => row.supersedesId)
+        .whereType<String>()
+        .toSet();
     await db.transaction(() async {
       for (final row in rows) {
         final fact = _fromRow(row);
@@ -181,6 +255,11 @@ class CharacterKnowledgeFactRepo {
             fact.supersedesId != null && copiedIds.contains(fact.supersedesId)
             ? '${fact.supersedesId}@$toSessionId'
             : null;
+        final copiedLifecycle =
+            fact.lifecycle == CharacterKnowledgeFactLifecycle.superseded &&
+                !copiedSupersededIds.contains(fact.id)
+            ? CharacterKnowledgeFactLifecycle.active
+            : fact.lifecycle;
         await db
             .into(db.characterKnowledgeFactRows)
             .insertOnConflictUpdate(
@@ -190,6 +269,7 @@ class CharacterKnowledgeFactRepo {
                   chatSessionId: toSessionId,
                   supersedesId: copiedSupersedes,
                   clearSupersedesId: copiedSupersedes == null,
+                  lifecycle: copiedLifecycle,
                 ),
               ),
             );
@@ -268,6 +348,36 @@ class CharacterKnowledgeFactRepo {
         .go();
   }
 
+  Future<void> _reactivatePredecessors(
+    Iterable<CharacterKnowledgeFact> retracted,
+  ) async {
+    for (final fact in retracted) {
+      final predecessorId = fact.supersedesId;
+      if (predecessorId == null) continue;
+      final predecessor = await getById(predecessorId);
+      if (predecessor == null ||
+          predecessor.lifecycle != CharacterKnowledgeFactLifecycle.superseded) {
+        continue;
+      }
+      final activeRows = await _activeQuery(fact.chatSessionId).get();
+      final hasActiveSuccessor = activeRows
+          .map(_fromRow)
+          .any(
+            (candidate) =>
+                semanticSlotKey(candidate) == semanticSlotKey(predecessor),
+          );
+      if (hasActiveSuccessor) continue;
+      await (db.update(
+        db.characterKnowledgeFactRows,
+      )..where((row) => row.id.equals(predecessorId))).write(
+        CharacterKnowledgeFactRowsCompanion(
+          lifecycle: const Value('active'),
+          updatedAt: Value(currentTimestampSeconds()),
+        ),
+      );
+    }
+  }
+
   CharacterKnowledgeFactRow _toRow(CharacterKnowledgeFact fact) {
     final now = currentTimestampSeconds();
     return CharacterKnowledgeFactRow(
@@ -334,3 +444,13 @@ class CharacterKnowledgeFactRepo {
     }
   }
 }
+
+String semanticSlotKey(CharacterKnowledgeFact fact) => [
+  fact.knowerKey,
+  fact.subjectKey,
+  fact.factClass.wireName,
+  fact.scopeKey,
+  fact.factClass == CharacterKnowledgeFactClass.relationship
+      ? 'current_relationship_state'
+      : fact.predicate.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' '),
+].join('\u0000');

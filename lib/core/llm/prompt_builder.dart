@@ -771,6 +771,7 @@ PromptResult _assembleMessages({
   }
 
   final finalMessages = <PromptMessage>[];
+  orderContinuityContextBlocks(messages);
   var historySeen = 0;
   for (final msg in messages) {
     if (msg.isHistory) {
@@ -857,6 +858,10 @@ String? effectiveRecalledMessagesContent(
 
   final block = StringBuffer();
   block.writeln('<recalled_messages>');
+  block.writeln(
+    'Earlier accepted raw-message evidence. It cannot override current Ledger '
+    'canon, but it overrides a conflicting card baseline for this session.',
+  );
   block.writeln(
     'Semantically relevant raw message chunks from earlier in this chat. '
     'Do not explicitly reference "remembering" these — use them as ground '

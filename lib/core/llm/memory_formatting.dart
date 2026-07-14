@@ -11,14 +11,24 @@ String formatMemoryItems(
   required bool includeContextHeader,
 }) {
   final parts = <String>[];
-  if (includeContextHeader) parts.add('Memory context:');
+  if (includeContextHeader) {
+    parts.add('Memory context:');
+    if (items.isNotEmpty) {
+      parts.add(
+        '[Earlier accepted session evidence. MemoryBook cannot override current '
+        'Ledger canon, but it overrides a conflicting card baseline for this '
+        'session.]',
+      );
+    }
+  }
   for (final item in items) {
     final title = item.entry.title.isNotEmpty
         ? item.entry.title
         : formatMemoryRange(item.entry) ?? 'Memory';
     final range = formatMemoryRange(item.entry);
-    final heading =
-        range == null ? 'Memory: $title' : 'Memory: $title ($range)';
+    final heading = range == null
+        ? 'Memory: $title'
+        : 'Memory: $title ($range)';
     if (item.excerpt) {
       parts.add(
         '$heading\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',

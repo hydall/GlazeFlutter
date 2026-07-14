@@ -138,6 +138,35 @@ void injectStudioSessionStateBlock(
   }
 }
 
+/// Places continuity layers directly before history in ascending authority.
+/// Later system messages have greater practical recency, so Ledger canon is
+/// deliberately last: card/lore → episodic MemoryBook/raw recall → durable
+/// character state → current Ledger state.
+void orderContinuityContextBlocks(List<PromptMessage> messages) {
+  const orderedIds = <String>[
+    'memory',
+    'recalled_messages',
+    'current_character_state',
+    'studio_session_state',
+  ];
+  final blocks = <String, PromptMessage>{};
+  messages.removeWhere((message) {
+    if (!orderedIds.contains(message.blockId)) return false;
+    blocks[message.blockId!] = message;
+    return true;
+  });
+  if (blocks.isEmpty) return;
+  final historyIdx = messages.indexWhere((message) => message.isHistory);
+  final insertAt = historyIdx < 0 ? messages.length : historyIdx;
+  messages.insertAll(
+    insertAt,
+    orderedIds
+        .map((id) => blocks[id])
+        .whereType<PromptMessage>()
+        .toList(growable: false),
+  );
+}
+
 /// Refilter a [MemorySelection] against the visible-window message ids
 /// returned by [TokenBreakdown]. Re-runs the selector with the new
 /// exclusion set so anything whose `messageIds` overlaps the visible
