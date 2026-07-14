@@ -4,14 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_version.dart';
 import '../../core/state/dev_mode_provider.dart';
 
-/// Persistent build-date watermark pinned to the bottom-right of the screen.
+/// Persistent build watermark pinned to the bottom-right of the screen.
 ///
-/// Visible by default; can be hidden from the Dev settings via
-/// [hideBuildWatermarkProvider]. Must be placed as a direct child of a [Stack].
+/// Shows the build branch (when injected) above the build date, both aligned
+/// to the right edge. Visible by default; can be hidden from the Dev settings
+/// via [hideBuildWatermarkProvider]. Must be placed as a direct child of a
+/// [Stack].
 class BuildWatermark extends ConsumerWidget {
   const BuildWatermark({super.key});
 
-  String get _label {
+  String get _dateLabel {
     if (buildDate.isNotEmpty) return buildDate;
     // Fallback for local/dev builds where BUILD_DATE wasn't injected.
     final now = DateTime.now();
@@ -25,6 +27,14 @@ class BuildWatermark extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final cs = Theme.of(context).colorScheme;
+    final style = TextStyle(
+      fontSize: 9,
+      height: 1.0,
+      letterSpacing: 0.2,
+      fontWeight: FontWeight.w500,
+      decoration: TextDecoration.none,
+      color: cs.onSurface.withValues(alpha: 0.3),
+    );
     return Positioned(
       right: 0,
       bottom: 0,
@@ -32,17 +42,14 @@ class BuildWatermark extends ConsumerWidget {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.only(right: 6, bottom: 4),
-            child: Text(
-              _label,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 9,
-                height: 1.0,
-                letterSpacing: 0.2,
-                fontWeight: FontWeight.w500,
-                decoration: TextDecoration.none,
-                color: cs.onSurface.withValues(alpha: 0.3),
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (buildBranch.isNotEmpty)
+                  Text(buildBranch, textAlign: TextAlign.right, style: style),
+                Text(_dateLabel, textAlign: TextAlign.right, style: style),
+              ],
             ),
           ),
         ),
