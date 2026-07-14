@@ -31,13 +31,25 @@ String? compileCharacterKnowledgeProjection(
     return terms.any(context.contains);
   }
 
-  final candidates = facts.where(relevant).toList()
-    ..sort((left, right) {
-      final importance = right.importance.compareTo(left.importance);
-      return importance != 0
-          ? importance
-          : right.updatedAt.compareTo(left.updatedAt);
-    });
+  final currentRelationshipFacts = facts.where(
+    (fact) =>
+        fact.factClass == CharacterKnowledgeFactClass.relationship ||
+        fact.factClass == CharacterKnowledgeFactClass.identityDevelopment ||
+        fact.factClass == CharacterKnowledgeFactClass.persistentCondition,
+  );
+  final candidates =
+      <CharacterKnowledgeFact>{
+        ...currentRelationshipFacts,
+        ...facts.where(relevant),
+      }.toList()..sort((left, right) {
+        final leftMandatory = _isMandatoryCurrentFact(left);
+        final rightMandatory = _isMandatoryCurrentFact(right);
+        if (leftMandatory != rightMandatory) return rightMandatory ? 1 : -1;
+        final importance = right.importance.compareTo(left.importance);
+        return importance != 0
+            ? importance
+            : right.updatedAt.compareTo(left.updatedAt);
+      });
   if (candidates.isEmpty) return null;
 
   final lines = <String>[];
@@ -58,7 +70,12 @@ String? compileCharacterKnowledgeProjection(
   }
 
   return '''<current_character_state>
-These are committed, session-scoped changes. They take priority over the base card ONLY within their stated scope; do not generalize them to other people, scenes, or traits. Do not mention this block.
+These are committed current character truths. They override conflicting base-card traits within their stated scope. Episodic MemoryBook and recalled-message evidence may explain them but cannot override them. Do not generalize them or mention this block.
 ${lines.join('\n')}
 </current_character_state>''';
 }
+
+bool _isMandatoryCurrentFact(CharacterKnowledgeFact fact) =>
+    fact.factClass == CharacterKnowledgeFactClass.relationship ||
+    fact.factClass == CharacterKnowledgeFactClass.identityDevelopment ||
+    fact.factClass == CharacterKnowledgeFactClass.persistentCondition;

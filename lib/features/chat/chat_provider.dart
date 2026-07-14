@@ -257,6 +257,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       imagePath: imageDataUrl,
     );
 
+    final acceptedAssistant = current.messages.reversed
+        .where((message) => message.role == 'assistant')
+        .firstOrNull;
     final updatedSession = await ref
         .read(chatRepoProvider)
         .appendUserMessageAndClearDraft(
@@ -265,14 +268,24 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
           updatedAt: currentTimestampSeconds(),
         );
     if (updatedSession == null) return;
-    // Mark the latest tracker snapshot as committed — the user has moved on
-    // from the previous assistant turn by sending a follow-up. This separates
-    // accepted state (committed=1, used by getLatestCommitted) from
-    // tentative/regen state (committed=0).
-    final committedSnapshot = await ref
-        .read(trackerSnapshotRepoProvider)
-        .commitLatest(current.session!.id);
+    // Commit the exact visible green/blue swipe, never whichever Ledger call
+    // happened to finish most recently.
+    final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
+    final committedSnapshot = acceptedAssistant == null
+        ? null
+        : await snapshotRepo.getByAnchor(
+            sessionId: current.session!.id,
+            messageId: acceptedAssistant.id,
+            swipeId: acceptedAssistant.swipeId,
+            agentSwipeId: acceptedAssistant.agentSwipeId,
+          );
     if (committedSnapshot != null) {
+      await snapshotRepo.commit(
+        sessionId: committedSnapshot.sessionId,
+        messageId: committedSnapshot.messageId,
+        swipeId: committedSnapshot.swipeId,
+        agentSwipeId: committedSnapshot.agentSwipeId,
+      );
       await ref
           .read(characterKnowledgeFactRepoProvider)
           .activateAnchor(

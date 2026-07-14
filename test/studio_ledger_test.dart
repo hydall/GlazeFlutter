@@ -71,10 +71,10 @@ const _validJson = '''
       "eventState": "completed"
     },
     {
-      "op": "append_unique",
-      "key": "npc:Lucyna Kushinada.knowledge",
-      "value": "Danvi knows Lucy's role in David's fate.",
-      "evidence": "Revealed in final assistant response.",
+      "op": "set",
+      "key": "relationship:Lucyna Kushinada:Danvi.trust",
+      "value": "fragile but established",
+      "evidence": "Lucy accepted a shared ride.",
       "eventState": "completed"
     },
     {
@@ -150,6 +150,21 @@ void main() {
       expect(prompt, contains('"knowledgeFacts"'));
       expect(prompt, isNot(contains('durableFacts')));
       expect(prompt, isNot(contains('Max value length')));
+    });
+
+    test('rejects append histories and legacy knowledge tracker keys', () {
+      const raw = '''
+<glaze_memory_export>
+{"ops":[
+  {"op":"append_unique","key":"npc:Lucy.boundaries","value":"new"},
+  {"op":"set","key":"npc:Lucy.knowledge","value":"history blob"}
+]}
+</glaze_memory_export>
+''';
+
+      final result = parser.parse(raw);
+      expect(result.export, isNull);
+      expect(result.rejectionReason, contains('all ops rejected'));
     });
   });
 
@@ -251,7 +266,7 @@ Ledger text.
   "ops": [
     {
       "op": "set",
-      "key": "npc:Lucy.knowledge",
+      "key": "npc:Lucy.boundaries",
       "value": ["Danvi knows", "Lucy reacted"],
       "evidence": {"source":"assistant"},
       "eventState": "completed"
@@ -317,16 +332,16 @@ Ledger text.
       expect(result.wasRejected, isTrue);
     });
 
-    test('preserves long ledger values without truncation', () {
+    test('rejects oversized current-state values', () {
       final longVal = 'x' * 4000;
       final longOpBlock =
           '<glaze_memory_export>\n'
-          '{"ops":[{"op":"set","key":"npc:Lucy.knowledge","value":"$longVal",'
+          '{"ops":[{"op":"set","key":"npc:Lucy.boundaries","value":"$longVal",'
           '"evidence":"test","eventState":"completed"}]}\n'
           '</glaze_memory_export>';
       final result = parser.parse(longOpBlock);
-      expect(result.wasRejected, isFalse);
-      expect(result.export?.ops.single.value, longVal);
+      expect(result.wasRejected, isTrue);
+      expect(result.export, isNull);
     });
 
     test('ignores empty export (no ops or knowledge facts)', () {

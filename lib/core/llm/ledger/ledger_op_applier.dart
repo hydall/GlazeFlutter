@@ -6,7 +6,7 @@ import 'ledger_provenance.dart';
 
 /// Applies a single [LedgerOp] to the [TrackerRepo].
 ///
-/// Handles `set`, `append_unique`, and `delete` ops. Respects `canon_lock`
+/// Handles current-state `set` and `delete` ops. Respects `canon_lock`
 /// keys — when `canon_lock:<key>` is set to `'true'`, the op is blocked.
 class LedgerOpApplier {
   const LedgerOpApplier();
@@ -47,39 +47,8 @@ class LedgerOpApplier {
           scope: 'ledger',
           provenance: provenance,
         );
-      case 'append_unique':
-        // Read current value and append if not already present.
-        final existing = await trackerRepo.get(sessionId, op.key);
-        final currentValue = existing?.value ?? '';
-        if (containsValue(currentValue, op.value)) {
-          debugPrint(
-            '[StudioLedger] append_unique skipped (already present) '
-            'key=${op.key}',
-          );
-          return;
-        }
-        final newValue = currentValue.isEmpty
-            ? op.value
-            : '$currentValue\n${op.value}';
-        await trackerRepo.upsertValue(
-          sessionId,
-          op.key,
-          newValue,
-          scope: 'ledger',
-          provenance: provenance,
-        );
       case 'delete':
         await trackerRepo.delete(sessionId, op.key);
     }
-  }
-
-  /// Returns true when [haystack] already contains [needle] as a line
-  /// (case-insensitive, trimmed). Used for append_unique semantics.
-  bool containsValue(String haystack, String needle) {
-    if (haystack.isEmpty || needle.isEmpty) return false;
-    final needleLower = needle.trim().toLowerCase();
-    return haystack
-        .split('\n')
-        .any((line) => line.trim().toLowerCase() == needleLower);
   }
 }

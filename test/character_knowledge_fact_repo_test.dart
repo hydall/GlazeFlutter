@@ -73,6 +73,101 @@ void main() {
   );
 
   test(
+    'replaying an anchor with no facts clears stale tentative output',
+    () async {
+      await repo.insertTentative(fact(id: 'stale'));
+
+      await repo.replaceTentativeAnchor(
+        sessionId: 'session-1',
+        messageId: 'message-1',
+        swipeId: 0,
+        agentSwipeId: 0,
+        facts: const [],
+      );
+
+      expect(
+        await repo.getBySourceAnchor(
+          sessionId: 'session-1',
+          messageId: 'message-1',
+          swipeId: 0,
+          agentSwipeId: 0,
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'activating a relationship slot supersedes its prior current value',
+    () async {
+      await repo.insertTentative(fact(id: 'low', messageId: 'message-1'));
+      await repo.activateAnchor(
+        sessionId: 'session-1',
+        messageId: 'message-1',
+        swipeId: 0,
+        agentSwipeId: 0,
+      );
+      await repo.insertTentative(
+        fact(
+          id: 'high',
+          messageId: 'message-2',
+        ).copyWith(predicate: 'fully trusts', object: 'fully trusts Danvi'),
+      );
+
+      await repo.activateAnchor(
+        sessionId: 'session-1',
+        messageId: 'message-2',
+        swipeId: 0,
+        agentSwipeId: 0,
+      );
+
+      expect(
+        (await repo.getActiveForSession('session-1')).map((item) => item.id),
+        ['high'],
+      );
+      expect(
+        (await repo.getById('low'))!.lifecycle,
+        CharacterKnowledgeFactLifecycle.superseded,
+      );
+      expect((await repo.getById('high'))!.supersedesId, 'low');
+    },
+  );
+
+  test('retracting a replacement restores prior relationship truth', () async {
+    await repo.insertTentative(fact(id: 'low', messageId: 'message-1'));
+    await repo.activateAnchor(
+      sessionId: 'session-1',
+      messageId: 'message-1',
+      swipeId: 0,
+      agentSwipeId: 0,
+    );
+    await repo.insertTentative(
+      fact(
+        id: 'high',
+        messageId: 'message-2',
+      ).copyWith(predicate: 'fully trusts', object: 'fully trusts Danvi'),
+    );
+    await repo.activateAnchor(
+      sessionId: 'session-1',
+      messageId: 'message-2',
+      swipeId: 0,
+      agentSwipeId: 0,
+    );
+
+    await repo.retractAnchor(
+      sessionId: 'session-1',
+      messageId: 'message-2',
+      swipeId: 0,
+      agentSwipeId: 0,
+    );
+
+    expect(
+      (await repo.getActiveForSession('session-1')).map((item) => item.id),
+      ['low'],
+    );
+  });
+
+  test(
     'superseding preserves the old row but excludes it from active retrieval',
     () async {
       await repo.insertTentative(fact(id: 'old'));

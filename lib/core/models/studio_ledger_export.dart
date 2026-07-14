@@ -20,12 +20,7 @@ part 'studio_ledger_export.g.dart';
 
 /// Allowed op codes in the patch list.
 /// Only these ops are accepted; others are rejected by validation.
-enum LedgerOpCode {
-  set,
-  // ignore: constant_identifier_names
-  append_unique,
-  delete,
-}
+enum LedgerOpCode { set, delete }
 
 /// One patch operation produced by the Studio Ledger.
 ///
@@ -33,7 +28,7 @@ enum LedgerOpCode {
 /// - [op] must be in [LedgerOpCode].
 /// - [key] must start with a known namespace prefix (npc:, relationship:,
 ///   arc:, world:, scene.).
-/// - [value] must be non-empty for set/append_unique.
+/// - [value] must be non-empty for set.
 /// - [eventState] (optional) must be one of the known event-state tokens.
 @freezed
 abstract class LedgerOp with _$LedgerOp {

@@ -42,7 +42,8 @@ class StudioStreamInterceptor {
     for (var i = nonHidden.length - 1; i >= 0; i--) {
       final m = nonHidden[i];
       final tokens = estimateTokens(m.content);
-      if (selected.isNotEmpty && totalTokens + tokens > finalHistoryTokenBudget) {
+      if (selected.isNotEmpty &&
+          totalTokens + tokens > finalHistoryTokenBudget) {
         break;
       }
       selected.insert(0, m.id);
@@ -95,6 +96,7 @@ class StudioStreamInterceptor {
       arcContent: payload.arcContent,
       entitiesContent: payload.entitiesContent,
       studioSessionStateContent: payload.studioSessionStateContent,
+      characterKnowledgeContent: payload.characterKnowledgeContent,
       recalledMessagesContent: payload.recalledMessagesContent,
       recalledMessageChunks: payload.recalledMessageChunks,
       disableSourceWindowExclusion: payload.disableSourceWindowExclusion,
