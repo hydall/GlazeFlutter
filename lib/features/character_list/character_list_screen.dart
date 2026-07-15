@@ -950,6 +950,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     if (!context.mounted) return;
     ref.read(characterSelectionProvider.notifier).clear();
     GlazeToast.show(context, 'chars_hidden_toast'.plural(ids.length));
+    if (ids.isNotEmpty) {
+      await maybeShowCharacterHidingOnboarding(context);
+    }
   }
 
   void _addSelectedToFolder(

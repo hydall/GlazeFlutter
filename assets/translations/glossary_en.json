@@ -101,6 +101,12 @@
                     "name": "Connections",
                     "alt": "Bindings",
                     "desc": "Links a [[lorebook]], [[preset]], or [[persona]] to a specific scope. Scopes: globally (all chats), per character, or per individual chat session. Priority: chat > character > global. Lets different characters or conversations automatically use different settings without manual switching."
+                },
+                {
+                    "id": "character-hiding",
+                    "name": "Character & Chats Hiding",
+                    "alt": "Hidden Characters",
+                    "desc": "Hiding a [[character]] removes it — and all of its [[chat-session]]s — from your Characters list, chat history, search, and filters. Nothing is deleted; the character is simply tucked away out of sight. To reveal hidden characters again, quickly tap the Characters tab 10 times in a row; tap it 10 more times to hide them again. The reveal is session-only and resets when you restart the app. The first time you hide a character, a one-time explainer describes how this works."
                 }
             ]
         },
