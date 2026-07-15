@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -34,6 +36,7 @@ import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/colored_markdown.dart';
+import 'character_editor_screen.dart';
 import 'widgets/character_variations_sheet.dart';
 
 // ─── Colour tokens ─────────────────────────────────────────────────────────
@@ -288,6 +291,25 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  /// Opens the character editor stacked ABOVE this detail sheet.
+  ///
+  /// The detail sheet is itself an imperative modal route (opened via
+  /// `showModalBottomSheet(useRootNavigator: true)`). Routing to the editor
+  /// through GoRouter (`context.push`) would insert it as a declarative *page*,
+  /// which the Navigator always stacks BELOW an imperatively-pushed route — so
+  /// the editor appeared underneath the sheet. Pushing it imperatively on the
+  /// same root navigator puts it on top; popping it (its own back button, the
+  /// system back gesture, or `context.pop`) returns to the still-open sheet.
+  void _openEditor() {
+    final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    final editor = CharacterEditorScreen(charId: widget.charId);
+    Navigator.of(context, rootNavigator: true).push(
+      isIos
+          ? CupertinoPageRoute<void>(builder: (_) => editor)
+          : MaterialPageRoute<void>(builder: (_) => editor),
+    );
+  }
+
   void _openActionsMenu() {
     final rootNav = Navigator.of(context, rootNavigator: true);
     final char = ref.read(characterByIdProvider(widget.charId));
@@ -303,7 +325,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
           onTap: () {
             rootNav.pop();
             if (!mounted) return;
-            context.push('/character/${widget.charId}/edit');
+            _openEditor();
           },
         ),
         BottomSheetItem(
