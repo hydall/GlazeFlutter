@@ -109,27 +109,14 @@ class ChatBridgeController {
   /// on" marker derived from the first message's timestamp. Timestamps are in
   /// milliseconds to match [ChatMessage.timestamp] and the WebView's `new Date`.
   static Map<String, Object?>? originMarkerFor(ChatSession? session) {
-    if (session == null) return null;
-    final branchedRaw = session.sessionVars['branchedAt'];
-    final branchedAt = branchedRaw == null ? null : int.tryParse(branchedRaw);
-    if (branchedAt != null && branchedAt > 0) {
-      return {
-        '__separator': true,
-        'separatorKind': 'branched',
-        'timestamp': branchedAt,
-      };
-    }
-    final firstTs = session.messages.isNotEmpty
-        ? session.messages.first.timestamp
-        : null;
-    if (firstTs != null && firstTs > 0) {
-      return {
-        '__separator': true,
-        'separatorKind': 'created',
-        'timestamp': firstTs,
-      };
-    }
-    return null;
+    final event = session?.originEvent;
+    if (event == null) return null;
+    return {
+      '__separator': true,
+      'separatorKind':
+          event.kind == ChatOriginKind.branched ? 'branched' : 'created',
+      'timestamp': event.timestampMs,
+    };
   }
 
   void setRegexContext(

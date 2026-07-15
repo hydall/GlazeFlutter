@@ -895,12 +895,33 @@ class _SessionsSheetContentState extends ConsumerState<_SessionsSheetContent> {
     final sessions = await ref
         .read(chatProvider(widget.charId).notifier)
         .getSessions();
+    // Most-recent activity first — branch/creation counts as activity, so a
+    // freshly branched or created chat sorts to the top even before any
+    // message is sent.
+    sessions.sort((a, b) => b.lastActivityMs.compareTo(a.lastActivityMs));
     if (mounted) {
       setState(() {
         _sessions = sessions;
         _loading = false;
       });
     }
+  }
+
+  /// Preview line for a session: the origin event ("Created on …" /
+  /// "Branched on …") while it is the most recent thing to have happened,
+  /// otherwise the last message content.
+  String _sessionPreview(ChatSession session) {
+    final origin = session.originEvent;
+    final lastTs = session.messages.isNotEmpty
+        ? session.messages.last.timestamp
+        : null;
+    if (origin != null && (lastTs == null || origin.timestampMs >= lastTs)) {
+      final kind = origin.kind == ChatOriginKind.branched
+          ? 'branched'
+          : 'created';
+      return formatOriginPreview(kind, origin.timestampMs);
+    }
+    return session.messages.lastOrNull?.content ?? 'No messages yet';
   }
 
   String _formatRelativeTime(int updatedAtSeconds) {
@@ -938,11 +959,10 @@ class _SessionsSheetContentState extends ConsumerState<_SessionsSheetContent> {
                       namedArgs: {'id': (session.sessionIndex + 1).toString()},
                     ),
               count: session.messages.length,
-              time: session.updatedAt == 0
+              time: session.lastActivityMs == 0
                   ? ''
-                  : _formatRelativeTime(session.updatedAt),
-              preview:
-                  session.messages.lastOrNull?.content ?? 'No messages yet',
+                  : _formatRelativeTime(session.lastActivityMs ~/ 1000),
+              preview: _sessionPreview(session),
               isActive: session.id == currentSessionId,
               onTap: () {
                 Navigator.of(context).pop();

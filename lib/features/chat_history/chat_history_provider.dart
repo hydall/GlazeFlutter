@@ -8,6 +8,7 @@ import '../../core/state/character_provider.dart'
     show revealHiddenCharactersProvider;
 import '../../core/state/db_provider.dart';
 import '../../core/utils/sync_deletion_tracker.dart';
+import '../../shared/utils/time_formatter.dart';
 import '../chat/chat_session_service.dart';
 
 class ChatSessionInfo {
@@ -96,13 +97,25 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
       final characterName = (variant != null && variant.isNotEmpty)
           ? '$baseName — $variant'
           : baseName;
+      // While the origin event (branch/creation) is the most recent thing to
+      // have happened, surface it as the preview and sort key so a freshly
+      // branched or created chat rises to the top with a "Branched on …" /
+      // "Created on …" line instead of a stale copied message.
+      var lastMessage = m.lastMessageContent;
+      var lastMessageTime = m.lastMessageTimestamp;
+      if (m.originKind != null &&
+          m.originTimestamp > 0 &&
+          m.originTimestamp >= m.lastMessageTimestamp) {
+        lastMessage = formatOriginPreview(m.originKind!, m.originTimestamp);
+        lastMessageTime = m.originTimestamp;
+      }
       result.add(ChatSessionInfo(
         sessionId: m.sessionId,
         characterId: m.characterId,
         characterName: characterName,
         avatarPath: char?.avatarPath,
-        lastMessage: m.lastMessageContent,
-        lastMessageTime: m.lastMessageTimestamp,
+        lastMessage: lastMessage,
+        lastMessageTime: lastMessageTime,
         messageCount: m.messageCount,
         sessionIndex: m.sessionIndex,
         sessionName: m.sessionName,

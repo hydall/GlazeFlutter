@@ -713,11 +713,30 @@ class ChatRepo implements SyncChatStore {
     }
 
     String? sessionName;
+    int? branchedAt;
     if (c.sessionVarsJson != null && c.sessionVarsJson!.isNotEmpty) {
       try {
         final vars = jsonDecode(c.sessionVarsJson!) as Map;
         sessionName = vars['sessionName'] as String?;
+        final b = vars['branchedAt'];
+        if (b is String) branchedAt = int.tryParse(b);
       } catch (_) {}
+    }
+
+    // Origin event: a branch stamp wins over the creation time (the first
+    // message timestamp). Reported alongside — never folded into
+    // lastMessageTimestamp — so the cloud-sync metadata hash stays stable.
+    int originTimestamp = 0;
+    String? originKind;
+    if (branchedAt != null && branchedAt > 0) {
+      originTimestamp = branchedAt;
+      originKind = 'branched';
+    } else {
+      final firstTs = _firstMessageTimestamp(json);
+      if (firstTs > 0) {
+        originTimestamp = firstTs;
+        originKind = 'created';
+      }
     }
 
     return SessionMetadata(
@@ -729,7 +748,52 @@ class ChatRepo implements SyncChatStore {
       lastMessageContent: lastContent,
       lastMessageTimestamp: lastTimestamp,
       sessionName: sessionName,
+      originTimestamp: originTimestamp,
+      originKind: originKind,
     );
+  }
+
+  /// Timestamp (ms) of the first top-level message object, or 0. String-aware
+  /// brace scan that stops at the first object — cheap enough for the
+  /// metadata listing, which otherwise decodes only the last message.
+  static int _firstMessageTimestamp(String json) {
+    int depth = 0;
+    int start = -1;
+    bool inString = false;
+    for (int i = 0; i < json.length; i++) {
+      final ch = json.codeUnitAt(i);
+      if (inString) {
+        if (ch == 0x5C /* \ */ ) {
+          i++;
+        } else if (ch == 0x22 /* " */ ) {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch == 0x22 /* " */ ) {
+        inString = true;
+      } else if (ch == 0x5B /* [ */ ) {
+        depth++;
+      } else if (ch == 0x7B /* { */ ) {
+        depth++;
+        if (depth == 2 && start < 0) start = i;
+      } else if (ch == 0x5D /* ] */ ) {
+        depth--;
+      } else if (ch == 0x7D /* } */ ) {
+        depth--;
+        if (start >= 0 && depth == 1) {
+          try {
+            final obj =
+                jsonDecode(json.substring(start, i + 1))
+                    as Map<String, dynamic>;
+            return (obj['timestamp'] as int?) ?? 0;
+          } catch (_) {
+            return 0;
+          }
+        }
+      }
+    }
+    return 0;
   }
 
   /// Single-pass scan of a JSON array string.

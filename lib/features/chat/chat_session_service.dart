@@ -200,6 +200,9 @@ class ChatSessionService {
       characterId: charId,
       sessionIndex: nextIndex,
       messages: initialMessages,
+      // Stamp creation time so the new chat carries a real "last activity"
+      // date for the session list (display + sorting) instead of 0.
+      updatedAt: currentTimestampSeconds(),
     );
     await repo.put(session);
     await saveCurrentSessionIndex(charId, nextIndex);
