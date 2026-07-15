@@ -16,6 +16,7 @@ import 'services/janitor_provider.dart';
 import 'services/janitor_public_lorebook.dart';
 import 'services/janny_provider.dart';
 import 'services/chub_provider.dart';
+import 'services/saucepan_provider.dart';
 
 const _pageSize = 24;
 const _providerKey = 'gz_catalog_provider';
@@ -27,6 +28,7 @@ const providerSortDefaults = <CatalogProvider, String>{
   CatalogProvider.janny: 'newest',
   CatalogProvider.datacat: 'recent',
   CatalogProvider.chub: 'popular',
+  CatalogProvider.saucepan: 'popular',
 };
 
 class CatalogState {
@@ -240,6 +242,13 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         );
       case CatalogProvider.chub:
         return chubSearch(
+          query: state.query,
+          page: state.page,
+          limit: _pageSize,
+          filters: state.filters,
+        );
+      case CatalogProvider.saucepan:
+        return saucepanSearch(
           query: state.query,
           page: state.page,
           limit: _pageSize,

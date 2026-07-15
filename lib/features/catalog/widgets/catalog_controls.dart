@@ -24,6 +24,7 @@ class CatalogControls extends StatelessWidget {
     CatalogProvider.janny => 'catalog_provider_janny_label'.tr(),
     CatalogProvider.datacat => 'catalog_provider_datacat_label'.tr(),
     CatalogProvider.chub => 'catalog_provider_chub_label'.tr(),
+    CatalogProvider.saucepan => 'catalog_provider_saucepan_label'.tr(),
   };
 
   static Map<String, String> sortOptionsForProvider(CatalogProvider p) =>
@@ -56,6 +57,12 @@ class CatalogControls extends StatelessWidget {
           'latest': 'catalog_sort_chub_latest'.tr(),
           'rating': 'catalog_sort_chub_rating'.tr(),
           'updated': 'catalog_sort_chub_updated'.tr(),
+        },
+        CatalogProvider.saucepan => {
+          'popular': 'catalog_sort_saucepan_popular'.tr(),
+          'newest': 'catalog_sort_saucepan_newest'.tr(),
+          'updated': 'catalog_sort_saucepan_updated'.tr(),
+          'chats': 'catalog_sort_saucepan_chats'.tr(),
         },
       };
 

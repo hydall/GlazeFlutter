@@ -14,6 +14,7 @@ import '../services/datacat_provider.dart';
 import '../services/janitor_extractor.dart';
 import '../services/janitor_provider.dart';
 import '../services/janny_provider.dart';
+import '../services/saucepan_provider.dart';
 import 'janitor_lorebooks_tab.dart';
 
 /// Fetches a catalog item's full character data and presents
@@ -73,6 +74,8 @@ class _CatalogDetailLauncherState
           result = await chubGetCharacter(
             widget.item.fullPath ?? widget.item.id,
           );
+        case CatalogProvider.saucepan:
+          result = await saucepanGetCharacter(widget.item.id);
       }
       if (mounted) setState(() => _downloaded = result);
     } catch (e) {

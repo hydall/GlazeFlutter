@@ -45,7 +45,7 @@ abstract class CatalogTag with _$CatalogTag {
   }) = _CatalogTag;
 }
 
-enum CatalogProvider { janitor, janny, datacat, chub }
+enum CatalogProvider { janitor, janny, datacat, chub, saucepan }
 
 class CatalogSearchResult {
   final List<CatalogItem> characters;
