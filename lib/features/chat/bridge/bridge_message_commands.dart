@@ -38,6 +38,16 @@ class MessageBridgeCommands {
     for (int i = 0; i < mapped.length; i++) {
       mapped[i]['text'] = resolved[i];
     }
+    // Prepend the session origin ("Created on" / "Branched on") marker only
+    // when the real first message is in this batch (top of the chat). During
+    // scrollback windowing (visibleStartIndex > 0) the top is not shown, so the
+    // marker would otherwise float above an unrelated message. Inserted after
+    // the image-resolve pass above so the synthetic (text-less) entry is not
+    // fed through resolveImgResults.
+    final origin = _host.chatOrigin;
+    if (visibleStartIndex == 0 && origin != null) {
+      mapped.insert(0, {...origin, '__separator': true});
+    }
     final json = jsonEncode(mapped);
     if (preserveScroll) {
       // Pass the preserve-scroll flag through as a second JS argument so the

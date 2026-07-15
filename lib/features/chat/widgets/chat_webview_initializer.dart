@@ -9,6 +9,7 @@ import '../../../core/state/character_provider.dart';
 import '../../../core/state/persona_resolution.dart';
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_overlay_blur_region.dart';
+import '../chat_provider.dart';
 
 /// Snapshot of the [ChatWebViewWidget] fields needed by
 /// [ChatWebViewInitializer]. Pure data — no `BuildContext` or
@@ -165,6 +166,10 @@ class ChatWebViewInitializer {
     bridge.isGenerating = input.isGenerating;
     bridge.isPostGenRunning = input.isPostGenRunning;
     bridge.isGeneratingImage = input.isGeneratingImage;
+    // Origin ("Created on" / "Branched on") marker for the first paint.
+    bridge.chatOrigin = ChatBridgeController.originMarkerFor(
+      ref.read(chatProvider(input.charId)).value?.session,
+    );
     await bridge.setMessages(
       input.messages,
       visibleStartIndex: input.visibleStartIndex,

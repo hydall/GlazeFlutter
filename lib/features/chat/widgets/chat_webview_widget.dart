@@ -16,6 +16,7 @@ import '../../../core/models/chat_message.dart';
 import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../extensions/services/panel_host_service.dart';
 import '../bridge/chat_bridge_registry.dart';
+import '../chat_provider.dart';
 import 'chat_message_sync.dart';
 import 'chat_webview_build_listeners.dart';
 import 'chat_webview_callbacks.dart';
@@ -795,6 +796,12 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     if (_bridge != null) {
       _bindBridgeCallbacks();
       _bridge!.setRegexContext(displayRegexes, character, effectivePersona);
+      // Refresh the origin ("Created on" / "Branched on") marker before any
+      // message sync dispatches, so a full setMessages picks up the current
+      // session's creation/branch stamp.
+      _bridge!.chatOrigin = ChatBridgeController.originMarkerFor(
+        ref.watch(chatProvider(widget.charId)).value?.session,
+      );
     }
 
     ChatWebViewBuildListeners(
