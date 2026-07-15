@@ -122,13 +122,6 @@ class _SheetViewState extends ConsumerState<SheetView>
   bool _keyboardOpen = false;
   bool _wasExpandedBeforeKeyboard = false;
 
-  /// True while the user is dragging the sheet. Combined with an active snap
-  /// animation, this disables the top-edge blur pass for the duration of the
-  /// motion so the drag stays at framerate. The blur is restored the moment
-  /// the sheet settles.
-  bool _dragging = false;
-  bool get _interacting => _dragging || _ctrl.isAnimating;
-
   late AnimationController _ctrl;
   Animation<double>? _anim;
 
@@ -162,9 +155,6 @@ class _SheetViewState extends ConsumerState<SheetView>
       vsync: this,
       duration: const Duration(milliseconds: 350),
     );
-    // Restore the blur once a snap animation finishes (per-tick height changes
-    // go through _heightN and never rebuild the sheet subtree).
-    _ctrl.addStatusListener(_onAnimStatus);
     _headerH = _estimateHeaderHeight();
     _headerBaseH = _headerH;
   }
@@ -291,7 +281,6 @@ class _SheetViewState extends ConsumerState<SheetView>
       );
     }
     _anim?.removeListener(_onTick);
-    _ctrl.removeStatusListener(_onAnimStatus);
     _ctrl.dispose();
     _fallbackScrollController.dispose();
     _heightN.dispose();
@@ -318,21 +307,11 @@ class _SheetViewState extends ConsumerState<SheetView>
   // sheet subtree is not rebuilt on every animation/drag frame.
   void _onTick() => _currentHeight = _anim!.value;
 
-  void _onAnimStatus(AnimationStatus status) {
-    if (!mounted) return;
-    if (status == AnimationStatus.completed ||
-        status == AnimationStatus.dismissed) {
-      // Force a rebuild so _interacting flips back to false and the blur paints.
-      setState(() {});
-    }
-  }
-
   void _onDragStart(DragStartDetails d) {
     _ctrl.stop();
     _anim?.removeListener(_onTick);
     _dragStartY = d.globalPosition.dy;
     _dragStartH = _currentHeight;
-    setState(() => _dragging = true);
   }
 
   void _onDragUpdate(DragUpdateDetails d) {
@@ -345,7 +324,6 @@ class _SheetViewState extends ConsumerState<SheetView>
   }
 
   void _onDragEnd(DragEndDetails d) {
-    _dragging = false;
     final vy = d.velocity.pixelsPerSecond.dy;
     final collapsed = _collapsed(context);
     final full = _full(context);
@@ -679,7 +657,7 @@ class _SheetViewState extends ConsumerState<SheetView>
     // FocusNode) survives interaction/battery-saver transitions without
     // GlobalKey tricks.
     return TopEdgeBlur(
-      enabled: _hasHeader && !_interacting && !batterySaver,
+      enabled: _hasHeader && !batterySaver,
       height: _headerH + 8,
       sigma: 24,
       tintColor: context.cs.surface.withValues(alpha: 0.4),
