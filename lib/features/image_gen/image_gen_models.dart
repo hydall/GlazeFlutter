@@ -57,9 +57,13 @@ class RoutMyConstants {
 
   static const models = [
     ('google/gemini-3.1-flash-image-preview', 'Gemini 3.1 Flash Image'),
+    ('google/gemini-3.1-flash-lite-image', 'Gemini 3.1 Flash Lite Image'),
     ('google/gemini-3-pro-image', 'Gemini 3 Pro Image'),
+    ('google/gemini-omni-flash-preview', 'Gemini Omni Flash'),
     ('openai/gpt-image-1.5', 'GPT Image 1.5'),
     ('openai/gpt-image-2', 'GPT Image 2'),
+    ('meta/muse-spark-1.1', 'Muse Spark 1.1'),
+    ('bytedance/seedream-5.0-pro', 'Seedream 5.0 Pro'),
   ];
 
   // Models that generate images via /v1/chat/completions with modalities:[image,text].
@@ -68,11 +72,22 @@ class RoutMyConstants {
   // /v1/images/generations (without refs).
   static const chatImageModels = {
     'google/gemini-3.1-flash-image-preview',
+    'google/gemini-3.1-flash-lite-image',
     'google/gemini-3-pro-image',
+    'google/gemini-omni-flash-preview',
   };
 
   static const aspectRatios = [
-    '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9',
+    '1:1',
+    '2:3',
+    '3:2',
+    '3:4',
+    '4:3',
+    '4:5',
+    '5:4',
+    '9:16',
+    '16:9',
+    '21:9',
   ];
 
   static const imageSizes = ['1K', '2K', '4K'];
@@ -106,7 +121,13 @@ class OpenAIConstants {
 
 class GeminiConstants {
   static const aspectRatios = [
-    '1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2',
+    '1:1',
+    '9:16',
+    '16:9',
+    '3:4',
+    '4:3',
+    '2:3',
+    '3:2',
   ];
   static const imageSizes = ['1K', '2K', '4K'];
 }

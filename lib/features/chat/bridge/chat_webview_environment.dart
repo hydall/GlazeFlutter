@@ -221,10 +221,9 @@ Future<void> _serveChatWebViewBundleAssets(HttpServer server) async {
       }
 
       request.response.headers.contentType = _contentTypeFor(path);
-      request.response.add(data.buffer.asUint8List(
-        data.offsetInBytes,
-        data.lengthInBytes,
-      ));
+      request.response.add(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      );
       await request.response.close();
     } catch (_) {
       request.response.statusCode = HttpStatus.internalServerError;
@@ -395,6 +394,8 @@ ContentType _contentTypeFor(String path) {
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
     return ContentType('image', 'jpeg');
   }
+  if (lower.endsWith('.webp')) return ContentType('image', 'webp');
+  if (lower.endsWith('.gif')) return ContentType('image', 'gif');
   return ContentType.binary;
 }
 

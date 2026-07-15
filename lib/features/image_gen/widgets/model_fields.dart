@@ -7,13 +7,14 @@ import 'rows.dart' as rows;
 /// Callback for showing a single-select options bottom sheet from a
 /// model-field row. Kept here so the row constructors don't have to
 /// know about [BuildContext] or modal sheet plumbing.
-typedef ShowOptionsCallback = void Function<T>({
-  required String title,
-  required List<T> items,
-  required String Function(T) labelBuilder,
-  required bool Function(T) isSelected,
-  required void Function(T) onSelected,
-});
+typedef ShowOptionsCallback =
+    void Function<T>({
+      required String title,
+      required List<T> items,
+      required String Function(T) labelBuilder,
+      required bool Function(T) isSelected,
+      required void Function(T) onSelected,
+    });
 
 /// Model-field rows for the Naistera image-gen API.
 List<Widget> buildNaisteraModelFields(
@@ -66,7 +67,15 @@ List<Widget> buildRoutmyModelFields(
   final aspect = isRu ? s.ruRoutmyAspectRatio : s.routmyAspectRatio;
   final size = isRu ? s.ruRoutmyImageSize : s.routmyImageSize;
   final quality = isRu ? s.ruRoutmyQuality : s.routmyQuality;
-  final constantsModels = RoutMyConstants.models;
+  final constantsModels = isRu
+      ? RuRoutMyConstants.models
+      : RoutMyConstants.models;
+  final aspectRatios = isRu
+      ? RuRoutMyConstants.aspectRatios
+      : RoutMyConstants.aspectRatios;
+  final imageSizes = isRu
+      ? RuRoutMyConstants.imageSizes
+      : RoutMyConstants.imageSizes;
 
   return [
     rows.ImageGenSelectorRow(
@@ -77,8 +86,7 @@ List<Widget> buildRoutmyModelFields(
       onTap: () => showOptions<String>(
         title: 'Model',
         items: constantsModels.map((e) => e.$1).toList(),
-        labelBuilder: (v) =>
-            constantsModels.firstWhere((e) => e.$1 == v).$2,
+        labelBuilder: (v) => constantsModels.firstWhere((e) => e.$1 == v).$2,
         isSelected: (v) => model == v,
         onSelected: (v) => isRu
             ? onUpdate(s.copyWith(ruRoutmyModel: v))
@@ -90,7 +98,7 @@ List<Widget> buildRoutmyModelFields(
       value: aspect,
       onTap: () => showOptions<String>(
         title: 'Aspect Ratio',
-        items: RoutMyConstants.aspectRatios,
+        items: aspectRatios,
         labelBuilder: (v) => v,
         isSelected: (v) => aspect == v,
         onSelected: (v) => isRu
@@ -103,7 +111,7 @@ List<Widget> buildRoutmyModelFields(
       value: size,
       onTap: () => showOptions<String>(
         title: 'Resolution',
-        items: RoutMyConstants.imageSizes,
+        items: imageSizes,
         labelBuilder: (v) => v,
         isSelected: (v) => size == v,
         onSelected: (v) => isRu

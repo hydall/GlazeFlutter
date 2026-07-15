@@ -72,26 +72,23 @@ class RoutmyImageProvider {
     CancelToken? cancelToken,
   }) async {
     final url = '$baseUrl/v1/images/generations';
+    final normalizedQuality = _normalizeQuality(quality);
 
     final body = <String, dynamic>{
       'model': model,
       'prompt': prompt,
       'n': 1,
-      'image_config': {
-        'aspect_ratio': aspectRatio,
-        'image_size': imageSize,
-        if (quality.isNotEmpty) 'quality': quality,
-      },
+      'image_config': {'aspect_ratio': aspectRatio, 'image_size': imageSize},
+      'quality': ?normalizedQuality,
     };
 
-    final b64 = await _http.postAndExtractBase64(
+    final json = await _http.post(
       url: url,
       apiKey: apiKey,
       body: body,
       cancelToken: cancelToken,
-      extractBase64: _extractImageBase64,
     );
-    return ImageGenHttp.base64ToBytes(b64);
+    return _extractImageBytes(json, cancelToken: cancelToken);
   }
 
   /// OpenAI-style image edits via multipart/form-data.
@@ -112,11 +109,7 @@ class RoutmyImageProvider {
     final validRefs = referenceImages.where((s) => s.isNotEmpty).toList();
 
     // Plain string fields — mirror sillyimages field order exactly
-    final fields = <String, String>{
-      'model': model,
-      'prompt': prompt,
-      'n': '1',
-    };
+    final fields = <String, String>{'model': model, 'prompt': prompt, 'n': '1'};
 
     // Map aspect ratio → OpenAI WxH size (gpt-image-2 specific sizes)
     final sizeStr = _aspectToSizeGptImage2(aspectRatio);
@@ -144,7 +137,7 @@ class RoutmyImageProvider {
       apiKey: apiKey,
       cancelToken: cancelToken,
     );
-    return ImageGenHttp.base64ToBytes(_extractImageBase64(json));
+    return _extractImageBytes(json, cancelToken: cancelToken);
   }
 
   /// gpt-image-2 size map (different from gpt-image-1 family).
@@ -187,7 +180,9 @@ class RoutmyImageProvider {
   /// Without this, every avatar/context reference was silently dropped.
   String _asDataUrl(String s) {
     if (s.isEmpty) return s;
-    if (s.startsWith('data:') || s.startsWith('http://') || s.startsWith('https://')) {
+    if (s.startsWith('data:') ||
+        s.startsWith('http://') ||
+        s.startsWith('https://')) {
       return s;
     }
     return 'data:${_sniffMime(s)};base64,$s';
@@ -201,21 +196,22 @@ class RoutmyImageProvider {
     return 'image/png';
   }
 
-  String _extractImageBase64(Map<String, dynamic> json) {
+  Future<Uint8List> _extractImageBytes(
+    Map<String, dynamic> json, {
+    CancelToken? cancelToken,
+  }) async {
     final data = json['data'] as List?;
     if (data == null || data.isEmpty) {
       throw Exception('No image data in response');
     }
     final imageObj = data.first as Map<String, dynamic>;
     final b64 = imageObj['b64_json'] as String?;
-    if (b64 != null && b64.isNotEmpty) return b64;
-    final imgUrl = imageObj['url'] as String?;
-    if (imgUrl != null && imgUrl.startsWith('data:')) {
-      final commaIdx = imgUrl.indexOf(',');
-      if (commaIdx != -1) return imgUrl.substring(commaIdx + 1);
+    if (b64 != null && b64.isNotEmpty) {
+      return ImageGenHttp.base64ToBytes(b64);
     }
-    if (imgUrl != null) {
-      throw Exception('URL response — need to download');
+    final imgUrl = imageObj['url'] as String?;
+    if (imgUrl != null && imgUrl.isNotEmpty) {
+      return _downloadImage(imgUrl, cancelToken: cancelToken);
     }
     throw Exception('No image in response');
   }
@@ -267,7 +263,9 @@ class RoutmyImageProvider {
     );
 
     final choices = response['choices'] as List?;
-    if (choices == null || choices.isEmpty) throw Exception('No response from rout.my');
+    if (choices == null || choices.isEmpty) {
+      throw Exception('No response from rout.my');
+    }
     final message = choices.first['message'] as Map<String, dynamic>?;
     if (message == null) throw Exception('No message in rout.my response');
 
@@ -285,7 +283,10 @@ class RoutmyImageProvider {
         if (part is Map<String, dynamic> &&
             part['type'] == 'image_url' &&
             part['image_url']?['url'] != null) {
-          return _downloadImage(part['image_url']['url'] as String, cancelToken: cancelToken);
+          return _downloadImage(
+            part['image_url']['url'] as String,
+            cancelToken: cancelToken,
+          );
         }
       }
     }
@@ -293,7 +294,10 @@ class RoutmyImageProvider {
     throw Exception('No image in rout.my response');
   }
 
-  Future<Uint8List> _downloadImage(String url, {CancelToken? cancelToken}) async {
+  Future<Uint8List> _downloadImage(
+    String url, {
+    CancelToken? cancelToken,
+  }) async {
     if (url.startsWith('data:')) {
       final commaIdx = url.indexOf(',');
       if (commaIdx == -1) throw Exception('Invalid data URL');
