@@ -59,10 +59,8 @@ Future<void> _maybeShowJanitorLoginInfo(
     child: _JanitorLoginInfoContent(
       onLogin: () async {
         Navigator.of(context, rootNavigator: true).pop();
+        // The login sheet itself refreshes the catalog on a successful sign-in.
         await showJanitorLoginSheet(context);
-        if (context.mounted) {
-          await ref.read(catalogProvider.notifier).search(reset: true);
-        }
       },
     ),
   );

@@ -50,8 +50,8 @@ Future<void> openJanitorAccountSheet(BuildContext context, WidgetRef ref) async 
 }
 
 /// Opens the JanitorAI login WebView as a modal sheet. After it closes the
-/// account session (if any) is active for catalog requests; callers that show a
-/// catalog should refresh it afterwards.
+/// account session (if any) is active for catalog requests. On a successful
+/// sign-in the sheet refreshes the catalog itself, so callers don't need to.
 Future<void> showJanitorLoginSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -116,6 +116,10 @@ class _JanitorLoginSheetState extends ConsumerState<JanitorLoginSheet> {
     if (userName != null) {
       await ref.read(janitorAccountProvider.notifier).setUserName(userName);
     }
+    // Drop the anonymous catalog results so the now-authenticated character set
+    // is fetched — mirrors the logout path. Fires regardless of which entry
+    // point (menu or catalog) opened this sheet.
+    await ref.read(catalogProvider.notifier).search(reset: true);
     if (!mounted) return;
     Navigator.of(context).pop();
   }
