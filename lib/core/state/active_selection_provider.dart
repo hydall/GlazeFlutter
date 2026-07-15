@@ -192,3 +192,23 @@ Future<void> setPresetConnection(
   final prefs = await ref.read(sharedPreferencesProvider.future);
   await prefs.setString('presetConnections', jsonEncode(updated.toJson()));
 }
+
+void setPresetConnectionRef(
+  Ref ref,
+  String type,
+  String targetId,
+  String? presetId,
+) {
+  final current = ref.read(presetConnectionsProvider);
+  final updated = _buildUpdatedPresetConnections(
+    current,
+    type,
+    targetId,
+    presetId,
+  );
+  ref.read(presetConnectionsProvider.notifier).state = updated;
+  final prefs = ref.read(sharedPreferencesProvider).value;
+  if (prefs != null) {
+    prefs.setString('presetConnections', jsonEncode(updated.toJson()));
+  }
+}

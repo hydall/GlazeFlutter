@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/models/persona.dart';
 import '../../core/state/active_selection_provider.dart';
+import '../../core/state/lorebook_provider.dart';
+import '../../core/state/shared_prefs_provider.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import 'initial_message_builder.dart';
@@ -229,9 +231,19 @@ class ChatSessionService {
         ...current.sessionVars,
         'branchedAt': DateTime.now().millisecondsSinceEpoch.toString(),
       },
+      // Carry the chat-scoped author's note and summary into the branch —
+      // both are session state that the user set for this conversation and
+      // expects to continue in the fork.
+      authorsNote: current.authorsNote,
+      summary: current.summary,
       updatedAt: currentTimestampSeconds(),
     );
     await repo.put(session);
+    // Carry chat-scoped connections (persona / preset / lorebook activations)
+    // keyed by the parent session id onto the new session id. Without this the
+    // branch loses its bound persona, preset and enabled lorebooks and silently
+    // falls back to character/global defaults.
+    _copyChatConnections(fromSessionId: current.id, toSessionId: session.id);
     await _ref
         .read(memoryBookRepoProvider)
         .copyForSessionBranch(
@@ -267,6 +279,41 @@ class ChatSessionService {
         );
     await saveCurrentSessionIndex(charId, nextIndex);
     return session;
+  }
+
+  /// Copies the chat-scoped connection bindings from [fromSessionId] to
+  /// [toSessionId]: the bound persona, preset and enabled lorebooks. Each is
+  /// keyed by session id, so a fresh branch id starts unbound unless we
+  /// duplicate the parent's entries here. No-op for any binding the parent
+  /// session did not have.
+  void _copyChatConnections({
+    required String fromSessionId,
+    required String toSessionId,
+  }) {
+    final personaId = _ref
+        .read(personaConnectionsProvider)
+        .chat[fromSessionId];
+    if (personaId != null) {
+      setPersonaConnectionRef(_ref, 'chat', toSessionId, personaId);
+    }
+
+    final presetId = _ref.read(presetConnectionsProvider).chat[fromSessionId];
+    if (presetId != null) {
+      setPresetConnectionRef(_ref, 'chat', toSessionId, presetId);
+    }
+
+    final activations = _ref.read(lorebookActivationsProvider);
+    final lorebookIds = activations.chat[fromSessionId];
+    if (lorebookIds != null && lorebookIds.isNotEmpty) {
+      final chatMap = Map<String, List<String>>.from(activations.chat);
+      chatMap[toSessionId] = List<String>.from(lorebookIds);
+      final updated = activations.copyWith(chat: chatMap);
+      _ref.read(lorebookActivationsProvider.notifier).state = updated;
+      saveLorebookActivations(
+        updated,
+        _ref.read(sharedPreferencesProvider).value,
+      );
+    }
   }
 
   Future<ChatSession> clearChat(String charId, ChatSession session) async {
