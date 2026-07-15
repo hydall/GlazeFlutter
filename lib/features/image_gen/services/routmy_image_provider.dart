@@ -23,6 +23,7 @@ class RoutmyImageProvider {
     CancelToken? cancelToken,
   }) async {
     final isChatModel = RoutMyConstants.chatImageModels.contains(model);
+    final isSeedreamModel = model == 'bytedance/seedream-5.0-pro';
     final hasRefs = referenceImages != null && referenceImages.isNotEmpty;
 
     if (isChatModel) {
@@ -37,7 +38,7 @@ class RoutmyImageProvider {
         cancelToken: cancelToken,
       );
     }
-    if (hasRefs) {
+    if (hasRefs && !isSeedreamModel) {
       return _editImages(
         apiKey: apiKey,
         model: model,
@@ -56,7 +57,7 @@ class RoutmyImageProvider {
       aspectRatio: aspectRatio,
       imageSize: imageSize,
       quality: quality,
-      referenceImages: null,
+      referenceImages: isSeedreamModel ? referenceImages : null,
       cancelToken: cancelToken,
     );
   }
@@ -81,6 +82,14 @@ class RoutmyImageProvider {
       'image_config': {'aspect_ratio': aspectRatio, 'image_size': imageSize},
       'quality': ?normalizedQuality,
     };
+
+    final validRefs = referenceImages
+        ?.where((ref) => ref.isNotEmpty)
+        .map(_asDataUrl)
+        .toList();
+    if (validRefs != null && validRefs.isNotEmpty) {
+      body['image'] = validRefs.length == 1 ? validRefs.first : validRefs;
+    }
 
     final json = await _http.post(
       url: url,
