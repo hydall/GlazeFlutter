@@ -15,11 +15,17 @@ StudioPreset prepareStudioPresetForMode(
   const assistedTaskIds = {
     'continuity_task_universal',
     'narrative_task_universal',
+    'beauty_task',
   };
   final allowedAgents = switch (mode) {
     StudioExecutionMode.legacy => null,
     StudioExecutionMode.direct => const {'final'},
-    StudioExecutionMode.assisted => const {'continuity', 'narrative', 'final'},
+    StudioExecutionMode.assisted => const {
+      'continuity',
+      'narrative',
+      'beauty',
+      'final',
+    },
   };
 
   final agentEnabled = Map<String, bool>.from(source.agentEnabled);
@@ -56,13 +62,16 @@ StudioPreset prepareStudioPresetForMode(
           !assistedTaskIds.contains(block.id)) {
         continue;
       }
+      if (mode == StudioExecutionMode.assisted) {
+        candidate = candidate.copyWith(enabled: true);
+      }
     }
-    if (mode != StudioExecutionMode.legacy && block.id == 'beauty_extractor') {
+    if (mode == StudioExecutionMode.direct && block.id == 'beauty_extractor') {
       blocks.add(candidate.copyWith(enabled: false));
     } else if (mode != StudioExecutionMode.legacy &&
         block.id == 'cleaner_beauty') {
-      // Direct/Assisted have no pregen Beauty agent. The post-cleaner owns
-      // styling and derives it from the actual response + persisted state.
+      // Direct derives Beauty in post-cleaner. Assisted passes its pregen
+      // Beauty brief into the same post-cleaner stage.
       blocks.add(candidate.copyWith(enabled: true));
     } else {
       blocks.add(candidate);

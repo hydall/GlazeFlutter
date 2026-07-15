@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/db/studio_seed_blocks.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/models/studio_preset_block_groups.dart';
 import '../../../core/state/db_provider.dart';
@@ -11,9 +10,7 @@ import '../../studio/widgets/studio_preset_group_tile.dart';
 /// Studio Preset Editor as a bottom sheet — replaces the full-screen
 /// [StudioPresetEditorScreen]. Shows preset blocks grouped by section.
 ///
-/// Only the 4 user-facing sections are shown: pregen (Trackers), final
-/// (Final Agent), cleaner (Post-Processing), ledger (Canon Ledger).
-/// Technical sections (build, brief_parser) are hidden.
+/// All prompt sections are visible so imported presets remain fully editable.
 class StudioPresetEditorSheet extends ConsumerStatefulWidget {
   final String presetId;
 
@@ -35,6 +32,8 @@ class _StudioPresetEditorSheetState
     ('final', 'Final Agent'),
     ('cleaner', 'Post-Processing'),
     ('ledger', 'Canon Ledger'),
+    ('build', 'Build'),
+    ('brief_parser', 'Brief Parser'),
   ];
 
   @override
@@ -174,11 +173,6 @@ class _StudioPresetEditorSheetState
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Add Block'),
                 ),
-                TextButton.icon(
-                  onPressed: _resetToDefaults,
-                  icon: const Icon(Icons.restore, size: 18),
-                  label: const Text('Reset'),
-                ),
               ],
             ),
           ),
@@ -306,50 +300,5 @@ class _StudioPresetEditorSheetState
     if (confirmed != true || _preset == null) return;
     final blocks = _preset!.blocks.where((b) => b.id != block.id).toList();
     await _save(_preset!.copyWith(blocks: blocks));
-  }
-
-  Future<void> _resetToDefaults() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Reset to Defaults'),
-        content: const Text(
-          'This will replace ALL blocks with the default seed data. '
-          'Your customizations will be lost.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Reset'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || _preset == null) return;
-    final seedData = studioPresetSeedBlocks();
-    final seedBlocks = seedData
-        .map(
-          (m) => StudioPresetBlock(
-            id: m['id'] as String? ?? '',
-            title: (m['name'] as String?) ?? (m['title'] as String?) ?? '',
-            kind: (m['kind'] as String?) ?? 'custom_text',
-            role: (m['role'] as String?) ?? 'system',
-            content: (m['content'] as String?) ?? '',
-            enabled: (m['enabled'] as bool?) ?? true,
-            order: (m['order'] as int?) ?? 0,
-            section: (m['section'] as String?) ?? 'pregen',
-          ),
-        )
-        .toList();
-    await _save(
-      _preset!.copyWith(
-        blocks: seedBlocks,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
   }
 }

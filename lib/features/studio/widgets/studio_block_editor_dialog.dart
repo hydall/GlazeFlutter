@@ -30,7 +30,14 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
   late bool _enabled;
 
   static const _roles = ['system', 'user', 'assistant'];
-  static const _sections = ['pregen', 'final', 'cleaner', 'ledger'];
+  static const _sections = [
+    'pregen',
+    'final',
+    'cleaner',
+    'ledger',
+    'build',
+    'brief_parser',
+  ];
   static const _kinds = [
     'custom_text',
     'slot',

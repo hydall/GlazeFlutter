@@ -23,7 +23,10 @@ class StudioActivationGate {
       StudioExecutionMode.legacy => true,
       StudioExecutionMode.direct => specId == 'final',
       StudioExecutionMode.assisted =>
-        specId == 'final' || specId == 'continuity' || specId == 'narrative',
+        specId == 'final' ||
+            specId == 'continuity' ||
+            specId == 'narrative' ||
+            specId == 'beauty',
     };
   }
 
