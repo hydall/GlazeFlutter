@@ -140,21 +140,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                 : (folderTitle ?? 'header_characters'.tr())),
       titleWidget: inSearch ? _buildSearchField(context) : null,
       showBack: inFolder,
-      onBack: inPicks
-          ? (_picksCanGoBack && _picksGoBackFn != null
-                ? _picksGoBackFn
-                : () {
-                    _showHeader();
-                    setState(() => _currentFolderId = null);
-                    refreshShellHeader();
-                  })
-          : inFolder
-          ? () {
-              _showHeader();
-              setState(() => _currentFolderId = null);
-              refreshShellHeader();
-            }
-          : null,
+      onBack: inFolder ? _handleFolderBack : null,
       actions: inPicks
           ? null
           : [
@@ -310,6 +296,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   /// current sub-view to the top, or — when Discover is already at the top —
   /// switch back to the My Characters sub-tab.
   void _onCharactersTabReTap() {
+    // Inside a folder, a tap on the already-active Characters tab pops back out
+    // to the top-level My Characters grid before doing anything else.
+    if (_tabIndex == 0 && _currentFolderId != null) {
+      _exitFolder();
+      return;
+    }
+
     final atTop =
         !_listScrollController.hasClients ||
         _listScrollController.positions.length != 1 ||
@@ -347,12 +340,23 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     // The tabs ride inside the shell header (its `below` slot) only at the top
     // level; inside a folder the header shows a back button instead. Reserve the
     // extra room for the tabs row when it's present so content clears it.
-    final showTabBar = !(_tabIndex == 0 && _currentFolderId != null);
+    final inFolder = _tabIndex == 0 && _currentFolderId != null;
+    final showTabBar = !inFolder;
     final contentTopPad = showTabBar ? topPad + _kTabBarBlock : topPad;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
+    // While inside a folder, intercept the system/gesture back so it pops out to
+    // the top-level grid instead of bubbling up to the shell (which would exit
+    // the app). Back events reach this branch navigator's PopScope first; when
+    // not in a folder we let them bubble up to the shell's "press again to exit".
+    return PopScope(
+      canPop: !inFolder,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleFolderBack();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
         children: [
           Positioned.fill(
             child: NotificationListener<ScrollNotification>(
@@ -445,9 +449,31 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                       ),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  /// Leaves the current folder view and returns to the top-level My Characters
+  /// grid.
+  void _exitFolder() {
+    _showHeader();
+    setState(() => _currentFolderId = null);
+    refreshShellHeader();
+  }
+
+  /// Handles a back request (header button or system/gesture back) while inside
+  /// a folder. Inside Our Picks it first steps back through the folder's own
+  /// internal navigation; otherwise it pops straight out to the grid.
+  void _handleFolderBack() {
+    if (_currentFolderId == kPicksFolderId &&
+        _picksCanGoBack &&
+        _picksGoBackFn != null) {
+      _picksGoBackFn!();
+      return;
+    }
+    _exitFolder();
   }
 
   String? _folderName(String id) {
