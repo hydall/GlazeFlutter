@@ -885,6 +885,15 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     return b.scrollToBottom(smooth: smooth);
   }
 
+  /// Arm a one-shot "stick to bottom on the next append" so sending a message
+  /// scrolls the view down even if the user had scrolled up. Called before the
+  /// new message is dispatched so the flag is set ahead of the append.
+  Future<void> requestScrollToBottomOnAppend() {
+    final b = _bridge;
+    if (b == null) return Future.value();
+    return b.requestScrollToBottomOnAppend();
+  }
+
   /// Re-asserts the WebView's bottom padding to [px]. Used on app resume to
   /// reconcile a stale padding: the native WebView freezes its JS while
   /// backgrounded, so an inset change pushed during the background transition

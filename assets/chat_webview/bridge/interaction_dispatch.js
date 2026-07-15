@@ -178,6 +178,20 @@ export class InteractionDispatch {
       },
       'swipe-right': (e, el) => {
         const id = el.dataset.messageId;
+        // Mirror the touch-swipe gesture (swipe_gesture_handler.onEnd): when the
+        // next arrow is pressed while already on the last variation of the last
+        // message, kick off a regeneration into a fresh swipe instead of a no-op
+        // — unless swipe-regeneration is disabled in settings.
+        const section = document.querySelector(`[data-message-id="${id}"]`);
+        const swipeId = section ? parseInt(section.dataset.swipeId || '0', 10) : 0;
+        const swipeTotal = section ? parseInt(section.dataset.swipeTotal || '1', 10) : 1;
+        const isLast = section ? section.dataset.isLast === 'true' : false;
+        if (swipeId >= swipeTotal - 1) {
+          if (isLast && !bridge.disableSwipeRegeneration) {
+            bridge._sendToFlutter('onRegenerate', [id, 'new_variant']);
+          }
+          return;
+        }
         bridge._swipeHandler.animateVariantSwap(id, 'next', () =>
           bridge._sendToFlutter('onSwipe', [JSON.stringify({ id, direction: 'right' })])
         );

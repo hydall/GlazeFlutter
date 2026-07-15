@@ -179,6 +179,10 @@ class MessageBridgeCommands {
     return _host.evalJs('window.bridge?.scrollToBottom($behavior)');
   }
 
+  Future<void> requestScrollToBottomOnAppend() {
+    return _host.evalJs('window.bridge?.requestScrollToBottomOnAppend()');
+  }
+
   Future<void> scrollToMessage(String messageId, {bool highlight = false}) {
     return _host.evalJs(
       'window.bridge?.scrollToMessage("${_host.escape(messageId)}", $highlight)',

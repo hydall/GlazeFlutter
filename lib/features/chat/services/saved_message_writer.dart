@@ -253,7 +253,12 @@ class SavedMessageWriter {
       timestamp: DateTime.now().millisecondsSinceEpoch,
       swipes: [errorText],
       swipeId: 0,
-      swipesMeta: [{}],
+      // Per-swipe error marker: error styling follows the active variation
+      // (see ChatMessageService.setSwipe), so swiping to a healthy swipe
+      // clears the error window.
+      swipesMeta: [
+        <String, dynamic>{'isError': true},
+      ],
     );
     final finalMessages = [...currentSession.messages, errorMsg];
     final finalSession = currentSession.copyWith(
@@ -283,20 +288,33 @@ class SavedMessageWriter {
       );
     }
     final original = saveSession.messages[idx];
-    final errorSwipes = original.swipes.isNotEmpty
+    final priorSwipes = original.swipes.isNotEmpty
         ? [...original.swipes]
         : [original.content];
-    errorSwipes.add(errorText);
-    final errorSwipesMeta = original.swipesMeta.isNotEmpty
-        ? [...original.swipesMeta, <String, dynamic>{}]
-        : [
-            <String, dynamic>{
-              'genTime': original.genTime,
-              'reasoning': original.reasoning,
-              'tokens': original.tokens,
-            },
-            <String, dynamic>{},
-          ];
+    final errorSwipes = [...priorSwipes, errorText];
+    // Build metas for the prior (healthy) swipes, then append the error
+    // swipe's meta carrying a per-swipe 'isError' marker so the error
+    // styling stays bound to this variation only (see
+    // ChatMessageService.setSwipe). The list is kept aligned 1:1 with
+    // [errorSwipes] so the marker lands on the error swipe's index.
+    final priorMeta = <Map<String, dynamic>>[];
+    for (var i = 0; i < priorSwipes.length; i++) {
+      if (i < original.swipesMeta.length) {
+        priorMeta.add(original.swipesMeta[i]);
+      } else if (i == original.swipeId) {
+        priorMeta.add(<String, dynamic>{
+          'genTime': original.genTime,
+          'reasoning': original.reasoning,
+          'tokens': original.tokens,
+        });
+      } else {
+        priorMeta.add(<String, dynamic>{});
+      }
+    }
+    final errorSwipesMeta = [
+      ...priorMeta,
+      <String, dynamic>{'isError': true},
+    ];
     final updated = original.copyWith(
       content: errorText,
       isError: true,
