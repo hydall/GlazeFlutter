@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
 import 'package:go_router/go_router.dart';
 
@@ -1119,10 +1120,31 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   }
 
   Future<void> _importFromGallery(BuildContext context, WidgetRef ref) async {
-    final picker = ImagePicker();
-    final images = await picker.pickMultiImage();
+    // photo_manager exposes the ORIGINAL asset bytes (via PhotoKit on iOS).
+    // image_picker re-encodes the picked photo through UIImage, which strips
+    // the PNG tEXt chunks that hold the character-card JSON — so a card picked
+    // from the gallery would import as a plain image. Reading originBytes keeps
+    // the chunks intact while still presenting a native gallery grid.
+    final permission = await PhotoManager.requestPermissionExtend();
+    if (!permission.hasAccess) {
+      if (!context.mounted) return;
+      GlazeToast.show(
+        context,
+        'Photo access denied. Enable it in Settings to import from gallery.',
+      );
+      return;
+    }
     if (!context.mounted) return;
-    if (images.isEmpty) return;
+
+    final assets = await AssetPicker.pickAssets(
+      context,
+      pickerConfig: const AssetPickerConfig(
+        requestType: RequestType.image,
+        maxAssets: 50,
+      ),
+    );
+    if (!context.mounted) return;
+    if (assets == null || assets.isEmpty) return;
 
     final importer = await ref.read(characterImporterProvider.future);
     final notifier = ref.read(charactersProvider.notifier);
@@ -1130,10 +1152,17 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     int imported = 0;
     String? lastError;
 
-    for (final image in images) {
+    for (final asset in assets) {
+      var name = await asset.titleAsync;
+      if (name.isEmpty) name = '${asset.id}.png';
       try {
-        final bytes = await File(image.path).readAsBytes();
-        final r = await importer.importFromBytes(bytes, image.name);
+        final bytes = await _loadOriginalBytes(asset);
+        if (bytes == null) {
+          lastError =
+              'Failed to import $name: could not load the original (not downloaded from iCloud?)';
+          continue;
+        }
+        final r = await importer.importFromBytes(bytes, name);
         await notifier.add(r.character);
         if (r.characterBookData != null) {
           final lorebook = convertCharacterBook(
@@ -1163,7 +1192,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         }
         imported++;
       } catch (e) {
-        lastError = 'Failed to import ${image.name}: $e';
+        lastError = 'Failed to import $name: $e';
       }
     }
 
@@ -1176,6 +1205,16 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     } else if (lastError != null) {
       GlazeToast.show(context, lastError);
     }
+  }
+
+  /// Reads the untouched original bytes of a gallery [asset] so embedded PNG
+  /// tEXt chunks survive. Falls back to the origin file, and returns null when
+  /// the asset can't be materialised (e.g. an iCloud photo not yet downloaded).
+  Future<Uint8List?> _loadOriginalBytes(AssetEntity asset) async {
+    final origin = await asset.originBytes;
+    if (origin != null) return origin;
+    final file = await asset.originFile;
+    return file?.readAsBytes();
   }
 
   Future<void> _importFromFiles(BuildContext context, WidgetRef ref) async {
