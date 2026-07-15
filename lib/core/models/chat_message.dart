@@ -206,6 +206,14 @@ class SessionMetadata {
   final int lastMessageTimestamp;
   final String? sessionName;
 
+  /// Origin event timestamp (ms) — branch time, else creation time. 0 when
+  /// unknown. Kept separate from [lastMessageTimestamp] so it can drive the
+  /// list preview/sort without perturbing the cloud-sync metadata hash.
+  final int originTimestamp;
+
+  /// 'branched' or 'created' when [originTimestamp] > 0, else null.
+  final String? originKind;
+
   const SessionMetadata({
     required this.sessionId,
     required this.characterId,
@@ -215,7 +223,23 @@ class SessionMetadata {
     required this.lastMessageContent,
     required this.lastMessageTimestamp,
     this.sessionName,
+    this.originTimestamp = 0,
+    this.originKind,
   });
+}
+
+/// How a [ChatSession] came into being — used for the "Created on" /
+/// "Branched on" origin marker shown as a chat separator and in the session
+/// list preview.
+enum ChatOriginKind { created, branched }
+
+/// The origin event of a [ChatSession]: its kind and the moment it happened,
+/// in milliseconds since epoch (matching [ChatMessage.timestamp]).
+class ChatOriginEvent {
+  final ChatOriginKind kind;
+  final int timestampMs;
+
+  const ChatOriginEvent({required this.kind, required this.timestampMs});
 }
 
 extension ChatSessionX on ChatSession {
@@ -223,4 +247,48 @@ extension ChatSessionX on ChatSession {
       .where((m) => (m.role == 'user' || m.role == 'assistant') && !m.isHidden)
       .map((m) => m.content)
       .join('\n');
+
+  /// Branch time (ms) when this session was created via Branch, else null.
+  /// Stored as a reserved `branchedAt` session var (see `branchSession`).
+  int? get branchedAtMs {
+    final raw = sessionVars['branchedAt'];
+    if (raw == null) return null;
+    final v = int.tryParse(raw);
+    return (v != null && v > 0) ? v : null;
+  }
+
+  /// The session's origin event: a branch stamp when present, otherwise the
+  /// creation time inferred from the first message. Null when no usable
+  /// timestamp exists (legacy sessions with untimestamped messages).
+  ChatOriginEvent? get originEvent {
+    final branched = branchedAtMs;
+    if (branched != null) {
+      return ChatOriginEvent(
+        kind: ChatOriginKind.branched,
+        timestampMs: branched,
+      );
+    }
+    final firstTs = messages.isNotEmpty ? messages.first.timestamp : null;
+    if (firstTs != null && firstTs > 0) {
+      return ChatOriginEvent(
+        kind: ChatOriginKind.created,
+        timestampMs: firstTs,
+      );
+    }
+    return null;
+  }
+
+  /// Last activity time (ms) used to order the session list: the newest of the
+  /// stored `updatedAt` (seconds → ms), the last message timestamp, and the
+  /// origin event. Lets branch/creation bump a session to the top even when no
+  /// message has been sent yet.
+  int get lastActivityMs {
+    final updated = updatedAt > 0 ? updatedAt * 1000 : 0;
+    final lastMsg = messages.isNotEmpty ? (messages.last.timestamp ?? 0) : 0;
+    final origin = originEvent?.timestampMs ?? 0;
+    var best = updated;
+    if (lastMsg > best) best = lastMsg;
+    if (origin > best) best = origin;
+    return best;
+  }
 }

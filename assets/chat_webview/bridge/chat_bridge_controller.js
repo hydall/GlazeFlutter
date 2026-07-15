@@ -570,10 +570,45 @@ export class Bridge {
     }
     const el = document.querySelector(`[data-message-id="${messageId}"]`);
     if (el && this.renderer) {
-      this.renderer.animateRemoveSection(el, () => this.virtualList.remove(messageId));
+      this.renderer.animateRemoveSection(el, () => {
+        this.virtualList.remove(messageId);
+        this._pruneOrphanSeparators();
+      });
     } else {
       this.virtualList.remove(messageId);
+      this._pruneOrphanSeparators();
     }
+  }
+
+  // Drop separators that no longer head any message. Deleting the last
+  // message under a date separator (or trimming the tail on a branch/edit)
+  // otherwise leaves the separator hanging until a full chat reload. A date
+  // separator is orphaned when no real message follows it before the next
+  // separator or the end of the list; the origin marker (`__date_origin`)
+  // stays as long as any real message remains.
+  _pruneOrphanSeparators() {
+    if (!this.virtualList || !this.virtualList.items) return;
+    const items = this.virtualList.items;
+    const isSep = (id) => typeof id === 'string' && id.startsWith('__date_');
+    let realCount = 0;
+    for (const it of items) if (!isSep(it.id)) realCount++;
+    const orphanIds = [];
+    for (let i = 0; i < items.length; i++) {
+      const id = items[i].id;
+      if (!isSep(id)) continue;
+      if (id === '__date_origin') {
+        if (realCount === 0) orphanIds.push(id);
+        continue;
+      }
+      let hasMsg = false;
+      for (let j = i + 1; j < items.length; j++) {
+        if (isSep(items[j].id)) break;
+        hasMsg = true;
+        break;
+      }
+      if (!hasMsg) orphanIds.push(id);
+    }
+    for (const id of orphanIds) this.virtualList.remove(id);
   }
 
   clearAll() {

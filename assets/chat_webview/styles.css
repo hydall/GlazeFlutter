@@ -1551,6 +1551,9 @@
   text-transform: uppercase;
   font-weight: 500;
 }
+.origin-separator .date-separator-label {
+  opacity: 0.55;
+}
 
 /* ============================================================
  * Background layer

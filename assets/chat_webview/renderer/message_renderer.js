@@ -53,6 +53,18 @@ export class Renderer {
       }
     }
 
+    // Origin marker ("Created on" / "Branched on"), injected by the Dart
+    // bridge as the first synthetic entry of a full setMessages batch. Seed
+    // the date tracking so a following same-date message does not also emit a
+    // redundant date row directly beneath it.
+    if (messageData.__separator) {
+      if (messageData.timestamp) {
+        const originDate = this._formatDate(messageData.timestamp);
+        if (originDate) this._lastTimestamps = { date: originDate, idx: 0 };
+      }
+      return [this._createOriginSeparator(messageData)];
+    }
+
     const elements = [];
 
     if (messageData.timestamp) {
@@ -886,6 +898,27 @@ if (messageData.isEditing) classes.push('editing');
     el.dataset.dateSeparator = dateStr;
     el.innerHTML = `<div class="date-separator-line"></div><span class="date-separator-label">${this._formatDateDisplay(dateStr)}</span><div class="date-separator-line"></div>`;
     return el;
+  }
+
+  _createOriginSeparator(data) {
+    const el = document.createElement('div');
+    el.className = 'date-separator origin-separator';
+    // Stable id so the virtual list keys it as `__date_origin` (see the bridge
+    // controller) — it is kept/pruned distinctly from date separators.
+    el.dataset.dateSeparator = 'origin';
+    const label = this._formatOriginLabel(data.separatorKind, data.timestamp);
+    el.innerHTML = `<div class="date-separator-line"></div><span class="date-separator-label">${label}</span><div class="date-separator-line"></div>`;
+    return el;
+  }
+
+  _formatOriginLabel(kind, timestamp) {
+    const verb = kind === 'branched' ? 'Branched on' : 'Created on';
+    if (!timestamp) return verb;
+    const d = new Date(timestamp);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${verb} ${hh}:${mm}, ${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
   }
 
   resetDateTracking() { this._lastTimestamps = { date: null, idx: -1 }; }

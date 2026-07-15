@@ -200,6 +200,9 @@ class ChatSessionService {
       characterId: charId,
       sessionIndex: nextIndex,
       messages: initialMessages,
+      // Stamp creation time so the new chat carries a real "last activity"
+      // date for the session list (display + sorting) instead of 0.
+      updatedAt: currentTimestampSeconds(),
     );
     await repo.put(session);
     await saveCurrentSessionIndex(charId, nextIndex);
@@ -218,7 +221,14 @@ class ChatSessionService {
       characterId: charId,
       sessionIndex: nextIndex,
       messages: current.messages.sublist(0, messageIndex + 1),
-      sessionVars: current.sessionVars,
+      // Stamp the branch time (ms, to match message timestamps) so the WebView
+      // can render a "Branched on …" separator at the top of the new session.
+      // Overrides any inherited marker from the parent — this is the new
+      // session's own branch point.
+      sessionVars: {
+        ...current.sessionVars,
+        'branchedAt': DateTime.now().millisecondsSinceEpoch.toString(),
+      },
       updatedAt: currentTimestampSeconds(),
     );
     await repo.put(session);
@@ -278,7 +288,15 @@ class ChatSessionService {
       persona: persona,
       sessionId: session.id,
     );
-    final clearedSession = session.copyWith(messages: initialMessages);
+    // Drop the branch stamp so a cleared session reads as freshly created
+    // ("Created on …" from the new greeting) rather than keeping a stale
+    // "Branched on …" marker.
+    final clearedVars = Map<String, String>.from(session.sessionVars)
+      ..remove('branchedAt');
+    final clearedSession = session.copyWith(
+      messages: initialMessages,
+      sessionVars: clearedVars,
+    );
     await _ref.read(chatRepoProvider).put(clearedSession);
     // Wipe tracker snapshots so stale state from before the clear does not
     // leak into the fresh chat.

@@ -58,6 +58,12 @@ class ChatBridgeController {
   Character? _regexCharacter;
   Persona? _regexPersona;
 
+  /// Origin marker ("Created on" / "Branched on") for the current session,
+  /// prepended by [MessageBridgeCommands.setMessages] as the first synthetic
+  /// separator of a full batch. Refreshed on every rebuild before messages
+  /// are dispatched. Null when the session has no usable timestamp.
+  Map<String, Object?>? chatOrigin;
+
   late final MessageBridgeCommands messages = MessageBridgeCommands(this);
   late final ThemeBridgeCommands theme = ThemeBridgeCommands(this);
   late final IdentityBridgeCommands identity = IdentityBridgeCommands(this);
@@ -96,6 +102,22 @@ class ChatBridgeController {
     greetingTotal: currentGreetingTotal,
     blockStatusByMessageId: Map.unmodifiable(_blockStatusByMessageId),
   );
+
+  /// Builds the origin separator marker for [session], or null when it has no
+  /// usable timestamp. A branched session (carrying a `branchedAt` session var)
+  /// yields a "Branched on" marker; any other session falls back to a "Created
+  /// on" marker derived from the first message's timestamp. Timestamps are in
+  /// milliseconds to match [ChatMessage.timestamp] and the WebView's `new Date`.
+  static Map<String, Object?>? originMarkerFor(ChatSession? session) {
+    final event = session?.originEvent;
+    if (event == null) return null;
+    return {
+      '__separator': true,
+      'separatorKind':
+          event.kind == ChatOriginKind.branched ? 'branched' : 'created',
+      'timestamp': event.timestampMs,
+    };
+  }
 
   void setRegexContext(
     List<PresetRegex> regexes,
