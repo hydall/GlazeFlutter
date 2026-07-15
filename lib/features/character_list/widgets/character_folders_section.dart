@@ -62,13 +62,14 @@ class CharacterFoldersSection extends ConsumerWidget {
         .toList();
 
     final tiles = <Widget>[
-      if (showFavorites)
-        _FavoritesCircle(onTap: () => onOpenFavorites?.call()),
+      // Our Picks always leads the row, ahead of Favorites and real folders.
       if (showOurPicks)
         _OurPicksCircle(
           onTap: () => onOpenPicks?.call(),
           onLongPress: () => _picksActions(context),
         ),
+      if (showFavorites)
+        _FavoritesCircle(onTap: () => onOpenFavorites?.call()),
       for (final folder in folders)
         _FolderCircle(
           folder: folder,
