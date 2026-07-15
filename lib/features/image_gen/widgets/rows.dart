@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
@@ -293,7 +295,8 @@ class _ImageGenReferenceRowState extends State<ImageGenReferenceRow> {
                       : Colors.black12,
                 ),
               ),
-              child: const Icon(Icons.image, size: 20, color: Colors.grey),
+              clipBehavior: Clip.antiAlias,
+              child: _referencePreview(),
             ),
           ),
           const SizedBox(width: 8),
@@ -302,7 +305,7 @@ class _ImageGenReferenceRowState extends State<ImageGenReferenceRow> {
               controller: _controller,
               onChanged: widget.onNameChanged,
               decoration: InputDecoration(
-                hintText: 'imggen_ref_keyword'.tr(),
+                hintText: '${'imggen_ref_keyword'.tr()} (Zoe, Зои)',
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 8,
@@ -407,5 +410,22 @@ class _ImageGenReferenceRowState extends State<ImageGenReferenceRow> {
         ],
       ),
     );
+  }
+
+  Widget _referencePreview() {
+    final comma = widget.refItem.imageData.indexOf(',');
+    if (comma < 0) {
+      return const Icon(Icons.add_photo_alternate_outlined, size: 20);
+    }
+    try {
+      return Image.memory(
+        base64Decode(widget.refItem.imageData.substring(comma + 1)),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) =>
+            const Icon(Icons.broken_image_outlined, size: 20),
+      );
+    } catch (_) {
+      return const Icon(Icons.broken_image_outlined, size: 20);
+    }
   }
 }

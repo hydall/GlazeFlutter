@@ -57,6 +57,7 @@ class ImageGenBlockHandler implements BlockHandler {
       blockConfig: blockConfig,
       character: context.character,
       persona: context.persona?.name,
+      personaPrompt: context.persona?.prompt,
       previousOutput: context.previousOutput,
       swipeId: context.swipeId,
       cancelToken: context.cancelToken,

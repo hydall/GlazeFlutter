@@ -37,6 +37,7 @@ class InfoBlockService {
     required BlockConfig blockConfig,
     required Character? character,
     required String? persona,
+    String? personaPrompt,
     required String? previousOutput,
     int swipeId = 0,
     CancelToken? cancelToken,
@@ -81,6 +82,7 @@ class InfoBlockService {
       blockConfig: blockConfig,
       character: character,
       persona: persona,
+      personaPrompt: personaPrompt,
       contextMessages: contextMessages,
       previousOutput: previousOutput,
       previousBlocks: previousBlocks,
@@ -301,6 +303,7 @@ class InfoBlockService {
     required BlockConfig blockConfig,
     required Character? character,
     required String? persona,
+    String? personaPrompt,
     required List<ChatMessage> contextMessages,
     required String? previousOutput,
     List<InfoBlock> previousBlocks = const [],
@@ -341,6 +344,11 @@ class InfoBlockService {
 
     if (persona != null && persona.isNotEmpty) {
       buffer.writeln('User Persona: $persona');
+      final profile = personaPrompt?.trim();
+      if (profile != null && profile.isNotEmpty) {
+        buffer.writeln('Persona profile:');
+        buffer.writeln(profile);
+      }
       buffer.writeln();
     }
 

@@ -77,17 +77,29 @@ class ImageGenService {
         final filename = 'imggen_${DateTime.now().millisecondsSinceEpoch}.png';
         final savedPath = await _saveGeneratedImage(filename, imageBytes);
 
-        currentText = ImageTagMarkup.replaceTagWithResult(currentText, i, savedPath);
+        currentText = ImageTagMarkup.replaceTagWithResult(
+          currentText,
+          i,
+          savedPath,
+        );
         onUpdate?.call(currentText);
       } on DioException catch (e) {
         if (CancelToken.isCancel(e)) break;
         final errorMsg = _formatError(e);
-        currentText = ImageTagMarkup.replaceTagWithError(currentText, i, errorMsg);
+        currentText = ImageTagMarkup.replaceTagWithError(
+          currentText,
+          i,
+          errorMsg,
+        );
         onUpdate?.call(currentText);
         onError?.call(errorMsg);
       } catch (e) {
         final errorMsg = _formatErrorString(e.toString());
-        currentText = ImageTagMarkup.replaceTagWithError(currentText, i, errorMsg);
+        currentText = ImageTagMarkup.replaceTagWithError(
+          currentText,
+          i,
+          errorMsg,
+        );
         onUpdate?.call(currentText);
         onError?.call(errorMsg);
       }
@@ -97,7 +109,24 @@ class ImageGenService {
   }
 
   String _formatError(DioException e) {
-    final msg = e.message ?? e.toString();
+    final data = e.response?.data;
+    String? responseMessage;
+    if (data is Map) {
+      final error = data['error'];
+      if (error is Map) {
+        responseMessage = error['message']?.toString();
+      } else if (error != null) {
+        responseMessage = error.toString();
+      }
+      responseMessage ??= data['message']?.toString();
+      responseMessage ??= data['detail']?.toString();
+    } else if (data != null) {
+      responseMessage = data.toString();
+    }
+    final status = e.response?.statusCode;
+    final msg = responseMessage?.trim().isNotEmpty == true
+        ? [if (status != null) 'HTTP $status', responseMessage!].join(': ')
+        : e.message ?? e.toString();
     return _formatErrorString(msg);
   }
 
@@ -137,7 +166,6 @@ class ImageGenService {
             persona: persona,
             recentImageContexts: recentImageContexts,
           );
-
     switch (settings.apiType) {
       case ImageGenApiType.openai:
         return _generateOpenai(
@@ -158,9 +186,19 @@ class ImageGenService {
       case ImageGenApiType.naistera:
         return _generateNaistera(settings, prompt, refs, cancelToken);
       case ImageGenApiType.routmy:
-        return _generateRoutmy(settings, prompt, refs, cancelToken);
+        return _generateRoutmy(
+          settings,
+          prompt,
+          refs.take(routmyMaxInjectedReferenceImages).toList(),
+          cancelToken,
+        );
       case ImageGenApiType.ruRoutmy:
-        return _generateRuRoutmy(settings, prompt, refs, cancelToken);
+        return _generateRuRoutmy(
+          settings,
+          prompt,
+          refs.take(routmyMaxInjectedReferenceImages).toList(),
+          cancelToken,
+        );
     }
   }
 
@@ -298,10 +336,12 @@ class ImageGenService {
         });
       }
       for (final ref in settings.additionalReferences) {
-        if (ref.matchMode == 'always' ||
-            promptLower.contains(ref.name.toLowerCase())) {
+        final name = ref.name.trim();
+        final triggers = _referenceTriggers(name);
+        if (ref.imageData.isNotEmpty &&
+            (ref.matchMode == 'always' || triggers.any(promptLower.contains))) {
           refs.add({
-            'name': ref.name,
+            'name': name,
             'image': _extractBase64FromDataUrl(ref.imageData),
           });
         }
@@ -354,10 +394,12 @@ class ImageGenService {
       if (img.isNotEmpty) refs.add({'name': persona.name, 'image': img});
     }
     for (final ref in settings.routmyAdditionalRefs) {
-      if (ref.matchMode == 'always' ||
-          promptLower.contains(ref.name.toLowerCase())) {
+      final name = ref.name.trim();
+      final triggers = _referenceTriggers(name);
+      if (ref.imageData.isNotEmpty &&
+          (ref.matchMode == 'always' || triggers.any(promptLower.contains))) {
         final raw = _extractBase64FromDataUrl(ref.imageData);
-        if (raw.isNotEmpty) refs.add({'name': ref.name, 'image': raw});
+        if (raw.isNotEmpty) refs.add({'name': name, 'image': raw});
       }
     }
 
@@ -372,6 +414,12 @@ class ImageGenService {
 
     return refs;
   }
+
+  List<String> _referenceTriggers(String value) => value
+      .split(',')
+      .map((trigger) => trigger.trim().toLowerCase())
+      .where((trigger) => trigger.isNotEmpty)
+      .toList();
 
   String _fileToBase64(String path) {
     try {
@@ -420,10 +468,38 @@ class ImageGenService {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    final path = p.join(dir.path, filename);
+    final extension = _generatedImageExtension(bytes);
+    final path = p.join(
+      dir.path,
+      '${p.basenameWithoutExtension(filename)}.$extension',
+    );
     await File(path).writeAsBytes(bytes);
     return path;
   }
+}
+
+String _generatedImageExtension(Uint8List bytes) {
+  if (bytes.length >= 12) {
+    if (bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return 'jpg';
+    if (bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return 'webp';
+    }
+  }
+  if (bytes.length >= 6 &&
+      bytes[0] == 0x47 &&
+      bytes[1] == 0x49 &&
+      bytes[2] == 0x46 &&
+      bytes[3] == 0x38) {
+    return 'gif';
+  }
+  return 'png';
 }
 
 // ─── Isolate helpers for JPEG resize ────────────────────────────────────────

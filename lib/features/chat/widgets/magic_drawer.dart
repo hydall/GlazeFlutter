@@ -489,7 +489,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           useRootNavigator: true,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
-          builder: (_) => const ImageGenSheet(),
+          builder: (_) => ImageGenSheet(charId: widget.charId),
         );
         return;
       case 'authors-note':
