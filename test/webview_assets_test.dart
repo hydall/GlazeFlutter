@@ -599,6 +599,8 @@ void main() {
         'img-find',
         'img-regen',
         'img-stop',
+        'ext-block-edit',
+        'ext-block-delete',
       ];
       for (final action in requiredActions) {
         expect(
@@ -607,6 +609,10 @@ void main() {
           reason: 'InteractionDispatch._actionMap must contain key "$action"',
         );
       }
+    });
+
+    test('ExtBlock placeholders do not expose edit or delete buttons', () {
+      expect(bridgeControllerJs, contains('if (block.id)'));
     });
 
     test('Bridge creates InteractionDispatch instance', () {

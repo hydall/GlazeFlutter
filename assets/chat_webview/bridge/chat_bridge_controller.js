@@ -1156,27 +1156,28 @@ export class Bridge {
       const btnGroup = document.createElement('span');
       btnGroup.className = 'ext-block-actions';
 
-      // Edit button — always present.
-      const editBtn = document.createElement('button');
-      editBtn.type = 'button';
-      editBtn.className = 'ext-block-btn ext-block-btn-icon';
-      editBtn.dataset.action = 'ext-block-edit';
-      editBtn.dataset.blockId = block.blockId;
-      editBtn.dataset.messageId = messageId;
-      editBtn.title = 'Редактировать';
-      editBtn.textContent = '✎';
-      btnGroup.appendChild(editBtn);
+      // Pending entries are preset placeholders and have no persisted row yet.
+      if (block.id) {
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'ext-block-btn ext-block-btn-icon';
+        editBtn.dataset.action = 'ext-block-edit';
+        editBtn.dataset.blockId = block.blockId;
+        editBtn.dataset.messageId = messageId;
+        editBtn.title = 'Редактировать';
+        editBtn.textContent = '✎';
+        btnGroup.appendChild(editBtn);
 
-      // Delete button — always present.
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'ext-block-btn ext-block-btn-icon ext-block-btn-danger';
-      deleteBtn.dataset.action = 'ext-block-delete';
-      deleteBtn.dataset.blockId = block.blockId;
-      deleteBtn.dataset.messageId = messageId;
-      deleteBtn.title = 'Удалить';
-      deleteBtn.textContent = '✕';
-      btnGroup.appendChild(deleteBtn);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'ext-block-btn ext-block-btn-icon ext-block-btn-danger';
+        deleteBtn.dataset.action = 'ext-block-delete';
+        deleteBtn.dataset.blockId = block.blockId;
+        deleteBtn.dataset.messageId = messageId;
+        deleteBtn.title = 'Удалить';
+        deleteBtn.textContent = '✕';
+        btnGroup.appendChild(deleteBtn);
+      }
 
       if (block.status === 'running') {
         const stopBtn = document.createElement('button');

@@ -248,6 +248,15 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
   late Map<String, dynamic> _item;
   late final String _personaId;
   late final int _createdAt;
+  late ProviderContainer _container;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // GenericEditor flushes pending changes from dispose(), after this element
+    // has been deactivated. Keep a container captured while it is still active.
+    _container = ProviderScope.containerOf(context);
+  }
 
   List<GenericEditorSection> get _config => [
         GenericEditorSection(
@@ -325,7 +334,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
       createdAt: _createdAt,
     );
 
-    ref.read(personaListProvider.notifier).updatePersona(persona);
+    _container.read(personaListProvider.notifier).updatePersona(persona);
   }
 
   @override
