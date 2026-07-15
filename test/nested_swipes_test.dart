@@ -165,4 +165,93 @@ void main() {
       expect(updated.swipeId, 1);
     });
   });
+
+  group('SavedMessageWriter per-swipe error markers', () {
+    const writer = SavedMessageWriter();
+
+    ChatSession makeSessionWithMessage(ChatMessage msg) {
+      return ChatSession(
+        id: 's1',
+        characterId: 'c1',
+        sessionIndex: 0,
+        messages: [msg],
+      );
+    }
+
+    test('writeError marks the lone swipe meta with isError', () {
+      final session = makeSessionWithMessage(
+        ChatMessage(id: 'u1', role: 'user', content: 'hello'),
+      );
+      final state = writer.writeError(
+        errorText: 'boom',
+        currentSession: session,
+      );
+      final errMsg = state.session!.messages.last;
+      expect(errMsg.isError, isTrue);
+      expect(errMsg.swipes, ['boom']);
+      expect(errMsg.swipeId, 0);
+      expect(errMsg.swipesMeta.length, 1);
+      expect(errMsg.swipesMeta[0]['isError'], isTrue);
+    });
+
+    test(
+      'writeRegenError appends an error swipe whose meta marks isError only '
+      'on the error index',
+      () {
+        final existing = ChatMessage(
+          id: 'a1',
+          role: 'assistant',
+          content: 'good',
+          swipes: ['good'],
+          swipeId: 0,
+          swipesMeta: [
+            <String, dynamic>{'genTime': '1.0s'},
+          ],
+        );
+        final session = makeSessionWithMessage(existing);
+        final state = writer.writeRegenError(
+          errorText: 'boom',
+          saveSession: session,
+          regenTargetId: 'a1',
+        );
+        final updated = state.session!.messages.first;
+
+        // Error swipe is appended and becomes active.
+        expect(updated.swipes, ['good', 'boom']);
+        expect(updated.swipeId, 1);
+        expect(updated.isError, isTrue);
+
+        // Meta stays aligned 1:1 with swipes; only the error index is marked.
+        expect(updated.swipesMeta.length, 2);
+        expect(updated.swipesMeta[0]['isError'], isNot(true));
+        expect(updated.swipesMeta[0]['genTime'], '1.0s');
+        expect(updated.swipesMeta[1]['isError'], isTrue);
+      },
+    );
+
+    test('writeRegenError keeps meta aligned when the original had no meta', () {
+      final existing = ChatMessage(
+        id: 'a1',
+        role: 'assistant',
+        content: 'good',
+        swipes: ['good'],
+        swipeId: 0,
+        genTime: '2.0s',
+      );
+      final session = makeSessionWithMessage(existing);
+      final state = writer.writeRegenError(
+        errorText: 'boom',
+        saveSession: session,
+        regenTargetId: 'a1',
+      );
+      final updated = state.session!.messages.first;
+      expect(updated.swipes.length, 2);
+      expect(updated.swipesMeta.length, 2);
+      // Prior swipe keeps its badge meta and is NOT flagged as an error.
+      expect(updated.swipesMeta[0]['isError'], isNot(true));
+      expect(updated.swipesMeta[0]['genTime'], '2.0s');
+      // Only the appended error swipe carries the marker.
+      expect(updated.swipesMeta[1]['isError'], isTrue);
+    });
+  });
 }

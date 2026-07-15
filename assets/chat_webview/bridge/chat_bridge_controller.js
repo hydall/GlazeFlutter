@@ -579,6 +579,13 @@ export class Bridge {
       this._sendToFlutter('onScrollToBottomVisibility', [false]);
     });
   }
+
+  // Arm a one-shot "stick to bottom on the next append" so that sending a
+  // message scrolls the view down even when the user had scrolled up (the
+  // append handler otherwise only follows the bottom when already near it).
+  requestScrollToBottomOnAppend() {
+    this.virtualList.pendingScrollToBottom();
+  }
   scrollToMessage(messageId, highlight = false) { this.virtualList.scrollToMessage(messageId, highlight); }
 
   setSearch(query, activeIndex) { this.renderer.setSearch(query, activeIndex); }

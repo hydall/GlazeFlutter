@@ -238,6 +238,10 @@ class ChatMessageService {
     final updated = msg.copyWith(
       swipeId: swipeId,
       content: activeContent,
+      // Error state is tracked per-swipe (swipesMeta[i]['isError']) so the
+      // error styling follows the active variation only. Navigating to a
+      // healthy swipe clears the error window; navigating back restores it.
+      isError: meta?['isError'] == true,
       reasoning: nextAgentSwipes.isNotEmpty
           ? nextAgentSwipes[nextAgentSwipeId.clamp(
                   0,
@@ -408,43 +412,6 @@ class ChatMessageService {
         ? (dir > 0 ? 'slide-next' : 'slide-prev')
         : 'fade';
 
-    // Error-swipe path: drop the error variant and slide to the neighbor.
-    if (msg.isError && msg.swipes.length > 1) {
-      final errorSwipeId = msg.swipeId;
-      final remainingSwipes = List<String>.from(msg.swipes)
-        ..removeAt(errorSwipeId);
-      final remainingMeta = msg.swipesMeta.length > errorSwipeId
-          ? (List<Map<String, dynamic>>.from(msg.swipesMeta)
-              ..removeAt(errorSwipeId))
-          : List<Map<String, dynamic>>.from(msg.swipesMeta);
-
-      var newIndex = dir < 0 ? errorSwipeId - 1 : errorSwipeId;
-      if (newIndex >= remainingSwipes.length) {
-        newIndex = remainingSwipes.length - 1;
-      }
-      if (newIndex < 0) newIndex = 0;
-
-      final meta = newIndex < remainingMeta.length
-          ? remainingMeta[newIndex]
-          : null;
-      final updated = msg.copyWith(
-        swipes: remainingSwipes,
-        swipesMeta: remainingMeta,
-        swipeId: newIndex,
-        content: remainingSwipes[newIndex],
-        isError: false,
-        swipeDirection: animDir,
-        reasoning: meta?['reasoning'] as String?,
-        genTime: meta?['genTime'] as String?,
-        tokens: meta?['tokens'] as int?,
-        triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
-        triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
-      );
-      final newMessages = List<ChatMessage>.from(session.messages)
-        ..[messageIndex] = updated;
-      return ChangeSwipeResult.updated(_persist(session, newMessages));
-    }
-
     if (msg.swipes.length <= 1) return const ChangeSwipeResult.noop();
 
     final newIndex = msg.swipeId + dir;
@@ -458,13 +425,13 @@ class ChatMessageService {
     }
 
     // Delegate to setSwipe for the heavy lifting (agentSwipes save/load,
-    // content/reasoning/meta restoration). Then patch swipeDirection +
-    // isError for the animation/clear semantics changeSwipe provides.
+    // content/reasoning/meta restoration + per-swipe isError). Then patch
+    // swipeDirection for the slide animation. Error variants are kept as
+    // navigable swipes; the error styling is derived per-swipe in setSwipe.
     final swapped = setSwipe(session, messageIndex, newIndex);
     final swappedMsg = swapped.messages[messageIndex];
     final patched = swappedMsg.copyWith(
       swipeDirection: animDir,
-      isError: false,
     );
     final patchedMessages = List<ChatMessage>.from(swapped.messages)
       ..[messageIndex] = patched;

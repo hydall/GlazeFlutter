@@ -542,6 +542,8 @@ class ChatBridgeController {
   Future<void> clearAll() => messages.clearAll();
   Future<void> scrollToBottom({bool smooth = false}) =>
       messages.scrollToBottom(smooth: smooth);
+  Future<void> requestScrollToBottomOnAppend() =>
+      messages.requestScrollToBottomOnAppend();
   Future<void> scrollToMessage(String id, {bool highlight = false}) =>
       messages.scrollToMessage(id, highlight: highlight);
 

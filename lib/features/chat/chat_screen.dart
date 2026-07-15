@@ -1068,7 +1068,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
             targetPanelHeight +
             (safeBottom * (1 - targetFactor));
         _lastMessageListBottom = webViewBottomInset;
-        final showScrollBtn = _showScrollToBottom && !widget.search.showSearch;
+        final showScrollBtn =
+            _showScrollToBottom &&
+            !widget.search.showSearch &&
+            !isEditingMessage;
 
         final animatedBottomPanelInset =
             panelHeight + (safeBottom * (1 - factor));
@@ -1675,6 +1678,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                           _ensureApiSelected(),
                                       onSend: (text) {
                                         if (text.trim().isEmpty) return;
+                                        _webViewStateKey.currentState
+                                            ?.requestScrollToBottomOnAppend();
                                         ref
                                             .read(
                                               chatProvider(
@@ -1685,6 +1690,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                       },
                                       onSendWithGuidance: (text, guidance) {
                                         if (text.trim().isEmpty) return;
+                                        _webViewStateKey.currentState
+                                            ?.requestScrollToBottomOnAppend();
                                         ref
                                             .read(
                                               chatProvider(
@@ -1698,6 +1705,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                       },
                                       onSendWithImage:
                                           (text, guidanceText, imageDataUrl) {
+                                            _webViewStateKey.currentState
+                                                ?.requestScrollToBottomOnAppend();
                                             ref
                                                 .read(
                                                   chatProvider(
