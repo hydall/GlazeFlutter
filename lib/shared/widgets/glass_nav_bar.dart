@@ -104,7 +104,15 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
               if (i != widget.currentIndex) {
                 Haptics.selectionClick();
               }
-              if (i == _kCharactersTabIndex) _registerCharactersTabTap();
+              if (i == _kCharactersTabIndex) {
+                _registerCharactersTabTap();
+                // Re-tapping the already-active Characters tab asks the screen
+                // to scroll the current sub-view to top (and Discover→My when
+                // it's already there).
+                if (i == widget.currentIndex) {
+                  ref.read(charactersTabReTapProvider.notifier).state++;
+                }
+              }
               widget.onTap(i);
             },
           ),

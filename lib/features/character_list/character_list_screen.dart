@@ -304,10 +304,40 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     });
   }
 
+  /// Handles a re-tap on the already-active Characters navbar tab: scroll the
+  /// current sub-view to the top, or — when Discover is already at the top —
+  /// switch back to the My Characters sub-tab.
+  void _onCharactersTabReTap() {
+    final atTop =
+        !_listScrollController.hasClients ||
+        _listScrollController.positions.length != 1 ||
+        _listScrollController.position.pixels <= 0.5;
+
+    if (!atTop) {
+      _scrollToTop();
+      _showHeader();
+      return;
+    }
+
+    _showHeader();
+    // Already at the top: on Discover, fall back to My Characters.
+    if (_tabIndex == 1) {
+      ref.read(characterSelectionProvider.notifier).clear();
+      setState(() {
+        _tabIndex = 0;
+        if (_searchExpanded) _applySearchForActiveTab();
+      });
+      refreshShellHeader();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final navHeight = ref.watch(navHeightProvider);
     final selection = ref.watch(characterSelectionProvider);
+
+    // Re-tap on the active Characters navbar tab → scroll to top / Discover→My.
+    ref.listen(charactersTabReTapProvider, (_, _) => _onCharactersTabReTap());
 
     final topPad = MediaQuery.of(context).padding.top + 74.0;
     // The tabs ride inside the shell header (its `below` slot) only at the top
