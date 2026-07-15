@@ -471,6 +471,16 @@ export class Bridge {
       center.appendChild(this.renderer._createSwitcher(section.dataset.messageId, agentSwipeIndex || 0, agentSwipeTotal, 'agent-swipe'));
     }
 
+    if (isChar && isLast && !isGenerating && !isEditing && agentSwipeTotal >= 1) {
+      const rerun = document.createElement('div');
+      rerun.className = 'msg-rerun-cleaner';
+      rerun.dataset.action = 'rerun-cleaner';
+      rerun.dataset.messageId = section.dataset.messageId;
+      rerun.title = 'Re-run cleaner';
+      rerun.innerHTML = ICON.rerunCleaner;
+      center.appendChild(rerun);
+    }
+
     if (isChar && isLast && !isGenerating && !isEditing) {
       const guided = document.createElement('div');
       guided.className = 'msg-guided-swipe-btn';

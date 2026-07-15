@@ -235,14 +235,14 @@ Hold mode (Marinara) is not implemented.
 
 #### Swipe-first cleaner lifecycle (UX phase) ✅ ENFORCED
 
-`generation_pipeline._runPostCleaner` pre-creates an empty `'cleaned'`
+`CleanerStage.run` pre-creates an empty `'cleaned'`
 swipe at cleaner start and finalizes it based on the outcome. The cascade
 checks partial text BEFORE `skipped`/fallback, so a timeout or skip with
 streamed text never loses what the user saw live:
 - `wasCleaned==true` → `updateAgentSwipeContent` fills it with the cleaned
   text + `genTime` (cleaner elapsed) + `tokens` (estimateTokens).
-- `wasCleaned==false` AND `_lastStreamedText` non-empty → save the partial
-  (truncated) text into the swipe (ops log marks `partialSaved`). Covers
+- `wasCleaned==false` AND `_lastStreamedText` non-empty → save the complete
+  latest streamed partial into the swipe (ops log marks `partialSaved`). Covers
   `timeout`, `skipped`, and any other non-ok status that produced stream
   chunks before failing.
 - `wasCleaned==false` AND nothing streamed AND `status=='skipped'` →
@@ -256,9 +256,9 @@ streamed text never loses what the user saw live:
 - `finally` → best-effort `removeAgentSwipe` when no path finalized
   (`_finalized==false`), so a stale empty `'cleaned'` bubble never lingers.
 
-`GenerationPipeline._lastStreamedText` /
+`CleanerStage._lastStreamedText` /
 `_preCreatedCleanerSwipeId` / `_preCreatedMessageId` / `_finalized` are
-instance fields, reset in the `_runPostCleaner` finally block so state
+instance fields, reset in the `run` finally block so state
 never leaks across runs.
 
 ### INV-ST5: Tracker failure aborts Studio after two retries ✅ ENFORCED
@@ -389,7 +389,7 @@ The POST-cleaner clones the parent message's snapshot into the new `'cleaned'`
 agent-swipe anchor so the cleaned sub-swipe inherits the parent's tracker
 state; the original `'final'` snapshot is preserved. Two paths:
 
-- **Swipe-first flow (UX phase, `generation_pipeline._runPostCleaner`):**
+- **Swipe-first flow (UX phase, `CleanerStage.run`):**
   the snapshot is cloned at pre-create time (right after
   `appendAgentSwipe(kind: 'cleaned', content: '')`), before the cleaner
   runs. So even if the cleaner crashes the pre-created swipe already has a
@@ -397,7 +397,7 @@ state; the original `'final'` snapshot is preserved. Two paths:
 - **Legacy fallback (`post_cleaner_service.applyCleanedText`):** used when
   pre-create failed earlier; clones after the append inside `applyCleanedText`.
 
-Code ref: `lib/features/chat/services/generation_pipeline.dart` (pre-create
+Code ref: `lib/features/chat/services/stages/cleaner_stage.dart` (pre-create
 snapshot clone) and `lib/core/llm/post_cleaner_service.dart:applyCleanedText`
 (fallback) — both call `snapshotRepo.upsertTrackers(...)` with the parent's
 `messageId`/`swipeId` and the new `agentSwipeId`.

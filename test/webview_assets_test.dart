@@ -674,6 +674,16 @@ void main() {
         expect(body, isNot(contains('isPostGenRunning')));
       },
     );
+
+    test('incremental controls restore the rerun-cleaner button', () {
+      final marker = '_syncMessageControls(section, msg) {';
+      final idx = bridgeControllerJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeControllerJs, idx);
+      expect(body, contains("rerun.className = 'msg-rerun-cleaner'"));
+      expect(body, contains("rerun.dataset.action = 'rerun-cleaner'"));
+      expect(body, contains('agentSwipeTotal >= 1'));
+    });
   });
 
   // ─── renderMessage always returns array (Phase 3.6) ────────────────────────

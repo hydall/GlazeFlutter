@@ -410,15 +410,28 @@ GoRouter lives in `router.dart`, not `app.dart`. Shell tabs and overlay routes:
 | 17 | `stream_accumulator.dart` | Splits text from inline `<think…>` reasoning |
 | 18 | `response_normalizer.dart` | Non-streaming response extraction |
 
-### Phase B — Post-SSE (`generation_pipeline.dart`)
+### Phase B — Post-SSE (`generation_pipeline.dart` + `stages/post_gen_coordinator.dart`)
 
 After `StreamGenerationService` returns, `ChatNotifier._runGeneration()` runs
-`GenerationPipeline.run()` for **send** and **regenerate** only:
+`GenerationPipeline.run()` for **send** and **regenerate** only. The pipeline
+persists the assistant result (or follows the regen/error rollback path), then
+delegates successful post-generation work to `PostGenCoordinator`.
 
-1. Persist assistant message (or regen/error rollback paths)
-2. `ChatGenerationService.processImageTags()` — inline `[IMG:GEN]` tags
-3. `ChatGenerationService.processExtensions()` → `extension_post_gen_service.dart`
-4. Cloud sync notification + generation notification preview
+Shared work starts with awaited cloud-sync and generation notifications. Raw
+message embeddings and empty MemoryBook draft planning are then launched as
+independent background tasks.
+
+**Studio OFF:** ExtBlocks run in the background. Inline `[IMG:GEN]` processing
+runs independently when image tags exist; neither task updates Studio Ledger.
+
+**Studio ON:** `CleanerStage` owns the ordered canonicalization path:
+
+1. Character & World audit (when POST-cleaner and prompt payload are available)
+2. POST-cleaner rewrite / canonical final-cleaned-partial swipe selection
+3. ExtBlocks bound to that selected `(swipeId, agentSwipeId)`
+4. Studio Ledger extraction from the same canonical text
+5. Inline image-tag processing after the cleaner/Ledger task, using the
+   reloaded canonical message
 
 **Continue exception:** `ChatNotifier.continueMessage()` calls
 `ChatGenerationService.generate()` directly and merges text onto the last assistant
@@ -435,7 +448,7 @@ post-gen, or pipeline sync notification. See `docs/INVARIANTS.md` INV-CM2.
 | Chat | `ChatState.isGenerating` per `charId` | Yes (SSE) | `AbortHandler`: `CancelToken` + `_activeGenId` |
 | Image gen | `ChatState.isGeneratingImage` + `_imgGenCancelToken` | No (one-shot) | `_imgGenCancelToken` in `ChatNotifier` |
 | Summary | Widget-local in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
-| Memory draft | `MemoryBookController` (`_generatingDrafts`, `_cancelTokens`) | No | Per-draft `CancelToken`; mutex via `memory_active_drafts_provider` |
+| Memory draft | `MemoryDraftGenerationController` (delegated by `MemoryBookController`) | No | Per-draft `CancelToken`; mutex via `memory_active_drafts_provider` |
 
 ### Reasoning / Thinking
 
@@ -462,15 +475,45 @@ it.
 
 ### Studio Mode Pipeline
 
-Studio Mode is a tracker-around-generator model (Phase 5 refactor — see
-`docs/PLAN_AGENTIC_STUDIO.md`). One main LLM (the generator) writes the visible
-reply; lightweight trackers run as sidecars and contribute notes/injections
-that shape the next prompt, never duplicating the generator's output.
+Studio Mode separates analysis, prose generation, and post-generation editing.
+Pre-generation trackers create compact briefs; one FINAL agent writes the
+visible reply. Optional `StudioAgent.phase == 'post_processing'` agents then run
+sequentially after FINAL and may replace the current response. These agents are
+part of the Studio cycle and are distinct from the later POST-cleaner.
 
-Studio settings are stored as reusable Studio profiles in `studio_config_rows`.
-Sessions bind to a profile by `profileId`; starting a new session can reuse an
-existing profile without rebuilding agents. Rebuilding only changes the selected
-profile's agent prompts/settings.
+Studio has two separate persisted layers:
+
+- `studio_config_rows` stores reusable agent profiles, model slots, scheduling,
+  and session-to-profile binding through `profileId`;
+- `studio_preset_rows` stores user-owned prompt presets as JSON block lists,
+  per-controller toggles, and an explicit `executionMode`.
+
+Studio prompt presets are imported, copied, edited, and exported by the user.
+The application does not expose a public default-seed reset and does not ship
+the maintainer's working Loom presets as repository assets. Updating the app
+therefore cannot silently replace a user's calibrated preset. Old seed block
+data remains private to historical DB migrations only, so upgrades from older
+schemas continue to work.
+
+#### Execution topologies
+
+`StudioExecutionMode` is persisted with every preset and enforced twice:
+`prepareStudioPresetForMode` shapes the editable block/controller structure,
+then `StudioActivationGate.applyExecutionMode` gates stale agents at runtime.
+This prevents agents left in an older `studio_config_rows` profile from reviving
+after a mode switch.
+
+| Mode | Pre-generation controllers | Final generator | Beauty ownership |
+|------|----------------------------|-----------------|------------------|
+| `direct` | none | `final` | POST-cleaner derives and applies Beauty |
+| `assisted` | `continuity`, `narrative`, `beauty` | `final` | pregen Beauty brief is passed to POST-cleaner |
+| `legacy` | all enabled controllers | `final` | pregen Beauty brief is passed to POST-cleaner |
+
+Assisted keeps only its three controller task blocks plus the shared pregen
+context blocks. Legacy preserves the full controller/task layout. Their FINAL
+prompt blocks expose only briefs intended for prose generation. In particular,
+`StudioBriefMacroRenderer` always resolves `{{studio_beauty_brief}}` to an empty
+string: Beauty is never injected into FINAL.
 
 At generation time `MemoryStudioService.runTrackerCycle` runs:
 
@@ -492,11 +535,14 @@ At generation time `MemoryStudioService.runTrackerCycle` runs:
 4. **Batch retry**: if any agent in the batch comes back failed or missing,
    re-request the whole batch twice. If it still cannot be parsed, Studio
    returns a hard error asking the user to restart generation.
-5. **Final generator** (`_runFinalGenerator`): runs only after all
+5. **Final generator** (`_runFinalGenerator`): runs after all pre-generation
    trackers settle, using `maxFinalHistoryMessages` (default 30) for the
    trimmed history; trackers receive their own `contextSize` (default 5,
    hard-cap 200) via `_limitTrackerHistory` + `truncateAgentText`
    (head 40% + tail 60%) + `stripHtmlTags`.
+6. **Studio post-processing agents:** due agents run in `order`, respecting
+   `runInterval` and activation keywords. Each receives the current
+   `mainResponse`; a non-empty result replaces it before the cycle returns.
 
 `AgentRunFailedException` wraps tracker failures for retry accounting. After
 two failed retries, Studio aborts before the final generator instead of running
@@ -513,24 +559,30 @@ sub-swipe (`post_cleaner_service.dart`, `generation_pipeline.dart`),
 preserving the original `'final'` as the parent. Hold mode (Marinara) is not
 implemented. See INV-ST4.
 
+For Assisted and Legacy, `BeautyStateHandler` reads the Beauty tracker brief
+from the saved assistant message's `studioOutputs`; `CleanerStage` passes it to
+the cleaner together with the persisted `glaze_beauty_state` session variable.
+Direct has no Beauty tracker output, so the cleaner receives an empty brief and
+owns Beauty derivation itself. The POST-cleaner enable switch controls automatic
+cleaner/audit calls, not whether the independent Studio topology exists.
+
 #### POST-cleaner swipe lifecycle (UX phase, "swipe-first streaming")
 
 The cleaned swipe is **pre-created at cleaner start** (empty content, tracker
 snapshot cloned from the parent `'final'`) so the blue sub-swipe switcher is
 visible immediately while the rewrite streams into the chat bubble for live
-preview (`generation_pipeline._runPostCleaner`). The cleaner's `onCleanedChunk`
-callback tracks the latest accumulated chunk in
-`GenerationPipeline._lastStreamedText` — `SidecarCallOutcome.text` is null on
-any failure, so partial text the user saw live is only reachable via the
-callback.
+preview (`CleanerStage`). The cleaner's `onCleanedChunk` callback tracks the
+latest accumulated chunk in `CleanerStage._lastStreamedText` —
+`SidecarCallOutcome.text` is null on failure, so partial text the user saw live
+is only reachable via the callback.
 
-On cleaner completion (`generation_pipeline.dart`):
+On cleaner completion (`stages/cleaner_stage.dart`):
 - `wasCleaned==true` → `ChatRepo.updateAgentSwipeContent` fills the pre-created
   swipe with the cleaned text + per-swipe `genTime` (cleaner's own elapsed)
   + `tokens` (estimateTokens of the cleaned text) — keeps the badge visible on
   the blue sub-swipe.
-- `wasCleaned==false` AND partial text was streamed → keep the partial
-  (truncated) text in the swipe so the user doesn't lose what they saw live
+- `wasCleaned==false` AND partial text was streamed → keep the complete latest
+  streamed partial in the swipe so the user doesn't lose what they saw live
   (ops log summary marks `partialSaved (N chars)`).
 - `wasCleaned==false` AND nothing streamed → `ChatRepo.removeAgentSwipe`
   deletes the pre-created empty swipe and reverts active to the parent
@@ -543,9 +595,19 @@ On cleaner completion (`generation_pipeline.dart`):
 
 `ChatRepo.updateAgentSwipeContent` / `removeAgentSwipe` are the atomic
 (transaction-wrapped) methods for in-place swipe edits; `appendAgentSwipe`
-remains the legacy append path. The character/world audit can use a
-**separate model** from the cleaner rewrite (`PipelineSettings.postCleanerAuditModel`,
-inheriting endpoint/key/source/protocol from the cleaner config — Fix 2).
+remains the legacy append path. `PipelineSettings.postCleanerAuditModel` exists,
+but the current `CleanerStage` passes the resolved cleaner config to both the
+character/world audit and rewrite; a separate audit-model override is not yet
+wired into this runtime path.
+
+The manual rerun action is available for the settled last character message
+whenever it has an agent swipe, including when automatic POST-cleaner is off.
+Both WebView render paths must enforce this invariant: the full footer builder
+in `message_renderer.js` and incremental `_syncMessageControls` in
+`chat_bridge_controller.js` create `.msg-rerun-cleaner` under the same
+`isChar && isLast && !isGenerating && !isEditing && agentSwipeTotal >= 1`
+condition. Otherwise the button appears only after reopening the session and
+forcing a full render.
 
 ### Preset decomposition (auto + manual)
 
@@ -716,17 +778,19 @@ MemoryBook {
 }
 
 MemoryEntry {
-  id, content, keys, glazeKeys
+  id, title, content, keys
   vectorSearch: bool
   messageIds: List<String>
   messageRange: { start, end }
   status: 'active' | 'needs_rebuild' | 'stale'
-  source: 'manual' | 'auto'
+  source: String // provenance, e.g. scan_chat / auto_create
+  importance, arc, locked, temporallyBlind
 }
 
 MemoryDraft {
-  id, title, messageIds, messageRange
-  generationStatus: 'pending' | 'generating' | 'completed' | 'failed'
+  id, title, content, keys, messageIds, messageRange
+  status: 'pending_generation' | 'needs_regeneration' | 'pending_approval'
+  source: String // scan_chat / auto_create
 }
 ```
 
@@ -735,8 +799,34 @@ MemoryDraft {
 generated entries whose title is a plain range like `91-105` are read with a
 compatibility backfill into `messageRange`.
 
-### Injection Rule
-Memory entries are injected only when all linked `messageIds` are already **outside** the active context window. This prevents double-coverage.
+### Draft lifecycle
+
+`MemoryDraftPlanner` scans stable user/assistant messages, leaves a configurable
+recent-message lag, and creates only complete fixed-size ranges. The post-turn
+`MemoryDraftStage` and manual **Scan Chat** action create empty drafts without an
+LLM call. Draft text is generated later through
+`MemoryDraftGenerationController` + `memory_draft_generator.dart`, then remains
+`pending_approval` until the user accepts it. Approval copies content, keys,
+message provenance, and range into an active `MemoryEntry`; vector indexing is
+best-effort when enabled.
+
+The `autoGenerateEnabled` setting exists in model/UI, but the current automatic
+post-turn stage does not invoke LLM draft generation. Automatic draft creation
+is not automatic memory population or approval.
+
+### Retrieval and injection rule
+
+The retrieval query is assembled from current input, optional assistant text,
+and recent turns. `MemorySelector` combines keyword, vector, catalog, recency,
+importance, entity, emotion, and diversity signals depending on mode/settings.
+Selection is bounded by entry count and token budget, then
+`MemoryExcerptSelector` packs full entries or excerpts.
+
+When v2 `sourceWindowExclusion` is enabled, an entry is excluded if **any** of
+its linked `messageIds` overlaps the visible history window. Legacy selection
+and explicit exclusion-disable paths bypass this rule. Deferred macro injection
+rechecks against the final context cutoff to avoid a gap between trimmed history
+and recalled memory.
 
 ### Token budget (INV-PS4)
 `MemoryInjectionBudget.maxInjectionTokens()` caps injected memory at
@@ -802,100 +892,33 @@ capture full prompts for debugging; it is NOT a production logging facility (the
 dump contains full prompt text). `LlmRequestDump.filePath` overrides the output
 location.
 
-### Memory system vs Marinara — intentional divergences + bug fixes
+### Raw recall and canonical state
 
-A comprehensive comparison of GlazeFlutter's MemoryBook against the
-Marinara Engine memory system revealed 5 concrete bugs (now fixed) and
-several features that are **intentionally absent or deferred**. This
-section documents both.
+Raw recall is independent from MemoryBook. `ChatMessageEmbeddingService`
+indexes source-message chunks after a turn; `MessageRecallService` performs
+single-session semantic retrieval and injects selected source text through
+`<recalled_messages>`. It uses the same any-overlap source-window exclusion and
+requires a configured embedding endpoint. Embedding/search failures degrade to
+an empty best-effort result rather than failing chat generation.
 
-#### Bug fixes applied
+MemoryBook, Raw Recall, character knowledge, and Studio Ledger are separate
+continuity layers:
 
-1. **Consolidation wired into `runPostTurn`** — `MemoryPostTurnService`
-   docstring claimed step 4 = "trigger consolidation" but the method body
-   only did graph + salience. Consolidation is now called after graph+salience,
-   gated by cadence + `PipelineSettings.consolidationEnabled`. Key detail:
-   `shouldConsolidate` is evaluated **before** `markRun('graph')` because
-   graph and consolidation share the same cadence counter.
-   See `lib/core/llm/memory_post_turn_service.dart`.
+1. MemoryBook: user-approved episodic summaries.
+2. Raw Recall: near-verbatim source-message chunks.
+3. Character knowledge facts: scoped, provenance-backed character state and
+   epistemic facts.
+4. Studio Ledger: compact current scene/world/relationship/arc canon.
 
-2. **Consolidation `source='current'` resolution** —
-   `MemoryConsolidationService._callLlm` threw "requires caller to resolve
-   config" for `source='current'`, so consolidation only worked with a custom
-   endpoint. Now resolves via `SidecarLlmClient.resolveConfigForConsolidation`
-   (reads `activeApiConfigProvider`, `consolidationModel` overrides when
-   non-empty). See `lib/core/llm/memory_consolidation_service.dart` +
-   `lib/core/llm/sidecar_llm_client.dart`.
+Prompt continuity blocks are ordered MemoryBook → Raw Recall → current
+character state → current Studio session state. Studio OFF stops new Ledger
+writes but does not suppress previously committed Ledger/fact projections.
 
-3. **Retired generic tracker write-loop** — the former JSON-retry parser and
-   generic tracker writer were removed because they competed with Studio Ledger
-   in the same tracker keyspace. Studio Ledger is now the sole automatic writer
-   of canonical tracker state; MemoryBook remains user-directed.
-
-4. **`reindexAll` copy-paste bug** —
-   `MemoryBookController.reindexAll` had `vectorSearchEnabled ? 'content' : 'content'`
-   (both branches identical). Removed the pointless conditional; `reindexAll`
-   always targets `'content'`. See `lib/features/memory/controllers/memory_book_controller.dart`.
-
-5. **Classifier timeout guard** —
-   `MemoryClassifierHttpClient` returned `completer.future` without a
-   timeout. If the transport silently dropped the request (neither
-   `onComplete` nor `onError` fired), the completer would hang until the
-   caller's `Future.timeout` — or indefinitely if `classifierTimeoutMs`
-   were 0. Added a 30s defensive timeout on the completer.
-   See `lib/core/llm/memory_classifier_http_client.dart`.
-
-6. **MessageRecall dimension-mismatch detection** —
-   `MessageRecallService.recall` did not check that candidate embedding
-   dimensions matched the query embedding dimensions. If the user switched
-   embedding models, old stored vectors would produce garbage cosine scores
-   (silently 0, filtered by threshold) with no diagnostic. Now filters stale
-   candidates out of the scoring pool and logs a warning.
-   See `lib/core/llm/message_recall_service.dart`.
-
-#### Intentionally absent / deferred features
-
-The following Marinara features are **intentionally absent or deferred** —
-documented here so future contributors know the decisions are deliberate,
-not oversights:
-
-1. **Cross-chat recall** (Marinara: up to 50 chatIds) — our recall is
-   single-session. Defer: requires multi-session embedding index; not
-   needed for roleplay MVP.
-
-2. **Local embedder fallback** (Marinara: ONNX MiniLM / llama.cpp sidecar) —
-   we require a configured embedding endpoint. Defer: 23MB ONNX binary in
-   Flutter mobile builds is expensive; if mobile latency/binary size becomes
-   prohibitive, `runMemoryRecall` can be feature-flagged per-chat (default off
-   on mobile) or dropped entirely — MemoryBook + context window covers ~80%.
-
-3. **Agent batching by provider+model** (Marinara: XML-delimited `<result>`
-   blocks) — our single JSON call is simpler. Defer: no per-agent model
-   selection yet.
-
-4. **Per-agent cadence** (Marinara: per-agent `runInterval`) — we use global
-   `runAgenticEveryN`. Defer: add when we have >8 agents with different cost
-   profiles.
-
-5. **Knowledge router** (Marinara: LLM-based catalog routing for lorebook
-   entries) — we use keyword + vector search. Defer: our
-   `fallbackThreshold`/`fallbackTopK` semantic fallback covers the
-   keyless-entry gap.
-
-6. **Multi-pass RAG for lorebook** (Marinara: chunked extraction +
-   consolidation) — defer: lorebook entries are short; multi-pass is for
-   oversized documents.
-
-7. **Head/tail truncation for recalled memories** (Marinara: 70% head + 30%
-   tail with marker) — we use a soft char cap. Defer: marginal improvement;
-   current cap works.
-
-8. **Per-day/per-week characterMemories bucketing** — CANCELLED. Doesn't fit
-   roleplay: roleplay chats are paused between sessions (the in-fiction
-   timeline does not advance with wall-clock time), so bucketing memories by
-   real-world day/week is meaningless. MemoryBook's chronological append-only
-   structure already handles long conversations. Marinara uses day/week only
-   for its "Conversation" mode (Discord-style DMs), not for roleplay.
+`MemoryPostTurnService.runPostTurn()` is currently a no-op except for cadence
+bookkeeping. Heuristic graph, salience, and consolidation writes remain disabled
+because the extractor is unreliable for non-English roleplay. Their tables
+remain for forward compatibility; Studio Ledger is the sole automatic writer of
+canonical tracker state.
 
 ---
 
@@ -1016,7 +1039,9 @@ finish and receives its output as context (see INV-EG6).
 | `false` (default) | Launched as a `Future`, not awaited — runs in parallel with adjacent blocks |
 | `true` | `await`-ed; preceding block's `content` passed as `previousOutput` |
 
-Each block is stored as an `InfoBlock` row keyed by `(sessionId, messageId, blockId)`.
+Each block result is stored as an `InfoBlock` row with its own primary-key `id`.
+`(sessionId, messageId, swipeId, agentSwipeId)` are indexed coordinates used to
+select the results for the visible message variant.
 `BlockRunStatus` (`pending → running → done / error / stopped`) is updated atomically
 per block via `InfoBlocksRepository.updateStatus()`.
 
@@ -1033,7 +1058,7 @@ per block via `InfoBlocksRepository.updateStatus()`.
 
 | `BlockTrigger` | When it runs | What it can do |
 |---|---|---|
-| `afterAssistant` | `ExtensionPostGenService.processAfterGeneration` (via `GenerationPipeline`) | all block types |
+| `afterAssistant` | `PostGenCoordinator`: background when Studio is off; `CleanerStage` after canonical swipe selection when Studio is on | all block types |
 | `afterUser` | `ChatNotifier.sendMessage` (fire-and-forget `unawaited(_dispatchAfterUserBlocks(...))`) | all block types |
 | `periodic` | `PeriodicTriggerScheduler` (`Timer.periodic(block.periodicIntervalSeconds)`) | `jsRunner` only — headless engine preferred, visual bridge fallback |
 
@@ -1043,21 +1068,28 @@ for `afterAssistant` (`runBlocksForMessage`) and `afterUser`
 (`runAfterUserBlocks`). The periodic scheduler calls `runJsBlock()` directly —
 no chain, no `InfoBlock` row, just a side-effect tick.
 
+`afterUser` is fire-and-forget and races the main reply; that reply does not
+await or consume its result. Under Studio, `afterAssistant` runs after
+final/cleaned/partial selection and before Ledger, so persisted block rows bind
+to the canonical `(swipeId, agentSwipeId)`.
+
 ### Periodic scheduler
 
-`PeriodicTriggerScheduler` is a singleton Riverpod provider. It watches
-`extensionPresetsProvider` + `extensionsSettingsProvider` and registers
-as a `WidgetsBindingObserver` to pause on `paused` / `inactive` /
-`hidden` / `detached` (no catch-up tick on resume). The
-`debugLifecycleState` test seam is used by `periodic_lifecycle_test.dart`.
+`PeriodicTriggerScheduler` has a Riverpod provider that would watch
+`extensionPresetsProvider` + `extensionsSettingsProvider` and pause timers on
+app lifecycle transitions. The production app currently never reads/watches
+`periodicTriggerSchedulerProvider`; because providers are lazy, periodic timers
+do not start. The dormant tick path also passes `activePresetId` as `charId`.
+Treat `periodic` as unwired until the provider is bootstrapped and this context
+bug is fixed.
 
 ### Cancellation
 
-`ExtensionPostGenService` owns an `extensionBlocksCancelToken` (`CancelToken`).
-Calling `cancelBlocks()` sets the token; `SingleBlockRunner` and each concrete
-handler check it before and after async work. Cancelled blocks are marked
-`stopped`. The cancel token is independent of the chat text-generation token
-(INV-EG5).
+`ExtensionPostGenService` owns a `Set<CancelToken>` because `afterUser` and
+`afterAssistant` chains may overlap. `cancelBlocks()` cancels every active
+chain; `SingleBlockRunner` and each concrete handler check their token before
+and after async work. Cancelled blocks are marked `stopped`. These tokens are
+independent of the chat text-generation token (INV-EG5).
 
 ### Key configuration fields (`BlockConfig`)
 
@@ -1065,8 +1097,8 @@ handler check it before and after async work. Cancelled blocks are marked
 |---|---|---|
 | `order` | 0 | Execution order (ascending) |
 | `dependsOnPrevious` | false | Serial/parallel mode |
-| `injectLastN` | 0 | Inject last N block outputs into LLM context; 0 = disabled |
-| `inject` | false | Whether to insert block output as a system message in the prompt |
+| `injectLastN` | 1 | Number of recent assistant messages eligible for injection; explicit 0 disables it |
+| `inject` | false | Append stored block output to eligible assistant-message content in future prompts |
 | `trigger` | `afterAssistant` | `afterAssistant` / `afterUser` / `periodic` |
 | `periodicIntervalSeconds` | 60 | Tick interval when `trigger == periodic` |
 
@@ -1100,6 +1132,18 @@ preset })` reads the matching slot and resolves it via
 when the slot is empty or stale). The UI picker in
 `preset_editor_screen.dart` lists every `ApiConfig` plus an
 "Использовать основной" default.
+
+### Prompt injection and swipe scope
+
+Stored-output injection is opt-in (`inject=false` by default). When enabled,
+`InfoBlockInjector` appends output to the content of the last N eligible
+assistant messages; it does not create a separate system message. Selection is
+aware of top-level `swipeId` but not `agentSwipeId`, so it is less strict than
+the visible panel lookup when multiple Studio sub-swipes have stored outputs.
+
+`glaze.injectPrompt` is separate: it creates an in-memory
+`RuntimePromptBlock` with role/depth and capability checks. Runtime injections
+are not persisted and disappear on restart.
 
 ### Variable scopes
 

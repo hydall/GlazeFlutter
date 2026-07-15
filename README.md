@@ -130,6 +130,13 @@ Primary technical references:
 - `docs/rules/`
 - `docs/WORKFLOW.md`
 
+## Studio References
+
+Glaze Studio was informed by prior work from:
+
+- [Marinara Engine](https://github.com/Pasta-Devs/Marinara-Engine)
+- [Lumiverse](https://github.com/prolix-oc/Lumiverse)
+
 ## License
 
 This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
