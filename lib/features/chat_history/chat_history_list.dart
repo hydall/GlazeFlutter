@@ -26,12 +26,16 @@ class ChatHistoryList extends ConsumerStatefulWidget {
   /// clear of the translucent bottom nav bar instead of being hidden by it.
   final double bottomPadding;
 
+  /// Owned by the parent so a navbar re-tap can animate the list back to the top.
+  final ScrollController? controller;
+
   const ChatHistoryList({
     super.key,
     this.collapsed = false,
     this.searchQuery = '',
     this.topPadding = 0,
     this.bottomPadding = 20,
+    this.controller,
   });
 
   @override
@@ -93,6 +97,7 @@ class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
         }
 
         return ListView.builder(
+          controller: widget.controller,
           padding: EdgeInsets.only(top: widget.topPadding, bottom: widget.bottomPadding),
           itemCount: filtered.length + 1,
           itemBuilder: (_, i) {
@@ -153,6 +158,7 @@ class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
       );
 
     return ListView.builder(
+      controller: widget.controller,
       padding: EdgeInsets.only(top: widget.topPadding, bottom: 20),
       itemCount: sortedGroups.length + 1,
       itemBuilder: (_, i) {

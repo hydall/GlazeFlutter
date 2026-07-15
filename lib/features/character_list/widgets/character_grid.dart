@@ -133,7 +133,14 @@ class CharacterGrid extends StatelessWidget {
             delegate: SliverChildBuilderDelegate(
               // No explicit RepaintBoundary: SliverChildBuilderDelegate already
               // wraps each child in one (addRepaintBoundaries: true by default).
+              //
+              // Keyed by character id so Flutter matches each card's State to its
+              // character across list changes. Without this, deleting a card mid-
+              // list left its slot's State (which still holds the finished dust
+              // cloud) attached to the character that shifted up into that slot —
+              // showing an empty slot instead of the next card.
               (ctx, i) => CharacterCard(
+                key: ValueKey(characters[i].id),
                 character: characters[i],
                 folderId: folderId,
               ),

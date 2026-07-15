@@ -19,6 +19,7 @@ import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/shell/header_scroll_hider.dart';
 import '../../shared/shell/nav_height_provider.dart';
+import '../../shared/shell/nav_retap_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glass_surface.dart';
@@ -304,10 +305,42 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     });
   }
 
+  /// Handles a re-tap on the already-active Characters navbar tab: scroll the
+  /// current sub-view to the top, or — when Discover is already at the top —
+  /// switch back to the My Characters sub-tab.
+  void _onCharactersTabReTap() {
+    final atTop =
+        !_listScrollController.hasClients ||
+        _listScrollController.positions.length != 1 ||
+        _listScrollController.position.pixels <= 0.5;
+
+    if (!atTop) {
+      _scrollToTop();
+      _showHeader();
+      return;
+    }
+
+    _showHeader();
+    // Already at the top: on Discover, fall back to My Characters.
+    if (_tabIndex == 1) {
+      ref.read(characterSelectionProvider.notifier).clear();
+      setState(() {
+        _tabIndex = 0;
+        if (_searchExpanded) _applySearchForActiveTab();
+      });
+      refreshShellHeader();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final navHeight = ref.watch(navHeightProvider);
     final selection = ref.watch(characterSelectionProvider);
+
+    // Re-tap on the active Characters navbar tab → scroll to top / Discover→My.
+    ref.listen(navReTapProvider, (_, next) {
+      if (next.branchIndex == kCharactersBranchIndex) _onCharactersTabReTap();
+    });
 
     final topPad = MediaQuery.of(context).padding.top + 74.0;
     // The tabs ride inside the shell header (its `below` slot) only at the top
@@ -364,25 +397,53 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
               ),
             ),
           ),
+          // The selection bar and the add button share the same bottom slot and
+          // cross-fade/slide between each other so the panel glides in and out
+          // instead of popping.
           if (_tabIndex == 0 && _currentFolderId != kPicksFolderId)
-            selection.active
-                ? Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: navHeight + 16,
-                    child: _SelectionBar(
-                      count: selection.count,
-                      onCancel: () => ref
-                          .read(characterSelectionProvider.notifier)
-                          .clear(),
-                      onMore: () => _showSelectionActions(context, selection),
-                    ),
-                  )
-                : Positioned(
-                    right: 16,
-                    bottom: navHeight + 16,
-                    child: _AddButton(onTap: () => _showAddSheet(context, ref)),
-                  ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: navHeight + 16,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, animation) {
+                  final slide =
+                      Tween<Offset>(
+                        begin: const Offset(0, 0.5),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutBack,
+                        ),
+                      );
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(position: slide, child: child),
+                  );
+                },
+                child: selection.active
+                    ? _SelectionBar(
+                        key: const ValueKey('selection_bar'),
+                        count: selection.count,
+                        onCancel: () => ref
+                            .read(characterSelectionProvider.notifier)
+                            .clear(),
+                        onMore: () =>
+                            _showSelectionActions(context, selection),
+                      )
+                    : Align(
+                        key: const ValueKey('add_button'),
+                        alignment: Alignment.centerRight,
+                        child: _AddButton(
+                          onTap: () => _showAddSheet(context, ref),
+                        ),
+                      ),
+              ),
+            ),
         ],
       ),
     );
@@ -943,10 +1004,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     CharacterSelectionState selection,
   ) async {
     final ids = {...selection.ids};
-    final notifier = ref.read(charactersProvider.notifier);
-    for (final id in ids) {
-      await notifier.setHidden(id, true);
-    }
+    // Batched: all hidden in one transaction → the grid rebuilds once and the
+    // cards leave together instead of blinking out one-by-one.
+    await ref.read(charactersProvider.notifier).setHiddenMany(ids, true);
     if (!context.mounted) return;
     ref.read(characterSelectionProvider.notifier).clear();
     GlazeToast.show(context, 'chars_hidden_toast'.plural(ids.length));
@@ -996,10 +1056,16 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           onTap: () async {
             Navigator.of(context, rootNavigator: true).pop();
             final notifier = ref.read(charactersProvider.notifier);
-            for (final id in ids) {
-              await notifier.remove(id);
-            }
+            // Crumble every selected card to dust simultaneously, then batch the
+            // actual deletion so the rows leave the grid in one frame (not one
+            // slow row at a time).
+            ref.read(characterDisintegrationProvider.notifier).mark(ids);
+            // Fold the selection bar away while the cards dissolve.
             ref.read(characterSelectionProvider.notifier).clear();
+            // Let the dust sweep run (matches the card's dust controller).
+            await Future<void>.delayed(const Duration(milliseconds: 900));
+            await notifier.removeMany(ids);
+            ref.read(characterDisintegrationProvider.notifier).clear();
           },
         ),
         BottomSheetItem(
@@ -1236,6 +1302,7 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onMore;
 
   const _SelectionBar({
+    super.key,
     required this.count,
     required this.onCancel,
     required this.onMore,

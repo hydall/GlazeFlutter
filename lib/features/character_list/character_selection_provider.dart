@@ -38,3 +38,21 @@ final characterSelectionProvider =
     NotifierProvider<CharacterSelectionNotifier, CharacterSelectionState>(
       CharacterSelectionNotifier.new,
     );
+
+/// Ids whose cards should be playing the iOS "crumble to dust" delete animation
+/// right now. The bulk-delete flow marks every selected id at once so all
+/// visible cards disintegrate together (rather than one-by-one); each
+/// [CharacterCard] listens for its own id, plays its dust animation, and the
+/// screen batch-removes the rows once the sweep has had time to run.
+class CharacterDisintegrationNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void mark(Set<String> ids) => state = {...state, ...ids};
+  void clear() => state = const {};
+}
+
+final characterDisintegrationProvider =
+    NotifierProvider<CharacterDisintegrationNotifier, Set<String>>(
+      CharacterDisintegrationNotifier.new,
+    );
