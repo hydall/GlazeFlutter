@@ -24,6 +24,18 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
   late Map<String, dynamic> _localItem;
   bool _enabled = true;
   bool _isGenerating = false;
+  // Captured while the element is active so _performSave can still read
+  // providers when invoked from GenericEditor.dispose() (e.g. the sheet is
+  // swipe-dismissed with a pending debounced edit) — by then ref.read throws
+  // "Looking up a deactivated widget's ancestor is unsafe". Mirrors
+  // AuthorsNoteSheet.
+  late final ProviderContainer _container;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _container = ProviderScope.containerOf(context);
+  }
 
   @override
   void initState() {
@@ -46,16 +58,19 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
   }
 
   Future<void> _performSave(Map<String, dynamic> item) async {
-    final session = ref.read(chatProvider(widget.charId)).value?.session;
+    // Use the captured container, not ref — this can be invoked from
+    // GenericEditor.dispose() when the element is already deactivated.
+    final session =
+        _container.read(chatProvider(widget.charId)).value?.session;
     if (session == null) return;
     final content = (item['content'] as String?)?.trim() ?? '';
     // Write to the same store the prompt reads, so manual summaries inject.
-    await ref.read(summaryServiceProvider).setSummary(
+    await _container.read(summaryServiceProvider).setSummary(
           sessionId: session.id,
           content: content,
           messageCount: session.messages.length,
         );
-    ref.read(summaryRevisionProvider.notifier).state++;
+    _container.read(summaryRevisionProvider.notifier).state++;
   }
 
   void _setEnabled(bool value) {

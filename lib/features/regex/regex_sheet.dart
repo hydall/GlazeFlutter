@@ -45,6 +45,20 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
   Timer? _saveTimer;
 
   @override
+  void deactivate() {
+    // When shown as a modal bottom sheet (magic-drawer / preset editor) a
+    // swipe- or barrier-dismiss never routes through _goBack, so a pending
+    // debounced script edit would be lost — dispose() only cancels the timer,
+    // and by then the captured ref is unmounted. Flush here while the widget is
+    // still mounted (ref valid).
+    if ((_saveTimer?.isActive ?? false) && _activeScript != null) {
+      _saveTimer!.cancel();
+      _saveActiveScript(_activeScript!);
+    }
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _saveTimer?.cancel();
     super.dispose();

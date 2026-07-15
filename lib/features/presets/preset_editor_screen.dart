@@ -130,6 +130,20 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   }
 
   @override
+  void deactivate() {
+    // Flush a pending debounced save while the widget is still mounted (ref
+    // valid). dispose() runs the same flush, but by then this ConsumerState is
+    // unmounting and ref.read is unsafe, so a save deferred to dispose can
+    // silently fail (the last <500 ms edit before back would be lost). Mirrors
+    // ApiSettingsScreen / RegexSheet.
+    if (_saveTimer != null && _saveTimer!.isActive) {
+      _saveTimer!.cancel();
+      _performSave();
+    }
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     if (_saveTimer != null && _saveTimer!.isActive) {
       _saveTimer!.cancel();
