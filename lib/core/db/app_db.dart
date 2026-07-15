@@ -816,7 +816,7 @@ class AppDatabase extends _$AppDatabase {
           'SELECT COUNT(*) AS cnt FROM studio_preset_rows',
         ).getSingle();
         if (existing.read<int>('cnt') == 0) {
-          final seedBlocks = studioPresetSeedBlocks();
+          final seedBlocks = _legacyStudioPresetMigrationBlocks();
           await customStatement(
             'INSERT INTO studio_preset_rows '
             '(preset_id, name, blocks_json, updated_at) VALUES '
@@ -895,7 +895,7 @@ class AppDatabase extends _$AppDatabase {
             final blocksJson = row.read<String>('blocks_json');
             final blocks = (jsonDecode(blocksJson) as List<dynamic>)
                 .cast<Map<String, dynamic>>();
-            final seedBlocks = studioPresetSeedBlocks();
+            final seedBlocks = _legacyStudioPresetMigrationBlocks();
             final seedById = {for (final b in seedBlocks) b['id'] as String: b};
             var changed = false;
             // Add missing blocks (cleaner_beauty).
@@ -984,7 +984,7 @@ class AppDatabase extends _$AppDatabase {
             final blocksJson = row.read<String>('blocks_json');
             final blocks = (jsonDecode(blocksJson) as List<dynamic>)
                 .cast<Map<String, dynamic>>();
-            final seedBlocks = studioPresetSeedBlocks();
+            final seedBlocks = _legacyStudioPresetMigrationBlocks();
             final seedById = {for (final b in seedBlocks) b['id'] as String: b};
             var changed = false;
             for (var i = 0; i < blocks.length; i++) {
@@ -1044,7 +1044,7 @@ class AppDatabase extends _$AppDatabase {
             final blocksJson = row.read<String>('blocks_json');
             final blocks = (jsonDecode(blocksJson) as List<dynamic>)
                 .cast<Map<String, dynamic>>();
-            final seedBlocks = studioPresetSeedBlocks();
+            final seedBlocks = _legacyStudioPresetMigrationBlocks();
             final seedById = {for (final b in seedBlocks) b['id'] as String: b};
             var changed = false;
             for (var i = 0; i < blocks.length; i++) {
@@ -1083,7 +1083,7 @@ class AppDatabase extends _$AppDatabase {
           final presetRows = await customSelect(
             'SELECT preset_id, blocks_json FROM studio_preset_rows',
           ).get();
-          final seedBlocks = studioPresetSeedBlocks();
+          final seedBlocks = _legacyStudioPresetMigrationBlocks();
           final seedById = {for (final b in seedBlocks) b['id'] as String: b};
           final idsToUpdate = {
             'continuity_task_universal',
@@ -1128,7 +1128,7 @@ class AppDatabase extends _$AppDatabase {
           final presetRows = await customSelect(
             'SELECT preset_id, blocks_json FROM studio_preset_rows',
           ).get();
-          final seedBlocks = studioPresetSeedBlocks();
+          final seedBlocks = _legacyStudioPresetMigrationBlocks();
           final seedById = {for (final b in seedBlocks) b['id'] as String: b};
           for (final row in presetRows) {
             final presetId = row.read<String>('preset_id');
@@ -1306,7 +1306,7 @@ class AppDatabase extends _$AppDatabase {
             final blocksJson = row.read<String>('blocks_json');
             final blocks = (jsonDecode(blocksJson) as List<dynamic>)
                 .cast<Map<String, dynamic>>();
-            final seedBlocks = studioPresetSeedBlocks();
+            final seedBlocks = _legacyStudioPresetMigrationBlocks();
             final ledgerSeed = seedBlocks.firstWhere(
               (block) => block['id'] == 'ledger_system',
             );
@@ -1433,7 +1433,9 @@ LazyDatabase _openConnection() {
 /// The `section` field groups blocks by pipeline stage:
 /// `pregen`, `final`, `cleaner`, `ledger`, `build`, `brief_parser`.
 
-List<Map<String, dynamic>> studioPresetSeedBlocks() {
+/// Versioned payload retained only so upgrades from old database schemas can
+/// finish without changing their historical migration behavior.
+List<Map<String, dynamic>> _legacyStudioPresetMigrationBlocks() {
   return _applyStudioLengthContract(<Map<String, dynamic>>[
     // ─── pregen section (agent layout + tracker instructions + slots) ───
     {

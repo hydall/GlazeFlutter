@@ -5,6 +5,7 @@ import '../../../core/models/persona.dart';
 
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/persona_resolution.dart';
+import '../../extensions/models/info_block.dart';
 import '../../extensions/providers/info_blocks_provider.dart';
 import '../../extensions/services/extension_post_gen_service.dart';
 import '../chat_provider.dart';
@@ -136,18 +137,8 @@ class ChatWebViewExtBlockCallbacks {
       if (!isMounted()) return;
       final sessionId = this.sessionId;
       if (sessionId == null || sessionId.isEmpty) return;
-      final blocks = ref
-          .read(infoBlocksProvider(sessionId))
-          .where(
-            (b) =>
-                b.messageId == messageId &&
-                b.swipeId == _swipeIdForChat(messageId) &&
-                b.agentSwipeId == _agentSwipeIdForChat(messageId) &&
-                b.blockId == blockId,
-          )
-          .toList();
-      if (blocks.isEmpty) return;
-      final block = blocks.first;
+      final block = _blockForChat(sessionId, messageId, blockId);
+      if (block == null) return;
       if (!isMounted()) return;
       // ignore: use_build_context_synchronously
       final newContent = await ExtBlockDialogs.promptEdit(
@@ -172,18 +163,8 @@ class ChatWebViewExtBlockCallbacks {
       if (!isMounted()) return;
       final sessionId = this.sessionId;
       if (sessionId == null || sessionId.isEmpty) return;
-      final blocks = ref
-          .read(infoBlocksProvider(sessionId))
-          .where(
-            (b) =>
-                b.messageId == messageId &&
-                b.swipeId == _swipeIdForChat(messageId) &&
-                b.agentSwipeId == _agentSwipeIdForChat(messageId) &&
-                b.blockId == blockId,
-          )
-          .toList();
-      if (blocks.isEmpty) return;
-      final block = blocks.first;
+      final block = _blockForChat(sessionId, messageId, blockId);
+      if (block == null) return;
       if (!isMounted()) return;
       // ignore: use_build_context_synchronously
       final confirmed = await ExtBlockDialogs.confirmDelete(
@@ -206,16 +187,28 @@ class ChatWebViewExtBlockCallbacks {
     );
   }
 
-  int _swipeIdForChat(String messageId) {
+  InfoBlock? _blockForChat(
+    String sessionId,
+    String messageId,
+    String blockId,
+  ) {
     final chatState = ref.read(chatProvider(charId)).value;
-    if (chatState == null) return 0;
-    return _swipeIdFor(chatState.messages, messageId);
-  }
-
-  int _agentSwipeIdForChat(String messageId) {
-    final chatState = ref.read(chatProvider(charId)).value;
-    if (chatState == null) return -1;
-    return _agentSwipeIdFor(chatState.messages, messageId);
+    if (chatState == null) return null;
+    for (final message in chatState.messages) {
+      if (message.id != messageId) continue;
+      final blocks = ref
+          .read(infoBlocksProvider(sessionId).notifier)
+          .getByMessageId(
+            messageId,
+            swipeId: message.swipeId,
+            agentSwipeId: message.agentSwipeId,
+          );
+      for (final block in blocks) {
+        if (block.blockId == blockId) return block;
+      }
+      return null;
+    }
+    return null;
   }
 
   static int _swipeIdFor(List<dynamic> messages, String messageId) {

@@ -17,6 +17,7 @@ void main() {
     const StudioAgent(id: 'agent_s_guard', name: 'Anti-Loop & Prose Guard'),
     const StudioAgent(id: 'agent_s_world', name: 'World / NPC Controller'),
     const StudioAgent(id: 'agent_s_meta', name: 'Meta-Weaver / OOC Policy'),
+    const StudioAgent(id: 'agent_s_beauty', name: 'Beauty Shard'),
     const StudioAgent(id: 'agent_s_final', name: 'Main Responder'),
   ];
 
@@ -31,7 +32,7 @@ void main() {
     ]);
   });
 
-  test('assisted mode permits only continuity, scene director, and final', () {
+  test('assisted permits continuity, scene director, beauty, and final', () {
     final gated = StudioActivationGate.applyExecutionMode(
       staleAgents,
       StudioExecutionMode.assisted,
@@ -40,6 +41,7 @@ void main() {
     expect(gated.where((agent) => agent.enabled).map((agent) => agent.name), [
       'Continuity Controller',
       'Narrative / Pacing / Style Controller',
+      'Beauty Shard',
       'Main Responder',
     ]);
   });
@@ -57,7 +59,7 @@ void main() {
         'beauty',
         StudioExecutionMode.assisted,
       ),
-      isFalse,
+      isTrue,
     );
     expect(
       StudioActivationGate.isControllerAllowed(
