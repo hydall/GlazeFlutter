@@ -17,6 +17,7 @@ import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/api_config.dart';
+import '../../../core/services/model_usage_service.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/memory_agent_providers.dart';
 import '../../../core/state/pipeline_settings_provider.dart';
@@ -366,6 +367,7 @@ class StreamGenerationService {
               studioOutputs: StudioStreamInterceptor.studioOutputsToJson(studioResult.stageBriefs),
             )
             .copyWith(promptPayload: finalPayload);
+        _recordModelUsage(apiConfig.model);
         final messageId = _lastAssistantId(finalState.session!, regenTargetId);
         _recorder.recordStudioTrackerOperation(
           sessionId: session.id,
@@ -551,6 +553,7 @@ class StreamGenerationService {
                 visibleStartIndex: vsi,
               )
               .copyWith(promptPayload: payload);
+          _recordModelUsage(apiConfig.model);
           if (memoryDiagnostics is Map<String, dynamic> &&
               finalState?.session != null) {
             final messageId = _lastAssistantId(
@@ -707,6 +710,13 @@ class StreamGenerationService {
 
   static void _log(String message) {
     debugPrint('[StudioGen] $message');
+  }
+
+  /// Record one successful generation against [model] for the global "Top
+  /// Models" statistics. Fire-and-forget: a stats-counter write must never
+  /// block or fail the generation flow.
+  void _recordModelUsage(String model) {
+    unawaited(_ref.read(modelUsageServiceProvider).recordModelUse(model));
   }
 
   String _resolvedTrackerModel(ApiConfig apiConfig) {

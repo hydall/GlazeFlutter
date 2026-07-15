@@ -106,6 +106,20 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   }
 
   @override
+  void deactivate() {
+    // This screen is presented two ways: a fullscreen route (Tools → API) and
+    // a modal bottom sheet (chat magic-drawer → API). The route path flushes
+    // via the back button (_goBack), but a bottom sheet dismissed by swipe or
+    // barrier-tap never calls _goBack — only dispose() runs, and by then the
+    // captured ref is unmounted so the flush silently fails. That is why a
+    // toggle like Streaming was lost when changed from the sheet. deactivate()
+    // runs while the widget is still mounted (ref valid), so flushing the
+    // pending debounced save here makes it reliable on every exit path.
+    _flushSave();
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _flushSave();
     _scrollController.dispose();

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../core/state/chat_session_ops_provider.dart';
+import '../../../core/services/model_usage_service.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -76,6 +77,9 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
   _StatsData _charStats = const _StatsData();
   _StatsData _generalStats = const _StatsData();
 
+  /// Top 10 most-used models (global), highest count first.
+  List<MapEntry<String, int>> _topModels = const [];
+
   Timer? _updateInterval;
 
   @override
@@ -96,10 +100,19 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
 
   Future<void> _initData() async {
     _allCharacters = ref.read(charactersProvider).value ?? [];
+    await _loadTopModels();
     await _calculateStats();
     if (mounted) {
       setState(() => _loading = false);
     }
+  }
+
+  Future<void> _loadTopModels() async {
+    final counts = await ref.read(modelUsageServiceProvider).getUsageCounts();
+    final sorted = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    if (!mounted) return;
+    setState(() => _topModels = sorted.take(10).toList());
   }
 
   Future<void> _updateTimeStats() async {
@@ -412,6 +425,120 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
     );
   }
 
+  Widget _buildTopModels() {
+    final maxCount = _topModels.isEmpty ? 1 : _topModels.first.value;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Icon(Icons.leaderboard_outlined,
+                    size: 18, color: context.cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Top Models',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: context.cs.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_topModels.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+              child: Text(
+                _loading ? '...' : 'No model usage yet',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.cs.onSurfaceVariant,
+                ),
+              ),
+            )
+          else
+            for (var i = 0; i < _topModels.length; i++)
+              _buildModelRow(i, _topModels[i], maxCount),
+          const SizedBox(height: 6),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModelRow(int index, MapEntry<String, int> entry, int maxCount) {
+    final fraction = maxCount == 0 ? 0.0 : entry.value / maxCount;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 22,
+            child: Text(
+              '${index + 1}',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        entry.key,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: context.cs.onSurface,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    RollingNumber(
+                      value: _formatNumber(entry.value),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: context.cs.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: fraction.clamp(0.0, 1.0),
+                    minHeight: 4,
+                    backgroundColor: Colors.white.withValues(alpha: 0.06),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(context.cs.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSeparator() {
     return Padding(
       padding: const EdgeInsets.only(left: 64),
@@ -671,6 +798,10 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                 ],
               ),
             ),
+            if (_currentTab == 'general') ...[
+              const SizedBox(height: 12),
+              _buildTopModels(),
+            ],
           ],
         ),
       ),
