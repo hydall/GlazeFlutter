@@ -327,10 +327,12 @@ class ImageGenService {
         });
       }
       for (final ref in settings.additionalReferences) {
-        if (ref.matchMode == 'always' ||
-            promptLower.contains(ref.name.toLowerCase())) {
+        final name = ref.name.trim();
+        final triggers = _referenceTriggers(name);
+        if (ref.imageData.isNotEmpty &&
+            (ref.matchMode == 'always' || triggers.any(promptLower.contains))) {
           refs.add({
-            'name': ref.name,
+            'name': name,
             'image': _extractBase64FromDataUrl(ref.imageData),
           });
         }
@@ -383,10 +385,12 @@ class ImageGenService {
       if (img.isNotEmpty) refs.add({'name': persona.name, 'image': img});
     }
     for (final ref in settings.routmyAdditionalRefs) {
-      if (ref.matchMode == 'always' ||
-          promptLower.contains(ref.name.toLowerCase())) {
+      final name = ref.name.trim();
+      final triggers = _referenceTriggers(name);
+      if (ref.imageData.isNotEmpty &&
+          (ref.matchMode == 'always' || triggers.any(promptLower.contains))) {
         final raw = _extractBase64FromDataUrl(ref.imageData);
-        if (raw.isNotEmpty) refs.add({'name': ref.name, 'image': raw});
+        if (raw.isNotEmpty) refs.add({'name': name, 'image': raw});
       }
     }
 
@@ -401,6 +405,12 @@ class ImageGenService {
 
     return refs;
   }
+
+  List<String> _referenceTriggers(String value) => value
+      .split(',')
+      .map((trigger) => trigger.trim().toLowerCase())
+      .where((trigger) => trigger.isNotEmpty)
+      .toList();
 
   String _fileToBase64(String path) {
     try {

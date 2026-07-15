@@ -1,7 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:easy_localization/easy_localization.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/platform_paths.dart';
+import '../../character_gallery/gallery_image_picker.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/help_tip.dart';
 import '../../../shared/widgets/sheet_view.dart';
@@ -12,7 +18,9 @@ import 'model_fields.dart';
 import 'rows.dart' as rows;
 
 class ImageGenSheet extends ConsumerStatefulWidget {
-  const ImageGenSheet({super.key});
+  const ImageGenSheet({super.key, this.charId});
+
+  final String? charId;
 
   @override
   ConsumerState<ImageGenSheet> createState() => _ImageGenSheetState();
@@ -366,6 +374,79 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
     }
   }
 
+  Future<String?> _pickReferenceImage() async {
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: context.cs.surface,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text(
+                'Choose reference image',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open),
+              title: const Text('From device'),
+              onTap: () => Navigator.pop(context, 'device'),
+            ),
+            if (widget.charId != null)
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('From card gallery'),
+                onTap: () => Navigator.pop(context, 'gallery'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || source == null) return null;
+
+    if (source == 'gallery') {
+      final entry = await showCharacterGalleryImagePicker(
+        context,
+        charId: widget.charId!,
+      );
+      if (entry == null) return null;
+      final path = resolveGlazeFilePath(entry.imagePath) ?? entry.imagePath;
+      return _fileToDataUrl(File(path), path);
+    }
+
+    final result = await FilePicker.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return null;
+    final picked = result.files.single;
+    final bytes =
+        picked.bytes ??
+        (picked.path == null ? null : await File(picked.path!).readAsBytes());
+    if (bytes == null) return null;
+    return 'data:${_imageMime(picked.name)};base64,${base64Encode(bytes)}';
+  }
+
+  Future<String?> _fileToDataUrl(File file, String path) async {
+    try {
+      if (!await file.exists()) return null;
+      return 'data:${_imageMime(path)};base64,${base64Encode(await file.readAsBytes())}';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _imageMime(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return 'image/png';
+  }
+
   List<Widget> _buildReferences(ImageGenSettings s) {
     final isRoutmy = s.apiType == ImageGenApiType.routmy;
     final isRuRoutmy = s.apiType == ImageGenApiType.ruRoutmy;
@@ -444,7 +525,17 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
                   _update(s.copyWith(additionalReferences: copy));
                 }
               },
-              onPickImage: () {},
+              onPickImage: () async {
+                final imageData = await _pickReferenceImage();
+                if (imageData == null || !mounted) return;
+                final copy = List<ReferenceImage>.from(refs);
+                copy[i] = copy[i].copyWith(imageData: imageData);
+                if (isRoutmy || isRuRoutmy) {
+                  _update(s.copyWith(routmyAdditionalRefs: copy));
+                } else {
+                  _update(s.copyWith(additionalReferences: copy));
+                }
+              },
               onRemove: () {
                 final copy = List<ReferenceImage>.from(refs);
                 copy.removeAt(i);
