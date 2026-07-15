@@ -30,8 +30,11 @@ class DustParticles {
   /// already unmounted) so callers can fall back to an instant removal.
   static Future<DustParticles?> capture(
     GlobalKey key, {
-    int columns = 26,
-    double pixelRatio = 1.5,
+    // Higher column count → smaller cells → a finer, more granular dust cloud
+    // (closer to the fine iOS "app crumble" powder than coarse chunks). Kept
+    // moderate so bulk delete — several cards crumbling at once — stays smooth.
+    int columns = 36,
+    double pixelRatio = 1.6,
   }) async {
     final ctx = key.currentContext;
     if (ctx == null) return null;

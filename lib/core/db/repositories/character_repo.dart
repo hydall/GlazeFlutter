@@ -346,6 +346,34 @@ class CharacterRepo implements SyncCharacterStore {
         .write(CharactersCompanion(hidden: Value(hidden)));
   }
 
+  /// Hides or reveals the variation groups of every character in [charIds] in a
+  /// single transaction, so the reactive watchers emit **one** update instead of
+  /// one per character (the bulk "hide selected" flow — otherwise cards vanish
+  /// one-by-one as each write lands).
+  Future<void> setHiddenMany(Set<String> charIds, bool hidden) async {
+    if (charIds.isEmpty) return;
+    await _db.transaction(() async {
+      final ids = charIds.toList();
+      final rows = await (_db.select(_db.characters)
+            ..where((t) => t.charId.isIn(ids)))
+          .get();
+      // Resolve each selected card to its whole variation group so hidden state
+      // stays consistent (mirrors the single-character [setHidden] semantics).
+      final groupIds = <String>{
+        for (final r in rows) r.variantGroupId.isEmpty ? r.charId : r.variantGroupId,
+      };
+      if (groupIds.isEmpty) return;
+      final groupList = groupIds.toList();
+      await (_db.update(_db.characters)
+            ..where(
+              (t) =>
+                  t.variantGroupId.isIn(groupList) |
+                  (t.variantGroupId.equals('') & t.charId.isIn(groupList)),
+            ))
+          .write(CharactersCompanion(hidden: Value(hidden)));
+    });
+  }
+
   /// Reassigns variant_order so [orderedIds] becomes 0..n-1 (index 0 = cover).
   Future<void> reorderVariants(String groupId, List<String> orderedIds) async {
     await _db.batch((b) {

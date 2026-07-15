@@ -109,6 +109,16 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
 
   @override
   Widget build(BuildContext context) {
+    // The bulk-delete flow marks every selected id at once; each card starts its
+    // own dust animation here so they all crumble together (not one-by-one). The
+    // actual row removal is batched by the screen after the sweep.
+    ref.listen<bool>(
+      characterDisintegrationProvider.select((s) => s.contains(character.id)),
+      (prev, next) {
+        if (next && _dust == null) _playDust();
+      },
+    );
+
     final selectionActive =
         ref.watch(characterSelectionProvider.select((s) => s.active));
     final selected = ref.watch(
@@ -494,15 +504,27 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   Future<void> _disintegrate() async {
     if (_dust != null) return; // already dissolving
     final notifier = ref.read(charactersProvider.notifier);
-    final data = await DustParticles.capture(_boundaryKey);
-    if (!mounted || data == null) {
+    final played = await _playDust();
+    if (!played) {
       // Couldn't snapshot (e.g. unmounted) — fall back to an instant delete.
       await notifier.remove(character.id);
       return;
     }
+    await notifier.remove(character.id);
+  }
+
+  /// Snapshots the card and runs its dust animation to completion, leaving the
+  /// scattered particles painted in place. Returns `false` when the boundary
+  /// couldn't be captured. Used both by the single-card delete ([_disintegrate])
+  /// and — driven by [characterDisintegrationProvider] — by the bulk delete,
+  /// where the screen batch-removes the rows once the sweep has run.
+  Future<bool> _playDust() async {
+    if (_dust != null) return true; // already dissolving
+    final data = await DustParticles.capture(_boundaryKey);
+    if (!mounted || data == null) return false;
     setState(() => _dust = data);
     await _dustCtrl.forward(from: 0);
-    await notifier.remove(character.id);
+    return true;
   }
 }
 

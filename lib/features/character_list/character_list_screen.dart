@@ -364,25 +364,53 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
               ),
             ),
           ),
+          // The selection bar and the add button share the same bottom slot and
+          // cross-fade/slide between each other so the panel glides in and out
+          // instead of popping.
           if (_tabIndex == 0 && _currentFolderId != kPicksFolderId)
-            selection.active
-                ? Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: navHeight + 16,
-                    child: _SelectionBar(
-                      count: selection.count,
-                      onCancel: () => ref
-                          .read(characterSelectionProvider.notifier)
-                          .clear(),
-                      onMore: () => _showSelectionActions(context, selection),
-                    ),
-                  )
-                : Positioned(
-                    right: 16,
-                    bottom: navHeight + 16,
-                    child: _AddButton(onTap: () => _showAddSheet(context, ref)),
-                  ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: navHeight + 16,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, animation) {
+                  final slide =
+                      Tween<Offset>(
+                        begin: const Offset(0, 0.5),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutBack,
+                        ),
+                      );
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(position: slide, child: child),
+                  );
+                },
+                child: selection.active
+                    ? _SelectionBar(
+                        key: const ValueKey('selection_bar'),
+                        count: selection.count,
+                        onCancel: () => ref
+                            .read(characterSelectionProvider.notifier)
+                            .clear(),
+                        onMore: () =>
+                            _showSelectionActions(context, selection),
+                      )
+                    : Align(
+                        key: const ValueKey('add_button'),
+                        alignment: Alignment.centerRight,
+                        child: _AddButton(
+                          onTap: () => _showAddSheet(context, ref),
+                        ),
+                      ),
+              ),
+            ),
         ],
       ),
     );
@@ -943,10 +971,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     CharacterSelectionState selection,
   ) async {
     final ids = {...selection.ids};
-    final notifier = ref.read(charactersProvider.notifier);
-    for (final id in ids) {
-      await notifier.setHidden(id, true);
-    }
+    // Batched: all hidden in one transaction → the grid rebuilds once and the
+    // cards leave together instead of blinking out one-by-one.
+    await ref.read(charactersProvider.notifier).setHiddenMany(ids, true);
     if (!context.mounted) return;
     ref.read(characterSelectionProvider.notifier).clear();
     GlazeToast.show(context, 'chars_hidden_toast'.plural(ids.length));
@@ -993,10 +1020,16 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           onTap: () async {
             Navigator.of(context, rootNavigator: true).pop();
             final notifier = ref.read(charactersProvider.notifier);
-            for (final id in ids) {
-              await notifier.remove(id);
-            }
+            // Crumble every selected card to dust simultaneously, then batch the
+            // actual deletion so the rows leave the grid in one frame (not one
+            // slow row at a time).
+            ref.read(characterDisintegrationProvider.notifier).mark(ids);
+            // Fold the selection bar away while the cards dissolve.
             ref.read(characterSelectionProvider.notifier).clear();
+            // Let the dust sweep run (matches the card's dust controller).
+            await Future<void>.delayed(const Duration(milliseconds: 900));
+            await notifier.removeMany(ids);
+            ref.read(characterDisintegrationProvider.notifier).clear();
           },
         ),
         BottomSheetItem(
@@ -1233,6 +1266,7 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onMore;
 
   const _SelectionBar({
+    super.key,
     required this.count,
     required this.onCancel,
     required this.onMore,
