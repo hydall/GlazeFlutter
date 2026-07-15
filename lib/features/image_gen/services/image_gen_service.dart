@@ -166,7 +166,6 @@ class ImageGenService {
             persona: persona,
             recentImageContexts: recentImageContexts,
           );
-
     switch (settings.apiType) {
       case ImageGenApiType.openai:
         return _generateOpenai(
@@ -187,9 +186,19 @@ class ImageGenService {
       case ImageGenApiType.naistera:
         return _generateNaistera(settings, prompt, refs, cancelToken);
       case ImageGenApiType.routmy:
-        return _generateRoutmy(settings, prompt, refs, cancelToken);
+        return _generateRoutmy(
+          settings,
+          prompt,
+          refs.take(routmyMaxInjectedReferenceImages).toList(),
+          cancelToken,
+        );
       case ImageGenApiType.ruRoutmy:
-        return _generateRuRoutmy(settings, prompt, refs, cancelToken);
+        return _generateRuRoutmy(
+          settings,
+          prompt,
+          refs.take(routmyMaxInjectedReferenceImages).toList(),
+          cancelToken,
+        );
     }
   }
 

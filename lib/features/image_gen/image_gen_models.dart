@@ -4,6 +4,8 @@ part 'image_gen_models.freezed.dart';
 
 enum ImageGenApiType { openai, gemini, naistera, routmy, ruRoutmy }
 
+const routmyMaxInjectedReferenceImages = 10;
+
 @freezed
 abstract class ReferenceImage with _$ReferenceImage {
   const factory ReferenceImage({

@@ -499,10 +499,23 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
       rows.ImageGenMenuGroup(
         title: 'Additional References',
         trailing: Text(
-          '${refs.length}/8',
+          isRoutmy || isRuRoutmy ? '${refs.length}' : '${refs.length}/8',
           style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
         ),
         children: [
+          if (isRoutmy || isRuRoutmy)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'You can save any number of references. If more than '
+                '$routmyMaxInjectedReferenceImages match, only the first '
+                '$routmyMaxInjectedReferenceImages are sent.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.cs.onSurfaceVariant,
+                ),
+              ),
+            ),
           for (int i = 0; i < refs.length; i++)
             rows.ImageGenReferenceRow(
               key: ValueKey('ref_$i'),
@@ -546,7 +559,7 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
                 }
               },
             ),
-          if (refs.length < 8)
+          if (isRoutmy || isRuRoutmy || refs.length < 8)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: InkWell(
