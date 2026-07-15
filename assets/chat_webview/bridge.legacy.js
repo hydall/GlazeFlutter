@@ -1810,7 +1810,9 @@ class Bridge {
 
   _renderExtBlockImageHtml(payload) {
     const src = this._escapeAttr(this._extBlockImageSrc(payload));
-    return `<span class="ext-block-image-wrapper img-result-wrapper"><img src="${src}" class="ext-block-image" loading="lazy" data-action="image-click" data-src="${src}"><button class="img-download-btn" data-action="img-download" data-src="${src}" title="Save image">⤓</button></span>`;
+    // loading="eager" (see bridge/chat_bridge_controller.js): lazy ext-block
+    // images blink and collapse on iOS while the keyboard resizes the viewport.
+    return `<span class="ext-block-image-wrapper img-result-wrapper"><img src="${src}" class="ext-block-image" loading="eager" decoding="sync" data-action="image-click" data-src="${src}"><button class="img-download-btn" data-action="img-download" data-src="${src}" title="Save image">⤓</button></span>`;
   }
 
   _fillExtBlockBody(body, block) {

@@ -1341,7 +1341,15 @@ export class Bridge {
 
   _renderExtBlockImageHtml(payload) {
     const src = this._escapeAttr(this._extBlockImageSrc(payload));
-    return `<span class="ext-block-image-wrapper img-result-wrapper"><img src="${src}" class="ext-block-image" loading="lazy" data-action="image-click" data-src="${src}"><button class="img-download-btn" data-action="img-download" data-src="${src}" title="Save image">⤓</button></span>`;
+    // loading="eager" (not "lazy"): the ext-block panel hangs off the last
+    // assistant message, i.e. at the very bottom edge of the WebView next to
+    // the input bar. On iOS WKWebView, lazy images that close to the viewport
+    // edge get unloaded/reloaded as the keyboard + input pill resize the
+    // viewport while typing — the image blinks, and because .ext-block-image
+    // has no reserved height the whole block collapses and re-expands
+    // ("opens and closes"). These are already-generated local files, so eager
+    // loading costs nothing and keeps the image pinned.
+    return `<span class="ext-block-image-wrapper img-result-wrapper"><img src="${src}" class="ext-block-image" loading="eager" decoding="sync" data-action="image-click" data-src="${src}"><button class="img-download-btn" data-action="img-download" data-src="${src}" title="Save image">⤓</button></span>`;
   }
 
   _fillExtBlockBody(body, block) {
