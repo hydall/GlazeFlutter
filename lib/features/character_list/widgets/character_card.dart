@@ -18,6 +18,7 @@ import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../character_detail_screen.dart';
+import 'character_hiding_onboarding_sheet.dart';
 import '../../../core/llm/character_tokens.dart';
 import '../character_selection_provider.dart';
 import 'add_to_folder_sheet.dart';
@@ -356,16 +357,20 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
               : Icons.visibility_off_outlined,
           label: character.hidden ? 'action_unhide'.tr() : 'action_hide'.tr(),
           onTap: () {
+            final willHide = !character.hidden;
             Navigator.of(context, rootNavigator: true).pop();
             ref
                 .read(charactersProvider.notifier)
-                .setHidden(character.id, !character.hidden);
+                .setHidden(character.id, willHide);
             GlazeToast.show(
               context,
               character.hidden
                   ? 'char_unhidden_toast'.tr()
                   : 'char_hidden_toast'.tr(),
             );
+            if (willHide) {
+              maybeShowCharacterHidingOnboarding(context);
+            }
           },
         ),
         BottomSheetItem(

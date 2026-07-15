@@ -38,6 +38,7 @@ import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/colored_markdown.dart';
 import 'character_editor_screen.dart';
 import 'widgets/character_variations_sheet.dart';
+import 'widgets/character_hiding_onboarding_sheet.dart';
 
 // ─── Colour tokens ─────────────────────────────────────────────────────────
 
@@ -435,6 +436,9 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
       context,
       wasHidden ? 'char_unhidden_toast'.tr() : 'char_hidden_toast'.tr(),
     );
+    if (!wasHidden) {
+      await maybeShowCharacterHidingOnboarding(context);
+    }
   }
 
   void _showVariations(BuildContext context) {
