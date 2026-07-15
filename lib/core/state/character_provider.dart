@@ -108,12 +108,6 @@ final infiniteCharactersProvider =
 
 final avatarVersionProvider = StateProvider<int>((ref) => 0);
 
-/// Incremented each time the user taps the Characters navbar tab while that
-/// branch is **already active** (a "re-tap"). The Characters screen listens and
-/// scrolls the current sub-view (My / Discover) to the top; when Discover is
-/// already at the top it switches back to the My Characters sub-tab instead.
-final charactersTabReTapProvider = StateProvider<int>((ref) => 0);
-
 void bumpAvatarVersion(dynamic ref) {
   ref.read(avatarVersionProvider.notifier).state++;
 }

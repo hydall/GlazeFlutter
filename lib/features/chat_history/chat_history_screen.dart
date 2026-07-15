@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/shell/header_scroll_hider.dart';
 import '../../shared/shell/nav_height_provider.dart';
+import '../../shared/shell/nav_retap_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
 
@@ -30,6 +31,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
   bool _searchExpanded = false;
   ShellHeaderRegistry? _registry;
   final HeaderScrollHider _headerScrollHider = HeaderScrollHider();
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -62,10 +64,23 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
     if (notifier.state) notifier.state = false;
   }
 
+  /// Animates the dialogs list back to the top (guarded so it never touches a
+  /// controller with no — or more than one — attached scroll position).
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.positions.length != 1) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   void dispose() {
     _searchCtrl.dispose();
     _searchFocus.dispose();
+    _scrollController.dispose();
     if (!widget.embedded) {
       final registry = _registry;
       WidgetsBinding.instance.addPostFrameCallback(
@@ -140,7 +155,16 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
     final topPad = MediaQuery.of(context).padding.top + 66.0 + 16.0;
     final bottomPad = ref.watch(navHeightProvider) + 20;
 
+    // Re-tap on the active Dialogs navbar tab → scroll the list to the top.
+    ref.listen(navReTapProvider, (_, next) {
+      if (next.branchIndex == kDialogsBranchIndex) {
+        _showHeader();
+        _scrollToTop();
+      }
+    });
+
     final list = ChatHistoryList(
+      controller: _scrollController,
       searchQuery: _searchQuery,
       topPadding: topPad,
       bottomPadding: bottomPad,

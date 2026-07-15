@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/platform/haptics.dart';
 import '../../core/state/character_provider.dart';
 import '../shell/nav_height_provider.dart';
+import '../shell/nav_retap_provider.dart';
 import '../theme/app_colors.dart';
 import 'glass_surface.dart';
 import 'glaze_toast.dart';
@@ -103,16 +104,13 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
             onTap: () {
               if (i != widget.currentIndex) {
                 Haptics.selectionClick();
+              } else {
+                // Re-tap on the already-active tab: ask that branch's screen to
+                // return to the top of its main view (sub-routes are popped by
+                // the shell's goBranch(initialLocation: true)).
+                ref.read(navReTapProvider.notifier).reTap(i);
               }
-              if (i == _kCharactersTabIndex) {
-                _registerCharactersTabTap();
-                // Re-tapping the already-active Characters tab asks the screen
-                // to scroll the current sub-view to top (and Discover→My when
-                // it's already there).
-                if (i == widget.currentIndex) {
-                  ref.read(charactersTabReTapProvider.notifier).state++;
-                }
-              }
+              if (i == _kCharactersTabIndex) _registerCharactersTabTap();
               widget.onTap(i);
             },
           ),

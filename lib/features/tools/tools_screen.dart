@@ -10,6 +10,7 @@ import '../../core/state/active_selection_provider.dart';
 import '../../core/utils/platform_paths.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
+import '../../shared/shell/nav_retap_provider.dart';
 import '../personas/persona_list_provider.dart';
 import '../presets/preset_list_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
@@ -95,6 +96,8 @@ class ToolsScreen extends ConsumerStatefulWidget {
 
 class _ToolsScreenState extends ConsumerState<ToolsScreen>
     with ShellHeaderMixin {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   int get headerBranchIndex => 2;
 
@@ -103,17 +106,43 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
       ShellHeaderConfig(title: 'tab_tools'.tr());
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Animates the list back to the top (guarded against a detached / multiply
+  /// attached controller).
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.positions.length != 1) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bottomPad = ref.watch(navHeightProvider) + 20;
     final personaInfo = ref.watch(_activePersonaInfoProvider);
     final resolvedAvatar = ref.watch(_resolvedPersonaAvatarPathProvider).value;
     final presetName = ref.watch(_activePresetNameProvider).value ?? 'label_default'.tr();
     final topPad = MediaQuery.of(context).padding.top + 66.0;
+
+    // Re-tap on the active Tools navbar tab → scroll to top (sub-routes are
+    // already popped by the shell's goBranch(initialLocation: true)).
+    ref.listen(navReTapProvider, (_, next) {
+      if (next.branchIndex == kToolsBranchIndex) _scrollToTop();
+    });
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           ListView(
+            controller: _scrollController,
             padding: EdgeInsets.fromLTRB(16, topPad + 16, 16, bottomPad),
             children: [
               _HeroCard(

@@ -11,6 +11,7 @@ import '../chat/widgets/triggered_items_sheet.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../core/state/dev_mode_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
+import '../../shared/shell/nav_retap_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
@@ -31,12 +32,20 @@ class MenuScreen extends ConsumerStatefulWidget {
 }
 
 class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   int get headerBranchIndex => 3;
 
   @override
   ShellHeaderConfig buildShellHeader() =>
       ShellHeaderConfig(title: 'menu_menu_title'.tr());
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   Future<void> _openLink(String url) async {
     final uri = Uri.parse(url);
@@ -45,16 +54,36 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
     }
   }
 
+  /// Animates the menu list back to the top (guarded against a detached /
+  /// multiply attached controller).
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.positions.length != 1) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final navHeight = ref.watch(navHeightProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0;
     final lang = ref.watch(appSettingsProvider).value?.language ?? 'en';
+
+    // Re-tap on the active Menu navbar tab → scroll to top (sub-routes are
+    // already popped by the shell's goBranch(initialLocation: true)).
+    ref.listen(navReTapProvider, (_, next) {
+      if (next.branchIndex == kMenuBranchIndex) _scrollToTop();
+    });
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           ListView(
+            controller: _scrollController,
             padding: EdgeInsets.only(
               top: topPad + 8,
               bottom: navHeight + 20,

@@ -19,6 +19,7 @@ import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/shell/header_scroll_hider.dart';
 import '../../shared/shell/nav_height_provider.dart';
+import '../../shared/shell/nav_retap_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glass_surface.dart';
@@ -337,7 +338,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     final selection = ref.watch(characterSelectionProvider);
 
     // Re-tap on the active Characters navbar tab → scroll to top / Discover→My.
-    ref.listen(charactersTabReTapProvider, (_, _) => _onCharactersTabReTap());
+    ref.listen(navReTapProvider, (_, next) {
+      if (next.branchIndex == kCharactersBranchIndex) _onCharactersTabReTap();
+    });
 
     final topPad = MediaQuery.of(context).padding.top + 74.0;
     // The tabs ride inside the shell header (its `below` slot) only at the top
