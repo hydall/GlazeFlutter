@@ -20,6 +20,7 @@ import '../../../core/models/api_config.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/glaze_tab_bar.dart';
+import '../../../shared/widgets/swipe_tab_switcher.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
@@ -236,7 +237,11 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   }
 
   Widget _buildBody() {
-    return Builder(
+    return SwipeTabSwitcher(
+      index: _dataTabIndex,
+      length: 2,
+      onChanged: (i) => setState(() => _dataTabIndex = i),
+      child: Builder(
       builder: (context) {
         final topPad = MediaQuery.paddingOf(context).top;
 
@@ -342,6 +347,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
           return _buildRawView(displayString, topPad);
         }
       },
+      ),
     );
   }
 
