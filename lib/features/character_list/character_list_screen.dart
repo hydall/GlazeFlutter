@@ -85,6 +85,33 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   final HeaderScrollHider _headerScrollHider = HeaderScrollHider();
 
   @override
+  void initState() {
+    super.initState();
+    _scheduleThumbnailBackfill();
+  }
+
+  /// Kicks off the one-time background thumbnail regeneration triggered by the
+  /// higher-resolution bump (which wipes the old 512²-square thumbnails). It is
+  /// fire-and-forget and self-guarded by a SharedPreferences flag, so it is a
+  /// no-op on every launch after the first, and decodes off the UI isolate.
+  /// Bumps the avatar version on completion so cards momentarily rendered from
+  /// the full-res fallback swap over to the fresh, lighter thumbnail.
+  void _scheduleThumbnailBackfill() {
+    Future(() async {
+      try {
+        final storage = await ref.read(imageStorageProvider.future);
+        final chars = await ref.read(characterRepoProvider).getAll();
+        final made = await storage.backfillMissingThumbnails(
+          chars.map((c) => c.avatarPath),
+        );
+        if (made > 0 && mounted) bumpAvatarVersion(ref);
+      } catch (_) {
+        // Non-fatal: the full-resolution fallback keeps rendering correctly.
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _catalogDebounce?.cancel();
     _searchCtrl.dispose();

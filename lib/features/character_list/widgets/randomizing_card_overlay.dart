@@ -120,6 +120,47 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
 
   double get _screenW => MediaQuery.of(context).size.width;
 
+  /// Guards the first (post-mount) preload pass so it runs only once.
+  bool _preloadedOnce = false;
+
+  /// Device-pixel width the deck's portraits are decoded to. Mirrors the card
+  /// width computed in [build] (`min(screenW * 0.82, 350) * dpr`) so the value
+  /// handed to [HoloCard.imageCacheWidth] and the one used by the preloader are
+  /// identical — the swiped-in card then paints from an already-warm decode.
+  int _imageCacheWidth() {
+    final mq = MediaQuery.of(context);
+    final cardW = math.min(mq.size.width * 0.82, 350.0);
+    return (cardW * mq.devicePixelRatio).round();
+  }
+
+  /// Warms the image cache for the current card and the next few in the deck so
+  /// dealing the next card never blocks on a fresh full-resolution decode. Runs
+  /// off the swipe's critical path (post-mount and after each [_advance]).
+  void _precacheDeck() {
+    if (!mounted) return;
+    final cacheW = _imageCacheWidth();
+    const lookAhead = 4; // current + next three
+    for (var k = 0; k < lookAhead; k++) {
+      final i = _index + k;
+      if (i < 0 || i >= _deck.length) break;
+      final provider = holoCardImageProvider(_deck[i], cacheW);
+      if (provider != null) {
+        // Swallow errors (missing/corrupt file) — the card falls back to its
+        // placeholder on display anyway.
+        precacheImage(provider, context, onError: (_, _) {});
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_preloadedOnce) {
+      _preloadedOnce = true;
+      _precacheDeck();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -350,6 +391,8 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
         _index = 0;
       }
     });
+    // Warm the newly-exposed cards so the next deal stays smooth.
+    _precacheDeck();
   }
 
   void _startChat(Character c) {
@@ -480,6 +523,7 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     }
 
     final absProgress = progress.abs();
+    final cacheW = _imageCacheWidth();
 
     final children = <Widget>[];
 
@@ -508,6 +552,7 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
                   tiltY: 0,
                   width: cardW,
                   height: cardH,
+                  imageCacheWidth: cacheW,
                 ),
               ),
             ),
@@ -548,6 +593,7 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
               tiltY: _tiltY,
               width: cardW,
               height: cardH,
+              imageCacheWidth: cacheW,
             ),
           ),
         ),
@@ -781,6 +827,20 @@ class _EmptyDeck extends StatelessWidget {
 
 // ─── Holographic card ────────────────────────────────────────────────────────
 
+/// Full-resolution avatar provider for the discovery card, decoded down to
+/// [cacheWidth] device pixels (preserving aspect) so the big card renders from
+/// the crisp source PNG instead of the small square list thumbnail — without
+/// paying a full multi-megabyte decode. Returns null when the card has no
+/// avatar. Reused verbatim by the overlay's background preloader so the
+/// precached decode and the displayed decode share one image-cache key.
+ImageProvider? holoCardImageProvider(Character character, int cacheWidth) {
+  final path = resolveGlazeFilePath(character.avatarPath);
+  if (path == null || path.isEmpty) return null;
+  final file = FileImage(File(path));
+  if (cacheWidth <= 0) return file;
+  return ResizeImage(file, width: cacheWidth, allowUpscaling: false);
+}
+
 /// A holographic character card mirroring Glaze's `HoloCardViewer`: a parallax
 /// portrait under a diagonal rainbow-foil band, a white sheen and a centred
 /// glare — all driven purely by the device tilt, with no idle animation (the
@@ -793,6 +853,11 @@ class HoloCard extends StatelessWidget {
   final double width;
   final double height;
 
+  /// Device-pixel width the full-resolution portrait is decoded down to. Kept
+  /// in sync with the overlay's preloader (same value → same image-cache key)
+  /// so a swiped-in card paints from an already-warm decode.
+  final int imageCacheWidth;
+
   const HoloCard({
     super.key,
     required this.character,
@@ -800,6 +865,7 @@ class HoloCard extends StatelessWidget {
     required this.tiltY,
     required this.width,
     required this.height,
+    this.imageCacheWidth = 0,
   });
 
   String get _displayName {
@@ -1025,15 +1091,16 @@ class HoloCard extends StatelessWidget {
   }
 
   Widget _buildImage() {
-    // Prefer the small pre-generated thumbnail: a full-resolution PNG decode is
-    // what made dealing the next card hitch. The thumbnail decodes in a few ms
-    // and is already warm in the image cache from the peek card, so the swap is
-    // instant; fresh decodes fade in via [frameBuilder] instead of popping.
-    final path = resolveGlazeThumbnailPath(character.avatarPath) ??
-        resolveGlazeFilePath(character.avatarPath);
-    if (path == null) return _placeholder();
-    return Image.file(
-      File(path),
+    // Render the full-resolution avatar (decoded down to the card's on-screen
+    // size via [imageCacheWidth]) so this large focal card stays crisp instead
+    // of upscaling the tiny square list thumbnail. The decode cost that used to
+    // make dealing the next card hitch is hidden by the overlay's background
+    // preloader, which warms this exact provider a few cards ahead; a card that
+    // still needs a fresh decode fades in via [frameBuilder] instead of popping.
+    final provider = holoCardImageProvider(character, imageCacheWidth);
+    if (provider == null) return _placeholder();
+    return Image(
+      image: provider,
       fit: BoxFit.cover,
       alignment: Alignment.topCenter,
       filterQuality: FilterQuality.medium,

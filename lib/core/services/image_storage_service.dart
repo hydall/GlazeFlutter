@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
@@ -9,6 +10,52 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/cast_helpers.dart';
 import '../utils/platform_paths.dart';
 import '../../features/cloud_sync/sync_repo_interfaces.dart';
+
+/// Longest-side (px) of the pre-generated list/card thumbnails. Bumped from the
+/// old 512²-square crop to a larger, aspect-preserving box so grid and card
+/// portraits stay crisp on high-DPI screens instead of reading upscaled/"шакал".
+/// Changing this must be paired with a bump of the thumbnail migration key (see
+/// [_kThumbMigrationKey]) so stale thumbnails are regenerated.
+const int kThumbnailMaxDimension = 768;
+
+/// JPEG quality for the generated thumbnails.
+const int _kThumbnailQuality = 92;
+
+/// SharedPreferences flag: once set, the old square thumbnails have been wiped.
+/// Bumping the version (v3 → v4 …) forces a one-time re-clear so a new
+/// [kThumbnailMaxDimension] takes effect for existing libraries. Pair with
+/// [_kThumbBackfillKey] so the wiped thumbnails are regenerated in the
+/// background.
+const String _kThumbMigrationKey = 'gz_thumb_v4_migrated';
+
+/// SharedPreferences flag guarding the one-time background thumbnail backfill.
+const String _kThumbBackfillKey = 'gz_thumb_v4_backfilled';
+
+/// Runs in a background isolate: decodes [imageBytes], scales it so its longest
+/// side is at most [maxDimension] (never upscaling), and re-encodes as JPEG.
+/// Kept top-level (not an instance method) so it is safely sendable to
+/// [Isolate.run] — capturing `this` would not be.
+Uint8List? resizeAvatarBytes(Uint8List imageBytes, int maxDimension) {
+  try {
+    final image = img.decodeImage(imageBytes);
+    if (image == null) return null;
+    // Preserve aspect ratio: constrain only the longer axis so portrait avatars
+    // keep their full height (the old square crop threw half of it away).
+    final img.Image scaled;
+    if (image.width >= image.height) {
+      scaled = image.width > maxDimension
+          ? img.copyResize(image, width: maxDimension)
+          : image;
+    } else {
+      scaled = image.height > maxDimension
+          ? img.copyResize(image, height: maxDimension)
+          : image;
+    }
+    return Uint8List.fromList(img.encodeJpg(scaled, quality: _kThumbnailQuality));
+  } catch (_) {
+    return null;
+  }
+}
 
 class ImageStorageService implements SyncImageStore {
   final String baseDir;
@@ -24,13 +71,57 @@ class ImageStorageService implements SyncImageStore {
 
   Future<void> _migrateOldThumbnails([SharedPreferences? prefsArg]) async {
     final prefs = prefsArg ?? await SharedPreferences.getInstance();
-    if (prefs.getBool('gz_thumb_v3_migrated') == true) return;
+    if (prefs.getBool(_kThumbMigrationKey) == true) return;
 
     final thumbDir = Directory(p.join(baseDir, 'thumbnails'));
     if (await thumbDir.exists()) {
       await thumbDir.delete(recursive: true);
     }
-    await prefs.setBool('gz_thumb_v3_migrated', true);
+    await prefs.setBool(_kThumbMigrationKey, true);
+    // The wipe leaves existing characters without thumbnails until they are
+    // re-saved; clear the backfill flag so the next [backfillMissingThumbnails]
+    // pass regenerates them at the new resolution.
+    await prefs.setBool(_kThumbBackfillKey, false);
+  }
+
+  /// One-time background pass that regenerates thumbnails for any [avatarPaths]
+  /// that lost theirs to the resolution bump wipe. Decoding is offloaded to a
+  /// short-lived isolate per image so the UI stays smooth; the whole pass is
+  /// guarded by a SharedPreferences flag so it only runs once per bump.
+  ///
+  /// Returns the number of thumbnails (re)generated.
+  Future<int> backfillMissingThumbnails(Iterable<String?> avatarPaths) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kThumbBackfillKey) == true) return 0;
+
+    final dir = Directory(p.join(baseDir, 'thumbnails'));
+    if (!await dir.exists()) await dir.create(recursive: true);
+
+    var made = 0;
+    for (final avatarPath in avatarPaths) {
+      if (avatarPath == null || avatarPath.isEmpty) continue;
+      if (thumbnailPath(avatarPath) != null) continue; // already has one
+
+      final resolvedPath = absolutePath(avatarPath) ?? avatarPath;
+      final avatarFile = File(resolvedPath);
+      if (!await avatarFile.exists()) continue;
+
+      try {
+        final bytes = await avatarFile.readAsBytes();
+        final thumbnail = await Isolate.run(
+          () => resizeAvatarBytes(bytes, kThumbnailMaxDimension),
+        );
+        if (thumbnail == null) continue;
+        final name = p.basenameWithoutExtension(resolvedPath);
+        await File(p.join(dir.path, '$name.jpg')).writeAsBytes(thumbnail);
+        made++;
+      } catch (_) {
+        // Skip this one; the full-res fallback still renders it correctly.
+      }
+    }
+
+    await prefs.setBool(_kThumbBackfillKey, true);
+    return made;
   }
 
   Future<String> saveAvatar(String characterId, Uint8List imageBytes) async {
@@ -58,7 +149,7 @@ class ImageStorageService implements SyncImageStore {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    final thumbnail = _resizeImage(imageBytes, 512);
+    final thumbnail = _resizeImage(imageBytes, kThumbnailMaxDimension);
     if (thumbnail == null) return null;
     final path = p.join(dir.path, '$characterId.jpg');
     await File(path).writeAsBytes(thumbnail);
@@ -72,7 +163,7 @@ class ImageStorageService implements SyncImageStore {
     if (!await avatarFile.exists()) return null;
 
     final bytes = await avatarFile.readAsBytes();
-    final thumbnail = _resizeImage(bytes, 512);
+    final thumbnail = _resizeImage(bytes, kThumbnailMaxDimension);
     if (thumbnail == null) return null;
 
     final dir = Directory(p.join(baseDir, 'thumbnails'));
@@ -153,16 +244,8 @@ class ImageStorageService implements SyncImageStore {
     return p.join(baseDir, suffix);
   }
 
-  Uint8List? _resizeImage(Uint8List imageBytes, int maxDimension) {
-    try {
-      final image = img.decodeImage(imageBytes);
-      if (image == null) return null;
-      final cropped = img.copyResizeCropSquare(image, size: maxDimension);
-      return Uint8List.fromList(img.encodeJpg(cropped, quality: 90));
-    } catch (_) {
-      return null;
-    }
-  }
+  Uint8List? _resizeImage(Uint8List imageBytes, int maxDimension) =>
+      resizeAvatarBytes(imageBytes, maxDimension);
 
   Uint8List _stripPngTextChunks(Uint8List pngBytes) {
     if (pngBytes.length < 8) return pngBytes;

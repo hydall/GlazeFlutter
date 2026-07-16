@@ -4,7 +4,6 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../core/models/character.dart';
 import '../../../core/services/character_export_helper.dart';
@@ -277,16 +276,15 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
     // back to the source avatar when a thumbnail hasn't been generated yet.
     final resolved = resolveGlazeThumbnailPath(avatarPath);
     if (resolved == null) return _buildPlaceholder();
-    final usingThumb = p.extension(resolved).toLowerCase() == '.jpg';
     final mq = MediaQuery.of(context);
+    // Decode to roughly the card's on-screen width (two columns) regardless of
+    // source: caps memory for the larger aspect-preserving thumbnails and the
+    // full-res fallback alike, while keeping the portrait crisp (no upscaling).
+    final cacheWidth = (mq.size.width * mq.devicePixelRatio / 2).ceil();
     return Image.file(
       File(resolved),
       fit: BoxFit.cover,
-      // Thumbnails are already small; only downscale the full-res fallback to
-      // roughly the card's on-screen width.
-      cacheWidth: usingThumb
-          ? null
-          : (mq.size.width * mq.devicePixelRatio / 2).ceil(),
+      cacheWidth: cacheWidth,
       filterQuality: FilterQuality.high,
       errorBuilder: (_, _, _) => _buildPlaceholder(),
     );
