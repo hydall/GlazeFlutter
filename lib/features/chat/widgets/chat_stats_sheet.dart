@@ -15,6 +15,7 @@ import '../../../shared/utils/time_formatter.dart';
 import '../../../shared/widgets/rolling_number.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../shared/widgets/glaze_tab_bar.dart';
+import '../../../shared/widgets/swipe_tab_switcher.dart';
 import '../chat_provider.dart';
 
 class _StatsData {
@@ -744,7 +745,13 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
         ),
       ),
       body: Builder(
-        builder: (context) => ListView(
+        builder: (context) => SwipeTabSwitcher(
+          index: _currentTab == 'chat' ? 0 : (_currentTab == 'char' ? 1 : 2),
+          length: 3,
+          onChanged: (index) => setState(() {
+            _currentTab = index == 0 ? 'chat' : (index == 1 ? 'char' : 'general');
+          }),
+          child: ListView(
           shrinkWrap: true,
           padding: EdgeInsets.fromLTRB(
             16,
@@ -803,6 +810,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
               _buildTopModels(),
             ],
           ],
+          ),
         ),
       ),
     );

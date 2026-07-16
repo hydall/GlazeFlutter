@@ -26,6 +26,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
+import '../../shared/widgets/swipe_tab_switcher.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../catalog/catalog_provider.dart';
@@ -363,7 +364,15 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
               onNotification: _onScrollNotification,
               child: PrimaryScrollController(
                 controller: _listScrollController,
-                child: AnimatedSwitcher(
+                child: SwipeTabSwitcher(
+                  // Only the top-level My/Catalog split is swipeable; inside a
+                  // folder the strip is hidden and horizontal drags belong to
+                  // the folder content.
+                  enabled: showTabBar,
+                  index: _tabIndex,
+                  length: 2,
+                  onChanged: _onTabSwipe,
+                  child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 350),
                   reverseDuration: const Duration(milliseconds: 300),
                   switchInCurve: Curves.easeOutQuart,
@@ -398,6 +407,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                             navHeight,
                           ),
                         ),
+                ),
                 ),
               ),
             ),
@@ -802,6 +812,20 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         hintStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 16),
       ),
     );
+  }
+
+  /// Switches the active tab in response to a body swipe. Mirrors the tab
+  /// strip's `onChanged`, minus the "tap the active tab" branch (a swipe always
+  /// resolves to a different tab).
+  void _onTabSwipe(int i) {
+    if (i == _tabIndex) return;
+    ref.read(characterSelectionProvider.notifier).clear();
+    _showHeader();
+    setState(() {
+      _tabIndex = i;
+      if (_searchExpanded) _applySearchForActiveTab();
+    });
+    refreshShellHeader();
   }
 
   Widget _buildTabBar() {
