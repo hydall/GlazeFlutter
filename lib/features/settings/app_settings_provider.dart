@@ -63,6 +63,11 @@ abstract class AppSettings with _$AppSettings {
     @Default(true) bool hapticFeedback,
     @Default(true) bool messageVibration,
     @Default(false) bool extractJanitorLocally,
+
+    /// When on, the shuffle button opens a random character straight in the
+    /// detail sheet (the classic behaviour) instead of the randomizing
+    /// (Holocard) discovery overlay. Off by default.
+    @Default(false) bool useStandardRandomizer,
   }) = _AppSettings;
 }
 
@@ -143,6 +148,11 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
         'extractJanitorLocally',
         defaultValue: false,
       ),
+      useStandardRandomizer: _readBoolPref(
+        prefs,
+        'useStandardRandomizer',
+        defaultValue: false,
+      ),
     );
   }
 
@@ -181,6 +191,10 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setBool(
       'extractJanitorLocally',
       normalized.extractJanitorLocally,
+    );
+    await prefs.setBool(
+      'useStandardRandomizer',
+      normalized.useStandardRandomizer,
     );
     Haptics.configure(enabled: normalized.hapticFeedback);
     Haptics.configureMessageVibration(enabled: normalized.messageVibration);
