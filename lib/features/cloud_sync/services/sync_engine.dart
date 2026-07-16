@@ -124,11 +124,11 @@ class SyncEngine {
       cloudManifest = SyncManifest.fromJson(
         jsonDecode(raw) as Map<String, dynamic>,
       );
+    } on CloudFileNotFoundException {
+      // A missing manifest means this is the first push or cloud data was wiped.
     } catch (e, st) {
-      // A null cloud manifest forces a full re-push of every entry. Surface
-      // the cause so this is no longer silent — the user previously saw a full
-      // cloud re-upload with no visible reason.
       debugPrint('[sync] cloud manifest download failed: $e\n$st');
+      rethrow;
     }
 
     final entries = localManifest.entries.values.toList();
@@ -144,8 +144,8 @@ class SyncEngine {
               })
               .map((entry) => entry.path)
               .toList();
-    final cloudFilePaths = candidatePaths.isEmpty
-        ? <String>{}
+    final cloudListing = candidatePaths.isEmpty
+        ? (paths: <String>{}, foldersWithFiles: <String>{})
         : await _loadCloudFilePathsForEntries(
             candidatePaths,
             onProgress: onProgress,
@@ -185,9 +185,10 @@ class SyncEngine {
         continue;
       }
 
-      final cloudFileExists = cloudFilePaths.isEmpty
-          ? false
-          : cloudSyncPathExists(cloudFilePaths, entry.path);
+      final cloudFileExists = cloudSyncPathExists(
+        cloudListing.paths,
+        entry.path,
+      );
 
       // Trust the cloud manifest hash for the skip decision. A fresh folder
       // listing only serves to repair an entry whose file is genuinely missing.
@@ -195,8 +196,14 @@ class SyncEngine {
       // hash-matching entry was re-uploaded because file existence could not be
       // confirmed — producing a full-cloud re-push with no duplicates. See the
       // empty-body fall-through that this replaces.
-      if (cloudEntry != null && !cloudEntry.deleted && cloudEntry.hash == entry.hash) {
-        final listingVerifiedMissing = cloudFilePaths.isNotEmpty && !cloudFileExists;
+      if (cloudEntry != null &&
+          !cloudEntry.deleted &&
+          cloudEntry.hash == entry.hash) {
+        final listingVerifiedMissing =
+            cloudListing.foldersWithFiles.contains(
+              _cloudParentFolder(entry.path),
+            ) &&
+            !cloudFileExists;
         if (listingVerifiedMissing) {
           // Listing succeeded and the file is actually absent — repair it.
           // Falls through to the push task below.
@@ -259,16 +266,21 @@ class SyncEngine {
     await _manifestBuilder.clearDeleted();
   }
 
-  Future<Set<String>> _loadCloudFilePathsForEntries(
+  Future<({Set<String> paths, Set<String> foldersWithFiles})>
+  _loadCloudFilePathsForEntries(
     List<String> entryPaths, {
     required void Function(SyncProgress) onProgress,
   }) async {
     onProgress(const SyncProgress(message: 'Checking cloud files...'));
     final folders = entryPaths.map(_cloudParentFolder).toSet();
     final paths = <String>{};
+    final foldersWithFiles = <String>{};
     for (final folder in folders) {
       try {
         final files = await _adapter.listFolder(folder);
+        if (files.any((file) => !file.isFolder)) {
+          foldersWithFiles.add(folder);
+        }
         paths.addAll(
           files
               .where((f) => !f.isFolder)
@@ -282,7 +294,7 @@ class SyncEngine {
         debugPrint('[sync] listFolder failed for "$folder": $e\n$st');
       }
     }
-    return paths;
+    return (paths: paths, foldersWithFiles: foldersWithFiles);
   }
 
   String _cloudParentFolder(String path) {

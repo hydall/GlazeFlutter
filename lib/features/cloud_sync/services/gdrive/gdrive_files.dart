@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
+import '../../cloud_adapter.dart';
 import 'gdrive_folders.dart';
 
 class GDriveFiles {
@@ -210,7 +211,7 @@ class GDriveFiles {
     final parentId = await _folders.resolvePathToParent(path);
     final fileName = path.split('/').last;
     final fileId = await _findFileByName(fileName, parentId, token);
-    if (fileId == null) throw Exception('File not found: $path');
+    if (fileId == null) throw CloudFileNotFoundException(path);
     _fileIdCache[path] = fileId;
     return fileId;
   }
