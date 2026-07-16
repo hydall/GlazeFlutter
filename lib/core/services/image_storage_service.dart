@@ -11,45 +11,48 @@ import '../utils/cast_helpers.dart';
 import '../utils/platform_paths.dart';
 import '../../features/cloud_sync/sync_repo_interfaces.dart';
 
-/// Longest-side (px) of the pre-generated list/card thumbnails. Bumped from the
-/// old 512²-square crop to a larger, aspect-preserving box so grid and card
-/// portraits stay crisp on high-DPI screens instead of reading upscaled/"шакал".
+/// Shorter-side target (px) of the pre-generated list/card thumbnails. We
+/// constrain the *shorter* side — not the longer one — because the grid/card
+/// portraits paint with `BoxFit.cover`, which binds on the short axis: a very
+/// tall composite portrait (several stacked arts) throttled by its *long* side
+/// would collapse to a sliver-wide image and read badly upscaled/"шакал". By
+/// capping the short side the width stays crisp no matter how tall the source
+/// is (the long side is left free, only the decode is bounded per card).
 /// Changing this must be paired with a bump of the thumbnail migration key (see
 /// [_kThumbMigrationKey]) so stale thumbnails are regenerated.
-const int kThumbnailMaxDimension = 768;
+const int kThumbnailShortSide = 768;
 
 /// JPEG quality for the generated thumbnails.
 const int _kThumbnailQuality = 92;
 
-/// SharedPreferences flag: once set, the old square thumbnails have been wiped.
-/// Bumping the version (v3 → v4 …) forces a one-time re-clear so a new
-/// [kThumbnailMaxDimension] takes effect for existing libraries. Pair with
-/// [_kThumbBackfillKey] so the wiped thumbnails are regenerated in the
-/// background.
-const String _kThumbMigrationKey = 'gz_thumb_v4_migrated';
+/// SharedPreferences flag: once set, the previous-generation thumbnails have
+/// been wiped. Bumping the version (v4 → v5 …) forces a one-time re-clear so a
+/// new [kThumbnailShortSide] / resize policy takes effect for existing
+/// libraries. Pair with [_kThumbBackfillKey] so the wiped thumbnails are
+/// regenerated in the background.
+const String _kThumbMigrationKey = 'gz_thumb_v5_migrated';
 
 /// SharedPreferences flag guarding the one-time background thumbnail backfill.
-const String _kThumbBackfillKey = 'gz_thumb_v4_backfilled';
+const String _kThumbBackfillKey = 'gz_thumb_v5_backfilled';
 
-/// Runs in a background isolate: decodes [imageBytes], scales it so its longest
-/// side is at most [maxDimension] (never upscaling), and re-encodes as JPEG.
-/// Kept top-level (not an instance method) so it is safely sendable to
-/// [Isolate.run] — capturing `this` would not be.
-Uint8List? resizeAvatarBytes(Uint8List imageBytes, int maxDimension) {
+/// Runs in a background isolate: decodes [imageBytes], scales it so its
+/// *shorter* side is at most [maxShortSide] (never upscaling, aspect preserved),
+/// and re-encodes as JPEG. Kept top-level (not an instance method) so it is
+/// safely sendable to [Isolate.run] — capturing `this` would not be.
+Uint8List? resizeAvatarBytes(Uint8List imageBytes, int maxShortSide) {
   try {
     final image = img.decodeImage(imageBytes);
     if (image == null) return null;
-    // Preserve aspect ratio: constrain only the longer axis so portrait avatars
-    // keep their full height (the old square crop threw half of it away).
+    // Scale by the shorter axis so the width of tall portraits (and the height
+    // of wide ones) survives — that is the axis `BoxFit.cover` keeps.
+    final shortSide = image.width <= image.height ? image.width : image.height;
     final img.Image scaled;
-    if (image.width >= image.height) {
-      scaled = image.width > maxDimension
-          ? img.copyResize(image, width: maxDimension)
-          : image;
+    if (shortSide > maxShortSide) {
+      scaled = image.width <= image.height
+          ? img.copyResize(image, width: maxShortSide)
+          : img.copyResize(image, height: maxShortSide);
     } else {
-      scaled = image.height > maxDimension
-          ? img.copyResize(image, height: maxDimension)
-          : image;
+      scaled = image; // already small enough — don't upscale
     }
     return Uint8List.fromList(img.encodeJpg(scaled, quality: _kThumbnailQuality));
   } catch (_) {
@@ -109,7 +112,7 @@ class ImageStorageService implements SyncImageStore {
       try {
         final bytes = await avatarFile.readAsBytes();
         final thumbnail = await Isolate.run(
-          () => resizeAvatarBytes(bytes, kThumbnailMaxDimension),
+          () => resizeAvatarBytes(bytes, kThumbnailShortSide),
         );
         if (thumbnail == null) continue;
         final name = p.basenameWithoutExtension(resolvedPath);
@@ -149,7 +152,7 @@ class ImageStorageService implements SyncImageStore {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    final thumbnail = _resizeImage(imageBytes, kThumbnailMaxDimension);
+    final thumbnail = _resizeImage(imageBytes, kThumbnailShortSide);
     if (thumbnail == null) return null;
     final path = p.join(dir.path, '$characterId.jpg');
     await File(path).writeAsBytes(thumbnail);
@@ -163,7 +166,7 @@ class ImageStorageService implements SyncImageStore {
     if (!await avatarFile.exists()) return null;
 
     final bytes = await avatarFile.readAsBytes();
-    final thumbnail = _resizeImage(bytes, kThumbnailMaxDimension);
+    final thumbnail = _resizeImage(bytes, kThumbnailShortSide);
     if (thumbnail == null) return null;
 
     final dir = Directory(p.join(baseDir, 'thumbnails'));
