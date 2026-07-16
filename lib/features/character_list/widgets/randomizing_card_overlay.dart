@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:palette_generator/palette_generator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../../../core/models/character.dart';
@@ -567,41 +568,54 @@ class _ActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     const skipColor = Color(0xFFFF5A6E);
     final chatColor = context.cs.primary;
-    // Grow the button the drag is heading toward for live feedback.
-    final skipScale = 1.0 + (progress < 0 ? -progress * 0.18 : 0.0);
-    final chatScale = 1.0 + (progress > 0 ? progress * 0.18 : 0.0);
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Transform.scale(
-          scale: skipScale,
-          child: _RoundButton(
-            icon: Icons.close_rounded,
-            size: 78,
-            iconSize: 38,
-            background: const Color(0xFF1C1C22),
-            iconColor: skipColor,
-            border: Border.all(color: skipColor.withValues(alpha: 0.6), width: 2),
-            glow: skipColor.withValues(alpha: (0.3 + (skipScale - 1.0)).clamp(0.0, 1.0)),
-            onTap: onSkip,
-          ),
-        ),
-        const SizedBox(width: 52),
-        Transform.scale(
-          scale: chatScale,
-          child: _RoundButton(
-            icon: Icons.chat_bubble_rounded,
-            size: 78,
-            iconSize: 34,
-            background: const Color(0xFF1C1C22),
-            iconColor: chatColor,
-            border: Border.all(color: chatColor.withValues(alpha: 0.6), width: 2),
-            glow: chatColor.withValues(alpha: (0.35 + (chatScale - 1.0)).clamp(0.0, 1.0)),
-            onTap: onChat,
-          ),
-        ),
-      ],
+    // Ease the button growth toward the current drag progress. Because the raw
+    // progress snaps back to 0 in a single frame when a card flies off, tweening
+    // it keeps the buttons from shrinking "за кадр".
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: progress.clamp(-1.0, 1.0)),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      builder: (context, p, _) {
+        final skipScale = 1.0 + (p < 0 ? -p * 0.18 : 0.0);
+        final chatScale = 1.0 + (p > 0 ? p * 0.18 : 0.0);
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Transform.scale(
+              scale: skipScale,
+              child: _RoundButton(
+                icon: Icons.close_rounded,
+                size: 78,
+                iconSize: 38,
+                background: const Color(0xFF1C1C22),
+                iconColor: skipColor,
+                border:
+                    Border.all(color: skipColor.withValues(alpha: 0.6), width: 2),
+                glow: skipColor
+                    .withValues(alpha: (0.3 + (skipScale - 1.0)).clamp(0.0, 1.0)),
+                onTap: onSkip,
+              ),
+            ),
+            const SizedBox(width: 52),
+            Transform.scale(
+              scale: chatScale,
+              child: _RoundButton(
+                icon: Icons.chat_bubble_rounded,
+                size: 78,
+                iconSize: 34,
+                background: const Color(0xFF1C1C22),
+                iconColor: chatColor,
+                border:
+                    Border.all(color: chatColor.withValues(alpha: 0.6), width: 2),
+                glow: chatColor.withValues(
+                    alpha: (0.35 + (chatScale - 1.0)).clamp(0.0, 1.0)),
+                onTap: onChat,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -728,6 +742,12 @@ class HoloCard extends StatelessWidget {
     }
     return const Color(0xFF7996CE);
   }
+
+  /// Resolved portrait path (thumbnail preferred — smaller/faster to decode for
+  /// the palette extraction), or null when the card has no avatar.
+  String? get _imagePath =>
+      resolveGlazeThumbnailPath(character.avatarPath) ??
+      resolveGlazeFilePath(character.avatarPath);
 
   @override
   Widget build(BuildContext context) {
@@ -860,7 +880,7 @@ class HoloCard extends StatelessWidget {
             right: 18,
             child: Transform.translate(
               offset: Offset(tiltX * 12, tiltY * 12),
-              child: _TopBadge(accent: _avatarColor),
+              child: _TopBadge(imagePath: _imagePath, fallback: _avatarColor),
             ),
           ),
         ],
@@ -1044,35 +1064,81 @@ class _EdgeTint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = progress.clamp(-1.0, 1.0);
-    if (p == 0) return const SizedBox.shrink();
-    final right = p > 0;
-    final color = right ? chatColor : const Color(0xFFFF5A6E);
-    final strength = p.abs();
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: right ? Alignment.centerRight : Alignment.centerLeft,
-          end: Alignment.center,
-          colors: [
-            color.withValues(alpha: 0.5 * strength),
-            color.withValues(alpha: 0),
-          ],
-        ),
-      ),
+    // Ease toward the current progress so the wash fades in/out smoothly rather
+    // than snapping off the instant a card flies away and the drag resets.
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: progress.clamp(-1.0, 1.0)),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      builder: (context, p, _) {
+        if (p.abs() < 0.001) return const SizedBox.shrink();
+        final right = p > 0;
+        final color = right ? chatColor : const Color(0xFFFF5A6E);
+        final strength = p.abs();
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: right ? Alignment.centerRight : Alignment.centerLeft,
+              end: Alignment.center,
+              colors: [
+                color.withValues(alpha: 0.5 * strength),
+                color.withValues(alpha: 0),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
-class _TopBadge extends StatelessWidget {
-  /// The card's accent colour (derived from the character), used to tint the
-  /// logo. Lightened a touch so it stays legible on the dark badge.
-  final Color accent;
-  const _TopBadge({required this.accent});
+/// The corner logo, tinted with the accent colour pulled from *this card's*
+/// portrait (vibrant → dominant), so every card lights the badge in its own
+/// hue. Falls back to [fallback] until the palette resolves (or when the card
+/// has no image). Extraction runs once per mount; the enclosing [HoloCard] is
+/// keyed by character id, so switching cards re-extracts for the new portrait.
+class _TopBadge extends StatefulWidget {
+  final String? imagePath;
+  final Color fallback;
+  const _TopBadge({required this.imagePath, required this.fallback});
+
+  @override
+  State<_TopBadge> createState() => _TopBadgeState();
+}
+
+class _TopBadgeState extends State<_TopBadge> {
+  Color? _accent;
+
+  @override
+  void initState() {
+    super.initState();
+    _extractAccent();
+  }
+
+  Future<void> _extractAccent() async {
+    final path = widget.imagePath;
+    if (path == null) return;
+    try {
+      final palette = await PaletteGenerator.fromImageProvider(
+        // Downscale first: the palette doesn't need full resolution and a small
+        // image keeps extraction to a few milliseconds.
+        ResizeImage(FileImage(File(path)), width: 96, height: 144),
+        maximumColorCount: 12,
+      );
+      final color = palette.vibrantColor?.color ??
+          palette.lightVibrantColor?.color ??
+          palette.dominantColor?.color;
+      if (mounted && color != null) setState(() => _accent = color);
+    } catch (_) {
+      // Keep the fallback tint.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final tint = Color.lerp(accent, Colors.white, 0.25)!;
+    // Lift the accent toward white a touch so it stays legible on the dark
+    // badge even for very dark portraits.
+    final tint = Color.lerp(_accent ?? widget.fallback, Colors.white, 0.25)!;
     return Container(
       width: 36,
       height: 36,
