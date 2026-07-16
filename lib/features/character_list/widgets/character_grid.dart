@@ -6,7 +6,7 @@ import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glass_surface.dart';
 import '../character_sort.dart';
 import 'character_card.dart';
-import 'tinder_card_overlay.dart';
+import 'randomizing_card_overlay.dart';
 
 class CharacterGrid extends StatelessWidget {
   final List<Character> characters;
@@ -57,13 +57,13 @@ class CharacterGrid extends StatelessWidget {
     this.randomPool,
   });
 
-  /// Opens the Tinder-style discovery overlay over the full matching set: a
+  /// Opens the randomizing discovery overlay over the full matching set: a
   /// holographic card the user can swipe right (start a new chat) or left (skip
   /// to the next random card).
-  void _openTinder(BuildContext context) {
+  void _openRandomizing(BuildContext context) {
     final pool = randomPool?.call() ?? characters;
     if (pool.isEmpty) return;
-    showTinderCardOverlay(context, pool);
+    showRandomizingCardOverlay(context, pool);
   }
 
   @override
@@ -80,7 +80,7 @@ class CharacterGrid extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (characters.isNotEmpty) ...[
-                  _DiceButton(onTap: () => _openTinder(context)),
+                  _DiceButton(onTap: () => _openRandomizing(context)),
                   const SizedBox(width: 10),
                 ],
                 if (onFilterTap != null) ...[

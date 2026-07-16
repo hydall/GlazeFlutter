@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -7,18 +8,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 import '../../../core/models/character.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 
-/// Opens the Tinder-style character discovery overlay.
+/// Opens the randomizing character-discovery overlay.
 ///
 /// A holographic "Holocard" (mirrors Glaze's `HoloCardViewer`) floats above the
 /// character list on a dimmed, blurred backdrop. Swiping the card right (or
 /// tapping the chat button) starts a brand-new chat with that character; swiping
-/// left (or the skip button) discards it and deals the next random card.
-Future<void> showTinderCardOverlay(
+/// left (or the skip button) discards it and deals the next random card. The
+/// holographic tilt tracks the device gyroscope (or the mouse on desktop), not
+/// the drag.
+Future<void> showRandomizingCardOverlay(
   BuildContext context,
   List<Character> pool,
 ) {
@@ -27,9 +31,9 @@ Future<void> showTinderCardOverlay(
     useRootNavigator: true,
     barrierDismissible: false,
     barrierColor: Colors.transparent,
-    barrierLabel: 'tinder_discovery',
+    barrierLabel: 'randomizing_discovery',
     transitionDuration: const Duration(milliseconds: 340),
-    pageBuilder: (_, _, _) => TinderCardOverlay(pool: pool),
+    pageBuilder: (_, _, _) => RandomizingCardOverlay(pool: pool),
     transitionBuilder: (ctx, anim, _, child) {
       final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
       return FadeTransition(
@@ -40,15 +44,15 @@ Future<void> showTinderCardOverlay(
   );
 }
 
-class TinderCardOverlay extends StatefulWidget {
+class RandomizingCardOverlay extends StatefulWidget {
   final List<Character> pool;
-  const TinderCardOverlay({super.key, required this.pool});
+  const RandomizingCardOverlay({super.key, required this.pool});
 
   @override
-  State<TinderCardOverlay> createState() => _TinderCardOverlayState();
+  State<RandomizingCardOverlay> createState() => _RandomizingCardOverlayState();
 }
 
-class _TinderCardOverlayState extends State<TinderCardOverlay>
+class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     with TickerProviderStateMixin {
   /// Shuffled deck we deal from; reshuffled (endlessly) when exhausted.
   late List<Character> _deck;
@@ -70,6 +74,21 @@ class _TinderCardOverlayState extends State<TinderCardOverlay>
 
   /// Last direction we haptically "armed" so we buzz only on threshold crossings.
   int _armedDir = 0;
+
+  // ─── Holographic tilt (gyroscope / mouse), smoothed into −1..1 ──────────────
+  double _tiltX = 0;
+  double _tiltY = 0;
+  StreamSubscription<AccelerometerEvent>? _accelSub;
+
+  /// Calibration reference captured on first sample after opening; the reading
+  /// is expressed relative to it so the "flat" pose is wherever the phone was
+  /// held. Slowly drifts back if the user tilts past [_kTiltLimit] (mirrors the
+  /// Vue `HoloCardViewer` "catch-up" behaviour).
+  double _calRoll = 0;
+  double _calPitch = 0;
+  bool _needsCalibration = true;
+  static const double _kTiltLimit = 26; // degrees mapped to full ±1
+  static const double _kDrift = 0.05;
 
   double get _screenW => MediaQuery.of(context).size.width;
 
@@ -93,14 +112,77 @@ class _TinderCardOverlayState extends State<TinderCardOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 420),
     )..forward();
+
+    // Drive the holographic tilt from the device gyroscope. On platforms with
+    // no accelerometer (most desktops / web) the stream simply errors out and
+    // the mouse fallback (see [_onHoverTilt]) takes over instead.
+    try {
+      _accelSub = accelerometerEventStream(
+        samplingPeriod: SensorInterval.gameInterval,
+      ).listen(_onAccelerometer, onError: (_) {});
+    } catch (_) {
+      _accelSub = null;
+    }
   }
 
   @override
   void dispose() {
+    _accelSub?.cancel();
     _swipeCtrl.dispose();
     _shimmerCtrl.dispose();
     _entryCtrl.dispose();
     super.dispose();
+  }
+
+  /// Converts the gravity vector into roll/pitch angles, re-bases them against
+  /// the calibration pose (with slow drift), clamps to ±[_kTiltLimit] and
+  /// smooths the normalised result into [_tiltX]/[_tiltY]. Runs off-frame; the
+  /// per-frame shimmer rebuild renders whatever value is current.
+  void _onAccelerometer(AccelerometerEvent e) {
+    final rollDeg =
+        math.atan2(e.x, math.sqrt(e.y * e.y + e.z * e.z)) * 180 / math.pi;
+    final pitchDeg =
+        math.atan2(e.y, math.sqrt(e.x * e.x + e.z * e.z)) * 180 / math.pi;
+
+    if (_needsCalibration) {
+      _calRoll = rollDeg;
+      _calPitch = pitchDeg;
+      _needsCalibration = false;
+    }
+
+    // Catch-up drift so the neutral pose follows the phone if it's held tilted.
+    final rawR = rollDeg - _calRoll;
+    if (rawR > _kTiltLimit) {
+      _calRoll += (rawR - _kTiltLimit) * _kDrift;
+    } else if (rawR < -_kTiltLimit) {
+      _calRoll += (rawR + _kTiltLimit) * _kDrift;
+    }
+    final rawP = pitchDeg - _calPitch;
+    if (rawP > _kTiltLimit) {
+      _calPitch += (rawP - _kTiltLimit) * _kDrift;
+    } else if (rawP < -_kTiltLimit) {
+      _calPitch += (rawP + _kTiltLimit) * _kDrift;
+    }
+
+    final tx = ((rollDeg - _calRoll) / _kTiltLimit).clamp(-1.0, 1.0);
+    final ty = ((pitchDeg - _calPitch) / _kTiltLimit).clamp(-1.0, 1.0);
+    // Ease toward the target so sensor noise doesn't jitter the foil.
+    _tiltX += (tx - _tiltX) * 0.18;
+    _tiltY += (-ty - _tiltY) * 0.18;
+  }
+
+  /// Desktop / web fallback: tilt tracks the pointer over the card.
+  void _onHoverTilt(Offset local, Size size) {
+    if (size.width == 0 || size.height == 0) return;
+    final tx = (local.dx / size.width * 2 - 1).clamp(-1.0, 1.0);
+    final ty = (local.dy / size.height * 2 - 1).clamp(-1.0, 1.0);
+    _tiltX = tx.toDouble();
+    _tiltY = ty.toDouble();
+  }
+
+  void _onHoverExit() {
+    _tiltX = 0;
+    _tiltY = 0;
   }
 
   void _onSwipeTick() {
@@ -286,7 +368,7 @@ class _TinderCardOverlayState extends State<TinderCardOverlay>
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Text(
-                  'tinder_hint'.tr(),
+                  'randomizing_hint'.tr(),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
@@ -347,10 +429,10 @@ class _TinderCardOverlayState extends State<TinderCardOverlay>
       );
     }
 
-    // The active top card: draggable, holographic, with SKIP/CHAT stamps.
+    // The active top card. The drag only translates/swings it (swipe-to-fling
+    // fling); the holographic tilt of the foil comes from the gyroscope (or the
+    // mouse on desktop) via [_tiltX]/[_tiltY].
     final swing = (_drag.dx / _screenW) * 0.32;
-    final tiltX = (_drag.dx / (cardW * 0.9)).clamp(-1.0, 1.0).toDouble();
-    final tiltY = (-_drag.dy / (cardH * 0.9)).clamp(-1.0, 1.0).toDouble();
     // Subtle entry pop for the top card.
     final entryScale = 0.86 + 0.14 * entry;
 
@@ -362,22 +444,27 @@ class _TinderCardOverlayState extends State<TinderCardOverlay>
             angle: swing,
             child: Transform.scale(
               scale: _dragging || _swipeCtrl.isAnimating ? 1.0 : entryScale,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onPanStart: _onPanStart,
-                onPanUpdate: _onPanUpdate,
-                onPanEnd: _onPanEnd,
-                child: RepaintBoundary(
-                  child: HoloCard(
-                    key: ValueKey('top_${current.id}'),
-                    character: current,
-                    tiltX: tiltX,
-                    tiltY: tiltY,
-                    shimmer: shimmer,
-                    width: cardW,
-                    height: cardH,
-                    interactive: true,
-                    stampProgress: progress,
+              child: MouseRegion(
+                onHover: (e) =>
+                    _onHoverTilt(e.localPosition, Size(cardW, cardH)),
+                onExit: (_) => _onHoverExit(),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: _onPanStart,
+                  onPanUpdate: _onPanUpdate,
+                  onPanEnd: _onPanEnd,
+                  child: RepaintBoundary(
+                    child: HoloCard(
+                      key: ValueKey('top_${current.id}'),
+                      character: current,
+                      tiltX: _tiltX,
+                      tiltY: _tiltY,
+                      shimmer: shimmer,
+                      width: cardW,
+                      height: cardH,
+                      interactive: true,
+                      stampProgress: progress,
+                    ),
                   ),
                 ),
               ),
@@ -534,7 +621,7 @@ class _EmptyDeck extends StatelessWidget {
           const Icon(Icons.style_outlined, size: 48, color: Colors.white38),
           const SizedBox(height: 16),
           Text(
-            'tinder_empty'.tr(),
+            'randomizing_empty'.tr(),
             style: const TextStyle(color: Colors.white70, fontSize: 15),
           ),
           const SizedBox(height: 20),
@@ -717,7 +804,7 @@ class HoloCard extends StatelessWidget {
               top: 28,
               left: 20,
               child: _Stamp(
-                label: 'tinder_new_chat'.tr().toUpperCase(),
+                label: 'randomizing_new_chat'.tr().toUpperCase(),
                 color: const Color(0xFF6FEEB6),
                 angle: -0.32,
                 opacity: stampProgress > 0 ? stampProgress.clamp(0.0, 1.0) : 0.0,
@@ -727,7 +814,7 @@ class HoloCard extends StatelessWidget {
               top: 28,
               right: 20,
               child: _Stamp(
-                label: 'tinder_skip'.tr().toUpperCase(),
+                label: 'randomizing_skip'.tr().toUpperCase(),
                 color: const Color(0xFFFF5A6E),
                 angle: 0.32,
                 opacity:
