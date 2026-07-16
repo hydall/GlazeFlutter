@@ -636,7 +636,14 @@ if (messageData.isEditing) classes.push('editing');
     const isError = sectionEl.classList.contains('error');
 
     if (!isTyping && !isError && !animate) {
-      const existingHost = body.querySelector('.message-content');
+      // Only reuse the bubble's OWN content host (a direct child of the body).
+      // A ':scope >' guard is essential: the error window nests its own
+      // `.message-content` (body > .error-window > … > .message-content), so a
+      // plain descendant query would match it when swiping error → healthy
+      // variation and rewrite the new text *inside* the red error chrome. By
+      // scoping to a direct child we get null there and fall through to the
+      // full rebuild below, which drops the error window.
+      const existingHost = body.querySelector(':scope > .message-content');
       if (existingHost && existingHost.shadowRoot) {
         const glazeMsg = existingHost.shadowRoot.querySelector('.glaze-message');
         if (glazeMsg) {
