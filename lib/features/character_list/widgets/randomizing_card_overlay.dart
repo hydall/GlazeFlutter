@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -14,6 +15,7 @@ import '../../../core/models/character.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/card_tag_chips.dart';
+import '../../../shared/widgets/glaze_logo.dart';
 
 /// Opens the randomizing character-discovery overlay.
 ///
@@ -77,8 +79,18 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
   int _armedDir = 0;
 
   // ─── Holographic tilt (gyroscope / mouse), smoothed into −1..1 ──────────────
+  //
+  // The sensor (or the mouse) writes a raw *target*; the actual [_tiltX]/[_tiltY]
+  // used for rendering eases toward it once per frame (see [_onTiltFrame]).
+  // Smoothing per-frame instead of per-sample keeps the motion fluid regardless
+  // of the sensor's irregular delivery rate and filters out its jitter.
   double _tiltX = 0;
   double _tiltY = 0;
+  double _targetTiltX = 0;
+  double _targetTiltY = 0;
+
+  /// Per-frame easing factor toward the target tilt. Lower = smoother but laggier.
+  static const double _kTiltEase = 0.12;
   StreamSubscription<AccelerometerEvent>? _accelSub;
 
   /// Calibration reference captured on first sample after opening; the reading
@@ -107,7 +119,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     _shimmerCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 3600),
-    )..repeat();
+    )
+      // Doubles as the per-frame clock that eases the tilt toward its target.
+      ..addListener(_onTiltFrame)
+      ..repeat();
 
     _entryCtrl = AnimationController(
       vsync: this,
@@ -167,9 +182,17 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
 
     final tx = ((rollDeg - _calRoll) / _kTiltLimit).clamp(-1.0, 1.0);
     final ty = ((pitchDeg - _calPitch) / _kTiltLimit).clamp(-1.0, 1.0);
-    // Ease toward the target so sensor noise doesn't jitter the foil.
-    _tiltX += (tx - _tiltX) * 0.18;
-    _tiltY += (-ty - _tiltY) * 0.18;
+    // Only record the target; [_onTiltFrame] eases the rendered value toward it
+    // once per frame so the foil glides instead of snapping on each sample.
+    _targetTiltX = tx.toDouble();
+    _targetTiltY = -ty.toDouble();
+  }
+
+  /// Eases the rendered tilt toward the latest target. Runs every shimmer frame
+  /// (~60fps), just before the deck's [AnimatedBuilder] reads [_tiltX]/[_tiltY].
+  void _onTiltFrame() {
+    _tiltX += (_targetTiltX - _tiltX) * _kTiltEase;
+    _tiltY += (_targetTiltY - _tiltY) * _kTiltEase;
   }
 
   /// Desktop / web fallback: tilt tracks the pointer over the card.
@@ -177,13 +200,13 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     if (size.width == 0 || size.height == 0) return;
     final tx = (local.dx / size.width * 2 - 1).clamp(-1.0, 1.0);
     final ty = (local.dy / size.height * 2 - 1).clamp(-1.0, 1.0);
-    _tiltX = tx.toDouble();
-    _tiltY = ty.toDouble();
+    _targetTiltX = tx.toDouble();
+    _targetTiltY = ty.toDouble();
   }
 
   void _onHoverExit() {
-    _tiltX = 0;
-    _tiltY = 0;
+    _targetTiltX = 0;
+    _targetTiltY = 0;
   }
 
   void _onSwipeTick() {
@@ -1158,15 +1181,12 @@ class _TopBadge extends StatelessWidget {
           BoxShadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 4)),
         ],
       ),
-      child: const Center(
-        child: Text(
-          'G',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            fontSize: 15,
-            shadows: [Shadow(blurRadius: 2, color: Colors.black87)],
-          ),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: SvgPicture.string(
+          glazeFilledLogoSvg,
+          fit: BoxFit.contain,
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
         ),
       ),
     );
