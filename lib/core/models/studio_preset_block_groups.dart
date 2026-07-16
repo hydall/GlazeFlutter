@@ -45,6 +45,7 @@ const _exclusiveStudioHeaders = <String>{
   'narrative styles',
   'story difficulty',
   'response length controls',
+  'cot selections',
 };
 
 const _narrativeStyleAddonTitles = <String>{
