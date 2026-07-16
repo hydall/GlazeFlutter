@@ -826,19 +826,24 @@ class HoloCard extends StatelessWidget {
             child: _Glare(opacity: glareMag),
           ),
 
-          // 6 — Inner border frame.
+          // 6 — Inner border frame. Counter-parallaxed with the text/badge so
+          // the whole "print" layer (frame + name + logo) shifts together over
+          // the portrait as the card is tilted, selling the depth.
           Positioned(
             top: 10,
             left: 10,
             right: 10,
             bottom: 10,
             child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.35),
-                    width: 1.5,
+              child: Transform.translate(
+                offset: Offset(tiltX * 12, tiltY * 12),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
