@@ -757,6 +757,18 @@ void main() {
         contains('.glaze-message'),
         reason: 'Fast path must patch existing .glaze-message element',
       );
+      // Regression guard: the fast path must only reuse the bubble's OWN
+      // content host (direct child of .msg-body). A plain descendant query
+      // also matches the error window's nested `.message-content`, so swiping
+      // from an error to a healthy variation would rewrite the new text inside
+      // the red error chrome instead of rebuilding the body.
+      expect(
+        body,
+        contains(":scope > .message-content"),
+        reason:
+            'Fast path host lookup must be scoped to a direct child so it '
+            'never matches the error window\'s nested content host',
+      );
     });
   });
 
