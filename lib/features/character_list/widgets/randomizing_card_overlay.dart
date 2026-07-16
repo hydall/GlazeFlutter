@@ -74,6 +74,11 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
   late final AnimationController _swipeCtrl;
   Animation<Offset>? _swipeTween;
 
+  /// Drives the tap-to-flip (front ↔ back "рубашка" with the card's tabs).
+  /// 0 = front, 1 = back.
+  late final AnimationController _flipCtrl;
+  bool _flipped = false;
+
   /// Endless idle shimmer that sweeps the holographic sheen at rest.
   late final AnimationController _shimmerCtrl;
 
@@ -134,6 +139,11 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
       duration: const Duration(milliseconds: 420),
     )..forward();
 
+    _flipCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 480),
+    );
+
     // Drive the holographic tilt from the device gyroscope. On platforms with
     // no accelerometer (most desktops / web) the stream simply errors out and
     // the mouse fallback (see [_onHoverTilt]) takes over instead.
@@ -152,6 +162,7 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     _swipeCtrl.dispose();
     _shimmerCtrl.dispose();
     _entryCtrl.dispose();
+    _flipCtrl.dispose();
     super.dispose();
   }
 
@@ -228,8 +239,20 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
   // ─── Gesture handling ──────────────────────────────────────────────────────
 
   void _onPanStart(DragStartDetails _) {
-    if (_swipeCtrl.isAnimating) return;
+    if (_swipeCtrl.isAnimating || _flipCtrl.isAnimating || _flipped) return;
     setState(() => _dragging = true);
+  }
+
+  /// Tap the card to flip it to its back (the card's tabs) and tap again to
+  /// flip back. Ignored mid-swipe so a fling isn't interrupted.
+  void _toggleFlip() {
+    if (_flipCtrl.isAnimating || _swipeCtrl.isAnimating || _dragging) return;
+    setState(() => _flipped = !_flipped);
+    if (_flipped) {
+      _flipCtrl.forward();
+    } else {
+      _flipCtrl.reverse();
+    }
   }
 
   void _onPanUpdate(DragUpdateDetails d) {
@@ -276,6 +299,11 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     final card = _current;
     if (card == null) return;
     _armedDir = 0;
+    // A flipped card flies off as its front, not its back.
+    if (_flipped) {
+      _flipped = false;
+      _flipCtrl.value = 0;
+    }
     // Opening a chat: hide the deck behind the fly-off (the next tick's setState
     // from the swipe controller applies it).
     if (dir > 0) _openingChat = true;
@@ -302,6 +330,9 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
   void _advance() {
     setState(() {
       _drag = Offset.zero;
+      // The next card always starts front-side up.
+      _flipped = false;
+      _flipCtrl.value = 0;
       _index++;
       if (_index >= _deck.length) {
         // Endless discovery: reshuffle and keep dealing, avoiding an immediate
@@ -382,9 +413,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
                   child: SizedBox(
                     width: cardW,
                     height: cardH,
-                    // Only the deck rebuilds per shimmer/swipe frame.
+                    // Only the deck rebuilds per shimmer/swipe/flip frame.
                     child: AnimatedBuilder(
-                      animation: Listenable.merge([_shimmerCtrl, _swipeCtrl]),
+                      animation:
+                          Listenable.merge([_shimmerCtrl, _swipeCtrl, _flipCtrl]),
                       builder: (context, _) => _buildDeck(
                         cardW,
                         cardH,
@@ -486,6 +518,52 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     // Subtle entry pop for the top card.
     final entryScale = 0.86 + 0.14 * entry;
 
+    // Tap-to-flip: rotate the card about Y; past the halfway point the back
+    // ("рубашка", the card's tabs) shows, counter-rotated so it reads normally.
+    final flipT = _flipCtrl.value;
+    final showBack = flipT >= 0.5;
+
+    final Widget face;
+    if (!showBack) {
+      face = MouseRegion(
+        onHover: (e) => _onHoverTilt(e.localPosition, Size(cardW, cardH)),
+        onExit: (_) => _onHoverExit(),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _toggleFlip,
+          onPanStart: _onPanStart,
+          onPanUpdate: _onPanUpdate,
+          onPanEnd: _onPanEnd,
+          child: RepaintBoundary(
+            child: HoloCard(
+              key: ValueKey('top_${current.id}'),
+              character: current,
+              tiltX: _tiltX,
+              tiltY: _tiltY,
+              width: cardW,
+              height: cardH,
+            ),
+          ),
+        ),
+      );
+    } else {
+      face = Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.identity()..rotateY(math.pi),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _toggleFlip,
+          child: RepaintBoundary(
+            child: _CardBack(
+              key: ValueKey('back_${current.id}'),
+              character: current,
+              accent: _accentFor(current),
+            ),
+          ),
+        ),
+      );
+    }
+
     children.add(
       Center(
         child: Transform.translate(
@@ -494,26 +572,12 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
             angle: swing,
             child: Transform.scale(
               scale: _dragging || _swipeCtrl.isAnimating ? 1.0 : entryScale,
-              child: MouseRegion(
-                onHover: (e) =>
-                    _onHoverTilt(e.localPosition, Size(cardW, cardH)),
-                onExit: (_) => _onHoverExit(),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onPanStart: _onPanStart,
-                  onPanUpdate: _onPanUpdate,
-                  onPanEnd: _onPanEnd,
-                  child: RepaintBoundary(
-                    child: HoloCard(
-                      key: ValueKey('top_${current.id}'),
-                      character: current,
-                      tiltX: _tiltX,
-                      tiltY: _tiltY,
-                      width: cardW,
-                      height: cardH,
-                    ),
-                  ),
-                ),
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.001)
+                  ..rotateY(flipT * math.pi),
+                child: SizedBox(width: cardW, height: cardH, child: face),
               ),
             ),
           ),
@@ -522,6 +586,18 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     );
 
     return Stack(children: children);
+  }
+
+  /// Accent colour for [c] (its stored colour, else the default), used to theme
+  /// the card back until/without image-derived colour.
+  Color _accentFor(Character c) {
+    final col = c.color;
+    if (col != null) {
+      try {
+        return Color(int.parse('FF${col.replaceFirst('#', '')}', radix: 16));
+      } catch (_) {}
+    }
+    return const Color(0xFF7996CE);
   }
 }
 
@@ -1236,6 +1312,276 @@ class _CardInfo extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+// ─── Card back ("рубашка") ───────────────────────────────────────────────────
+
+/// The flip side of the card: the same two tabs the detail sheet shows — Info
+/// (tags + description) and Prompt Blocks (the character's prompt fields). Dark
+/// "back of the card" surface, tinted with the card's accent.
+class _CardBack extends StatefulWidget {
+  final Character character;
+  final Color accent;
+  const _CardBack({super.key, required this.character, required this.accent});
+
+  @override
+  State<_CardBack> createState() => _CardBackState();
+}
+
+class _CardBackState extends State<_CardBack> {
+  int _tab = 0; // 0 = info, 1 = prompts
+
+  Character get _c => widget.character;
+
+  String get _displayName {
+    final dn = _c.displayName?.trim();
+    return (dn != null && dn.isNotEmpty) ? dn : _c.name;
+  }
+
+  /// The character's prompt fields, mirroring the detail sheet's Prompt Blocks
+  /// tab, dropping any that are empty.
+  List<({String label, String text})> get _promptSections {
+    final list = <({String label, String text})>[
+      (label: 'label_description'.tr(), text: _c.description ?? ''),
+      (label: 'label_personality'.tr(), text: _c.personality ?? ''),
+      (label: 'label_scenario'.tr(), text: _c.scenario ?? ''),
+      (label: 'label_mes_example'.tr(), text: _c.mesExample ?? ''),
+      (label: 'role_system'.tr(), text: _c.systemPrompt ?? ''),
+      (label: 'role_system'.tr(), text: _c.postHistoryInstructions ?? ''),
+      (label: 'label_first_mes'.tr(), text: _c.firstMes ?? ''),
+    ];
+    for (var i = 0; i < _c.alternateGreetings.length; i++) {
+      list.add((
+        label: '${'placeholder_greeting'.tr()} ${i + 2}',
+        text: _c.alternateGreetings[i],
+      ));
+    }
+    return list.where((s) => s.text.trim().isNotEmpty).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Color.lerp(widget.accent, Colors.white, 0.18)!;
+    return Container(
+      // Same casing as the front so the flip reads as one physical card.
+      padding: const EdgeInsets.all(4),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0x26FFFFFF), Color(0x05FFFFFF), Color(0x1AFFFFFF)],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.55),
+            blurRadius: 40,
+            offset: const Offset(0, 22),
+          ),
+          BoxShadow(
+            color: widget.accent.withValues(alpha: 0.25),
+            blurRadius: 30,
+            spreadRadius: -6,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color.alphaBlend(
+                  widget.accent.withValues(alpha: 0.16),
+                  const Color(0xFF16161C),
+                ),
+                const Color(0xFF111116),
+              ],
+            ),
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.flip_camera_android_rounded,
+                      size: 16,
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _BackTab(
+                        label: 'section_info'.tr(),
+                        active: _tab == 0,
+                        accent: accent,
+                        onTap: () => setState(() => _tab = 0),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _BackTab(
+                        label: 'section_prompt_blocks'.tr(),
+                        active: _tab == 1,
+                        accent: accent,
+                        onTap: () => setState(() => _tab = 1),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context)
+                      .copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 2, 16, 18),
+                    child: _tab == 0 ? _buildInfo() : _buildPrompts(accent),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfo() {
+    final notes = (_c.creatorNotes?.trim().isNotEmpty ?? false)
+        ? _c.creatorNotes!.trim()
+        : (_c.description?.trim() ?? '');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_c.tags.isNotEmpty) ...[
+          CardTagChips(tags: _c.tags),
+          const SizedBox(height: 14),
+        ],
+        if (notes.isNotEmpty)
+          Text(
+            notes,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              color: Color(0xD9FFFFFF),
+            ),
+          )
+        else if (_c.tags.isEmpty)
+          Text(
+            'no_preview_available'.tr(),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPrompts(Color accent) {
+    final sections = _promptSections;
+    if (sections.isEmpty) {
+      return Text(
+        'no_preview_available'.tr(),
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final s in sections) ...[
+          Text(
+            s.label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            s.text.trim(),
+            style: const TextStyle(
+              fontSize: 12.5,
+              height: 1.5,
+              color: Color(0xCCFFFFFF),
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+      ],
+    );
+  }
+}
+
+class _BackTab extends StatelessWidget {
+  final String label;
+  final bool active;
+  final Color accent;
+  final VoidCallback onTap;
+  const _BackTab({
+    required this.label,
+    required this.active,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: active
+              ? accent.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: active
+                ? accent.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.08),
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: active ? accent : Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
