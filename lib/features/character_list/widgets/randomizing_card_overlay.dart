@@ -585,7 +585,9 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
       ),
     );
 
-    return Stack(children: children);
+    // `Clip.none` so the top card's unclipped print layer (frame/name/badge)
+    // can float a few px past the card edge as it parallaxes.
+    return Stack(clipBehavior: Clip.none, children: children);
   }
 
   /// Accent colour for [c] (its stored colour, else the default), used to theme
@@ -834,7 +836,10 @@ class HoloCard extends StatelessWidget {
     final pos = (0.5 + tiltX * 0.34).clamp(0.16, 0.84).toDouble();
     final glareMag = math.min(1.0, tiltX.abs() + tiltY.abs() * 0.5).toDouble();
 
-    final card = ClipRRect(
+    // Clipped visual layers only: the portrait and the holographic foil / sheen
+    // / glare must fill the rounded card edge-to-edge and never spill, so they
+    // stay inside this ClipRRect + the casing clip below.
+    final clipped = ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: Stack(
         fit: StackFit.expand,
@@ -901,24 +906,68 @@ class HoloCard extends StatelessWidget {
             blendMode: BlendMode.plus,
             child: _Glare(opacity: glareMag),
           ),
+        ],
+      ),
+    );
 
-          // 6 — Inner border frame. Counter-parallaxed with the text/badge so
-          // the whole "print" layer (frame + name + logo) shifts together over
-          // the portrait as the card is tilted, selling the depth.
-          Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
-            bottom: 10,
-            child: IgnorePointer(
-              child: Transform.translate(
-                offset: Offset(tiltX * 12, tiltY * 12),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      width: 1.5,
+    // The framed physical card (rounded casing + the clipped content).
+    final casing = Container(
+      padding: const EdgeInsets.all(4),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0x26FFFFFF), Color(0x05FFFFFF), Color(0x1AFFFFFF)],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.55),
+            blurRadius: 40,
+            offset: const Offset(0, 22),
+          ),
+          BoxShadow(
+            color: _avatarColor.withValues(alpha: 0.25),
+            blurRadius: 30,
+            spreadRadius: -6,
+          ),
+        ],
+      ),
+      child: clipped,
+    );
+
+    // Outer casing + the unclipped "print" layer (frame / name / tags / badge),
+    // all under one 3D tilt. The print layer lives OUTSIDE the clip (Stack
+    // `Clip.none`) so, as it counter-parallaxes, it can float a few px past the
+    // card edge over the dimmed backdrop instead of being sliced off.
+    return Transform(
+      alignment: Alignment.center,
+      transform: Matrix4.identity()
+        ..setEntry(3, 2, 0.0011)
+        ..rotateX(tiltY * 0.11)
+        ..rotateY(tiltX * 0.11),
+      child: Stack(
+        clipBehavior: Clip.none,
+        fit: StackFit.expand,
+        children: [
+          casing,
+
+          // Inner border frame (inset 14 = 4 casing + 10), parallaxed.
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: IgnorePointer(
+                child: Transform.translate(
+                  offset: Offset(tiltX * 12, tiltY * 12),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -926,11 +975,11 @@ class HoloCard extends StatelessWidget {
             ),
           ),
 
-          // 7 — Name / creator / short description, counter-parallaxed.
+          // Name / creator / short description, parallaxed.
           Positioned(
-            left: 20,
-            right: 20,
-            bottom: 22,
+            left: 24,
+            right: 24,
+            bottom: 26,
             child: Transform.translate(
               offset: Offset(tiltX * 12, tiltY * 12),
               child: _CardInfo(
@@ -941,12 +990,12 @@ class HoloCard extends StatelessWidget {
             ),
           ),
 
-          // 8 — Tags in the top-left corner, colour-coded like the list cards.
+          // Tags in the top-left corner, colour-coded like the list cards.
           if (character.tags.isNotEmpty)
             Positioned(
-              top: 18,
-              left: 18,
-              right: 64, // clear the "G" badge
+              top: 22,
+              left: 22,
+              right: 72, // clear the badge
               child: Transform.translate(
                 offset: Offset(tiltX * 10, tiltY * 10),
                 child: IgnorePointer(
@@ -955,10 +1004,10 @@ class HoloCard extends StatelessWidget {
               ),
             ),
 
-          // 9 — Top badge: the filled Glaze logo, tinted with the card's accent.
+          // Top badge: the filled Glaze logo, tinted with the card's accent.
           Positioned(
-            top: 18,
-            right: 18,
+            top: 22,
+            right: 22,
             child: Transform.translate(
               offset: Offset(tiltX * 12, tiltY * 12),
               child: _TopBadge(imagePath: _imagePath, fallback: _avatarColor),
@@ -967,54 +1016,31 @@ class HoloCard extends StatelessWidget {
         ],
       ),
     );
-
-    // Outer casing + 3D tilt. The rotation is kept gentle so the projected card
-    // stays within its footprint; `clipBehavior` trims the 4px frame + holo
-    // layers to the rounded casing so nothing bleeds past the corners.
-    return Transform(
-      alignment: Alignment.center,
-      transform: Matrix4.identity()
-        ..setEntry(3, 2, 0.0011)
-        ..rotateX(tiltY * 0.11)
-        ..rotateY(tiltX * 0.11),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(28),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0x26FFFFFF), Color(0x05FFFFFF), Color(0x1AFFFFFF)],
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.55),
-              blurRadius: 40,
-              offset: const Offset(0, 22),
-            ),
-            BoxShadow(
-              color: _avatarColor.withValues(alpha: 0.25),
-              blurRadius: 30,
-              spreadRadius: -6,
-            ),
-          ],
-        ),
-        child: card,
-      ),
-    );
   }
 
   Widget _buildImage() {
-    final path = resolveGlazeFilePath(character.avatarPath) ??
-        resolveGlazeThumbnailPath(character.avatarPath);
+    // Prefer the small pre-generated thumbnail: a full-resolution PNG decode is
+    // what made dealing the next card hitch. The thumbnail decodes in a few ms
+    // and is already warm in the image cache from the peek card, so the swap is
+    // instant; fresh decodes fade in via [frameBuilder] instead of popping.
+    final path = resolveGlazeThumbnailPath(character.avatarPath) ??
+        resolveGlazeFilePath(character.avatarPath);
     if (path == null) return _placeholder();
     return Image.file(
       File(path),
       fit: BoxFit.cover,
       alignment: Alignment.topCenter,
-      filterQuality: FilterQuality.high,
+      filterQuality: FilterQuality.medium,
+      gaplessPlayback: true,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded) return child;
+        return AnimatedOpacity(
+          opacity: frame == null ? 0 : 1,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          child: child,
+        );
+      },
       errorBuilder: (_, _, _) => _placeholder(),
     );
   }
@@ -1221,8 +1247,8 @@ class _TopBadgeState extends State<_TopBadge> {
     // badge even for very dark portraits.
     final tint = Color.lerp(_accent ?? widget.fallback, Colors.white, 0.25)!;
     return Container(
-      width: 36,
-      height: 36,
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
         shape: BoxShape.circle,
@@ -1232,7 +1258,7 @@ class _TopBadgeState extends State<_TopBadge> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(9),
         child: SvgPicture.string(
           glazeFilledLogoSvg,
           fit: BoxFit.contain,
