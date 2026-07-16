@@ -20,6 +20,16 @@ on:
         required: false
         default: false
         type: boolean
+      dm_developers:
+        # Sends the APK + IPA straight to each developer's private Telegram chat
+        # (@frostake, @All_Systems_Go). Independent of "Post build to Telegram":
+        # it can be used on its own for an internal test share. Requires the
+        # TG_DEV_CHAT_IDS secret (numeric chat IDs) — see the "Send build to
+        # developers (DM)" step below for why @usernames can't be used.
+        description: 'Отправить в ЛС разработчикам (@frostake, @All_Systems_Go)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -300,8 +310,12 @@ jobs:
   notify:
     needs: [metadata, build-android, build-ios]
     runs-on: ubuntu-latest
-    # Only post to Telegram when the "Post build to Telegram" toggle is on.
-    if: ${{ success() && github.event.inputs.post_to_telegram == 'true' }}
+    # Run when either delivery toggle is on: the group post and/or the direct
+    # messages to developers. Each individual step is gated on its own toggle.
+    if: >-
+      ${{ success() &&
+      (github.event.inputs.post_to_telegram == 'true' ||
+       github.event.inputs.dm_developers == 'true') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -320,6 +334,8 @@ jobs:
           path: artifacts/
 
       - name: Send to Telegram
+        # Group post — only when the "Post build to Telegram" toggle is on.
+        if: ${{ github.event.inputs.post_to_telegram == 'true' }}
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
@@ -366,7 +382,62 @@ jobs:
             -F "reply_to_message_id=${MSG_ID}" \
             -F "document=@artifacts/${FILE_SLUG}.apk"
 
+      - name: Send build to developers (DM)
+        # Direct-message the APK + IPA to each developer's private chat when the
+        # "Отправить в ЛС разработчикам" toggle is on.
+        if: ${{ github.event.inputs.dm_developers == 'true' }}
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          # Numeric Telegram chat IDs of the developers (@frostake,
+          # @All_Systems_Go), whitespace- or comma-separated. The Bot API cannot
+          # start a private chat by @username, so each developer must have sent
+          # /start to the bot once and their numeric id stored in this secret.
+          TG_DEV_CHAT_IDS: ${{ secrets.TG_DEV_CHAT_IDS }}
+          VERSION:      ${{ needs.metadata.outputs.version }}
+          BUILD_DATE:   ${{ needs.metadata.outputs.build_date }}
+          BUILD_BRANCH: ${{ needs.metadata.outputs.build_branch }}
+          FILE_SLUG:    ${{ needs.metadata.outputs.file_slug }}
+          COMMITS:      ${{ needs.metadata.outputs.commits }}
+        run: |
+          if [ -z "$TG_DEV_CHAT_IDS" ]; then
+            echo "::warning::TG_DEV_CHAT_IDS secret is empty — skipping developer DMs."
+            exit 0
+          fi
+
+          COMMITS_SECTION=""
+          if [ -n "$COMMITS" ]; then
+            COMMITS_SECTION=$(printf '\n\n%s' "$COMMITS")
+          fi
+
+          TEXT=$(printf 'Новый дев-билд (в ЛС):\n\n%s\n%s\n%s%s' \
+            "$VERSION" "$BUILD_DATE" "$BUILD_BRANCH" "$COMMITS_SECTION")
+
+          # Accept commas or whitespace as separators between chat IDs.
+          IDS=$(printf '%s' "$TG_DEV_CHAT_IDS" | tr ',' ' ')
+          for CID in $IDS; do
+            [ -z "$CID" ] && continue
+
+            MSG_ID=$(curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -n --arg cid "$CID" --arg text "$TEXT" \
+                '{chat_id: $cid, text: $text, parse_mode: "HTML"}')" \
+              | jq -r '.result.message_id')
+
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" \
+              -F "chat_id=${CID}" \
+              -F "reply_to_message_id=${MSG_ID}" \
+              -F "document=@artifacts/${FILE_SLUG}.ipa"
+
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" \
+              -F "chat_id=${CID}" \
+              -F "reply_to_message_id=${MSG_ID}" \
+              -F "document=@artifacts/${FILE_SLUG}.apk"
+          done
+
       - name: Advance build/last tag
+        # Tied to the official group announcement — an internal dev-only DM share
+        # must not advance the changelog baseline.
+        if: ${{ github.event.inputs.post_to_telegram == 'true' }}
         run: |
           git tag -f build/last
           git push origin refs/tags/build/last --force
