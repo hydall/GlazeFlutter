@@ -7,15 +7,20 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/character.dart';
+import '../../../core/utils/html_to_markdown.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/card_tag_chips.dart';
+import '../../../shared/widgets/colored_markdown.dart';
 import '../../../shared/widgets/glaze_logo.dart';
 
 /// Opens the randomizing character-discovery overlay.
@@ -518,9 +523,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     // Subtle entry pop for the top card.
     final entryScale = 0.86 + 0.14 * entry;
 
-    // Tap-to-flip: rotate the card about Y; past the halfway point the back
-    // ("рубашка", the card's tabs) shows, counter-rotated so it reads normally.
-    final flipT = _flipCtrl.value;
+    // Tap-to-flip: rotate the card about Y on an ease-in-out curve (a linear
+    // spin read stiff/"колхозно"). Past the halfway point the back ("рубашка",
+    // the card's tabs) shows, counter-rotated so it reads normally.
+    final flipT = Curves.easeInOutCubic.transform(_flipCtrl.value);
     final showBack = flipT >= 0.5;
 
     final Widget face;
@@ -1359,6 +1365,9 @@ class _CardBack extends StatefulWidget {
 class _CardBackState extends State<_CardBack> {
   int _tab = 0; // 0 = info, 1 = prompts
 
+  /// Per-section expand state for the Prompt Blocks accordions.
+  final Map<int, bool> _expanded = {};
+
   Character get _c => widget.character;
 
   String get _displayName {
@@ -1488,7 +1497,28 @@ class _CardBackState extends State<_CardBack> {
                       .copyWith(scrollbars: false),
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 2, 16, 18),
-                    child: _tab == 0 ? _buildInfo() : _buildPrompts(accent),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, anim) => FadeTransition(
+                        opacity: anim,
+                        child: SizeTransition(
+                          sizeFactor: anim,
+                          axisAlignment: -1,
+                          child: child,
+                        ),
+                      ),
+                      child: _tab == 0
+                          ? KeyedSubtree(
+                              key: const ValueKey('back_info'),
+                              child: _buildInfo(),
+                            )
+                          : KeyedSubtree(
+                              key: const ValueKey('back_prompts'),
+                              child: _buildPrompts(accent),
+                            ),
+                    ),
                   ),
                 ),
               ),
@@ -1511,14 +1541,9 @@ class _CardBackState extends State<_CardBack> {
           const SizedBox(height: 14),
         ],
         if (notes.isNotEmpty)
-          Text(
-            notes,
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.5,
-              color: Color(0xD9FFFFFF),
-            ),
-          )
+          // Rendered as markdown (with the sheet's HTML→markdown + custom inline
+          // components) so the description reads the same as the detail sheet.
+          _DescriptionMarkdown(notes)
         else if (_c.tags.isEmpty)
           Text(
             'no_preview_available'.tr(),
@@ -1539,27 +1564,15 @@ class _CardBackState extends State<_CardBack> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final s in sections) ...[
-          Text(
-            s.label.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: accent,
-            ),
+        for (var i = 0; i < sections.length; i++)
+          _PromptAccordion(
+            label: sections[i].label,
+            text: sections[i].text.trim(),
+            accent: accent,
+            expanded: _expanded[i] ?? false,
+            onToggle: () =>
+                setState(() => _expanded[i] = !(_expanded[i] ?? false)),
           ),
-          const SizedBox(height: 4),
-          Text(
-            s.text.trim(),
-            style: const TextStyle(
-              fontSize: 12.5,
-              height: 1.5,
-              color: Color(0xCCFFFFFF),
-            ),
-          ),
-          const SizedBox(height: 14),
-        ],
       ],
     );
   }
@@ -1607,6 +1620,195 @@ class _BackTab extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Renders a character description as markdown, mirroring the detail sheet's
+/// Info tab: HTML is converted to markdown first, and the same custom inline
+/// components (coloured / glow / gradient text, links, images) are used.
+class _DescriptionMarkdown extends StatelessWidget {
+  final String text;
+  const _DescriptionMarkdown(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return GptMarkdown(
+      hasHtmlTags(text) ? htmlToMarkdown(text) : text,
+      style: const TextStyle(
+        fontSize: 13,
+        height: 1.5,
+        color: Color(0xD9FFFFFF),
+      ),
+      onLinkTap: (url, title) async {
+        final uri = Uri.tryParse(url);
+        if (uri != null) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      imageBuilder: (context, url, width, height) {
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: CachedNetworkImage(
+              imageUrl: url,
+              width: width,
+              height: height,
+              fit: BoxFit.contain,
+            ),
+          );
+        }
+        if (url.startsWith('data:')) {
+          final commaIdx = url.indexOf(',');
+          if (commaIdx > 0) {
+            try {
+              final bytes = Uri.parse(url).data!.contentAsBytes();
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(
+                  bytes,
+                  width: width,
+                  height: height,
+                  fit: BoxFit.contain,
+                ),
+              );
+            } catch (_) {}
+          }
+        }
+        final file = File(url);
+        if (file.existsSync()) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(
+              file,
+              width: width,
+              height: height,
+              fit: BoxFit.contain,
+            ),
+          );
+        }
+        return const SizedBox.shrink();
+      },
+      inlineComponents: [
+        HtmlColorMd(),
+        GlowTextMd(),
+        ColorGlowTextMd(),
+        GradientTextMd(),
+        BackgroundTextMd(),
+        ColoredBoldMd(),
+        ColoredUnderscoreBoldMd(),
+        ColoredItalicMd(),
+        ColoredUnderscoreItalicMd(),
+        LinkMd(),
+        ImageMd(),
+      ],
+    );
+  }
+}
+
+/// An expandable prompt block, matching the detail sheet's accordion: collapsed
+/// it shows a 3-line faded preview; tapping expands it to the full text.
+class _PromptAccordion extends StatelessWidget {
+  final String label;
+  final String text;
+  final Color accent;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  const _PromptAccordion({
+    required this.label,
+    required this.text,
+    required this.accent,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: onToggle,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.0 : 0.5,
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      color: Colors.white.withValues(alpha: 0.5),
+                      size: 22,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            crossFadeState: expanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 280),
+            sizeCurve: Curves.easeOutCubic,
+            firstChild: ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0.45, 1.0],
+                colors: [Colors.white, Colors.transparent],
+              ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                child: Text(
+                  text,
+                  maxLines: 3,
+                  overflow: TextOverflow.clip,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    height: 1.5,
+                    color: Color(0xCCFFFFFF),
+                  ),
+                ),
+              ),
+            ),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: SelectableText(
+                text,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  height: 1.5,
+                  color: Color(0xCCFFFFFF),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
