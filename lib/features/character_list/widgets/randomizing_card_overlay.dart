@@ -7,15 +7,20 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/character.dart';
+import '../../../core/utils/html_to_markdown.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/card_tag_chips.dart';
+import '../../../shared/widgets/colored_markdown.dart';
 import '../../../shared/widgets/glaze_logo.dart';
 
 /// Opens the randomizing character-discovery overlay.
@@ -518,9 +523,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     // Subtle entry pop for the top card.
     final entryScale = 0.86 + 0.14 * entry;
 
-    // Tap-to-flip: rotate the card about Y; past the halfway point the back
-    // ("рубашка", the card's tabs) shows, counter-rotated so it reads normally.
-    final flipT = _flipCtrl.value;
+    // Tap-to-flip: rotate the card about Y on an ease-in-out curve (a linear
+    // spin read stiff/"колхозно"). Past the halfway point the back ("рубашка",
+    // the card's tabs) shows, counter-rotated so it reads normally.
+    final flipT = Curves.easeInOutCubic.transform(_flipCtrl.value);
     final showBack = flipT >= 0.5;
 
     final Widget face;
@@ -585,7 +591,9 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
       ),
     );
 
-    return Stack(children: children);
+    // `Clip.none` so the top card's unclipped print layer (frame/name/badge)
+    // can float a few px past the card edge as it parallaxes.
+    return Stack(clipBehavior: Clip.none, children: children);
   }
 
   /// Accent colour for [c] (its stored colour, else the default), used to theme
@@ -834,7 +842,10 @@ class HoloCard extends StatelessWidget {
     final pos = (0.5 + tiltX * 0.34).clamp(0.16, 0.84).toDouble();
     final glareMag = math.min(1.0, tiltX.abs() + tiltY.abs() * 0.5).toDouble();
 
-    final card = ClipRRect(
+    // Clipped visual layers only: the portrait and the holographic foil / sheen
+    // / glare must fill the rounded card edge-to-edge and never spill, so they
+    // stay inside this ClipRRect + the casing clip below.
+    final clipped = ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: Stack(
         fit: StackFit.expand,
@@ -901,24 +912,68 @@ class HoloCard extends StatelessWidget {
             blendMode: BlendMode.plus,
             child: _Glare(opacity: glareMag),
           ),
+        ],
+      ),
+    );
 
-          // 6 — Inner border frame. Counter-parallaxed with the text/badge so
-          // the whole "print" layer (frame + name + logo) shifts together over
-          // the portrait as the card is tilted, selling the depth.
-          Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
-            bottom: 10,
-            child: IgnorePointer(
-              child: Transform.translate(
-                offset: Offset(tiltX * 12, tiltY * 12),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      width: 1.5,
+    // The framed physical card (rounded casing + the clipped content).
+    final casing = Container(
+      padding: const EdgeInsets.all(4),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0x26FFFFFF), Color(0x05FFFFFF), Color(0x1AFFFFFF)],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.55),
+            blurRadius: 40,
+            offset: const Offset(0, 22),
+          ),
+          BoxShadow(
+            color: _avatarColor.withValues(alpha: 0.25),
+            blurRadius: 30,
+            spreadRadius: -6,
+          ),
+        ],
+      ),
+      child: clipped,
+    );
+
+    // Outer casing + the unclipped "print" layer (frame / name / tags / badge),
+    // all under one 3D tilt. The print layer lives OUTSIDE the clip (Stack
+    // `Clip.none`) so, as it counter-parallaxes, it can float a few px past the
+    // card edge over the dimmed backdrop instead of being sliced off.
+    return Transform(
+      alignment: Alignment.center,
+      transform: Matrix4.identity()
+        ..setEntry(3, 2, 0.0011)
+        ..rotateX(tiltY * 0.11)
+        ..rotateY(tiltX * 0.11),
+      child: Stack(
+        clipBehavior: Clip.none,
+        fit: StackFit.expand,
+        children: [
+          casing,
+
+          // Inner border frame (inset 14 = 4 casing + 10), parallaxed.
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: IgnorePointer(
+                child: Transform.translate(
+                  offset: Offset(tiltX * 12, tiltY * 12),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -926,11 +981,11 @@ class HoloCard extends StatelessWidget {
             ),
           ),
 
-          // 7 — Name / creator / short description, counter-parallaxed.
+          // Name / creator / short description, parallaxed.
           Positioned(
-            left: 20,
-            right: 20,
-            bottom: 22,
+            left: 24,
+            right: 24,
+            bottom: 26,
             child: Transform.translate(
               offset: Offset(tiltX * 12, tiltY * 12),
               child: _CardInfo(
@@ -941,12 +996,12 @@ class HoloCard extends StatelessWidget {
             ),
           ),
 
-          // 8 — Tags in the top-left corner, colour-coded like the list cards.
+          // Tags in the top-left corner, colour-coded like the list cards.
           if (character.tags.isNotEmpty)
             Positioned(
-              top: 18,
-              left: 18,
-              right: 64, // clear the "G" badge
+              top: 22,
+              left: 22,
+              right: 72, // clear the badge
               child: Transform.translate(
                 offset: Offset(tiltX * 10, tiltY * 10),
                 child: IgnorePointer(
@@ -955,10 +1010,10 @@ class HoloCard extends StatelessWidget {
               ),
             ),
 
-          // 9 — Top badge: the filled Glaze logo, tinted with the card's accent.
+          // Top badge: the filled Glaze logo, tinted with the card's accent.
           Positioned(
-            top: 18,
-            right: 18,
+            top: 22,
+            right: 22,
             child: Transform.translate(
               offset: Offset(tiltX * 12, tiltY * 12),
               child: _TopBadge(imagePath: _imagePath, fallback: _avatarColor),
@@ -967,54 +1022,31 @@ class HoloCard extends StatelessWidget {
         ],
       ),
     );
-
-    // Outer casing + 3D tilt. The rotation is kept gentle so the projected card
-    // stays within its footprint; `clipBehavior` trims the 4px frame + holo
-    // layers to the rounded casing so nothing bleeds past the corners.
-    return Transform(
-      alignment: Alignment.center,
-      transform: Matrix4.identity()
-        ..setEntry(3, 2, 0.0011)
-        ..rotateX(tiltY * 0.11)
-        ..rotateY(tiltX * 0.11),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(28),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0x26FFFFFF), Color(0x05FFFFFF), Color(0x1AFFFFFF)],
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.55),
-              blurRadius: 40,
-              offset: const Offset(0, 22),
-            ),
-            BoxShadow(
-              color: _avatarColor.withValues(alpha: 0.25),
-              blurRadius: 30,
-              spreadRadius: -6,
-            ),
-          ],
-        ),
-        child: card,
-      ),
-    );
   }
 
   Widget _buildImage() {
-    final path = resolveGlazeFilePath(character.avatarPath) ??
-        resolveGlazeThumbnailPath(character.avatarPath);
+    // Prefer the small pre-generated thumbnail: a full-resolution PNG decode is
+    // what made dealing the next card hitch. The thumbnail decodes in a few ms
+    // and is already warm in the image cache from the peek card, so the swap is
+    // instant; fresh decodes fade in via [frameBuilder] instead of popping.
+    final path = resolveGlazeThumbnailPath(character.avatarPath) ??
+        resolveGlazeFilePath(character.avatarPath);
     if (path == null) return _placeholder();
     return Image.file(
       File(path),
       fit: BoxFit.cover,
       alignment: Alignment.topCenter,
-      filterQuality: FilterQuality.high,
+      filterQuality: FilterQuality.medium,
+      gaplessPlayback: true,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded) return child;
+        return AnimatedOpacity(
+          opacity: frame == null ? 0 : 1,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          child: child,
+        );
+      },
       errorBuilder: (_, _, _) => _placeholder(),
     );
   }
@@ -1221,8 +1253,8 @@ class _TopBadgeState extends State<_TopBadge> {
     // badge even for very dark portraits.
     final tint = Color.lerp(_accent ?? widget.fallback, Colors.white, 0.25)!;
     return Container(
-      width: 36,
-      height: 36,
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
         shape: BoxShape.circle,
@@ -1232,7 +1264,7 @@ class _TopBadgeState extends State<_TopBadge> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(9),
         child: SvgPicture.string(
           glazeFilledLogoSvg,
           fit: BoxFit.contain,
@@ -1332,6 +1364,9 @@ class _CardBack extends StatefulWidget {
 
 class _CardBackState extends State<_CardBack> {
   int _tab = 0; // 0 = info, 1 = prompts
+
+  /// Per-section expand state for the Prompt Blocks accordions.
+  final Map<int, bool> _expanded = {};
 
   Character get _c => widget.character;
 
@@ -1462,7 +1497,28 @@ class _CardBackState extends State<_CardBack> {
                       .copyWith(scrollbars: false),
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 2, 16, 18),
-                    child: _tab == 0 ? _buildInfo() : _buildPrompts(accent),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, anim) => FadeTransition(
+                        opacity: anim,
+                        child: SizeTransition(
+                          sizeFactor: anim,
+                          axisAlignment: -1,
+                          child: child,
+                        ),
+                      ),
+                      child: _tab == 0
+                          ? KeyedSubtree(
+                              key: const ValueKey('back_info'),
+                              child: _buildInfo(),
+                            )
+                          : KeyedSubtree(
+                              key: const ValueKey('back_prompts'),
+                              child: _buildPrompts(accent),
+                            ),
+                    ),
                   ),
                 ),
               ),
@@ -1485,14 +1541,9 @@ class _CardBackState extends State<_CardBack> {
           const SizedBox(height: 14),
         ],
         if (notes.isNotEmpty)
-          Text(
-            notes,
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.5,
-              color: Color(0xD9FFFFFF),
-            ),
-          )
+          // Rendered as markdown (with the sheet's HTML→markdown + custom inline
+          // components) so the description reads the same as the detail sheet.
+          _DescriptionMarkdown(notes)
         else if (_c.tags.isEmpty)
           Text(
             'no_preview_available'.tr(),
@@ -1513,27 +1564,15 @@ class _CardBackState extends State<_CardBack> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final s in sections) ...[
-          Text(
-            s.label.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: accent,
-            ),
+        for (var i = 0; i < sections.length; i++)
+          _PromptAccordion(
+            label: sections[i].label,
+            text: sections[i].text.trim(),
+            accent: accent,
+            expanded: _expanded[i] ?? false,
+            onToggle: () =>
+                setState(() => _expanded[i] = !(_expanded[i] ?? false)),
           ),
-          const SizedBox(height: 4),
-          Text(
-            s.text.trim(),
-            style: const TextStyle(
-              fontSize: 12.5,
-              height: 1.5,
-              color: Color(0xCCFFFFFF),
-            ),
-          ),
-          const SizedBox(height: 14),
-        ],
       ],
     );
   }
@@ -1581,6 +1620,195 @@ class _BackTab extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Renders a character description as markdown, mirroring the detail sheet's
+/// Info tab: HTML is converted to markdown first, and the same custom inline
+/// components (coloured / glow / gradient text, links, images) are used.
+class _DescriptionMarkdown extends StatelessWidget {
+  final String text;
+  const _DescriptionMarkdown(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return GptMarkdown(
+      hasHtmlTags(text) ? htmlToMarkdown(text) : text,
+      style: const TextStyle(
+        fontSize: 13,
+        height: 1.5,
+        color: Color(0xD9FFFFFF),
+      ),
+      onLinkTap: (url, title) async {
+        final uri = Uri.tryParse(url);
+        if (uri != null) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      imageBuilder: (context, url, width, height) {
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: CachedNetworkImage(
+              imageUrl: url,
+              width: width,
+              height: height,
+              fit: BoxFit.contain,
+            ),
+          );
+        }
+        if (url.startsWith('data:')) {
+          final commaIdx = url.indexOf(',');
+          if (commaIdx > 0) {
+            try {
+              final bytes = Uri.parse(url).data!.contentAsBytes();
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(
+                  bytes,
+                  width: width,
+                  height: height,
+                  fit: BoxFit.contain,
+                ),
+              );
+            } catch (_) {}
+          }
+        }
+        final file = File(url);
+        if (file.existsSync()) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(
+              file,
+              width: width,
+              height: height,
+              fit: BoxFit.contain,
+            ),
+          );
+        }
+        return const SizedBox.shrink();
+      },
+      inlineComponents: [
+        HtmlColorMd(),
+        GlowTextMd(),
+        ColorGlowTextMd(),
+        GradientTextMd(),
+        BackgroundTextMd(),
+        ColoredBoldMd(),
+        ColoredUnderscoreBoldMd(),
+        ColoredItalicMd(),
+        ColoredUnderscoreItalicMd(),
+        LinkMd(),
+        ImageMd(),
+      ],
+    );
+  }
+}
+
+/// An expandable prompt block, matching the detail sheet's accordion: collapsed
+/// it shows a 3-line faded preview; tapping expands it to the full text.
+class _PromptAccordion extends StatelessWidget {
+  final String label;
+  final String text;
+  final Color accent;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  const _PromptAccordion({
+    required this.label,
+    required this.text,
+    required this.accent,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: onToggle,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.0 : 0.5,
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      color: Colors.white.withValues(alpha: 0.5),
+                      size: 22,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            crossFadeState: expanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 280),
+            sizeCurve: Curves.easeOutCubic,
+            firstChild: ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0.45, 1.0],
+                colors: [Colors.white, Colors.transparent],
+              ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                child: Text(
+                  text,
+                  maxLines: 3,
+                  overflow: TextOverflow.clip,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    height: 1.5,
+                    color: Color(0xCCFFFFFF),
+                  ),
+                ),
+              ),
+            ),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: SelectableText(
+                text,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  height: 1.5,
+                  color: Color(0xCCFFFFFF),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
