@@ -65,6 +65,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
   Offset _drag = Offset.zero;
   bool _dragging = false;
 
+  /// Set once a chat is being opened (right fling / chat button): hides the
+  /// peeking next cards so nothing shows behind the card as it flies away.
+  bool _openingChat = false;
+
   /// Drives fly-off / spring-back of the top card by tweening [_drag].
   late final AnimationController _swipeCtrl;
   Animation<Offset>? _swipeTween;
@@ -271,6 +275,9 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     final card = _current;
     if (card == null) return;
     _armedDir = 0;
+    // Opening a chat: hide the deck behind the fly-off (the next tick's setState
+    // from the swipe controller applies it).
+    if (dir > 0) _openingChat = true;
     HapticFeedback.mediumImpact();
     final target = Offset(
       dir * (_screenW + 240),
@@ -357,6 +364,14 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
             ),
           ),
         ),
+        // Directional tint: as the card is dragged toward an action, half the
+        // screen washes into that button's colour (green-ish primary for chat,
+        // red for skip).
+        Positioned.fill(
+          child: IgnorePointer(
+            child: _EdgeTint(progress: progress, chatColor: context.cs.primary),
+          ),
+        ),
         SafeArea(
           child: Column(
             children: [
@@ -426,14 +441,15 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
       return _EmptyDeck(onClose: _close);
     }
 
-    final shimmer = _shimmerCtrl.value;
     final absProgress = progress.abs();
 
     final children = <Widget>[];
 
     // Peek of the next card, growing toward full size as the top card leaves.
+    // Hidden once a chat is being opened, so the deck doesn't show behind the
+    // card as it flies off into the new chat.
     final next = _next;
-    if (next != null) {
+    if (next != null && !_openingChat) {
       final peekScale = 0.9 + 0.1 * absProgress;
       final peekOpacity = 0.55 + 0.45 * absProgress;
       children.add(
@@ -448,10 +464,8 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
                   character: next,
                   tiltX: 0,
                   tiltY: 0,
-                  shimmer: shimmer,
                   width: cardW,
                   height: cardH,
-                  interactive: false,
                 ),
               ),
             ),
@@ -490,11 +504,8 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
                       character: current,
                       tiltX: _tiltX,
                       tiltY: _tiltY,
-                      shimmer: shimmer,
                       width: cardW,
                       height: cardH,
-                      interactive: true,
-                      stampProgress: progress,
                     ),
                   ),
                 ),
@@ -563,8 +574,8 @@ class _ActionBar extends StatelessWidget {
           scale: skipScale,
           child: _RoundButton(
             icon: Icons.close_rounded,
-            size: 64,
-            iconSize: 30,
+            size: 78,
+            iconSize: 38,
             background: const Color(0xFF1C1C22),
             iconColor: skipColor,
             border: Border.all(color: skipColor.withValues(alpha: 0.6), width: 2),
@@ -572,13 +583,13 @@ class _ActionBar extends StatelessWidget {
             onTap: onSkip,
           ),
         ),
-        const SizedBox(width: 44),
+        const SizedBox(width: 52),
         Transform.scale(
           scale: chatScale,
           child: _RoundButton(
             icon: Icons.chat_bubble_rounded,
-            size: 64,
-            iconSize: 28,
+            size: 78,
+            iconSize: 34,
             background: const Color(0xFF1C1C22),
             iconColor: chatColor,
             border: Border.all(color: chatColor.withValues(alpha: 0.6), width: 2),
@@ -669,32 +680,24 @@ class _EmptyDeck extends StatelessWidget {
 // ─── Holographic card ────────────────────────────────────────────────────────
 
 /// A holographic character card mirroring Glaze's `HoloCardViewer`: a parallax
-/// portrait under sweeping rainbow foil, a moving white sheen, prismatic corner
-/// shards, a cursor-tracking glare and an outer casing. [tiltX]/[tiltY] (−1..1)
-/// drive the 3D tilt + foil position; [shimmer] (0..1, looping) animates the
-/// idle sweep.
+/// portrait under a diagonal rainbow-foil band, a white sheen and a centred
+/// glare — all driven purely by the device tilt, with no idle animation (the
+/// Vue original uses `transition: none` and only moves on input). [tiltX]/
+/// [tiltY] (−1..1) drive the 3D tilt, the band position and the glare opacity.
 class HoloCard extends StatelessWidget {
   final Character character;
   final double tiltX;
   final double tiltY;
-  final double shimmer;
   final double width;
   final double height;
-  final bool interactive;
-
-  /// Drag progress (−1..1); positive fades in the CHAT stamp, negative SKIP.
-  final double stampProgress;
 
   const HoloCard({
     super.key,
     required this.character,
     required this.tiltX,
     required this.tiltY,
-    required this.shimmer,
     required this.width,
     required this.height,
-    this.interactive = true,
-    this.stampProgress = 0,
   });
 
   String get _displayName {
@@ -724,52 +727,52 @@ class HoloCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // −1..1 idle sweep, biased by the horizontal tilt while dragging.
-    final idle = math.sin(shimmer * 2 * math.pi);
-    final sweep = (tiltX * 0.65 + idle * 0.55).clamp(-1.15, 1.15).toDouble();
-    final pulse = 0.5 + 0.5 * math.sin(shimmer * 2 * math.pi + math.pi / 3);
-    final glareMag = (tiltX.abs() + tiltY.abs() * 0.6).clamp(0.0, 1.0);
+    // Purely tilt-driven — no idle animation (that constant sweep was the
+    // "jelly" wobble). `pos` (0..1) is where the diagonal light band sits, moved
+    // by the left/right tilt only, mirroring the Vue `sheenPos = 50 + xNorm*40`.
+    // The glare fades in with the tilt magnitude (`min(1, |x| + |y|*0.5)`).
+    final pos = (0.5 + tiltX * 0.34).clamp(0.16, 0.84).toDouble();
+    final glareMag = math.min(1.0, tiltX.abs() + tiltY.abs() * 0.5).toDouble();
 
     final card = ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 1 — Parallax portrait. The 1.14 overscan gives the parallax shift
-          // room to move without exposing the card edge; everything stays inside
-          // the ClipRRect below.
+          // 1 — Parallax portrait. The overscan gives the parallax shift room to
+          // move without exposing the card edge; everything stays clipped below.
           Transform.scale(
-            scale: 1.14,
+            scale: 1.12,
             child: Transform.translate(
-              offset: Offset(tiltX * 7, tiltY * 7),
+              offset: Offset(tiltX * 6, tiltY * 6),
               child: _buildImage(),
             ),
           ),
 
-          // 2 — Rainbow holographic foil (color-dodge), drifting with the sweep.
+          // 2 — Rainbow foil, masked to the moving diagonal band so the colour
+          // is only ever visible inside the light streak (color-dodge). The band
+          // slides along the diagonal as the card is tilted left/right.
           _BlendMask(
             blendMode: BlendMode.colorDodge,
-            child: Transform.translate(
-              offset: Offset(sweep * width * 0.4, 0),
+            child: ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (rect) =>
+                  _bandGradient(pos, const Color(0xFFFFFFFF)).createShader(rect),
               child: const _RainbowFoil(),
             ),
           ),
 
-          // 3 — Sweeping white sheen (screen/plus).
+          // 3 — The white light band itself (screen/plus).
           _BlendMask(
             blendMode: BlendMode.plus,
-            child: Transform.translate(
-              offset: Offset(sweep * width, 0),
-              child: const _SheenBand(),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: _bandGradient(pos, const Color(0x40FFFFFF)),
+              ),
             ),
           ),
 
-          // 4 — Prismatic corner shards, blending straight onto the portrait
-          // (no wrapping Opacity layer, which would isolate them from the image
-          // and neutralise the blend). The subtle breathing comes from [pulse].
-          IgnorePointer(child: _Shards(intensity: 0.55 + 0.45 * pulse)),
-
-          // 5 — Bottom legibility gradient.
+          // 4 — Bottom legibility gradient.
           const Positioned(
             left: 0,
             right: 0,
@@ -791,13 +794,15 @@ class HoloCard extends StatelessWidget {
             ),
           ),
 
-          // 6 — Cursor/tilt glare.
+          // 5 — Centred round glare; only its opacity tracks the tilt magnitude,
+          // so it reads as a highlight that appears as the card turns to the
+          // light (matching the Vue glare fixed at 50% 50%).
           _BlendMask(
             blendMode: BlendMode.plus,
-            child: _Glare(alignment: Alignment(tiltX, tiltY), opacity: glareMag),
+            child: _Glare(opacity: glareMag),
           ),
 
-          // 7 — Inner border frame.
+          // 6 — Inner border frame.
           Positioned(
             top: 10,
             left: 10,
@@ -816,7 +821,7 @@ class HoloCard extends StatelessWidget {
             ),
           ),
 
-          // 8 — Name / creator / short description, counter-parallaxed.
+          // 7 — Name / creator / short description, counter-parallaxed.
           Positioned(
             left: 20,
             right: 20,
@@ -831,7 +836,7 @@ class HoloCard extends StatelessWidget {
             ),
           ),
 
-          // 9 — Tags in the top-left corner, colour-coded like the list cards.
+          // 8 — Tags in the top-left corner, colour-coded like the list cards.
           if (character.tags.isNotEmpty)
             Positioned(
               top: 18,
@@ -845,40 +850,15 @@ class HoloCard extends StatelessWidget {
               ),
             ),
 
-          // 10 — Top "G" badge.
+          // 9 — Top badge: the filled Glaze logo, tinted with the card's accent.
           Positioned(
             top: 18,
             right: 18,
             child: Transform.translate(
               offset: Offset(tiltX * 12, tiltY * 12),
-              child: const _TopBadge(),
+              child: _TopBadge(accent: _avatarColor),
             ),
           ),
-
-          // 11 — SKIP / CHAT stamps.
-          if (interactive) ...[
-            Positioned(
-              top: 28,
-              left: 20,
-              child: _Stamp(
-                label: 'randomizing_new_chat'.tr().toUpperCase(),
-                color: const Color(0xFF6FEEB6),
-                angle: -0.32,
-                opacity: stampProgress > 0 ? stampProgress.clamp(0.0, 1.0) : 0.0,
-              ),
-            ),
-            Positioned(
-              top: 28,
-              right: 20,
-              child: _Stamp(
-                label: 'randomizing_skip'.tr().toUpperCase(),
-                color: const Color(0xFFFF5A6E),
-                angle: 0.32,
-                opacity:
-                    stampProgress < 0 ? (-stampProgress).clamp(0.0, 1.0) : 0.0,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1013,152 +993,67 @@ class _RainbowFoil extends StatelessWidget {
   }
 }
 
-class _SheenBand extends StatelessWidget {
-  const _SheenBand();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment(-1.2, -1),
-          end: Alignment(1.2, 1),
-          colors: [
-            Colors.transparent,
-            Color(0x00FFFFFF),
-            Color(0x59FFFFFF),
-            Color(0x00FFFFFF),
-            Colors.transparent,
-          ],
-          stops: [0.0, 0.38, 0.5, 0.62, 1.0],
-        ),
-      ),
-    );
-  }
-}
-
-class _Shards extends StatelessWidget {
-  /// 0..1 breathing intensity applied to every shard.
-  final double intensity;
-  const _Shards({required this.intensity});
-
-  @override
-  Widget build(BuildContext context) {
-    final o = intensity.clamp(0.0, 1.0);
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        _shard(
-          o,
-          BlendMode.colorDodge,
-          const _PolyClipper([
-            Offset(0.0, 0.10),
-            Offset(0.30, 0.0),
-            Offset(0.45, 0.30),
-            Offset(0.20, 0.60),
-            Offset(0.0, 0.45),
-          ]),
-          const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0x99BD93F9), Color(0x008BE9FD)],
-          ),
-        ),
-        _shard(
-          o,
-          BlendMode.colorDodge,
-          const _PolyClipper([
-            Offset(0.60, 1.0),
-            Offset(1.0, 1.0),
-            Offset(1.0, 0.60),
-            Offset(0.80, 0.80),
-          ]),
-          const LinearGradient(
-            begin: Alignment.bottomRight,
-            end: Alignment.topLeft,
-            colors: [Color(0x99FF79C6), Color(0x00000000)],
-          ),
-        ),
-        _shard(
-          o,
-          BlendMode.plus,
-          const _PolyClipper([
-            Offset(0.80, 0.0),
-            Offset(1.0, 0.0),
-            Offset(1.0, 0.22),
-            Offset(0.70, 0.30),
-          ]),
-          const LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [Color(0x66AEFFD8), Color(0x00000000)],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // The Opacity sits *inside* the blend layer, so the shard still composites
-  // onto the portrait below — it just dims the source first.
-  Widget _shard(
-    double opacity,
-    BlendMode blend,
-    _PolyClipper clipper,
-    Gradient gradient,
-  ) {
-    return _BlendMask(
-      blendMode: blend,
-      child: Opacity(
-        opacity: opacity,
-        child: ClipPath(
-          clipper: clipper,
-          child: DecoratedBox(decoration: BoxDecoration(gradient: gradient)),
-        ),
-      ),
-    );
-  }
-}
-
-class _PolyClipper extends CustomClipper<Path> {
-  /// Vertices as fractions of the box (0..1).
-  final List<Offset> points;
-  const _PolyClipper(this.points);
-
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    for (var i = 0; i < points.length; i++) {
-      final p = Offset(points[i].dx * size.width, points[i].dy * size.height);
-      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
-    }
-    return path..close();
-  }
-
-  @override
-  bool shouldReclip(covariant _PolyClipper old) => old.points != points;
+/// A soft diagonal light band centred at [pos] (0..1) along the card diagonal,
+/// filled with [color] and fading to fully transparent on both sides (using the
+/// same hue at 0 alpha so the fade stays neutral). Used both as the rainbow-foil
+/// mask and, filled with translucent white, as the sheen itself.
+LinearGradient _bandGradient(double pos, Color color) {
+  final c = pos.clamp(0.16, 0.84);
+  final edge = color.withValues(alpha: 0);
+  return LinearGradient(
+    begin: const Alignment(-1, -0.7),
+    end: const Alignment(1, 0.7),
+    colors: [edge, edge, color, edge, edge],
+    stops: [0.0, c - 0.16, c, c + 0.16, 1.0],
+  );
 }
 
 class _Glare extends StatelessWidget {
-  final Alignment alignment;
   final double opacity;
-  const _Glare({required this.alignment, required this.opacity});
+  const _Glare({required this.opacity});
 
   @override
   Widget build(BuildContext context) {
     return Opacity(
       opacity: opacity.clamp(0.0, 1.0),
-      child: DecoratedBox(
+      child: const DecoratedBox(
         decoration: BoxDecoration(
           gradient: RadialGradient(
-            center: alignment,
-            radius: 0.7,
-            colors: const [
-              Color(0xCCFFFFFF),
-              Color(0x33FFFFFF),
-              Color(0x00FFFFFF),
-            ],
-            stops: const [0.0, 0.25, 0.7],
+            center: Alignment.center,
+            radius: 0.75,
+            colors: [Color(0xCCFFFFFF), Color(0x33FFFFFF), Color(0x00FFFFFF)],
+            stops: [0.0, 0.2, 0.6],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Directional wash shown while the top card is dragged toward an action: the
+/// half of the screen the card is heading to fills with that button's colour,
+/// its strength tracking the drag [progress] (−1 = full skip, +1 = full chat).
+class _EdgeTint extends StatelessWidget {
+  final double progress;
+  final Color chatColor;
+  const _EdgeTint({required this.progress, required this.chatColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = progress.clamp(-1.0, 1.0);
+    if (p == 0) return const SizedBox.shrink();
+    final right = p > 0;
+    final color = right ? chatColor : const Color(0xFFFF5A6E);
+    final strength = p.abs();
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: right ? Alignment.centerRight : Alignment.centerLeft,
+          end: Alignment.center,
+          colors: [
+            color.withValues(alpha: 0.5 * strength),
+            color.withValues(alpha: 0),
+          ],
         ),
       ),
     );
@@ -1166,10 +1061,14 @@ class _Glare extends StatelessWidget {
 }
 
 class _TopBadge extends StatelessWidget {
-  const _TopBadge();
+  /// The card's accent colour (derived from the character), used to tint the
+  /// logo. Lightened a touch so it stays legible on the dark badge.
+  final Color accent;
+  const _TopBadge({required this.accent});
 
   @override
   Widget build(BuildContext context) {
+    final tint = Color.lerp(accent, Colors.white, 0.25)!;
     return Container(
       width: 36,
       height: 36,
@@ -1186,7 +1085,7 @@ class _TopBadge extends StatelessWidget {
         child: SvgPicture.string(
           glazeFilledLogoSvg,
           fit: BoxFit.contain,
-          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          colorFilter: ColorFilter.mode(tint, BlendMode.srcIn),
         ),
       ),
     );
@@ -1266,42 +1165,3 @@ class _CardInfo extends StatelessWidget {
   }
 }
 
-class _Stamp extends StatelessWidget {
-  final String label;
-  final Color color;
-  final double angle;
-  final double opacity;
-  const _Stamp({
-    required this.label,
-    required this.color,
-    required this.angle,
-    required this.opacity,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: opacity,
-      child: Transform.rotate(
-        angle: angle,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color, width: 4),
-            color: Colors.black.withValues(alpha: 0.25),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
