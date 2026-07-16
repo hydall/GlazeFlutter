@@ -75,6 +75,13 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
   /// peeking next cards so nothing shows behind the card as it flies away.
   bool _openingChat = false;
 
+  /// True while a card is flying off (fly-off, not spring-back). The action
+  /// highlight (edge tint + button glow) is pinned to 0 while this is set so it
+  /// fades out the instant the swipe commits, instead of tracking the drag
+  /// offset — which balloons during the fly-off and would otherwise hold the
+  /// highlight at full strength until the card lands.
+  bool _flinging = false;
+
   /// Drives fly-off / spring-back of the top card by tweening [_drag].
   late final AnimationController _swipeCtrl;
   Animation<Offset>? _swipeTween;
@@ -133,23 +140,32 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     return (cardW * mq.devicePixelRatio).round();
   }
 
-  /// Warms the image cache for the current card and the next few in the deck so
-  /// dealing the next card never blocks on a fresh full-resolution decode. Runs
-  /// off the swipe's critical path (post-mount and after each [_advance]).
+  /// Warms the image cache for the current card and the next couple in the deck
+  /// so dealing the next card never blocks on a fresh full-resolution decode.
+  ///
+  /// Deferred to a post-frame callback so the (potentially heavy) full-res
+  /// decodes never contend with the fly-off animation and re-freeze the swipe —
+  /// the earlier version precached four images synchronously inside [_advance],
+  /// saturating the decode/raster threads at the exact moment the next card
+  /// needed to become responsive. Two ahead is enough: the top card is the
+  /// previous peek (already warm) and the peek is warmed one deal early.
   void _precacheDeck() {
     if (!mounted) return;
-    final cacheW = _imageCacheWidth();
-    const lookAhead = 4; // current + next three
-    for (var k = 0; k < lookAhead; k++) {
-      final i = _index + k;
-      if (i < 0 || i >= _deck.length) break;
-      final provider = holoCardImageProvider(_deck[i], cacheW);
-      if (provider != null) {
-        // Swallow errors (missing/corrupt file) — the card falls back to its
-        // placeholder on display anyway.
-        precacheImage(provider, context, onError: (_, _) {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final cacheW = _imageCacheWidth();
+      const lookAhead = 2; // the upcoming peek + the one after it
+      for (var k = 1; k <= lookAhead; k++) {
+        final i = _index + k;
+        if (i < 0 || i >= _deck.length) break;
+        final provider = holoCardImageProvider(_deck[i], cacheW);
+        if (provider != null) {
+          // Swallow errors (missing/corrupt file) — the card falls back to its
+          // placeholder on display anyway.
+          precacheImage(provider, context, onError: (_, _) {});
+        }
       }
-    }
+    });
   }
 
   @override
@@ -169,7 +185,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
 
     _swipeCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 320),
+      // Snappy fly-off/spring-back: the next card's gestures stay blocked until
+      // this finishes, so a shorter throw makes the deck feel immediately
+      // responsive again after a swipe.
+      duration: const Duration(milliseconds: 230),
     )..addListener(_onSwipeTick);
 
     _shimmerCtrl = AnimationController(
@@ -345,6 +364,11 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     final card = _current;
     if (card == null) return;
     _armedDir = 0;
+    // Drop the action highlight immediately: the drag offset balloons as the
+    // card flies off, so without this the tint/glow would stay pinned at full
+    // until the card lands. The swipe controller's first tick rebuilds with this
+    // set, easing the highlight out over its own short fade.
+    _flinging = true;
     // A flipped card flies off as its front, not its back.
     if (_flipped) {
       _flipped = false;
@@ -376,6 +400,7 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
   void _advance() {
     setState(() {
       _drag = Offset.zero;
+      _flinging = false;
       // The next card always starts front-side up.
       _flipped = false;
       _flipCtrl.value = 0;
@@ -415,6 +440,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     final cardW = math.min(size.width * 0.82, 350.0);
     final cardH = math.min(cardW * 1.5, size.height * 0.62);
     final progress = (_drag.dx / _threshold).clamp(-1.0, 1.0).toDouble();
+    // The action highlight follows the live drag, but snaps to 0 the moment a
+    // fly-off commits so it fades out immediately instead of riding the card's
+    // (huge) fly-off offset. The card visuals below still use the raw [progress].
+    final highlightProgress = _flinging ? 0.0 : progress;
 
     // A transparent Material provides the ambient DefaultTextStyle the overlay
     // sits on. `showGeneralDialog` doesn't insert one, so without it every Text
@@ -449,7 +478,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
         // red for skip).
         Positioned.fill(
           child: IgnorePointer(
-            child: _EdgeTint(progress: progress, chatColor: context.cs.primary),
+            child: _EdgeTint(
+              progress: highlightProgress,
+              chatColor: context.cs.primary,
+            ),
           ),
         ),
         SafeArea(
@@ -476,7 +508,7 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
                 ),
               ),
               _ActionBar(
-                progress: progress,
+                progress: highlightProgress,
                 onSkip: () {
                   if (_current != null && !_swipeCtrl.isAnimating) {
                     _drag = const Offset(-30, 0);
@@ -704,7 +736,7 @@ class _ActionBar extends StatelessWidget {
     // it keeps the buttons from shrinking "за кадр".
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: progress.clamp(-1.0, 1.0)),
-      duration: const Duration(milliseconds: 180),
+      duration: const Duration(milliseconds: 130),
       curve: Curves.easeOut,
       builder: (context, p, _) {
         final skipScale = 1.0 + (p < 0 ? -p * 0.18 : 0.0);
@@ -1248,7 +1280,7 @@ class _EdgeTint extends StatelessWidget {
     // than snapping off the instant a card flies away and the drag resets.
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: progress.clamp(-1.0, 1.0)),
-      duration: const Duration(milliseconds: 180),
+      duration: const Duration(milliseconds: 130),
       curve: Curves.easeOut,
       builder: (context, p, _) {
         if (p.abs() < 0.001) return const SizedBox.shrink();
@@ -1292,7 +1324,13 @@ class _TopBadgeState extends State<_TopBadge> {
   @override
   void initState() {
     super.initState();
-    _extractAccent();
+    // Deferred a frame: PaletteGenerator quantizes on the main isolate, so
+    // running it inline as a freshly-dealt card mounts adds a hitch right when
+    // the swipe needs to stay smooth. The badge shows its fallback tint until
+    // then (a frame later), which is imperceptible.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _extractAccent();
+    });
   }
 
   Future<void> _extractAccent() async {
