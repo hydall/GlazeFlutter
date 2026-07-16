@@ -676,14 +676,18 @@ class _SheetViewState extends ConsumerState<SheetView>
         builder: (context) {
           final mediaQuery = MediaQuery.of(context);
 
+          // Reserve the system navigation-bar inset at the bottom so the last
+          // row never sits under the nav bar in edge-to-edge. fitContent sheets
+          // keep the bare inset (their bodies add their own margin); other
+          // sheets, whose bodies assumed a zero inset, get inset + a margin.
           final safeBottom = widget.fitContent
               ? mediaQuery.padding.bottom
-              : 0.0;
+              : mediaQuery.padding.bottom + 16;
           final innerChild = Padding(
             padding: widget.bodyPadding ?? EdgeInsets.zero,
             child: Padding(
               padding: EdgeInsets.only(
-                bottom: isKeyboardOpen ? bottomInset + 10 : safeBottom,
+                bottom: isKeyboardOpen ? bottomInset + 16 : safeBottom,
               ),
               child: Align(
                 alignment: Alignment.topCenter,
