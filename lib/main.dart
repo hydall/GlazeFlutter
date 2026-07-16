@@ -27,6 +27,35 @@ Future<void> main() async {
       ),
     );
   }
+  // Draw the app's own background behind the system status/navigation bars and
+  // keep those bars transparent. Without this the OS paints the navigation bar
+  // with the Android *window* background, which follows the system light/dark
+  // setting (see android/.../values*/styles.xml). On a device whose OS is in
+  // light mode while the app is forced dark (e.g. MIUI/HyperOS on Poco), that
+  // left a light strip behind the navigation bar; some OEMs additionally force
+  // a contrast scrim there. `edgeToEdge` + transparent bars + contrast disabled
+  // lets [GlazeBackground] paint edge-to-edge instead. The floating nav bar and
+  // other bottom UI already offset themselves by MediaQuery.padding.bottom.
+  try {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarContrastEnforced: false,
+        systemStatusBarContrastEnforced: false,
+      ),
+    );
+  } catch (error, stackTrace) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'startup',
+        context: ErrorDescription('system UI overlay setup failed'),
+      ),
+    );
+  }
   runApp(
     EasyLocalization(
       supportedLocales: const [Locale('en'), Locale('ru')],

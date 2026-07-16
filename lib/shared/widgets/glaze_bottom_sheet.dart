@@ -297,6 +297,11 @@ class _GlazeBottomSheetContentState
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    // The modal route wraps us in SafeArea(bottom: false), so the sheet must
+    // reserve the system navigation-bar inset itself — otherwise (in
+    // edge-to-edge) the last row sits under the nav bar. padding.bottom is 0
+    // while the keyboard is up, so it never double-counts with bottomInset.
+    final safeBottom = MediaQuery.of(context).padding.bottom;
     final batterySaver = ref.watch(
       appSettingsProvider.select((s) => s.value?.batterySaver ?? false),
     );
@@ -320,7 +325,7 @@ class _GlazeBottomSheetContentState
               child: Padding(
                 padding: EdgeInsets.only(
                   top: _headerH,
-                  bottom: bottomInset + 10,
+                  bottom: bottomInset + safeBottom + 16,
                 ),
                 child: RawScrollbar(
                   controller: _scrollController,

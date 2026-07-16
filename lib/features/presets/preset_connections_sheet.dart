@@ -65,7 +65,12 @@ class _PresetConnectionsSheetState
           ),
           showBack: true,
           fitContent: true,
-          body: ListView(
+          // Builder so `MediaQuery.paddingOf` reads the inset SheetView injects
+          // *inside* itself (real safe-area top + floating header height). Using
+          // the outer state `context` here would only see the safe-area top, so
+          // the floating title overlapped the first section.
+          body: Builder(
+            builder: (context) => ListView(
             shrinkWrap: true,
             padding: EdgeInsets.only(
               top: MediaQuery.paddingOf(context).top + 4,
@@ -113,6 +118,7 @@ class _PresetConnectionsSheetState
                       ),
               ),
             ],
+            ),
           ),
         );
       },
