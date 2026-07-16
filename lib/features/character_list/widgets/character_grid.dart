@@ -1,15 +1,12 @@
-import 'dart:math';
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glass_surface.dart';
-import '../character_detail_screen.dart';
 import '../character_sort.dart';
 import 'character_card.dart';
+import 'tinder_card_overlay.dart';
 
 class CharacterGrid extends StatelessWidget {
   final List<Character> characters;
@@ -60,22 +57,13 @@ class CharacterGrid extends StatelessWidget {
     this.randomPool,
   });
 
-  /// Opens a random character from the full matching set in the detail sheet.
-  /// Mirrors the card's tap behaviour (modal sheet + route-return nav).
-  Future<void> _openRandom(BuildContext context) async {
+  /// Opens the Tinder-style discovery overlay over the full matching set: a
+  /// holographic card the user can swipe right (start a new chat) or left (skip
+  /// to the next random card).
+  void _openTinder(BuildContext context) {
     final pool = randomPool?.call() ?? characters;
     if (pool.isEmpty) return;
-    final picked = pool[Random().nextInt(pool.length)];
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => CharacterDetailScreen(charId: picked.id),
-    );
-    if (result != null && result.isNotEmpty && context.mounted) {
-      context.go(result);
-    }
+    showTinderCardOverlay(context, pool);
   }
 
   @override
@@ -92,7 +80,7 @@ class CharacterGrid extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (characters.isNotEmpty) ...[
-                  _DiceButton(onTap: () => _openRandom(context)),
+                  _DiceButton(onTap: () => _openTinder(context)),
                   const SizedBox(width: 10),
                 ],
                 if (onFilterTap != null) ...[
@@ -224,7 +212,7 @@ class _DiceButton extends StatelessWidget {
           border: Border.all(color: context.cs.primary.withValues(alpha: 0.18)),
           child: Center(
             child: Icon(
-              Icons.casino_rounded,
+              Icons.style_rounded,
               size: 18,
               color: context.cs.primary,
             ),
