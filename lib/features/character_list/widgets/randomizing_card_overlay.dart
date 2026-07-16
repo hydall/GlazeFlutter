@@ -446,16 +446,20 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     final children = <Widget>[];
 
     // Peek of the next card, growing toward full size as the top card leaves.
-    // Hidden once a chat is being opened, so the deck doesn't show behind the
-    // card as it flies off into the new chat.
     final next = _next;
-    if (next != null && !_openingChat) {
+    if (next != null) {
       final peekScale = 0.9 + 0.1 * absProgress;
       final peekOpacity = 0.55 + 0.45 * absProgress;
+      // When a chat is opening, fade the deck out smoothly — in step with the
+      // top card's fly-off (driven by the swipe controller) — instead of
+      // popping it away. `_swipeCtrl` runs 0→1 over the fling, so the peek
+      // dissolves as the card leaves.
+      final openingFade =
+          _openingChat ? (1.0 - _swipeCtrl.value).clamp(0.0, 1.0) : 1.0;
       children.add(
         Center(
           child: Opacity(
-            opacity: peekOpacity,
+            opacity: (peekOpacity * openingFade).clamp(0.0, 1.0),
             child: Transform.scale(
               scale: peekScale,
               child: RepaintBoundary(
