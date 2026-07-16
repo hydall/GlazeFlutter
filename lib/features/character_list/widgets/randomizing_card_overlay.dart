@@ -13,6 +13,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../../../core/models/character.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/card_tag_chips.dart';
 
 /// Opens the randomizing character-discovery overlay.
 ///
@@ -305,7 +306,13 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     final cardH = math.min(cardW * 1.5, size.height * 0.62);
     final progress = (_drag.dx / _threshold).clamp(-1.0, 1.0).toDouble();
 
-    return Stack(
+    // A transparent Material provides the ambient DefaultTextStyle the overlay
+    // sits on. `showGeneralDialog` doesn't insert one, so without it every Text
+    // inherits the framework's "missing style" debug paint (the yellow
+    // double-underline) instead of the app's Inter theme text.
+    return Material(
+      type: MaterialType.transparency,
+      child: Stack(
       children: [
         // Dimmed, blurred backdrop over the character list. Isolated in its own
         // AnimatedBuilder so it only repaints during the entry fade — not on
@@ -381,6 +388,7 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
           ),
         ),
       ],
+      ),
     );
   }
 
@@ -671,6 +679,16 @@ class HoloCard extends StatelessWidget {
     return (dn != null && dn.isNotEmpty) ? dn : character.name;
   }
 
+  /// Short blurb shown under the name — the creator's notes when present (the
+  /// user-facing tagline), falling back to the character description.
+  String? get _shortDescription {
+    final notes = character.creatorNotes?.trim();
+    if (notes != null && notes.isNotEmpty) return notes;
+    final desc = character.description?.trim();
+    if (desc != null && desc.isNotEmpty) return desc;
+    return null;
+  }
+
   Color get _avatarColor {
     final c = character.color;
     if (c != null) {
@@ -694,11 +712,13 @@ class HoloCard extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 1 — Parallax portrait.
+          // 1 — Parallax portrait. The 1.14 overscan gives the parallax shift
+          // room to move without exposing the card edge; everything stays inside
+          // the ClipRRect below.
           Transform.scale(
             scale: 1.14,
             child: Transform.translate(
-              offset: Offset(tiltX * 10, tiltY * 10),
+              offset: Offset(tiltX * 7, tiltY * 7),
               child: _buildImage(),
             ),
           ),
@@ -773,32 +793,46 @@ class HoloCard extends StatelessWidget {
             ),
           ),
 
-          // 8 — Name / creator / tags, counter-parallaxed.
+          // 8 — Name / creator / short description, counter-parallaxed.
           Positioned(
             left: 20,
             right: 20,
             bottom: 22,
             child: Transform.translate(
-              offset: Offset(tiltX * 14, tiltY * 14),
+              offset: Offset(tiltX * 12, tiltY * 12),
               child: _CardInfo(
                 name: _displayName,
                 creator: character.creator,
-                tags: character.tags,
+                description: _shortDescription,
               ),
             ),
           ),
 
-          // 9 — Top "G" badge.
+          // 9 — Tags in the top-left corner, colour-coded like the list cards.
+          if (character.tags.isNotEmpty)
+            Positioned(
+              top: 18,
+              left: 18,
+              right: 64, // clear the "G" badge
+              child: Transform.translate(
+                offset: Offset(tiltX * 10, tiltY * 10),
+                child: IgnorePointer(
+                  child: CardTagChips(tags: character.tags, max: 3),
+                ),
+              ),
+            ),
+
+          // 10 — Top "G" badge.
           Positioned(
             top: 18,
             right: 18,
             child: Transform.translate(
-              offset: Offset(tiltX * 14, tiltY * 14),
+              offset: Offset(tiltX * 12, tiltY * 12),
               child: const _TopBadge(),
             ),
           ),
 
-          // 10 — SKIP / CHAT stamps.
+          // 11 — SKIP / CHAT stamps.
           if (interactive) ...[
             Positioned(
               top: 28,
@@ -826,15 +860,18 @@ class HoloCard extends StatelessWidget {
       ),
     );
 
-    // Outer casing + 3D tilt.
+    // Outer casing + 3D tilt. The rotation is kept gentle so the projected card
+    // stays within its footprint; `clipBehavior` trims the 4px frame + holo
+    // layers to the rounded casing so nothing bleeds past the corners.
     return Transform(
       alignment: Alignment.center,
       transform: Matrix4.identity()
-        ..setEntry(3, 2, 0.0012)
-        ..rotateX(tiltY * 0.16)
-        ..rotateY(tiltX * 0.16),
+        ..setEntry(3, 2, 0.0011)
+        ..rotateX(tiltY * 0.11)
+        ..rotateY(tiltX * 0.11),
       child: Container(
         padding: const EdgeInsets.all(4),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
           gradient: const LinearGradient(
@@ -1139,12 +1176,12 @@ class _TopBadge extends StatelessWidget {
 class _CardInfo extends StatelessWidget {
   final String name;
   final String? creator;
-  final List<String> tags;
-  const _CardInfo({required this.name, this.creator, required this.tags});
+  final String? description;
+  const _CardInfo({required this.name, this.creator, this.description});
 
   @override
   Widget build(BuildContext context) {
-    final shownTags = tags.take(3).toList();
+    final desc = description?.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -1190,40 +1227,21 @@ class _CardInfo extends StatelessWidget {
             ),
           ),
         ],
-        if (shownTags.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [for (final t in shownTags) _MiniTag(tag: t)],
+        if (desc != null && desc.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            desc,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.3,
+              color: Colors.white.withValues(alpha: 0.82),
+              shadows: const [Shadow(blurRadius: 4, color: Colors.black87)],
+            ),
           ),
         ],
       ],
-    );
-  }
-}
-
-class _MiniTag extends StatelessWidget {
-  final String tag;
-  const _MiniTag({required this.tag});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        tag,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-        ),
-      ),
     );
   }
 }

@@ -219,6 +219,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   .save(s.copyWith(openCardAfterImport: v)),
             ),
             MenuSwitchItem(
+              label: 'menu_use_standard_randomizer'.tr(),
+              description: 'desc_use_standard_randomizer'.tr(),
+              value: s.useStandardRandomizer,
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .save(s.copyWith(useStandardRandomizer: v)),
+            ),
+            MenuSwitchItem(
               label: 'menu_extract_janitor_locally'.tr(),
               description: 'desc_extract_janitor_locally'.tr(),
               value: s.extractJanitorLocally,

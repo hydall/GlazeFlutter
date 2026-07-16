@@ -1,9 +1,15 @@
+import 'dart:math';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glass_surface.dart';
+import '../../settings/app_settings_provider.dart';
+import '../character_detail_screen.dart';
 import '../character_sort.dart';
 import 'character_card.dart';
 import 'randomizing_card_overlay.dart';
@@ -57,13 +63,37 @@ class CharacterGrid extends StatelessWidget {
     this.randomPool,
   });
 
+  /// The pool the shuffle button draws from — always the currently matching set
+  /// (active filters, search and the hidden toggle already applied upstream via
+  /// [randomPool]); falls back to the rendered cards when no resolver is given.
+  List<Character> _randomPool() => randomPool?.call() ?? characters;
+
   /// Opens the randomizing discovery overlay over the full matching set: a
   /// holographic card the user can swipe right (start a new chat) or left (skip
   /// to the next random card).
   void _openRandomizing(BuildContext context) {
-    final pool = randomPool?.call() ?? characters;
+    final pool = _randomPool();
     if (pool.isEmpty) return;
     showRandomizingCardOverlay(context, pool);
+  }
+
+  /// Classic shuffle: opens one random character straight in the detail sheet.
+  /// Mirrors the card's tap behaviour (modal sheet + route-return nav). Used
+  /// when "use standard randomizer" is enabled in settings.
+  Future<void> _openStandardRandom(BuildContext context) async {
+    final pool = _randomPool();
+    if (pool.isEmpty) return;
+    final picked = pool[Random().nextInt(pool.length)];
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CharacterDetailScreen(charId: picked.id),
+    );
+    if (result != null && result.isNotEmpty && context.mounted) {
+      context.go(result);
+    }
   }
 
   @override
@@ -80,7 +110,21 @@ class CharacterGrid extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (characters.isNotEmpty) ...[
-                  _DiceButton(onTap: () => _openRandomizing(context)),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final standard = ref.watch(
+                        appSettingsProvider.select(
+                          (s) => s.value?.useStandardRandomizer ?? false,
+                        ),
+                      );
+                      return _DiceButton(
+                        standard: standard,
+                        onTap: () => standard
+                            ? _openStandardRandom(context)
+                            : _openRandomizing(context),
+                      );
+                    },
+                  ),
                   const SizedBox(width: 10),
                 ],
                 if (onFilterTap != null) ...[
@@ -197,7 +241,11 @@ class _SortDirButton extends StatelessWidget {
 class _DiceButton extends StatelessWidget {
   final VoidCallback onTap;
 
-  const _DiceButton({required this.onTap});
+  /// Classic shuffle uses the dice icon; the randomizing (Holocard) overlay
+  /// uses the stacked-cards icon.
+  final bool standard;
+
+  const _DiceButton({required this.onTap, this.standard = false});
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +260,7 @@ class _DiceButton extends StatelessWidget {
           border: Border.all(color: context.cs.primary.withValues(alpha: 0.18)),
           child: Center(
             child: Icon(
-              Icons.style_rounded,
+              standard ? Icons.casino_rounded : Icons.style_rounded,
               size: 18,
               color: context.cs.primary,
             ),
