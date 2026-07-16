@@ -14,6 +14,15 @@ abstract class CloudAdapter {
   Future<void> invalidateFolderCache();
 }
 
+class CloudFileNotFoundException implements Exception {
+  final String path;
+
+  const CloudFileNotFoundException(this.path);
+
+  @override
+  String toString() => 'Cloud file not found: $path';
+}
+
 class CloudFileInfo {
   final String path;
   final String name;

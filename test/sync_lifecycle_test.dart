@@ -325,11 +325,13 @@ class FakeCloudAdapter implements CloudAdapter {
   final Map<String, String> files = {};
   final List<String> listFolderCalls = [];
   final Set<String> ensuredFolders = {};
+  final Set<String> downloadFailures = {};
 
   /// When true, [listFolder] returns paths without the `/Glaze` prefix (Dropbox-style).
   bool stripGlazePrefixInList = false;
   bool omitFilesFromList = false;
   bool listFolderThrows = false;
+  final Set<String> listFolderFailures = {};
   bool requireEnsuredParentForUpload = false;
   final uploadFailures = <String>{};
 
@@ -368,8 +370,11 @@ class FakeCloudAdapter implements CloudAdapter {
 
   @override
   Future<String> download(String path) async {
+    if (downloadFailures.contains(path)) {
+      throw Exception('Download failed: $path');
+    }
     final data = files[path];
-    if (data == null) throw Exception('File not found: $path');
+    if (data == null) throw CloudFileNotFoundException(path);
     return data;
   }
 
@@ -393,7 +398,9 @@ class FakeCloudAdapter implements CloudAdapter {
   @override
   Future<List<CloudFileInfo>> listFolder(String path) async {
     listFolderCalls.add(path);
-    if (listFolderThrows) throw Exception('listFolder failed: $path');
+    if (listFolderThrows || listFolderFailures.contains(path)) {
+      throw Exception('listFolder failed: $path');
+    }
     if (omitFilesFromList) return [];
     return files.keys.where((k) => k.startsWith(path) && !k.endsWith('/')).map((
       k,
@@ -1401,6 +1408,45 @@ void main() {
       expect(initial.message, contains('Nothing to push'));
     },
   );
+
+  test(
+    'Push aborts instead of re-uploading everything when manifest download fails',
+    () async {
+      final world = SyncWorld();
+
+      await world.characters.put(makeChar('c1', name: 'Alpha'));
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      final manifestPath = cloudPath('manifest', 'manifest');
+      final characterPath = cloudPath('character', 'c1');
+      final characterJson = world.cloud.files[characterPath];
+      world.cloud.downloadFailures.add(manifestPath);
+
+      await expectLater(
+        world.engine.pushEntities(onProgress: (_) {}),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(world.cloud.files[characterPath], characterJson);
+      expect(world.cloud.files[manifestPath], isNotNull);
+    },
+  );
+
+  test('Push trusts matching hashes for folders whose listing fails', () async {
+    final world = SyncWorld();
+
+    await world.characters.put(makeChar('c1', name: 'Alpha'));
+    await world.chats.put(makeChat('s1', charId: 'c1'));
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    world.cloud.listFolderFailures.add('$cloudBase/chats');
+    final progressList = <SyncProgress>[];
+    await world.engine.pushEntities(onProgress: progressList.add);
+
+    final initial = firstTaskProgress(progressList);
+    expect(initial.total, 0);
+    expect(initial.message, contains('Nothing to push'));
+  });
 
   test(
     'Push after wipe with no cloud manifest does not scan cloud files',
