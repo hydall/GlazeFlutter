@@ -8,11 +8,19 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- Keep Android 13+ predictive back OFF (enableOnBackInvokedCallback below).
+         The chat screen is dominated by an InAppWebView platform view; with
+         predictive back enabled the WebView hijacks the OnBackInvoked gesture
+         before Flutter's PopScope (chat onBack, sheet dismissal, etc.) can
+         handle it, so the back gesture escaped to the system and minimized the
+         app instead of closing the drawer / leaving the chat. Legacy dispatch
+         keeps every PopScope working; the only thing lost is the predictive-back
+         peek animation. Re-enable only after verifying WebView back handling. -->
     <application
         android:label="Glaze"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:enableOnBackInvokedCallback="true"
+        android:enableOnBackInvokedCallback="false"
         android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
