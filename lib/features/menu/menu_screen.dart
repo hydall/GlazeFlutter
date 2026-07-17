@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +21,13 @@ import '../catalog/widgets/janitor_extract_sheet.dart';
 import '../catalog/widgets/janitor_login_sheet.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
+import '../lorebooks/lorebook_connections_sheet.dart';
+import '../personas/persona_connections_sheet.dart';
+import '../personas/persona_list_provider.dart';
+import '../presets/preset_connections_sheet.dart';
+import '../presets/preset_list_provider.dart';
+import '../../core/state/lorebook_provider.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import '../settings/app_settings_provider.dart';
 import 'update_dialog.dart';
 import '../../core/services/update_check_service.dart';
@@ -45,6 +53,21 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Dev-only: opens a connections sheet for the first available entity so the
+  /// shared connection-sheet widgets can be eyeballed. Toasts when the list is
+  /// empty (nothing to bind against yet).
+  void _openConnectionsTest({
+    required String? id,
+    required String emptyMsg,
+    required void Function(String id) open,
+  }) {
+    if (id == null) {
+      GlazeToast.show(context, emptyMsg);
+      return;
+    }
+    open(id);
   }
 
   Future<void> _openLink(String url) async {
@@ -156,6 +179,46 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                           builder: (_) => const MenuGroupDemoScreen(),
                         )),
+                      ),
+                      const MenuSubHeader('Connections sheets'),
+                      MenuItem(
+                        icon: Icons.person_outline,
+                        label: 'Persona connections',
+                        onTap: () => _openConnectionsTest(
+                          id: ref
+                              .read(personaListProvider)
+                              .value
+                              ?.firstOrNull
+                              ?.id,
+                          emptyMsg: 'No personas to preview',
+                          open: (id) => showPersonaConnections(context, id),
+                        ),
+                      ),
+                      MenuItem(
+                        icon: Icons.tune,
+                        label: 'Preset connections',
+                        onTap: () => _openConnectionsTest(
+                          id: ref
+                              .read(presetListProvider)
+                              .value
+                              ?.firstOrNull
+                              ?.id,
+                          emptyMsg: 'No presets to preview',
+                          open: (id) => showPresetConnections(context, id),
+                        ),
+                      ),
+                      MenuItem(
+                        icon: Icons.menu_book_outlined,
+                        label: 'Lorebook connections',
+                        onTap: () => _openConnectionsTest(
+                          id: ref
+                              .read(lorebooksProvider)
+                              .value
+                              ?.firstOrNull
+                              ?.id,
+                          emptyMsg: 'No lorebooks to preview',
+                          open: (id) => showLorebookConnections(context, id),
+                        ),
                       ),
                       MenuItem(
                         icon: Icons.auto_stories_outlined,
