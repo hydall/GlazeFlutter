@@ -34,7 +34,7 @@ Lorebook convertCharacterBook(
       caseSensitive: e['case_sensitive'] as bool?,
       matchWholeWords: e['match_whole_words'] as bool?,
       selectiveLogic: _mapSelectiveLogic(e['selective'] as bool?, e['selective_logic'] as int?),
-      probability: ((e['probability'] as num?)?.toDouble() ?? 1.0).round().clamp(0, 100),
+      probability: _mapProbability(e),
       group: (e['group'] as String?) ?? '',
       preventRecursion: e['prevent_recursion'] as bool? ?? false,
       sticky: e['constant'] as bool? ?? false ? 1 : 0,
@@ -49,6 +49,15 @@ Lorebook convertCharacterBook(
     activationTargetId: characterId,
     entries: entries,
   );
+}
+
+int _mapProbability(Map<String, dynamic> entry) {
+  final extensions = entry['extensions'];
+  final extensionProbability = extensions is Map
+      ? extensions['probability']
+      : null;
+  final probability = entry['probability'] ?? extensionProbability;
+  return probability is num ? probability.round().clamp(0, 100) : 100;
 }
 
 List<dynamic> _normalizeEntries(dynamic entries) {
@@ -132,7 +141,9 @@ Map<String, dynamic> lorebookToCharacterBookJson(Lorebook lorebook) {
     };
     if (e.scanDepth != null) entry['scan_depth'] = e.scanDepth!;
     if (e.caseSensitive != null) entry['case_sensitive'] = e.caseSensitive!;
-    if (e.matchWholeWords != null) entry['match_whole_words'] = e.matchWholeWords!;
+    if (e.matchWholeWords != null) {
+      entry['match_whole_words'] = e.matchWholeWords!;
+    }
     if (e.characterFilter != null) {
       entry['character_filter'] = {
         'names': e.characterFilter!.names,
