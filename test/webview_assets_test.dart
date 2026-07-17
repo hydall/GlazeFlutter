@@ -483,6 +483,22 @@ void main() {
       expect(wheelSection, contains('return;'));
     });
 
+    test('touch-drag on textarea scrolls the chat via scrollTopFn', () {
+      // The auto-growing textarea never scrolls itself, so a finger drag must
+      // be forwarded to the chat container instead of being swallowed.
+      expect(
+        editControllerJs,
+        contains("textarea.addEventListener('touchstart'"),
+      );
+      expect(
+        editControllerJs,
+        contains("textarea.addEventListener('touchmove'"),
+      );
+      // touchmove must be passive:false so preventDefault() can suppress the
+      // native caret/selection drag and hand the gesture to the chat scroll.
+      expect(editControllerJs, contains('scrollTopFn(scrollTopFn() - dy)'));
+    });
+
     test(
       'wheel listener calls stopPropagation to prevent chat container from also scrolling',
       () {
