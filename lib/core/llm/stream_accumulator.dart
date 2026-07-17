@@ -2,10 +2,13 @@ class StreamAccumulator {
   final String? tagStart;
   final String? tagEnd;
   final bool hasInlineTags;
+  final String? headerModel;
+  final String? headerInline;
 
   String _raw = '';
   String _text = '';
-  String _reasoning = '';
+  String _externalReasoning = '';
+  String _inlineReasoning = '';
   bool _hasExternalReasoning = false;
   bool _splitDone = false;
 
@@ -13,6 +16,8 @@ class StreamAccumulator {
     this.tagStart,
     this.tagEnd,
     this.hasInlineTags = false,
+    this.headerModel,
+    this.headerInline,
   });
 
   String _normalizeThinkTagVariants(String input) {
@@ -53,7 +58,7 @@ class StreamAccumulator {
 
   void consumeDelta(String delta, {String? reasoningDelta}) {
     if (reasoningDelta != null && reasoningDelta.isNotEmpty) {
-      _reasoning += reasoningDelta;
+      _externalReasoning += reasoningDelta;
       _hasExternalReasoning = true;
     }
 
@@ -67,19 +72,11 @@ class StreamAccumulator {
 
   void _resplit() {
     _raw = _normalizeThinkTagVariants(_raw);
-    if (_hasExternalReasoning) {
-      var content = _raw;
-      if (tagStart != null) content = content.replaceAll(tagStart!, '');
-      if (tagEnd != null) content = content.replaceAll(tagEnd!, '');
-      _text = content.trimLeft();
-      _splitDone = true;
-      return;
-    }
 
     final startIdx = _raw.indexOf(tagStart!);
     if (startIdx == -1) {
       _text = _raw;
-      _reasoning = '';
+      _inlineReasoning = '';
       _splitDone = false;
       return;
     }
@@ -87,20 +84,34 @@ class StreamAccumulator {
     final endIdx = _raw.indexOf(tagEnd!, startIdx + tagStart!.length);
     if (endIdx == -1) {
       _text = _raw.substring(0, startIdx).trimLeft();
-      _reasoning = _raw.substring(startIdx + tagStart!.length);
+      _inlineReasoning = _raw.substring(startIdx + tagStart!.length);
       _splitDone = false;
       return;
     }
 
+    _inlineReasoning = _raw.substring(startIdx + tagStart!.length, endIdx);
     _text = (_raw.substring(0, startIdx) + _raw.substring(endIdx + tagEnd!.length)).trimLeft();
-    _reasoning = _raw.substring(startIdx + tagStart!.length, endIdx);
     _splitDone = true;
   }
 
   void flush() {}
 
+  String _combineReasoning() {
+    final external = _externalReasoning.trim();
+    final inline = _inlineReasoning.trim();
+
+    if (external.isNotEmpty && inline.isNotEmpty) {
+      final hModel = headerModel ?? '';
+      final hInline = headerInline ?? '';
+      final prefix = hModel.isNotEmpty ? '$hModel\n' : '';
+      final midfix = hInline.isNotEmpty ? '$hInline\n' : '';
+      return '$prefix$external\n\n---\n\n$midfix$inline';
+    }
+    return inline.isNotEmpty ? inline : external;
+  }
+
   String get text => _text;
-  String get reasoning => _reasoning;
+  String get reasoning => _combineReasoning();
   bool get hasExternalReasoning => _hasExternalReasoning;
   bool get splitDone => _splitDone;
 
@@ -109,7 +120,8 @@ class StreamAccumulator {
   void reset() {
     _raw = '';
     _text = '';
-    _reasoning = '';
+    _externalReasoning = '';
+    _inlineReasoning = '';
     _hasExternalReasoning = false;
     _splitDone = false;
   }

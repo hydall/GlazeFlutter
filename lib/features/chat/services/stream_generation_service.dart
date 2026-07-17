@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -416,6 +417,8 @@ class StreamGenerationService {
         tagStart: reasoningTagStart,
         tagEnd: reasoningTagEnd,
         hasInlineTags: hasInlineTags,
+        headerModel: 'reasoning_model'.tr(),
+        headerInline: 'reasoning_inline'.tr(),
       );
 
       final startGenTime = DateTime.now();
