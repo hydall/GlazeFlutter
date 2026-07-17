@@ -6,11 +6,23 @@ import '../../models/character_knowledge_fact.dart';
 /// Lucy's relationship with Danvi must not silently become a global personality
 /// rewrite. The model gets the card normally, then this bounded higher-priority
 /// delta for the relevant relationship/subject only.
+///
+/// Fact selection has two tiers:
+///   - Tier A (canon-critical): `persistent_condition`, `commitment`,
+///     `identity_development`. These are always included and are EXEMPT from
+///     `maxFacts`. Dropping them would let the model violate a hard boundary,
+///     break an active commitment, or regress an established identity shift.
+///   - Tier B (priority): `relationship`. Bypasses the relevance filter (a
+///     durable relationship truth must persist even when the subject is not
+///     named literally in the latest turn) but is subject to `maxFacts`.
+///   - Relevance-caught: `knowledge`, `behavior_change`, `goal`. Included only
+///     when their subject/entities/topics appear in the latest user+assistant
+///     text, sorted by importance then recency, subject to `maxFacts`.
 String? compileCharacterKnowledgeProjection(
   List<CharacterKnowledgeFact> facts, {
   String latestUserText = '',
   String latestAssistantText = '',
-  int maxFacts = 8,
+  int maxFacts = 12,
 }) {
   if (facts.isEmpty || maxFacts <= 0) return null;
 
@@ -31,29 +43,29 @@ String? compileCharacterKnowledgeProjection(
     return terms.any(context.contains);
   }
 
-  final currentRelationshipFacts = facts.where(
-    (fact) =>
-        fact.factClass == CharacterKnowledgeFactClass.relationship ||
-        fact.factClass == CharacterKnowledgeFactClass.identityDevelopment ||
-        fact.factClass == CharacterKnowledgeFactClass.persistentCondition,
-  );
-  final candidates =
+  final tierA =
+      facts.where(_isCanonCriticalFact).toList()
+        ..sort((left, right) => right.importance.compareTo(left.importance));
+  final tierBAndRelevance =
       <CharacterKnowledgeFact>{
-        ...currentRelationshipFacts,
+        ...facts.where(_isRelationshipFact),
         ...facts.where(relevant),
-      }.toList()..sort((left, right) {
-        final leftMandatory = _isMandatoryCurrentFact(left);
-        final rightMandatory = _isMandatoryCurrentFact(right);
-        if (leftMandatory != rightMandatory) return rightMandatory ? 1 : -1;
-        final importance = right.importance.compareTo(left.importance);
-        return importance != 0
-            ? importance
-            : right.updatedAt.compareTo(left.updatedAt);
-      });
-  if (candidates.isEmpty) return null;
+      }.where((fact) => !_isCanonCriticalFact(fact)).toList()
+        ..sort((left, right) {
+          final leftPriority = _isRelationshipFact(left);
+          final rightPriority = _isRelationshipFact(right);
+          if (leftPriority != rightPriority) return rightPriority ? 1 : -1;
+          final importance = right.importance.compareTo(left.importance);
+          return importance != 0
+              ? importance
+              : right.updatedAt.compareTo(left.updatedAt);
+        });
+
+  final selected = [...tierA, ...tierBAndRelevance.take(maxFacts)];
+  if (selected.isEmpty) return null;
 
   final lines = <String>[];
-  for (final fact in candidates.take(maxFacts)) {
+  for (final fact in selected) {
     final scope = fact.scopeKey.isNotEmpty
         ? fact.scopeKey
         : '${fact.factClass.wireName}:${fact.subjectKey}';
@@ -75,7 +87,10 @@ ${lines.join('\n')}
 </current_character_state>''';
 }
 
-bool _isMandatoryCurrentFact(CharacterKnowledgeFact fact) =>
-    fact.factClass == CharacterKnowledgeFactClass.relationship ||
-    fact.factClass == CharacterKnowledgeFactClass.identityDevelopment ||
-    fact.factClass == CharacterKnowledgeFactClass.persistentCondition;
+bool _isCanonCriticalFact(CharacterKnowledgeFact fact) =>
+    fact.factClass == CharacterKnowledgeFactClass.persistentCondition ||
+    fact.factClass == CharacterKnowledgeFactClass.commitment ||
+    fact.factClass == CharacterKnowledgeFactClass.identityDevelopment;
+
+bool _isRelationshipFact(CharacterKnowledgeFact fact) =>
+    fact.factClass == CharacterKnowledgeFactClass.relationship;
