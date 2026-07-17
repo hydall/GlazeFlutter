@@ -230,14 +230,23 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
   /// Items whose `messageIds` does NOT contain [messageId] are preserved
   /// (they were sourced from other messages and should survive).
   Future<void> deleteForMessage(String sessionId, String messageId) async {
+    await deleteForMessages(sessionId, {messageId});
+  }
+
+  /// Atomically removes entries and drafts sourced from any deleted message.
+  Future<void> deleteForMessages(
+    String sessionId,
+    Set<String> messageIds,
+  ) async {
+    if (messageIds.isEmpty) return;
     await transaction(() async {
       final existing = await getBySessionId(sessionId);
       if (existing == null) return;
       final keptEntries = existing.entries
-          .where((e) => !e.messageIds.contains(messageId))
+          .where((e) => !e.messageIds.any(messageIds.contains))
           .toList();
       final keptDrafts = existing.pendingDrafts
-          .where((d) => !d.messageIds.contains(messageId))
+          .where((d) => !d.messageIds.any(messageIds.contains))
           .toList();
       if (keptEntries.length == existing.entries.length &&
           keptDrafts.length == existing.pendingDrafts.length) {

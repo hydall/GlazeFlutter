@@ -88,59 +88,66 @@ class ChatMessageService {
     return _persist(session, newMessages);
   }
 
-  ChatSession deleteMessage(ChatSession session, int index) {
-    if (index < 0 || index >= session.messages.length) return session;
-    final messageId = session.messages[index].id;
-    final newMessages = List<ChatMessage>.from(session.messages)
-      ..removeAt(index);
-    // Drop tracker snapshots for the deleted message so the read path
-    // (getLatestCommitted) falls back to the previous message's committed
-    // snapshot — rollback is emergent, no explicit restore needed.
+  Future<ChatSession> deleteMessage(ChatSession session, int index) {
+    return deleteMessages(session, {index});
+  }
+
+  /// Deletes multiple messages with one session write and one cleanup pass.
+  Future<ChatSession> deleteMessages(
+    ChatSession session,
+    Set<int> indices,
+  ) async {
+    final validIndices = indices
+        .where((index) => index >= 0 && index < session.messages.length)
+        .toSet();
+    if (validIndices.isEmpty) return session;
+
+    final messageIds = validIndices
+        .map((index) => session.messages[index].id)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final newMessages = <ChatMessage>[
+      for (var i = 0; i < session.messages.length; i++)
+        if (!validIndices.contains(i)) session.messages[i],
+    ];
+
     final snapshotRepo = _ref.read(trackerSnapshotRepoProvider);
     final trackerRepo = _ref.read(trackerRepoProvider);
     final memoryBookRepo = _ref.read(memoryBookRepoProvider);
-    // Drop memory book entries/drafts sourced from this message. Each
-    // MemoryEntry / MemoryDraft carries `messageIds`; items whose
-    // `messageIds` contains `messageId` are removed, items sourced from
-    // other messages are preserved. Wrapped in catchError so a DB error
-    // never blocks the message deletion itself.
-    memoryBookRepo
-        .deleteForMessage(session.id, messageId)
-        .catchError((Object _) {});
-    _ref
-        .read(characterKnowledgeFactRepoProvider)
-        .retractForMessage(session.id, messageId)
-        .catchError((Object _) {});
-    snapshotRepo
-        .deleteForMessage(session.id, messageId)
-        .then((_) {
-          // After the deleted message's snapshots are gone, the latest
-          // committed snapshot is the one written for the PREVIOUS message —
-          // that is the tracker state the user should see after deletion.
-          // Roll back the live `tracker_rows` store to it so the UI
-          // (agentic_operations_log_dialog "Tracker values" tab)
-          // shows the rolled-back state
-          // instead of the cumulative state that included writes from the
-          // deleted message. Sentinel anchor (messageId='') survives
-          // deleteForMessage and serves as the legacy baseline.
-          return snapshotRepo.getLatestCommitted(session.id);
-        })
-        .then((snapshot) {
-          if (snapshot == null) {
-            // No committed snapshot exists — the deleted message was the first
-            // (its snapshot was uncommitted; commit happens only on the next
-            // user turn via chat_provider.commitLatest). There is nothing to
-            // roll back to, so clear the live store entirely: otherwise the
-            // trackers written by the deleted turn would persist in
-            // `tracker_rows` forever (the UI falls back to tracker_rows when
-            // no snapshot is found). See chat_message_service.deleteMessage.
-            trackerRepo.clearForSession(session.id);
-            return;
-          }
-          trackerRepo.replaceForSession(session.id, snapshot.trackers);
-        })
-        .catchError((Object _) {});
-    return _persist(session, newMessages);
+
+    await Future.wait([
+      memoryBookRepo.deleteForMessages(session.id, messageIds),
+      _ref
+          .read(characterKnowledgeFactRepoProvider)
+          .retractForMessages(session.id, messageIds),
+      snapshotRepo.deleteForMessages(session.id, messageIds),
+    ]).catchError((Object e) {
+      debugPrint('[ChatMessageService] failed to clean deleted messages: $e');
+      return <void>[];
+    });
+
+    try {
+      final snapshot = await snapshotRepo.getLatestCommitted(session.id);
+      if (snapshot == null) {
+        await trackerRepo.clearForSession(session.id);
+      } else {
+        await trackerRepo.replaceForSession(session.id, snapshot.trackers);
+      }
+    } catch (e) {
+      debugPrint('[ChatMessageService] failed to roll back trackers: $e');
+    }
+
+    // Current chunk indices no longer map to the same message ranges. Drop the
+    // session index now; post-generation indexing will rebuild current chunks.
+    try {
+      await _ref
+          .read(embeddingRepoProvider)
+          .deleteBySource('chat_message', session.id);
+    } catch (e) {
+      debugPrint('[ChatMessageService] failed to clear message index: $e');
+    }
+
+    return _persistAndWait(session, newMessages);
   }
 
   ChatSession toggleMessageHidden(ChatSession session, int index) {
@@ -430,9 +437,7 @@ class ChatMessageService {
     // navigable swipes; the error styling is derived per-swipe in setSwipe.
     final swapped = setSwipe(session, messageIndex, newIndex);
     final swappedMsg = swapped.messages[messageIndex];
-    final patched = swappedMsg.copyWith(
-      swipeDirection: animDir,
-    );
+    final patched = swappedMsg.copyWith(swipeDirection: animDir);
     final patchedMessages = List<ChatMessage>.from(swapped.messages)
       ..[messageIndex] = patched;
     return ChangeSwipeResult.updated(_persist(session, patchedMessages));
@@ -542,6 +547,29 @@ class ChatMessageService {
         duration: 5000,
       );
     });
+    ChatSessionService.updateCache(updated);
+    return updated;
+  }
+
+  Future<ChatSession> _persistAndWait(
+    ChatSession session,
+    List<ChatMessage> newMessages,
+  ) async {
+    final updated = session.copyWith(
+      messages: newMessages,
+      updatedAt: currentTimestampSeconds(),
+    );
+    if (!_ref.mounted) return updated;
+    try {
+      await _ref.read(chatRepoProvider).put(updated);
+    } catch (e) {
+      debugPrint('[ChatMessageService] failed to persist session: $e');
+      GlazeToast.showWithoutContext(
+        'Failed to save changes: $e',
+        isError: true,
+        duration: 5000,
+      );
+    }
     ChatSessionService.updateCache(updated);
     return updated;
   }

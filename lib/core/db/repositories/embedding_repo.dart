@@ -57,6 +57,12 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
     )..where((e) => e.sourceType.equals(sourceType))).get();
   }
 
+  Future<List<EmbeddingRow>> getBySourceId(String sourceId) {
+    return (select(
+      embeddings,
+    )..where((e) => e.sourceId.equals(sourceId))).get();
+  }
+
   Future<void> put(EmbeddingsCompanion entry) {
     return into(embeddings).insertOnConflictUpdate(entry);
   }
@@ -74,6 +80,13 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
   @override
   Future<void> deleteBySourceId(String sourceId) {
     return (delete(embeddings)..where((e) => e.sourceId.equals(sourceId))).go();
+  }
+
+  Future<void> deleteBySource(String sourceType, String sourceId) {
+    return (delete(embeddings)
+          ..where((e) => e.sourceType.equals(sourceType))
+          ..where((e) => e.sourceId.equals(sourceId)))
+        .go();
   }
 
   Future<void> putEmbeddingVector({

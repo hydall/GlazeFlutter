@@ -110,10 +110,15 @@ class ChatMessageOpsController {
   }
 
   Future<void> deleteMessage(int index) async {
+    await deleteMessages({index});
+  }
+
+  Future<void> deleteMessages(Set<int> indices) async {
     if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
-    final updated = _messageSvc.deleteMessage(current.session!, index);
+    final updated = await _messageSvc.deleteMessages(current.session!, indices);
+    if (!_ref.mounted) return;
     _invalidateHistory();
     _setState(AsyncData(current.copyWith(session: updated)));
   }

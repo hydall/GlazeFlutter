@@ -142,22 +142,34 @@ class CharacterKnowledgeFactRepo {
   /// Retracts every fact generated for a deleted message, including all of its
   /// green/blue swipes. Rows remain as provenance tombstones.
   Future<void> retractForMessage(String sessionId, String messageId) async {
+    await retractForMessages(sessionId, {messageId});
+  }
+
+  /// Retracts facts generated for any of the deleted messages in one pass.
+  Future<void> retractForMessages(
+    String sessionId,
+    Set<String> messageIds,
+  ) async {
+    if (messageIds.isEmpty) return;
     await db.transaction(() async {
       final rows =
           await (db.select(db.characterKnowledgeFactRows)
                 ..where((row) => row.chatSessionId.equals(sessionId))
-                ..where((row) => row.sourceMessageId.equals(messageId)))
+                ..where((row) => row.sourceMessageId.isIn(messageIds)))
               .get();
       await (db.update(db.characterKnowledgeFactRows)
             ..where((row) => row.chatSessionId.equals(sessionId))
-            ..where((row) => row.sourceMessageId.equals(messageId)))
+            ..where((row) => row.sourceMessageId.isIn(messageIds)))
           .write(
             CharacterKnowledgeFactRowsCompanion(
               lifecycle: const Value('retracted'),
               updatedAt: Value(currentTimestampSeconds()),
             ),
           );
-      await _reactivatePredecessors(rows.map(_fromRow));
+      await _reactivatePredecessors(
+        rows.map(_fromRow),
+        excludedMessageIds: messageIds,
+      );
     });
   }
 
@@ -349,13 +361,15 @@ class CharacterKnowledgeFactRepo {
   }
 
   Future<void> _reactivatePredecessors(
-    Iterable<CharacterKnowledgeFact> retracted,
-  ) async {
+    Iterable<CharacterKnowledgeFact> retracted, {
+    Set<String> excludedMessageIds = const {},
+  }) async {
     for (final fact in retracted) {
       final predecessorId = fact.supersedesId;
       if (predecessorId == null) continue;
       final predecessor = await getById(predecessorId);
       if (predecessor == null ||
+          excludedMessageIds.contains(predecessor.sourceMessageId) ||
           predecessor.lifecycle != CharacterKnowledgeFactLifecycle.superseded) {
         continue;
       }
