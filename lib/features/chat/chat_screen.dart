@@ -1223,6 +1223,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         (appSettings?.hideTokenCount ?? false),
                     disableSwipeRegeneration:
                         appSettings?.disableSwipeRegeneration ?? false,
+                    studioEnabled: ref
+                        .watch(
+                          sessionStudioEnabledProvider(
+                            widget.state.session?.id ?? '',
+                          ),
+                        )
+                        .value ??
+                        false,
                     messageActions: MessageActionsCallbacks(
                       onMessageContext:
                           (index, messageId, isUser, isSystem, content) {

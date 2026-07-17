@@ -55,6 +55,7 @@ class LayoutBridgeCommands {
     required bool hideGenerationTime,
     required bool hideTokenCount,
     required bool disableSwipeRegeneration,
+    required bool studioEnabled,
   }) {
     final json = jsonEncode({
       'batterySaver': batterySaver,
@@ -62,6 +63,7 @@ class LayoutBridgeCommands {
       'hideGenerationTime': hideGenerationTime,
       'hideTokenCount': hideTokenCount,
       'disableSwipeRegeneration': disableSwipeRegeneration,
+      'studioEnabled': studioEnabled,
     });
     return _host.callJs('setMessageSettings', json);
   }

@@ -93,6 +93,8 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
         updatedAt: now,
       );
       await repo.upsert(config);
+      // Auto-create enables Studio for the first time — refresh dependents.
+      ref.invalidate(sessionStudioEnabledProvider(widget.sessionId));
     }
     final presets = await presetRepo.getAll();
     if (!mounted) return;
@@ -106,6 +108,9 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   Future<void> _save(StudioConfig config) async {
     final repo = ref.read(studioConfigRepoProvider);
     await repo.upsert(config);
+    // Refresh Studio-enablement-driven chat UI (e.g. the per-message "Re-run
+    // cleaner" button) so toggling Studio reflects immediately.
+    ref.invalidate(sessionStudioEnabledProvider(widget.sessionId));
     setState(() => _config = config);
   }
 

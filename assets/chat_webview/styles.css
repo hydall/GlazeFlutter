@@ -708,6 +708,9 @@
 .hide-token-count .gen-stat .token-count-inline { display: none !important; }
 /* Hide the entire gen-stat container when both gen-time AND token-count are hidden */
 .hide-gen-time.hide-token-count .gen-stat { display: none !important; }
+/* The "Re-run cleaner" button drives the Studio-only POST-cleaner; hide it when
+   Studio is disabled for the session (pressing it would be a silent no-op). */
+.hide-rerun-cleaner .msg-rerun-cleaner { display: none !important; }
 
 /* ============================================================
  * Center controls

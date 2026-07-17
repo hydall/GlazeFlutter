@@ -249,6 +249,7 @@ ChatWebViewWidgetFields _fields({
   hideGenerationTime: false,
   hideTokenCount: false,
   disableSwipeRegeneration: false,
+  studioEnabled: false,
   memoryEntries: const [],
   memoryDrafts: const [],
   sessionId: 's1',
