@@ -35,6 +35,7 @@ import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/image_viewer.dart';
+import '../character_list/character_detail_screen.dart';
 import '../personas/persona_list_screen.dart';
 import '../settings/api_list_provider.dart';
 import '../settings/api_settings_screen.dart';
@@ -317,6 +318,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       character: character,
                       sessionName: sessionName,
                       currentSessionIndex: sessionIndex,
+                      onTapInfo: () => _showCharacterCard(charId),
+                      onTapAvatar:
+                          (character.avatarPath != null &&
+                              character.avatarPath!.isNotEmpty)
+                          ? () => _showAvatarViewer(character.avatarPath!)
+                          : null,
                     )
                   : null),
         onBack: () {
@@ -603,6 +610,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       provider = FileImage(File(path));
     }
     ImageViewer.show(context, imageProvider: provider);
+  }
+
+  /// Opens the character card (detail sheet) for [charId]. Mirrors
+  /// [CharacterDetailSheetLauncher]: the sheet pops a route string when the
+  /// user picks an action inside it (edit / gallery / open chat), which we
+  /// forward to GoRouter.
+  Future<void> _showCharacterCard(String charId) async {
+    final navTarget = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CharacterDetailScreen(charId: charId),
+    );
+    if (!mounted || navTarget == null || navTarget.isEmpty) return;
+    context.go(navTarget);
+  }
+
+  /// Opens the character avatar in the full-screen image viewer.
+  void _showAvatarViewer(String avatarPath) {
+    final resolved = resolveGlazeFilePath(avatarPath);
+    if (resolved == null || resolved.isEmpty) return;
+    _showImageViewer(context, resolved);
   }
 
   String _imageSrcToFilePath(String src) {
