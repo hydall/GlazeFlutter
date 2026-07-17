@@ -357,7 +357,23 @@ class ChatWebViewSyncDispatcher {
         (message) => message.role == 'assistant' || message.role == 'character',
       );
       if (lastAssistant != null) {
-        bridge.updateMessage(lastAssistant, isLast: !current.isGenerating);
+        // Only stamp `data-is-last` on this assistant bubble when it is
+        // genuinely the trailing message. After a cancelled generation the
+        // trailing message is often a *user* message (the empty assistant
+        // placeholder was trimmed), so `lastAssistant` is an earlier char
+        // bubble that is NOT last. Marking it isLast=true then leaves two
+        // `data-is-last` sections in the DOM: the user message (flagged by the
+        // `setLastMessage` call above, which also injects its Regenerate
+        // button) and this stray char bubble. `setLastMessage` only clears a
+        // single match, so on the next generation the stray flag survives and
+        // the user-message Regenerate button can never be hidden. Passing the
+        // real trailing state keeps exactly one `data-is-last` in the DOM.
+        final assistantIsTrailing =
+            current.messages.last.id == lastAssistant.id;
+        bridge.updateMessage(
+          lastAssistant,
+          isLast: assistantIsTrailing && !current.isGenerating,
+        );
       }
     }
   }
