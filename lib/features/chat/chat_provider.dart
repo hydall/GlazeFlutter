@@ -17,6 +17,8 @@ import 'abort_handler.dart';
 import 'chat_generation_service.dart';
 import 'chat_session_service.dart';
 import 'chat_state.dart';
+import 'generating_sessions_provider.dart';
+import 'unread_sessions_provider.dart';
 import 'image_recovery_service.dart';
 import 'controllers/chat_message_ops_controller.dart';
 import 'controllers/chat_swipe_controller.dart';
@@ -48,9 +50,49 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     ChatSessionService.updateCache(session);
   }
 
+  /// Reflects the active session's generation state into
+  /// [generatingSessionsProvider]. Called on every state transition; membership
+  /// updates are idempotent so streaming chunks don't churn the registry.
+  void _syncGeneratingRegistry(AsyncValue<ChatState> next) {
+    final s = next.value;
+    final sessionId = s?.session?.id;
+    final generating = s != null && (s.isGenerating || s.isPostGenRunning);
+    final registry = ref.read(generatingSessionsProvider.notifier);
+
+    // A session switch mid-generation must not leave the previous session
+    // stuck showing the indicator.
+    final prevId = _registeredGeneratingSessionId;
+    if (prevId != null && prevId != sessionId) {
+      registry.unmark(prevId);
+      _registeredGeneratingSessionId = null;
+    }
+
+    if (sessionId == null) return;
+    if (generating) {
+      registry.mark(sessionId);
+      _registeredGeneratingSessionId = sessionId;
+    } else {
+      registry.unmark(sessionId);
+      if (_registeredGeneratingSessionId == sessionId) {
+        _registeredGeneratingSessionId = null;
+      }
+    }
+  }
+
+  /// The sessionId currently marked in [generatingSessionsProvider] by this
+  /// notifier, so a session switch can clear the stale entry.
+  String? _registeredGeneratingSessionId;
+
   @override
   Future<ChatState> build() async {
     ref.keepAlive();
+    // Mirror this character's generation state into the global registry so the
+    // chat list can show a live "typing" indicator for the session without
+    // building its full state. Generation outlives the chat screen
+    // (`keepAlive`), so the entry persists until the reply actually finishes.
+    listenSelf(
+      (_, AsyncValue<ChatState> next) => _syncGeneratingRegistry(next),
+    );
     _buildComplete = false;
     final existing = await _sessionSvc.findExistingSession(arg);
     if (!ref.mounted) return const ChatState();
@@ -549,14 +591,20 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     }
 
     final preview = buildMessagePreview(result.messages);
+    final finalSessionId = result.session?.id;
     await notifService.onGenerationCompleted(
       character?.name ?? 'Unknown',
       arg,
       messagePreview: preview,
-      sessionId: result.session?.id,
+      sessionId: finalSessionId,
       msgId: result.messages.isNotEmpty ? result.messages.last.id : null,
       avatarPath: character?.avatarPath,
     );
+
+    if (finalSessionId != null &&
+        !notifService.isActiveSession(arg, finalSessionId)) {
+      ref.read(unreadSessionsProvider.notifier).markUnread(finalSessionId);
+    }
   }
 
   bool _isMemoryDraftActive(ChatState current) {

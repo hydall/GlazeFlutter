@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart'
     hide NotificationVisibility;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../platform/haptics.dart';
 import '../utils/platform_paths.dart';
@@ -159,13 +160,53 @@ class GenerationNotificationService {
         final payload = launchDetails!.notificationResponse?.payload;
         if (payload != null) _pendingNotificationData = _parsePayload(payload);
       }
+
+      await _maybeRequestBatteryExemption();
     } catch (e, st) {
       debugPrint('NOTIF: platform init failed: $e\n$st');
     }
   }
 
+  /// Asks the user (once) to exempt Glaze from battery optimization / Doze.
+  /// Without the exemption Android may freeze the process while the screen is
+  /// off, stalling a background generation even though a foreground service +
+  /// wake lock are held. Gated by a SharedPreferences flag so the system
+  /// dialog is offered a single time.
+  Future<void> _maybeRequestBatteryExemption() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      const promptedKey = 'battery_optimization_prompted';
+      if (prefs.getBool(promptedKey) ?? false) return;
+
+      final alreadyIgnoring =
+          await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+      if (alreadyIgnoring) {
+        await prefs.setBool(promptedKey, true);
+        return;
+      }
+
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      // Mark prompted regardless of the user's choice — the dialog is only
+      // meant to appear once; the user can still change it in system settings.
+      await prefs.setBool(promptedKey, true);
+    } catch (e) {
+      debugPrint('NOTIF: battery optimization request failed: $e');
+    }
+  }
+
   void updateLifecycleState(AppLifecycleState state) {
     _lifecycleState = state;
+  }
+
+  /// True when the given character+session is the one the user currently has
+  /// open and focused (app resumed). Mirrors the suppression check used for
+  /// message notifications — used to decide whether a completed reply should be
+  /// flagged unread in the chat list.
+  bool isActiveSession(String charId, String? sessionId) {
+    if (_lifecycleState != AppLifecycleState.resumed) return false;
+    if (_activeCharId != charId) return false;
+    return sessionId == null || _activeSessionId == sessionId;
   }
 
   /// Call when the user opens / focuses a chat screen to suppress redundant

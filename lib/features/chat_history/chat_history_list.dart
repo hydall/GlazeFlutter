@@ -10,9 +10,12 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../core/state/character_provider.dart' show avatarVersionProvider;
 import '../chat/chat_actions_service.dart';
 import '../chat/chat_provider.dart';
+import '../chat/generating_sessions_provider.dart';
+import '../chat/unread_sessions_provider.dart';
 import '../settings/app_settings_provider.dart';
 import 'chat_history_provider.dart';
 import 'widgets/message_preview_text.dart';
+import 'widgets/typing_dots.dart';
 
 class ChatHistoryList extends ConsumerStatefulWidget {
   final bool collapsed;
@@ -338,12 +341,26 @@ class _SessionTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (collapsed) return _buildCollapsedTile(context, ref);
-    if (isGrouped) return _buildGroupedTile(context, ref);
-    return _buildFullTile(context, ref);
+    final generating = ref.watch(
+      generatingSessionsProvider.select((s) => s.contains(info.sessionId)),
+    );
+    // A live reply supersedes the unread dot: the row already reads as "active".
+    final unread =
+        !generating &&
+        ref.watch(
+          unreadSessionsProvider.select((s) => s.contains(info.sessionId)),
+        );
+    if (collapsed) return _buildCollapsedTile(context, ref, generating, unread);
+    if (isGrouped) return _buildGroupedTile(context, ref, generating, unread);
+    return _buildFullTile(context, ref, generating, unread);
   }
 
-  Widget _buildCollapsedTile(BuildContext context, WidgetRef ref) {
+  Widget _buildCollapsedTile(
+    BuildContext context,
+    WidgetRef ref,
+    bool generating,
+    bool unread,
+  ) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () =>
@@ -353,13 +370,33 @@ class _SessionTile extends ConsumerWidget {
         preferBelow: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
-          child: _buildAvatar(context, ref, size: 36),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _buildAvatar(context, ref, size: 36),
+              if (generating || unread)
+                Positioned(
+                  right: -1,
+                  top: -1,
+                  child: _StatusBadge(
+                    generating: generating,
+                    color: context.cs.primary,
+                    borderColor: context.cs.surface,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildFullTile(BuildContext context, WidgetRef ref) {
+  Widget _buildFullTile(
+    BuildContext context,
+    WidgetRef ref,
+    bool generating,
+    bool unread,
+  ) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () =>
@@ -368,6 +405,14 @@ class _SessionTile extends ConsumerWidget {
       child: Container(
         height: 72,
         padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: unread
+            ? BoxDecoration(
+                color: context.cs.primary.withValues(alpha: 0.06),
+                border: Border(
+                  left: BorderSide(color: context.cs.primary, width: 3),
+                ),
+              )
+            : null,
         child: Row(
           children: [
             _buildAvatar(context, ref),
@@ -381,16 +426,28 @@ class _SessionTile extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          info.characterName,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                            height: 20 / 16,
-                            color: context.cs.onSurface,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            if (unread) ...[
+                              _UnreadDot(color: context.cs.primary),
+                              const SizedBox(width: 6),
+                            ],
+                            Flexible(
+                              child: Text(
+                                info.characterName,
+                                style: TextStyle(
+                                  fontWeight: unread
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  fontSize: 16,
+                                  height: 20 / 16,
+                                  color: context.cs.onSurface,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -412,14 +469,18 @@ class _SessionTile extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  MessagePreviewText(
-                    raw: info.lastMessage,
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 16 / 13,
-                      color: context.cs.onSurfaceVariant,
-                    ),
-                  ),
+                  generating
+                      ? _GeneratingPreview(color: context.cs.primary)
+                      : MessagePreviewText(
+                          raw: info.lastMessage,
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 16 / 13,
+                            color: unread
+                                ? context.cs.onSurface
+                                : context.cs.onSurfaceVariant,
+                          ),
+                        ),
                 ],
               ),
             ),
@@ -429,7 +490,12 @@ class _SessionTile extends ConsumerWidget {
     );
   }
 
-  Widget _buildGroupedTile(BuildContext context, WidgetRef ref) {
+  Widget _buildGroupedTile(
+    BuildContext context,
+    WidgetRef ref,
+    bool generating,
+    bool unread,
+  ) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => context.go(
@@ -445,19 +511,31 @@ class _SessionTile extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    info.sessionName?.isNotEmpty == true
-                        ? info.sessionName!
-                        : 'session_name'.tr(namedArgs: {
-                            'id': (info.sessionIndex + 1).toString(),
-                          }),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      color: context.cs.onSurface,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    children: [
+                      if (unread) ...[
+                        _UnreadDot(color: context.cs.primary),
+                        const SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: Text(
+                          info.sessionName?.isNotEmpty == true
+                              ? info.sessionName!
+                              : 'session_name'.tr(namedArgs: {
+                                  'id': (info.sessionIndex + 1).toString(),
+                                }),
+                          style: TextStyle(
+                            fontWeight: unread
+                                ? FontWeight.w700
+                                : FontWeight.w600,
+                            fontSize: 15,
+                            color: context.cs.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -465,14 +543,18 @@ class _SessionTile extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 4),
-            MessagePreviewText(
-              raw: info.lastMessage,
-              style: TextStyle(
-                fontSize: 12,
-                color: context.cs.onSurfaceVariant,
-              ),
-              maxLines: 2,
-            ),
+            generating
+                ? _GeneratingPreview(color: context.cs.primary)
+                : MessagePreviewText(
+                    raw: info.lastMessage,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: unread
+                          ? context.cs.onSurface
+                          : context.cs.onSurfaceVariant,
+                    ),
+                    maxLines: 2,
+                  ),
           ],
         ),
       ),
@@ -652,6 +734,15 @@ class _GroupHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final latest = sessions.first;
+    final sessionIds = sessions.map((s) => s.sessionId).toSet();
+    final generating = ref.watch(
+      generatingSessionsProvider.select((s) => s.any(sessionIds.contains)),
+    );
+    final unread =
+        !generating &&
+        ref.watch(
+          unreadSessionsProvider.select((s) => s.any(sessionIds.contains)),
+        );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -659,6 +750,14 @@ class _GroupHeader extends ConsumerWidget {
       child: Container(
         height: 72,
         padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: unread
+            ? BoxDecoration(
+                color: context.cs.primary.withValues(alpha: 0.06),
+                border: Border(
+                  left: BorderSide(color: context.cs.primary, width: 3),
+                ),
+              )
+            : null,
         child: Row(
           children: [
             _buildAvatar(context, ref, latest),
@@ -672,16 +771,28 @@ class _GroupHeader extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          latest.characterName,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                            height: 20 / 16,
-                            color: context.cs.onSurface,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            if (unread) ...[
+                              _UnreadDot(color: context.cs.primary),
+                              const SizedBox(width: 6),
+                            ],
+                            Flexible(
+                              child: Text(
+                                latest.characterName,
+                                style: TextStyle(
+                                  fontWeight: unread
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  fontSize: 16,
+                                  height: 20 / 16,
+                                  color: context.cs.onSurface,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -712,14 +823,18 @@ class _GroupHeader extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  MessagePreviewText(
-                    raw: latest.lastMessage,
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 16 / 13,
-                      color: context.cs.onSurfaceVariant,
-                    ),
-                  ),
+                  generating
+                      ? _GeneratingPreview(color: context.cs.primary)
+                      : MessagePreviewText(
+                          raw: latest.lastMessage,
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 16 / 13,
+                            color: unread
+                                ? context.cs.onSurface
+                                : context.cs.onSurfaceVariant,
+                          ),
+                        ),
                 ],
               ),
             ),
@@ -818,6 +933,77 @@ class _GroupHeader extends ConsumerWidget {
         context.push('/character/${info.characterId}/edit');
       }
     });
+  }
+}
+
+/// A small solid dot marking an unread session in the chat list.
+class _UnreadDot extends StatelessWidget {
+  final Color color;
+  const _UnreadDot({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+}
+
+/// The last-message line replaced by animated typing dots + a "typing…" label
+/// while the session is generating.
+class _GeneratingPreview extends StatelessWidget {
+  final Color color;
+  const _GeneratingPreview({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        TypingDots(color: color),
+        const SizedBox(width: 8),
+        Text(
+          'chat_status_typing'.tr(),
+          style: TextStyle(
+            fontSize: 13,
+            height: 16 / 13,
+            fontStyle: FontStyle.italic,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Avatar-corner badge: pulsing typing dots while generating, else a static
+/// unread dot. Bordered so it reads clearly against the avatar.
+class _StatusBadge extends StatelessWidget {
+  final bool generating;
+  final Color color;
+  final Color borderColor;
+
+  const _StatusBadge({
+    required this.generating,
+    required this.color,
+    required this.borderColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(generating ? 3 : 0),
+      constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: borderColor, width: 2),
+      ),
+      child: generating
+          ? TypingDots(color: borderColor, size: 3)
+          : const SizedBox(width: 8, height: 8),
+    );
   }
 }
 

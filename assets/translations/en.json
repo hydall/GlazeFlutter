@@ -362,6 +362,7 @@
   "session_name": "Session #{id}",
   "empty_session": "Empty session",
   "no_dialogs": "No dialogs",
+  "chat_status_typing": "typing…",
   "msg_static_block_content": "This block is defined by character card, chat history or persona and cannot be modified.",
   "confirm_restore": "This will overwrite current data. Continue?",
   "confirm_import_chats": "Merge chats from JSON? Existing dialogs with same names will be overwritten.",
