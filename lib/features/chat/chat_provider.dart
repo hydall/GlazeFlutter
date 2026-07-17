@@ -237,6 +237,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   Future<void> deleteMessage(int index) => _messageOpsCtrl.deleteMessage(index);
 
+  Future<void> deleteMessages(Set<int> indices) =>
+      _messageOpsCtrl.deleteMessages(indices);
+
   Future<void> toggleMessageHidden(int index) =>
       _messageOpsCtrl.toggleMessageHidden(index);
 

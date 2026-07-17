@@ -195,9 +195,15 @@ class TrackerSnapshotRepo {
   /// Rollback is emergent: `getLatestCommitted` naturally falls back to the
   /// previous message's committed snapshot.
   Future<void> deleteForMessage(String sessionId, String messageId) {
+    return deleteForMessages(sessionId, {messageId});
+  }
+
+  /// Deletes snapshots for multiple messages with one database statement.
+  Future<void> deleteForMessages(String sessionId, Set<String> messageIds) {
+    if (messageIds.isEmpty) return Future.value();
     return (db.delete(db.trackerSnapshots)
           ..where((t) => t.sessionId.equals(sessionId))
-          ..where((t) => t.messageId.equals(messageId)))
+          ..where((t) => t.messageId.isIn(messageIds)))
         .go();
   }
 

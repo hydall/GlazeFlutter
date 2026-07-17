@@ -71,8 +71,6 @@ class ChatMessageEmbeddingService {
               (m.role == 'user' || m.role == 'assistant'),
         )
         .toList();
-    if (eligible.length < chunkSize) return;
-
     final chunks = <_MessageChunk>[];
     for (int i = 0; i + chunkSize <= eligible.length; i += chunkSize) {
       final slice = eligible.sublist(i, i + chunkSize);
@@ -85,6 +83,7 @@ class ChatMessageEmbeddingService {
         ),
       );
     }
+    await _deleteStaleChunks(sessionId, chunks.length);
     if (chunks.isEmpty) return;
 
     for (final chunk in chunks) {
@@ -174,13 +173,26 @@ class ChatMessageEmbeddingService {
   /// Removes all chunk rows for [sessionId]. Called when a session is
   /// deleted to avoid orphan embeddings.
   Future<void> deleteSessionIndex(String sessionId) async {
-    await _repo.deleteBySourceId(sessionId);
+    await _repo.deleteBySource('chat_message', sessionId);
   }
 
   /// Removes all `chat_message` embeddings (every session). Used by the
   /// "clear all vector data" admin action if one is added later.
   Future<void> deleteAllChatMessageIndexes() async {
     await _repo.deleteBySourceType('chat_message');
+  }
+
+  Future<void> _deleteStaleChunks(String sessionId, int chunkCount) async {
+    final rows = await _repo.getBySourceId(sessionId);
+    final currentEntryIds = {
+      for (var index = 0; index < chunkCount; index++) '${sessionId}_$index',
+    };
+    for (final row in rows) {
+      if (row.sourceType != 'chat_message') continue;
+      if (!currentEntryIds.contains(row.entryId)) {
+        await _repo.deleteByEntryId(row.entryId);
+      }
+    }
   }
 
   String _formatChunk(List<ChatMessage> slice) {

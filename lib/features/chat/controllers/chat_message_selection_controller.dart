@@ -25,22 +25,31 @@ class ChatMessageSelectionController {
     });
   }
 
-  Future<void> hideSelected(WidgetRef ref, String charId, List<ChatMessage> messages) async {
+  Future<void> hideSelected(
+    WidgetRef ref,
+    String charId,
+    List<ChatMessage> messages,
+  ) async {
     for (final id in selectedMessageIds) {
       final idx = messages.indexWhere((m) => m.id == id);
-      if (idx >= 0) await ref.read(chatProvider(charId).notifier).toggleMessageHidden(idx);
+      if (idx >= 0) {
+        await ref.read(chatProvider(charId).notifier).toggleMessageHidden(idx);
+      }
     }
     clearSelection();
   }
 
-  Future<void> deleteSelected(WidgetRef ref, String charId, List<ChatMessage> messages) async {
+  Future<void> deleteSelected(
+    WidgetRef ref,
+    String charId,
+    List<ChatMessage> messages,
+  ) async {
     final indices = selectedMessageIds
         .map((id) => messages.indexWhere((m) => m.id == id))
         .where((idx) => idx >= 0)
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
-    for (final idx in indices) {
-      await ref.read(chatProvider(charId).notifier).deleteMessage(idx);
+        .toSet();
+    if (indices.isNotEmpty) {
+      await ref.read(chatProvider(charId).notifier).deleteMessages(indices);
     }
     clearSelection();
   }
