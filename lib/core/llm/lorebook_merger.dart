@@ -14,10 +14,13 @@ List<LorebookEntry> mergeKeywordVector({
   );
 
   // Step 1: fill with keyword entries first (constants + triggered).
-  // Keywords can occupy up to maxEntries slots (minus constants).
-  final usedKeyword = triggeredKeywords
-      .take(maxEntries - constantKeywords.length)
-      .toList();
+  // Constants bypass the entry cap by design (see lorebook_coverage.dart);
+  // only triggered keywords are counted against `maxEntries`. When constants
+  // already exceed `maxEntries`, no triggered-keyword slots remain — clamp to
+  // 0 so `.take()` never receives a negative count (RangeError).
+  final triggeredKeywordSlots =
+      maxEntries - constantKeywords.length < 0 ? 0 : maxEntries - constantKeywords.length;
+  final usedKeyword = triggeredKeywords.take(triggeredKeywordSlots).toList();
 
   if (vectorEntries.isEmpty) {
     return [

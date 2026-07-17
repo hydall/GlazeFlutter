@@ -260,12 +260,15 @@ CoverageResult computeLorebookCoverage({
   // Constants bypass this entirely — they are always in-budget.
   // Keywords fill up to maxInjectedEntries; vectors fill remaining slots
   // but no more than vectorTopK (hard cap, no carry-over from unused
-  // keyword slots).
+  // keyword slots). When constants already exceed `maxInjectedEntries`,
+  // clamp triggered-keyword slots to 0 so `.take()` never receives a
+  // negative count (RangeError).
   final maxVector = globalSettings.vectorTopK;
 
-  final usedKeyword = keywordActivatedList
-      .take(maxInjectedEntries - constantActivated.length)
-      .toList();
+  final triggeredKeywordSlots = maxInjectedEntries - constantActivated.length < 0
+      ? 0
+      : maxInjectedEntries - constantActivated.length;
+  final usedKeyword = keywordActivatedList.take(triggeredKeywordSlots).toList();
 
   final keywordSlotCount = constantActivated.length + usedKeyword.length;
   final remainingSlots = maxInjectedEntries - keywordSlotCount;
