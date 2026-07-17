@@ -676,18 +676,29 @@ class _SheetViewState extends ConsumerState<SheetView>
         builder: (context) {
           final mediaQuery = MediaQuery.of(context);
 
-          // Reserve the system navigation-bar inset at the bottom so the last
-          // row never sits under the nav bar in edge-to-edge. fitContent sheets
-          // keep the bare inset (their bodies add their own margin); other
-          // sheets, whose bodies assumed a zero inset, get inset + a margin.
-          final safeBottom = widget.fitContent
+          // The nav-bar inset is delivered through MediaQuery.padding.bottom
+          // (below), not as an outer Padding around the body. That way a
+          // scrollable body (ListView &co, which auto-consumes the inset, or a
+          // body that reads MediaQuery.paddingOf(context).bottom itself) treats
+          // it as *scroll content* padding: the viewport keeps reaching the
+          // sheet's bottom edge, so list rows stay visible scrolling behind the
+          // nav bar, while the last row still rests above it. An outer Padding
+          // instead shrinks the viewport and leaves a dead strip below the
+          // list — and double-counts for bodies that already read the inset.
+          // fitContent sheets keep the bare inset (their bodies add their own
+          // margin); other sheets get inset + a small margin.
+          final navInset = widget.fitContent
               ? mediaQuery.padding.bottom
               : mediaQuery.padding.bottom + 16;
+
           final innerChild = Padding(
             padding: widget.bodyPadding ?? EdgeInsets.zero,
+            // The keyboard is a hard occlusion, so it stays an outer inset:
+            // content is lifted wholesale above it (a dead strip behind the
+            // keyboard is correct). The nav-bar inset does not — see above.
             child: Padding(
               padding: EdgeInsets.only(
-                bottom: isKeyboardOpen ? bottomInset + 16 : safeBottom,
+                bottom: isKeyboardOpen ? bottomInset + 16 : 0,
               ),
               child: Align(
                 alignment: Alignment.topCenter,
@@ -713,7 +724,10 @@ class _SheetViewState extends ConsumerState<SheetView>
                   : _topPad(height);
               return MediaQuery(
                 data: mediaQuery.copyWith(
-                  padding: mediaQuery.padding.copyWith(top: extraTop),
+                  padding: mediaQuery.padding.copyWith(
+                    top: extraTop,
+                    bottom: navInset,
+                  ),
                 ),
                 child: child!,
               );

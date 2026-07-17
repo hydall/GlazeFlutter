@@ -323,10 +323,14 @@ class _GlazeBottomSheetContentState
               sigma: 24,
               tintColor: context.cs.surface.withValues(alpha: 0.4),
               child: Padding(
-                padding: EdgeInsets.only(
-                  top: _headerH,
-                  bottom: bottomInset + safeBottom + 16,
-                ),
+                // Only the header is reserved as an *outer* inset. The
+                // nav-bar/keyboard inset goes *inside* the scroll view as
+                // content padding (below), so the viewport still reaches the
+                // sheet's bottom edge: list rows stay visible scrolling behind
+                // the nav bar, while the last row (e.g. Cancel/Save) rests
+                // above it. Reserving it out here instead would shrink the
+                // viewport and leave a dead strip no content can scroll into.
+                padding: EdgeInsets.only(top: _headerH),
                 child: RawScrollbar(
                   controller: _scrollController,
                   thumbColor: Colors.white.withValues(alpha: 0.15),
@@ -339,6 +343,9 @@ class _GlazeBottomSheetContentState
                     ).copyWith(scrollbars: false),
                     child: SingleChildScrollView(
                       controller: _scrollController,
+                      padding: EdgeInsets.only(
+                        bottom: bottomInset + safeBottom + 16,
+                      ),
                       // Isolates the sheet content in its own layer so a
                       // scroll only shifts the layer instead of re-recording
                       // every row each frame.
