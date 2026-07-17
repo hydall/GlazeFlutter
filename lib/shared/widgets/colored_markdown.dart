@@ -326,6 +326,65 @@ class LinkMd extends InlineMd {
   }
 }
 
+/// Inline linked image `[![alt](imgUrl)](linkUrl)` — the shape an HTML
+/// `<a href><img></a>` collapses to once `htmlToMarkdown` converts the inner
+/// `<img>` before the wrapping `<a>`. gpt_markdown ships no linked-image parser,
+/// and [LinkMd] would otherwise greedily eat `[![](img)` (treating the leading
+/// `![` as the link label), leaving `](link)` as literal text. So this MUST be
+/// listed BEFORE [LinkMd] in `inlineComponents`: with gpt_markdown's combined
+/// left-to-right alternation, the earlier entry wins the position-0 match.
+///
+/// Renders the image through the config's `imageBuilder` (so http/https, data:
+/// and local files are handled the same as a plain image) and makes it tappable
+/// to open the target URL. Only `http`/`https` link targets are accepted.
+class LinkedImageMd extends InlineMd {
+  @override
+  RegExp get exp =>
+      RegExp(r'\[!\[([^\]]*)\]\(([^\s)]*)\)\]\((https?:\/\/[^\s)]+)\)');
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text.trim());
+    if (match == null) return TextSpan(text: text, style: config.style);
+    final altText = match[1] ?? '';
+    final imageUrl = match[2] ?? '';
+    final linkUrl = match[3] ?? '';
+
+    // Optional `WxH` size prefix in the alt text, mirroring gpt_markdown's
+    // ImageMd so `![100x200](url)` still sizes the linked image.
+    double? width;
+    double? height;
+    if (altText.isNotEmpty) {
+      final size = RegExp(r'^([0-9]+)?x?([0-9]+)?').firstMatch(altText.trim());
+      width = double.tryParse(size?[1]?.toString().trim() ?? 'a');
+      height = double.tryParse(size?[2]?.toString().trim() ?? 'a');
+    }
+
+    final image = config.imageBuilder?.call(context, imageUrl, width, height) ??
+        SizedBox(
+          width: width,
+          height: height,
+          child: Image(image: NetworkImage(imageUrl)),
+        );
+
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () {
+            final uri = Uri.tryParse(linkUrl);
+            if (uri != null) {
+              launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          },
+          child: image,
+        ),
+      ),
+    );
+  }
+}
+
 class MarkMd extends InlineMd {
   final Color textColor;
 

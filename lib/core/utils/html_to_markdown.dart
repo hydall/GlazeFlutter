@@ -20,6 +20,7 @@ String htmlToMarkdown(String html) {
     },
   );
 
+  result = _convertMark(result);
   result = _convertColoredSpan(result);
   result = _convertColoredFont(result);
   result = _convertBackgroundImages(result);
@@ -58,8 +59,15 @@ String htmlToMarkdown(String html) {
   );
 
   result = result.replaceAllMapped(
-    RegExp(r'<p[^>]*>(.*?)</p>', caseSensitive: false, dotAll: true),
-    (m) => '\n${_inline(m[1]!)}\n',
+    RegExp(r'<p([^>]*)>(.*?)</p>', caseSensitive: false, dotAll: true),
+    (m) {
+      final inner = _inline(m[2]!);
+      final align = _extractTextAlign(m[1]!);
+      // Only non-default alignment is wrapped in a sentinel; left/start stays
+      // plain so unaligned text renders exactly as before. See [splitBioAlignment].
+      if (align.isEmpty) return '\n$inner\n';
+      return '\n$_kAlignOpen$align$_kAlignSep$inner$_kAlignClose\n';
+    },
   );
 
   result = result.replaceAllMapped(
@@ -74,13 +82,15 @@ String htmlToMarkdown(String html) {
   result = _convertInlineKeep(result, 'u');
   result = _convertInline(result, 'code', '`');
 
+  result = _convertLists(result);
+
   result = result.replaceAllMapped(
     RegExp(r'<hr\s*/?>', caseSensitive: false),
     (m) => '\n---\n',
   );
 
   result = result.replaceAll(
-    RegExp(r'</?(?:div|span|section|article|header|footer|nav|main|figure|figcaption|center|font|small|sub|sup|mark|table|tr|td|th|thead|tbody|ul|ol|li|dl|dt|dd|pre)[^>]*>', caseSensitive: false),
+    RegExp(r'</?(?:div|span|section|article|header|footer|nav|main|figure|figcaption|center|font|small|sub|sup|table|tr|td|th|thead|tbody|dl|dt|dd|pre)[^>]*>', caseSensitive: false),
     '\n',
   );
 
@@ -119,9 +129,139 @@ String htmlToMarkdown(String html) {
   return result.trim();
 }
 
+// Control-char sentinels wrapping a paragraph that carried an explicit
+// `text-align`. They survive the rest of the pipeline (the tag strips and entity
+// decoding never touch \x02) and are parsed out of the final markdown by
+// [splitBioAlignment]. Control chars are used so they can't collide with real
+// bio text. Format: <STX>A:<align><US><content><STX>/A<STX>.
+const _kAlignOpen = '\x02A:';
+const _kAlignSep = '\x1f';
+const _kAlignClose = '\x02/A\x02';
+
+String _extractTextAlign(String attrs) {
+  final m = RegExp(r'text-align\s*:\s*(center|right|justify)', caseSensitive: false)
+      .firstMatch(attrs);
+  return m?[1]?.toLowerCase() ?? '';
+}
+
+/// A run of description markdown with a resolved block alignment.
+class BioSegment {
+  /// One of `left` (default), `center`, `right`, `justify`.
+  final String align;
+  final String text;
+  const BioSegment(this.align, this.text);
+}
+
+/// Splits markdown produced by [htmlToMarkdown] into aligned segments. Only
+/// `<p style="text-align:center|right|justify">` produces a non-default run;
+/// all other text is `left`. Callers render each segment with its own
+/// alignment (e.g. one `GptMarkdown` per segment) — this keeps alignment out of
+/// gpt_markdown's block parser entirely. With no aligned paragraphs the whole
+/// string comes back as a single `left` segment (identical to rendering it as
+/// one widget).
+List<BioSegment> splitBioAlignment(String markdown) {
+  final exp = RegExp(
+    '${RegExp.escape(_kAlignOpen)}(center|right|justify)$_kAlignSep(.*?)'
+    '${RegExp.escape(_kAlignClose)}',
+    dotAll: true,
+  );
+  final segments = <BioSegment>[];
+  var last = 0;
+  for (final m in exp.allMatches(markdown)) {
+    if (m.start > last) {
+      final before = markdown.substring(last, m.start).trim();
+      if (before.isNotEmpty) segments.add(BioSegment('left', before));
+    }
+    final text = m[2]!.trim();
+    if (text.isNotEmpty) segments.add(BioSegment(m[1]!, text));
+    last = m.end;
+  }
+  if (last < markdown.length) {
+    final tail = markdown.substring(last).trim();
+    if (tail.isNotEmpty) segments.add(BioSegment('left', tail));
+  }
+  if (segments.isEmpty) segments.add(BioSegment('left', markdown.trim()));
+  return segments;
+}
+
 String _inline(String text) {
   return text.replaceAll(RegExp(r'<[^>]+>'), '').trim();
 }
+
+/// Converts `<mark>` (highlight) to the `==bg:#hex==…==` marker rendered by
+/// [BackgroundTextMd]. Runs BEFORE [_convertColoredSpan] so JanitorAI's spoiler
+/// pattern — a colour `<span>` directly wrapping a background `<mark>` (usually
+/// same colour = grey-on-grey hidden text) — collapses into a SINGLE marker.
+/// Nesting two `==…==` markers would break the non-greedy marker parser, so the
+/// wrapping span's colour is intentionally dropped here (the highlight shows with
+/// readable text — i.e. the spoiler is revealed). A `<mark>` with no background
+/// falls back to the accent tint. Inner inline formatting is flattened; spoiler
+/// text is plain in practice.
+String _convertMark(String html) {
+  var result = html;
+  // Colour <span> wrapping a background <mark> (spoiler) → one bg marker.
+  result = result.replaceAllMapped(
+    RegExp(
+      r'''<span[^>]*style=["'][^"']*["'][^>]*>\s*<mark([^>]*)>(.*?)</mark>\s*</span>''',
+      caseSensitive: false,
+      dotAll: true,
+    ),
+    (m) => _markMarker(m[1]!, m[2]!),
+  );
+  // Any remaining <mark>, with or without a background colour.
+  result = result.replaceAllMapped(
+    RegExp(r'<mark([^>]*)>(.*?)</mark>', caseSensitive: false, dotAll: true),
+    (m) => _markMarker(m[1]!, m[2]!),
+  );
+  return result;
+}
+
+String _markMarker(String attrs, String inner) {
+  final text = _inline(inner);
+  if (text.isEmpty) return '';
+  final bg = _extractBgColor(attrs);
+  return '==bg:${bg.isEmpty ? '#8b5cf6' : bg}==$text==';
+}
+
+/// Converts `<ul>` / `<ol>` / `<li>` to markdown list lines (`- ` / `1. `),
+/// which gpt_markdown's default block components render. Runs AFTER the inline
+/// conversions so a list item's `**bold**`, `[link](url)`, `![img](url)` etc.
+/// are already markdown; each item is flattened to a single line so a stray
+/// newline can't split the bullet.
+String _convertLists(String html) {
+  final liExp = RegExp(r'<li[^>]*>(.*?)</li>', caseSensitive: false, dotAll: true);
+  var result = html;
+
+  result = result.replaceAllMapped(
+    RegExp(r'<ol[^>]*>(.*?)</ol>', caseSensitive: false, dotAll: true),
+    (m) {
+      var n = 0;
+      final items = liExp
+          .allMatches(m[1]!)
+          .map((li) => '${++n}. ${_listItemText(li[1]!)}');
+      return items.isEmpty ? '' : '\n${items.join('\n')}\n';
+    },
+  );
+  result = result.replaceAllMapped(
+    RegExp(r'<ul[^>]*>(.*?)</ul>', caseSensitive: false, dotAll: true),
+    (m) {
+      final items =
+          liExp.allMatches(m[1]!).map((li) => '- ${_listItemText(li[1]!)}');
+      return items.isEmpty ? '' : '\n${items.join('\n')}\n';
+    },
+  );
+  // Stray <li> outside a recognized <ul>/<ol>.
+  result = result.replaceAllMapped(
+    liExp,
+    (m) => '\n- ${_listItemText(m[1]!)}',
+  );
+  return result;
+}
+
+String _listItemText(String inner) => inner
+    .replaceAll(RegExp(r'<[^>]+>'), '')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
 
 String _stripBlock(String html, String tag) {
   return html.replaceAll(RegExp('<$tag[^>]*>.*?</$tag>', caseSensitive: false, dotAll: true), '');
