@@ -131,6 +131,21 @@ final studioPresetProvider = FutureProvider<StudioPreset?>((ref) async {
   return ref.watch(studioPresetRepoProvider).getDefault();
 });
 
+/// Whether Studio is enabled for a given session. Drives Studio-only chat UI
+/// affordances (e.g. the per-message "Re-run cleaner" button, which is a no-op
+/// when Studio is off). Invalidated by the Studio settings sheet on save so the
+/// UI reflects a toggle immediately. Returns `false` for a null/absent config.
+final sessionStudioEnabledProvider = FutureProvider.family<bool, String>((
+  ref,
+  sessionId,
+) async {
+  if (sessionId.isEmpty) return false;
+  final config = await ref.watch(studioConfigRepoProvider).getBySessionId(
+    sessionId,
+  );
+  return config?.enabled == true;
+});
+
 final trackerRepoProvider = Provider<TrackerRepo>((ref) {
   return TrackerRepo(ref.watch(appDbProvider));
 });

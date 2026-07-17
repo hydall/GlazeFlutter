@@ -99,6 +99,10 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final bool hideTokenCount;
   final bool disableSwipeRegeneration;
 
+  /// Whether Studio is enabled for the current session. Gates the Studio-only
+  /// "Re-run cleaner" per-message button in the WebView (hidden when off).
+  final bool studioEnabled;
+
   // Callback objects
   final MessageActionsCallbacks messageActions;
   final EditActionsCallbacks editActions;
@@ -164,6 +168,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.hideGenerationTime = false,
     this.hideTokenCount = false,
     this.disableSwipeRegeneration = false,
+    this.studioEnabled = false,
     this.messageActions = const MessageActionsCallbacks(),
     this.editActions = const EditActionsCallbacks(),
     this.imageGenActions = const ImageGenCallbacks(),
@@ -364,6 +369,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           hideGenerationTime: widget.hideGenerationTime,
           hideTokenCount: widget.hideTokenCount,
           disableSwipeRegeneration: widget.disableSwipeRegeneration,
+          studioEnabled: widget.studioEnabled,
           messages: widget.messages,
           visibleStartIndex: widget.visibleStartIndex,
           memoryEntries: widget.memoryEntries,
@@ -690,6 +696,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       hideGenerationTime: w.hideGenerationTime,
       hideTokenCount: w.hideTokenCount,
       disableSwipeRegeneration: w.disableSwipeRegeneration,
+      studioEnabled: w.studioEnabled,
       memoryEntries: w.memoryEntries,
       memoryDrafts: w.memoryDrafts,
       sessionId: w.sessionId,

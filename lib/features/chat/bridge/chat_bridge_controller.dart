@@ -624,12 +624,14 @@ class ChatBridgeController {
     required bool hideGenerationTime,
     required bool hideTokenCount,
     required bool disableSwipeRegeneration,
+    required bool studioEnabled,
   }) => layout.setMessageSettings(
     batterySaver: batterySaver,
     hideMessageId: hideMessageId,
     hideGenerationTime: hideGenerationTime,
     hideTokenCount: hideTokenCount,
     disableSwipeRegeneration: disableSwipeRegeneration,
+    studioEnabled: studioEnabled,
   );
   Future<void> setSelectionMode(bool enabled) =>
       layout.setSelectionMode(enabled);

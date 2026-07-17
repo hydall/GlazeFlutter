@@ -840,6 +840,8 @@ export class Bridge {
     container.classList.toggle('hide-message-id', !!s.hideMessageId);
     container.classList.toggle('hide-gen-time', !!s.hideGenerationTime);
     container.classList.toggle('hide-token-count', !!s.hideTokenCount);
+    // Re-run cleaner is a Studio-only affordance — hide it when Studio is off.
+    container.classList.toggle('hide-rerun-cleaner', !s.studioEnabled);
     // Battery saver kills the overlay backdrop-filter strips too.
     this._renderOverlayBlurRegions();
   }
