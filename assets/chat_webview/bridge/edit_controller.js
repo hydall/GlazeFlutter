@@ -66,6 +66,46 @@ export class EditController {
       textarea.scrollTop += delta;
     }, { passive: false });
 
+    // Touch-drag over the textarea scrolls the whole chat. The textarea
+    // auto-grows to fit its content (field-sizing: content, no max-height), so
+    // it never scrolls itself vertically — a finger drag over it would
+    // otherwise be swallowed by the native <textarea> (caret/selection) and do
+    // nothing. When the textarea can't consume the vertical movement we drive
+    // the chat container's scrollTop directly via scrollTopFn, matching the
+    // wheel handler's "bubble to the chat" behavior for touch input.
+    let touchStartY = 0;
+    let touchLastY = 0;
+    let touchScrolling = false;
+    textarea.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      touchStartY = touchLastY = e.touches[0].clientY;
+      touchScrolling = false;
+    }, { passive: true });
+    textarea.addEventListener('touchmove', (e) => {
+      if (e.touches.length !== 1) return;
+      const y = e.touches[0].clientY;
+      const dyTotal = y - touchStartY;
+      const maxScrollTop = textarea.scrollHeight - textarea.clientHeight;
+      // Finger down (dyTotal > 0) scrolls the content up → the textarea can
+      // consume it only when it has hidden overflow above (scrollTop > 0).
+      const canScrollSelf = maxScrollTop > 1 && (
+        (dyTotal > 0 && textarea.scrollTop > 0) ||
+        (dyTotal < 0 && textarea.scrollTop < maxScrollTop - 1)
+      );
+      if (canScrollSelf) return; // let the textarea scroll its own overflow
+
+      // Below the threshold the gesture might still settle into a tap (caret
+      // placement / selection), so don't hijack it yet.
+      if (!touchScrolling && Math.abs(dyTotal) < 6) return;
+      touchScrolling = true;
+
+      const dy = y - touchLastY;
+      touchLastY = y;
+      e.preventDefault();
+      e.stopPropagation();
+      scrollTopFn(scrollTopFn() - dy);
+    }, { passive: false });
+
     const stopEditEventPropagation = (e) => e.stopPropagation();
     textarea.addEventListener('pointerdown', stopEditEventPropagation);
     textarea.addEventListener('mousedown', stopEditEventPropagation);
