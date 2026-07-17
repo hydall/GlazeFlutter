@@ -335,7 +335,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           actionIcon: Icons.settings_outlined,
           actionTitle: 'onboarding_action_configure_api'.tr(),
           actionSub: 'onboarding_action_configure_sub'.tr(),
-          onAction: () => _openSheet(const ApiSettingsScreen()),
+          onAction: () => _openSheet(const ApiSettingsScreen(startExpanded: true)),
         );
       case OnboardingSlideType.persona:
         return _buildActionSlide(

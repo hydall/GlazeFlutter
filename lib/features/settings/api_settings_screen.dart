@@ -139,10 +139,18 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 
   void _goBack() {
     _flushSave();
-    if (widget.startExpanded) {
-      context.go('/tools');
-    } else {
+    // Back navigation depends on how this screen is *presented*, not on whether
+    // it starts expanded. Presented as the Tools route (a page, not a modal
+    // sheet) it belongs to the /tools branch, so back returns there. Presented
+    // as a modal bottom sheet (chat magic-drawer, onboarding) it must simply
+    // pop, otherwise `go('/tools')` would tear the host flow (e.g. onboarding)
+    // down. This mirrors SheetView's own modal-vs-route detection so the sheet
+    // can be opened expanded from a modal without hijacking navigation.
+    final isModalSheet = ModalRoute.of(context) is ModalBottomSheetRoute;
+    if (isModalSheet) {
       Navigator.of(context).maybePop();
+    } else {
+      context.go('/tools');
     }
   }
 
