@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
@@ -189,6 +190,10 @@ class AgentRunner {
       timeoutMs: timeoutMs,
       maxTokensOverride: maxTokensOverride,
       temperatureOverride: temperatureOverride,
+      tagStart: apiConfig.reasoningTagStart,
+      tagEnd: apiConfig.reasoningTagEnd,
+      headerModel: isFinalResponse ? 'reasoning_model'.tr() : null,
+      headerInline: isFinalResponse ? 'reasoning_inline'.tr() : null,
       onFinalResponseUpdate: onFinalResponseUpdate,
       onIntermediateUpdate: onIntermediateUpdate,
     );

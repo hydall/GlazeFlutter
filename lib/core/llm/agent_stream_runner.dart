@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/studio_config.dart';
 import 'agent_runner.dart' show AgentRunResult, ResolvedAgentConfig;
 import 'reasoning_stripper.dart';
+import 'stream_accumulator.dart';
 import 'transport/chat_transport.dart';
 import 'transport/chat_transport_request.dart';
 
@@ -39,6 +40,10 @@ class AgentStreamRunner {
     required int timeoutMs,
     int? maxTokensOverride,
     double? temperatureOverride,
+    String? tagStart,
+    String? tagEnd,
+    String? headerModel,
+    String? headerInline,
     void Function(String text, String? reasoning)? onFinalResponseUpdate,
     void Function(String text)? onIntermediateUpdate,
   }) async {
@@ -49,6 +54,21 @@ class AgentStreamRunner {
         ? ReasoningStripper.stripMessageReasoning(messages)
         : messages;
     final shouldStream = resolved.stream;
+
+    const defaultTagStart = '<think>';
+    const defaultTagEnd = '</think>';
+    final effectiveTagStart = (tagStart?.isNotEmpty == true) ? tagStart! : defaultTagStart;
+    final effectiveTagEnd = (tagEnd?.isNotEmpty == true) ? tagEnd! : defaultTagEnd;
+    final hasInlineTags = effectiveTagStart.isNotEmpty && effectiveTagEnd.isNotEmpty;
+
+    final accumulator = StreamAccumulator(
+      tagStart: effectiveTagStart,
+      tagEnd: effectiveTagEnd,
+      hasInlineTags: hasInlineTags,
+      headerModel: headerModel,
+      headerInline: headerInline,
+    );
+
     final request = ChatTransportRequest(
       endpoint: resolved.endpoint,
       apiKey: resolved.apiKey,
@@ -74,19 +94,13 @@ class AgentStreamRunner {
     );
     final transport = _pickTransport(resolved.protocol);
     final startedAt = DateTime.now();
-    final output = StringBuffer();
-    final reasoning = StringBuffer();
     Timer? idleTimer;
     CancelToken? agentCancelToken;
-    // Once the model emits its first chunk (text OR reasoning), cancel the
-    // idle timer entirely so a long (but progressing) generation is never
-    // cut off mid-stream. The stream's own onComplete/onError (or the outer
-    // pipeline cancelToken) is the only termination after that.
     var streamStarted = false;
     void completeWithAccumulated(String reason) {
       if (completer.isCompleted) return;
-      final text = output.toString().trim();
-      final reasoningText = isFinalResponse ? reasoning.toString().trim() : '';
+      final text = accumulator.text.trim();
+      final reasoningText = isFinalResponse ? accumulator.reasoning : '';
       completer.complete(
         AgentRunResult(text: text, reasoning: reasoningText),
       );
@@ -95,7 +109,8 @@ class AgentStreamRunner {
     void resetAgentTimer() {
       idleTimer?.cancel();
       idleTimer = Timer(Duration(milliseconds: timeoutMs), () {
-        if (shouldStream && (output.isNotEmpty || reasoning.isNotEmpty)) {
+        if (completer.isCompleted) return;
+        if (shouldStream && (accumulator.text.isNotEmpty || accumulator.reasoning.isNotEmpty)) {
           completeWithAccumulated('idle_timeout');
           agentCancelToken?.cancel('Studio agent idle timeout');
         } else if (!completer.isCompleted) {
@@ -123,29 +138,17 @@ class AgentStreamRunner {
         request: request,
         cancelToken: agentCancelToken,
         onUpdate: (delta, reasoningDelta) {
-          if (delta.isNotEmpty) output.write(delta);
-          if (isFinalResponse && delta.isNotEmpty) {
+          accumulator.consumeDelta(delta, reasoningDelta: reasoningDelta);
+          final effectiveText = accumulator.text.trimLeft();
+          if (isFinalResponse) {
             onFinalResponseUpdate?.call(
-              output.toString().trimLeft(),
-              reasoning.isNotEmpty ? reasoning.toString() : null,
+              effectiveText,
+              accumulator.reasoning.isNotEmpty ? accumulator.reasoning : null,
             );
-          } else if (!isFinalResponse && delta.isNotEmpty) {
-            onIntermediateUpdate?.call(output.toString().trimLeft());
-          }
-          if (reasoningDelta != null && reasoningDelta.isNotEmpty) {
-            reasoning.write(reasoningDelta);
-            if (isFinalResponse) {
-              onFinalResponseUpdate?.call(
-                output.toString().trimLeft(),
-                reasoning.toString(),
-              );
-            }
+          } else if (delta.isNotEmpty) {
+            onIntermediateUpdate?.call(effectiveText);
           }
           if (delta.isNotEmpty || reasoningDelta?.isNotEmpty == true) {
-            // First chunk (text or reasoning): the model is producing
-            // output. Cancel the idle timer for good so a long generation
-            // is never cut off mid-stream. Only onComplete/onError or the
-            // outer pipeline cancel terminates the run after this.
             if (!streamStarted) {
               streamStarted = true;
               idleTimer?.cancel();
@@ -154,41 +157,45 @@ class AgentStreamRunner {
         },
         onComplete: (text, finalReasoning, {rawResponseJson}) {
           idleTimer?.cancel();
-          if (shouldStream && output.isEmpty && text.isNotEmpty) {
-            output.write(text);
+          if (shouldStream && accumulator.text.isEmpty && text.isNotEmpty) {
+            accumulator.consumeDelta(text, reasoningDelta: finalReasoning);
           }
+          final effectiveText = accumulator.text.trimLeft();
+          final effectiveReasoning = isFinalResponse
+              ? (accumulator.reasoning.isNotEmpty
+                  ? accumulator.reasoning
+                  : finalReasoning?.trim().isNotEmpty == true
+                      ? finalReasoning!.trim()
+                      : null)
+              : null;
           if (isFinalResponse) {
-            final accumulated = output.toString().trimLeft();
-            final reasoningText = reasoning.isNotEmpty
-                ? reasoning.toString()
-                : finalReasoning?.trim().isNotEmpty == true
-                ? finalReasoning!.trim()
-                : null;
-            if (accumulated.isNotEmpty) {
-              onFinalResponseUpdate?.call(accumulated, reasoningText);
+            if (effectiveText.isNotEmpty) {
+              onFinalResponseUpdate?.call(effectiveText, effectiveReasoning);
             } else if (text.isNotEmpty) {
-              onFinalResponseUpdate?.call(text.trimLeft(), reasoningText);
+              onFinalResponseUpdate?.call(text.trimLeft(), effectiveReasoning);
             }
           } else {
-            final accumulated = output.toString().trimLeft();
-            if (accumulated.isNotEmpty) {
-              onIntermediateUpdate?.call(accumulated);
+            if (effectiveText.isNotEmpty) {
+              onIntermediateUpdate?.call(effectiveText);
             } else if (text.isNotEmpty) {
               onIntermediateUpdate?.call(text.trimLeft());
             }
           }
           if (!completer.isCompleted) {
-            final accumulated = output.toString().trim();
+            final accumulatedText = effectiveText.isEmpty && text.isNotEmpty
+                ? text.trim()
+                : effectiveText;
+            final finalText = shouldStream && accumulatedText.isNotEmpty
+                ? accumulatedText
+                : text.trim();
             final reasoningText = isFinalResponse
-                ? reasoning.isNotEmpty
-                      ? reasoning.toString().trim()
-                      : finalReasoning?.trim() ?? ''
+                ? (accumulator.reasoning.isNotEmpty
+                    ? accumulator.reasoning
+                    : finalReasoning?.trim() ?? '')
                 : '';
             completer.complete(
               AgentRunResult(
-                text: shouldStream && accumulated.isNotEmpty
-                    ? accumulated
-                    : text.trim(),
+                text: finalText,
                 reasoning: reasoningText,
                 rawResponseJson: rawResponseJson,
               ),
@@ -200,7 +207,7 @@ class AgentStreamRunner {
           idleTimer?.cancel();
           if (shouldStream &&
               (agentCancelToken?.isCancelled ?? false) &&
-              output.isNotEmpty) {
+              accumulator.text.isNotEmpty) {
             completeWithAccumulated('cancel_with_streamed_text');
             return;
           }
