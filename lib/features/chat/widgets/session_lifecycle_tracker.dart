@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/generation_notification_service.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../chat_provider.dart';
+import '../unread_sessions_provider.dart';
 
 class SessionLifecycleTracker extends ConsumerStatefulWidget {
   final String charId;
@@ -40,6 +41,11 @@ class _SessionLifecycleTrackerState extends ConsumerState<SessionLifecycleTracke
       widget.charId,
       session?.id,
     );
+    // Opening / focusing a session clears its unread dot in the chat list.
+    final sessionId = session?.id;
+    if (sessionId != null) {
+      ref.read(unreadSessionsProvider.notifier).markRead(sessionId);
+    }
   }
 
   @override

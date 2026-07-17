@@ -428,6 +428,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       ),
     );
   }
+
+  /// Opens the character card (detail sheet) for [charId]. Mirrors
+  /// [CharacterDetailSheetLauncher]: the sheet pops a route string when the
+  /// user picks an action inside it (edit / gallery / open chat), which we
+  /// forward to GoRouter.
+  Future<void> _showCharacterCard(String charId) async {
+    final navTarget = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CharacterDetailScreen(charId: charId),
+    );
+    if (!mounted || navTarget == null || navTarget.isEmpty) return;
+    context.go(navTarget);
+  }
+
+  /// Opens the character avatar in the full-screen image viewer. The avatar is
+  /// always an on-disk file, so it resolves straight to a [FileImage] without
+  /// the data:/http handling the in-chat image viewer needs.
+  void _showAvatarViewer(String avatarPath) {
+    final resolved = resolveGlazeFilePath(avatarPath);
+    if (resolved == null || resolved.isEmpty) return;
+    ImageViewer.show(context, imageProvider: FileImage(File(resolved)));
+  }
 }
 
 class _ChatBody extends ConsumerStatefulWidget {
@@ -610,29 +635,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       provider = FileImage(File(path));
     }
     ImageViewer.show(context, imageProvider: provider);
-  }
-
-  /// Opens the character card (detail sheet) for [charId]. Mirrors
-  /// [CharacterDetailSheetLauncher]: the sheet pops a route string when the
-  /// user picks an action inside it (edit / gallery / open chat), which we
-  /// forward to GoRouter.
-  Future<void> _showCharacterCard(String charId) async {
-    final navTarget = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => CharacterDetailScreen(charId: charId),
-    );
-    if (!mounted || navTarget == null || navTarget.isEmpty) return;
-    context.go(navTarget);
-  }
-
-  /// Opens the character avatar in the full-screen image viewer.
-  void _showAvatarViewer(String avatarPath) {
-    final resolved = resolveGlazeFilePath(avatarPath);
-    if (resolved == null || resolved.isEmpty) return;
-    _showImageViewer(context, resolved);
   }
 
   String _imageSrcToFilePath(String src) {
