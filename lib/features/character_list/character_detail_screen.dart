@@ -1185,80 +1185,8 @@ class _InfoTab extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: GptMarkdown(
-              hasHtmlTags(notes) ? htmlToMarkdown(notes) : notes,
-              style: const TextStyle(
-                fontSize: 13.5,
-                height: 1.55,
-                color: _kText75,
-              ),
-              onLinkTap: (url, title) async {
-                final uri = Uri.tryParse(url);
-                if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-              imageBuilder: (context, url, width, height) {
-                if (url.startsWith('http://') || url.startsWith('https://')) {
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: url,
-                      width: width,
-                      height: height,
-                      fit: BoxFit.contain,
-                    ),
-                  );
-                }
-                if (url.startsWith('data:')) {
-                  final commaIdx = url.indexOf(',');
-                  if (commaIdx > 0) {
-                    try {
-                      final bytes = Uri.parse(url).data!.contentAsBytes();
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(
-                          bytes,
-                          width: width,
-                          height: height,
-                          fit: BoxFit.contain,
-                        ),
-                      );
-                    } catch (_) {}
-                  }
-                }
-                final file = File(url);
-                if (file.existsSync()) {
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.file(
-                      file,
-                      width: width,
-                      height: height,
-                      fit: BoxFit.contain,
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-              // A custom inlineComponents list replaces gpt_markdown's built-in
-              // inline set, so the standard emphasis parsers must be listed
-              // explicitly — otherwise `**bold**` / `*italic*` render as literal
-              // asterisks. Bold is listed before italic so `**` wins over `*`.
-              // Colours are left null so emphasis inherits the bio text colour.
-              inlineComponents: [
-                HtmlColorMd(),
-                GlowTextMd(),
-                ColorGlowTextMd(),
-                GradientTextMd(),
-                BackgroundTextMd(),
-                ColoredBoldMd(),
-                ColoredUnderscoreBoldMd(),
-                ColoredItalicMd(),
-                ColoredUnderscoreItalicMd(),
-                LinkMd(),
-                ImageMd(),
-              ],
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: _BioMarkdown(notes),
           ),
         ],
         if (tags.isEmpty && !hasNotes)
@@ -1274,6 +1202,139 @@ class _InfoTab extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Renders a character bio (JanitorAI `creatorNotes`, which is HTML) inside the
+/// site's default markdown block. HTML is converted to markdown, then split into
+/// alignment runs ([splitBioAlignment]) so each `<p style="text-align:…">` gets
+/// its own `GptMarkdown` with the matching `textAlign` — unaligned text stays
+/// left, exactly as before. gpt_markdown has no block-alignment of its own, so
+/// this keeps alignment out of its parser (worst case: a run isn't centred).
+class _BioMarkdown extends StatelessWidget {
+  final String notes;
+  const _BioMarkdown(this.notes);
+
+  TextAlign? _mapAlign(String a) {
+    switch (a) {
+      case 'center':
+        return TextAlign.center;
+      case 'right':
+        return TextAlign.right;
+      case 'justify':
+        return TextAlign.justify;
+      default:
+        return null;
+    }
+  }
+
+  Widget _segment(BuildContext context, BioSegment seg) {
+    return GptMarkdown(
+      seg.text,
+      textAlign: _mapAlign(seg.align),
+      style: const TextStyle(fontSize: 13.5, height: 1.55, color: _kText75),
+      onLinkTap: (url, title) async {
+        final uri = Uri.tryParse(url);
+        if (uri != null) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      imageBuilder: _bioImageBuilder,
+      // A custom inlineComponents list replaces gpt_markdown's built-in inline
+      // set, so emphasis parsers are listed explicitly. LinkedImageMd MUST come
+      // before LinkMd (see its doc). Colours are left null so emphasis inherits
+      // the bio text colour.
+      inlineComponents: [
+        HtmlColorMd(),
+        GlowTextMd(),
+        ColorGlowTextMd(),
+        GradientTextMd(),
+        BackgroundTextMd(),
+        ColoredBoldMd(),
+        ColoredUnderscoreBoldMd(),
+        ColoredItalicMd(),
+        ColoredUnderscoreItalicMd(),
+        LinkedImageMd(),
+        LinkMd(),
+        ImageMd(),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final md = hasHtmlTags(notes) ? htmlToMarkdown(notes) : notes;
+    final segments = splitBioAlignment(md);
+    return Container(
+      // JanitorAI's default bio block (`.characterInfoMarkdownContent`):
+      // translucent black panel, faint purple border, rounded, 1rem pad.
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0x7B000000),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x1A8B5CF6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < segments.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _segment(context, segments[i]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Shared image renderer for bio markdown: network (`http`/`https`), `data:`
+/// URIs, and local files. Used by every bio segment's `GptMarkdown`.
+Widget _bioImageBuilder(
+  BuildContext context,
+  String url,
+  double? width,
+  double? height,
+) {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: CachedNetworkImage(
+        imageUrl: url,
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+  if (url.startsWith('data:')) {
+    final commaIdx = url.indexOf(',');
+    if (commaIdx > 0) {
+      try {
+        final bytes = Uri.parse(url).data!.contentAsBytes();
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            bytes,
+            width: width,
+            height: height,
+            fit: BoxFit.contain,
+          ),
+        );
+      } catch (_) {}
+    }
+  }
+  final file = File(url);
+  if (file.existsSync()) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.file(
+        file,
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+  return const SizedBox.shrink();
 }
 
 class _TagChip extends StatelessWidget {
