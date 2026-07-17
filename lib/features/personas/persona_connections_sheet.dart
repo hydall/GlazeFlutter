@@ -7,7 +7,7 @@ import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/chat_session_ops_provider.dart';
 import '../../../features/personas/persona_list_provider.dart';
-import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/connection_sheet_widgets.dart';
 import '../../../shared/widgets/help_tip.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -77,10 +77,10 @@ class _PersonaConnectionsSheetState
               bottom: 16 + MediaQuery.paddingOf(context).bottom,
             ),
             children: [
-              _Section(
+              ConnectionSection(
                 icon: Icons.public,
                 title: 'label_global'.tr(),
-                child: _ToggleRow(
+                child: ConnectionToggleRow(
                   label: 'label_global_enabled'.tr(),
                   value: isGlobal,
                   onChanged: (v) {
@@ -88,17 +88,17 @@ class _PersonaConnectionsSheetState
                   },
                 ),
               ),
-              _Section(
+              ConnectionSection(
                 icon: Icons.person,
                 title: 'header_characters'.tr(),
                 onAdd: () => _addCharacterConnection(),
                 child: charIds.isEmpty
-                    ? _EmptyHint('no_char_connections'.tr())
+                    ? ConnectionEmptyHint('no_char_connections'.tr())
                     : Wrap(
                         spacing: 6,
                         runSpacing: 4,
                         children: charIds
-                            .map((id) => _ConnectionChip(
+                            .map((id) => ConnectionChip(
                                   id: id,
                                   futureLabel: _charName(id),
                                   onRemove: () => setPersonaConnection(
@@ -108,17 +108,17 @@ class _PersonaConnectionsSheetState
                             .toList(),
                       ),
               ),
-              _Section(
+              ConnectionSection(
                 icon: Icons.chat,
                 title: 'tab_dialogs'.tr(),
                 onAdd: () => _addChatConnection(),
                 child: chatIds.isEmpty
-                    ? _EmptyHint('no_chat_connections'.tr())
+                    ? ConnectionEmptyHint('no_chat_connections'.tr())
                     : Wrap(
                         spacing: 6,
                         runSpacing: 4,
                         children: chatIds
-                            .map((id) => _ConnectionChip(
+                            .map((id) => ConnectionChip(
                                   id: id,
                                   futureLabel: _chatLabel(id),
                                   onRemove: () => setPersonaConnection(
@@ -218,113 +218,6 @@ class _PersonaConnectionsSheetState
     if (selected != null) {
       await setPersonaConnection(ref, 'chat', selected.id as String, widget.personaId);
     }
-  }
-}
-
-class _Section extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback? onAdd;
-  final Widget child;
-
-  const _Section(
-      {required this.icon, required this.title, this.onAdd, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: context.cs.onSurfaceVariant),
-              const SizedBox(width: 6),
-              Text(title,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: context.cs.onSurfaceVariant)),
-              const Spacer(),
-              if (onAdd != null)
-                IconButton(
-                    icon: const Icon(Icons.add, size: 18),
-                    onPressed: onAdd,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints()),
-            ],
-          ),
-          const SizedBox(height: 6),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _ToggleRow extends StatelessWidget {
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _ToggleRow(
-      {required this.label, required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Flexible(
-            child: Text(label,
-                style: TextStyle(
-                    fontSize: 14, color: context.cs.onSurface))),
-        Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: context.cs.primary),
-      ],
-    );
-  }
-}
-
-class _ConnectionChip extends StatelessWidget {
-  final String id;
-  final Future<String> futureLabel;
-  final VoidCallback onRemove;
-
-  const _ConnectionChip(
-      {required this.id, required this.futureLabel, required this.onRemove});
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(
-      label: FutureBuilder<String>(
-        future: futureLabel,
-        builder: (_, snap) =>
-            Text(snap.data ?? id, style: const TextStyle(fontSize: 12)),
-      ),
-      deleteIcon: const Icon(Icons.close, size: 14),
-      onDeleted: onRemove,
-      visualDensity: VisualDensity.compact,
-      backgroundColor: Colors.white.withValues(alpha: 0.08),
-      side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
-    );
-  }
-}
-
-class _EmptyHint extends StatelessWidget {
-  final String text;
-  const _EmptyHint(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(text,
-        style: TextStyle(
-            fontSize: 12,
-            color: context.cs.onSurfaceVariant.withValues(alpha: 0.6),
-            fontStyle: FontStyle.italic));
   }
 }
 
