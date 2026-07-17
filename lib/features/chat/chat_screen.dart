@@ -322,12 +322,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         onBack: () {
           // Dismiss any open overlay first; only navigate up when nothing is
           // open. Order mirrors the precedence the back gesture should follow.
-          if (_drawerCtrl.inputFocus.hasFocus) {
-            _drawerCtrl.inputFocus.unfocus();
-            return;
-          }
-          // Covers both the open magic drawer / quick replies panel and the
-          // brief keyboard→drawer transition window; closeDrawer handles both.
+          //
+          // Close the drawer BEFORE looking at the input focus. The chat body
+          // is an InAppWebView platform view: tapping into it can steal native
+          // focus without Flutter clearing `inputFocus`, so `hasFocus` gets
+          // stuck `true` with no keyboard on screen. Checking focus first then
+          // swallowed the back on a no-op `unfocus()` — the magic drawer /
+          // quick replies never closed, and leaving the chat took a second
+          // press. Draining the visible overlays first keeps a stale focus flag
+          // from eating the gesture.
           if (_drawerCtrl.drawerOpen || _drawerCtrl.switchingToDrawer) {
             _drawerCtrl.closeDrawer();
             return;
@@ -335,6 +338,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           if (_search.showSearch) {
             _search.closeSearch();
             return;
+          }
+          // Only consume the back to dismiss the keyboard when it is genuinely
+          // up. Guarding on the live inset (not just `hasFocus`, which can be
+          // stale) means a lingering FocusNode no longer costs an extra press.
+          final keyboardUp = MediaQuery.viewInsetsOf(context).bottom > 0;
+          if (_drawerCtrl.inputFocus.hasFocus && keyboardUp) {
+            _drawerCtrl.inputFocus.unfocus();
+            return;
+          }
+          // Nothing left to dismiss — leave the chat. Clear any stale focus so
+          // we don't navigate away with the keyboard node still "focused".
+          if (_drawerCtrl.inputFocus.hasFocus) {
+            _drawerCtrl.inputFocus.unfocus();
           }
           context.go('/');
         },
