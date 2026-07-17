@@ -19,6 +19,11 @@ export class Bridge {
     this.isGenerating = false;
     this.isGeneratingImage = false;
     this.isPostGenRunning = false;
+    // Scroll-hide header state. Lifted out of the _setupScrollListener closure
+    // so setGenerating() can re-show the header when a generation ends (see
+    // setGenerating): the header is frozen for the whole streaming window and
+    // must never be left stuck hidden afterwards.
+    this._headerHidden = false;
     this._genTimer = new GenTimer(renderer);
     this._imgGenTimer = new ImgGenTimer();
     this._updateBatcher = new MessageUpdateBatcher();
@@ -92,8 +97,21 @@ export class Bridge {
   }
 
   setGenerating(value) {
+    const wasGenerating = this.isGenerating;
     this.isGenerating = !!value;
     this._syncGenerationActivity();
+    // updateHeader() early-returns for the whole streaming window, so the
+    // scroll-hide header is frozen at whatever state it had when generation
+    // started. If it was hidden — and especially if the chat then shrank (a
+    // cancelled generation trims its empty placeholder) so it no longer
+    // scrolls and the bounds check also early-returns — the header could never
+    // re-appear. Re-show it once when generation ends so it is never stuck
+    // hidden after a (possibly cancelled) generation. Emitting keeps JS the
+    // single source of truth for the Flutter header state.
+    if (wasGenerating && !this.isGenerating && this._headerHidden) {
+      this._headerHidden = false;
+      this._sendToFlutter('onHeaderScroll', [false]);
+    }
   }
 
   setPostGenRunning(value) {
@@ -187,9 +205,10 @@ export class Bridge {
     let loadMoreCooldown = false;
     let lastLoadTop = 0;
     let lastShowScrollToBottom = null;
-    // Header hide-on-scroll (ported from Glaze/src/core/services/ui.js initHeaderScroll)
+    // Header hide-on-scroll (ported from Glaze/src/core/services/ui.js initHeaderScroll).
+    // `_headerHidden` is an instance field (see constructor) so setGenerating()
+    // can re-show the header when a generation ends.
     let headerLastTop = 0;
-    let headerHidden = false;
     let ticking = false;
     const container = this.virtualList.container;
 
@@ -216,13 +235,13 @@ export class Bridge {
         return;
       }
       if (st > headerLastTop + 3 && st > 50) {
-        if (!headerHidden) {
-          headerHidden = true;
+        if (!this._headerHidden) {
+          this._headerHidden = true;
           this._sendToFlutter('onHeaderScroll', [true]);
         }
       } else if (st < headerLastTop - 3) {
-        if (headerHidden) {
-          headerHidden = false;
+        if (this._headerHidden) {
+          this._headerHidden = false;
           this._sendToFlutter('onHeaderScroll', [false]);
         }
       }

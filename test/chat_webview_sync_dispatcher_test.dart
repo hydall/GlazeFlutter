@@ -103,6 +103,46 @@ void main() {
       expect(bridge.evalCalls.single, contains('setPostGenRunning(false)'));
     });
 
+    test(
+      'does not flag a non-trailing assistant as last when a user message '
+      'trails after a cancelled generation',
+      () {
+        // Reproduces the cancel+regen stuck-Regenerate-button bug: after Stop
+        // trims the empty assistant placeholder, the trailing message is the
+        // user turn. The falling edge must NOT stamp data-is-last on the
+        // earlier char bubble (greeting), otherwise two sections carry the flag
+        // and setLastMessage (single querySelector) can never clear the
+        // user-message Regenerate button on the next generation.
+        final bridge = _FakeBridge()..isGenerating = true;
+        final greeting = _assistant('greeting');
+        final user = _user('u1');
+        final dispatcher = ChatWebViewSyncDispatcher(
+          state: ChatWebViewSyncState()..wasGenerating = true,
+        );
+
+        dispatcher.dispatch(
+          bridge: bridge,
+          old: _fields(isGenerating: true, messages: [greeting, user]),
+          current: _fields(isGenerating: false, messages: [greeting, user]),
+          oldMessages: [greeting, user],
+          newMessages: [greeting, user],
+          streamingId: '__streaming__',
+          onSyncExtBlockPanels: () async {},
+          appendMessage: (_) async {},
+          buildStreamingPlaceholder: () => _assistant('__streaming__'),
+        );
+
+        // The trailing message is the user turn → the last assistant bubble is
+        // not last and must be refreshed with isLast=false.
+        expect(bridge.updatedMessages, [greeting]);
+        expect(bridge.updatedIsLast, [false]);
+        // setLastMessage targets the trailing user message (which injects and
+        // owns the sole data-is-last / Regenerate button).
+        expect(bridge.lastMessageIds, ['u1']);
+        expect(bridge.evalCalls.single, contains('setGenerating(false)'));
+      },
+    );
+
     test('syncs overlay blur regions only when they change', () {
       final dispatcher = ChatWebViewSyncDispatcher(
         state: ChatWebViewSyncState(),
