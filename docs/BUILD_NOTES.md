@@ -2,34 +2,24 @@
 
 Platform/toolchain gotchas and their workarounds. Loaded on demand.
 
-## `path_provider_foundation` + `objective_c` breaks Windows builds
+## `path_provider_foundation` + `objective_c` on Windows
 
 **Symptom:** `flutter build windows` fails while compiling a native asset hook.
 
-**Cause:** Flutter compiles native asset hooks for *all* platforms when building for one. `path_provider_foundation >=2.4.3` depends on `objective_c >=9.0.0`, whose `hook/build.dart` uses macOS-only API (`OS.iOS`, `OS.macOS`) that fails to compile on Windows.
+**Cause:** Flutter compiles native asset hooks for *all* platforms when building
+for one. Older `objective_c` build hooks used Apple-only configuration while
+building on Windows and failed before the application was compiled.
 
 **Bug report:** [dart-lang/native#2480](https://github.com/dart-lang/native/issues/2480) — "[hooks] Exclude a platform from being built by dependency's build hook". Open, milestone: Native Assets v1.x.
 
-**Workaround (active):** `pubspec.yaml` pins via `dependency_overrides`:
+**Resolved 2026-07-16:** `objective_c 9.4.1` fixed its misconfigured build hook.
+The `path_provider` overrides were removed after successfully building Windows
+with `path_provider 2.1.6`, `path_provider_foundation 2.6.0`, and
+`objective_c 9.4.1` on Flutter 3.44.0.
 
-```yaml
-dependency_overrides:
-  path_provider: 2.1.5
-  path_provider_foundation: 2.4.2
-```
-
-`path_provider_foundation 2.4.2` uses MethodChannel instead of FFI, so it doesn't pull in `objective_c`.
-
-**Periodic check (every few weeks):**
-1. Remove the `dependency_overrides` block from `pubspec.yaml`.
-2. `flutter pub upgrade path_provider path_provider_foundation`
-3. `flutter build windows`
-4. If it passes — drop the override and delete this section.
-5. If it fails — restore the override and run `flutter pub get`.
-
-**Checked 2026-05-31 (Flutter 3.44.0):** `path_provider_foundation 2.6.0` — still broken.
-Hook folder is gone from the repo, but `objective_c`/`hooks` transitively still
-triggers "Building native assets failed" on Windows. Override stays.
+The general platform-exclusion request remains open in
+[dart-lang/native#2480](https://github.com/dart-lang/native/issues/2480), but it
+no longer blocks this dependency combination.
 
 ## MSVC 14.51+ rejects `<experimental/coroutine>`
 

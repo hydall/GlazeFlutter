@@ -308,7 +308,7 @@ class FakeCloudAdapter implements CloudAdapter {
   @override
   Future<String> download(String path) async {
     final d = files[path];
-    if (d == null) throw Exception('File not found: $path');
+    if (d == null) throw CloudFileNotFoundException(path);
     return d;
   }
 

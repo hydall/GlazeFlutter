@@ -114,6 +114,43 @@ void main() {
     );
   });
 
+  test('treats CoT selections as an exclusive group', () {
+    const cotBlocks = [
+      StudioPresetBlock(
+        id: 'cot_header',
+        title: '━ CoT Selections',
+        order: 0,
+      ),
+      StudioPresetBlock(id: 'compact', title: 'Compact Planning', order: 1),
+      StudioPresetBlock(
+        id: 'directional',
+        title: 'Directional Planning',
+        enabled: false,
+        order: 2,
+      ),
+      StudioPresetBlock(
+        id: 'next_header',
+        title: '━ Final Response',
+        order: 3,
+      ),
+    ];
+
+    final group = groupStudioPresetBlocks(cotBlocks).first;
+    expect(group.exclusive, isTrue);
+    expect(group.children.map((block) => block.id), ['compact', 'directional']);
+
+    final updated = selectExclusiveStudioBlock(
+      cotBlocks,
+      group,
+      'directional',
+    );
+    expect(updated.firstWhere((block) => block.id == 'compact').enabled, isFalse);
+    expect(
+      updated.firstWhere((block) => block.id == 'directional').enabled,
+      isTrue,
+    );
+  });
+
   test('renders narrative modifiers as independent add-on switches', () {
     const narrativeBlocks = [
       StudioPresetBlock(
