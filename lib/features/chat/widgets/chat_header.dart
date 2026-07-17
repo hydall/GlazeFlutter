@@ -15,11 +15,20 @@ class ChatHeader extends ConsumerWidget {
   final String sessionName;
   final int currentSessionIndex;
 
+  /// Tapping the name / session line opens the character card.
+  final VoidCallback? onTapInfo;
+
+  /// Tapping the avatar opens it in the full-screen image viewer. Left null
+  /// when the character has no avatar image (only the initial is shown).
+  final VoidCallback? onTapAvatar;
+
   const ChatHeader({
     super.key,
     required this.character,
     required this.sessionName,
     this.currentSessionIndex = 0,
+    this.onTapInfo,
+    this.onTapAvatar,
   });
 
   @override
@@ -77,39 +86,47 @@ class ChatHeader extends ConsumerWidget {
 
     return Row(
       children: [
-        avatar,
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTapAvatar,
+          child: avatar,
+        ),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                character.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 16 * scale,
-                  fontWeight: FontWeight.w600,
-                  height: 1.1,
-                  letterSpacing: letterSpacing,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTapInfo,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  character.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 16 * scale,
+                    fontWeight: FontWeight.w600,
+                    height: 1.1,
+                    letterSpacing: letterSpacing,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                sessionName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: secondaryColor,
-                  fontSize: 12 * scale,
-                  fontWeight: FontWeight.w400,
-                  height: 1.1,
-                  letterSpacing: letterSpacing,
+                const SizedBox(height: 2),
+                Text(
+                  sessionName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: secondaryColor,
+                    fontSize: 12 * scale,
+                    fontWeight: FontWeight.w400,
+                    height: 1.1,
+                    letterSpacing: letterSpacing,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
