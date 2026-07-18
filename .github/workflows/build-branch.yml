@@ -34,6 +34,12 @@ on:
 permissions:
   contents: write
 
+# Cancel an in-progress build when a newer one is dispatched for the same
+# branch, so runners are not spent finishing a build that is already superseded.
+concurrency:
+  group: build-release-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   # ── shared metadata ────────────────────────────────────────────────────────
   metadata:
@@ -142,6 +148,15 @@ jobs:
           key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: pub-${{ runner.os }}-
 
+      - name: Cache build_runner output
+        # Persist the incremental codegen cache so build_runner regenerates only
+        # what changed (drift + riverpod) instead of doing a full run each time.
+        uses: actions/cache@v4
+        with:
+          path: .dart_tool/build
+          key: build_runner-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: build_runner-${{ runner.os }}-
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -200,6 +215,15 @@ jobs:
           key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: pub-${{ runner.os }}-
 
+      - name: Cache build_runner output
+        # Persist the incremental codegen cache so build_runner regenerates only
+        # what changed (drift + riverpod) instead of doing a full run each time.
+        uses: actions/cache@v4
+        with:
+          path: .dart_tool/build
+          key: build_runner-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: build_runner-${{ runner.os }}-
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -256,6 +280,15 @@ jobs:
           path: ios/Pods
           key: pods-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
           restore-keys: pods-${{ runner.os }}-
+
+      - name: Cache build_runner output
+        # Persist the incremental codegen cache so build_runner regenerates only
+        # what changed (drift + riverpod) instead of doing a full run each time.
+        uses: actions/cache@v4
+        with:
+          path: .dart_tool/build
+          key: build_runner-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: build_runner-${{ runner.os }}-
 
       - name: Install dependencies
         run: flutter pub get
