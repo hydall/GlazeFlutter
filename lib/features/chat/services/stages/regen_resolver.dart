@@ -28,11 +28,8 @@ class RegenResolver {
     if (regenTargetId == null) return null;
 
     if (result.regenTargetId == regenTargetId) {
-      // Keep isGenerating true through the post-gen window (cleaner,
-      // fact-checker, ledger, ext blocks) so the Stop button stays
-      // available. The pipeline resets it after post-gen completes.
       ctx.setState(
-        AsyncData(result.copyWith(isGenerating: true, regenTargetId: null)),
+        AsyncData(result.copyWith(isGenerating: false, regenTargetId: null)),
       );
       ctx.abortHandler.restorationMessage = null;
       return GenerationOutcome(
