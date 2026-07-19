@@ -200,7 +200,8 @@ class CleanerStage {
             .read(studioConfigRepoProvider)
             .getBySessionId(sessionId);
         broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
-        studioConfigEnabled = studioConfig?.enabled == true;
+        studioConfigEnabled = studioConfig?.enabled == true &&
+            ctx.ref.read(studioFeatureEnabledProvider);
         studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
         studioPresetId = await ctx.ref.read(activeStudioPresetProvider.future);
       } catch (e) {
@@ -1007,7 +1008,8 @@ class CleanerStage {
           .read(studioConfigRepoProvider)
           .getBySessionId(sessionId);
       broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
-      studioConfigEnabled = studioConfig?.enabled == true;
+      studioConfigEnabled = studioConfig?.enabled == true &&
+          ctx.ref.read(studioFeatureEnabledProvider);
       studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
       studioPresetId = await ctx.ref.read(activeStudioPresetProvider.future);
     } catch (e) {

@@ -76,7 +76,8 @@ class LedgerStage {
         final studioConfig = await ctx.ref
             .read(studioConfigRepoProvider)
             .getBySessionId(sessionId);
-        studioConfigEnabled = studioConfig?.enabled == true;
+        studioConfigEnabled = studioConfig?.enabled == true &&
+            ctx.ref.read(studioFeatureEnabledProvider);
         studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
         studioPresetId = await ctx.ref.read(activeStudioPresetProvider.future);
       } catch (_) {}

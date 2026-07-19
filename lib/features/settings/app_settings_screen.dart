@@ -107,8 +107,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               onTap: () => setState(() => _currentScreen = 'interface'),
             ),
             MenuItem(
-              icon: Icons.extension_outlined,
-              label: 'Расширения',
+              icon: Icons.science_outlined,
+              label: 'experimental_features_title'.tr(),
               trailing: const Icon(Icons.chevron_right,
                   size: 20, color: Color(0xFF99A2AD)),
               onTap: () => context.push('/extensions'),

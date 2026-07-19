@@ -28,11 +28,16 @@ import '../models/memory_book.dart';
 import '../services/character_importer.dart';
 import '../services/image_storage_service.dart';
 import '../services/migration_service.dart';
+import 'studio_feature_provider.dart';
 
 // Re-export so existing call sites that `import db_provider.dart` can still
 // read pipelineSettingsProvider (previously defined here as a
 // FutureProvider.family before the singleton-global refactor).
 export 'pipeline_settings_provider.dart' show pipelineSettingsProvider;
+
+// Re-export the global Studio master switch so the generation pipeline stages
+// (which already import db_provider) can gate Studio without extra imports.
+export 'studio_feature_provider.dart' show studioFeatureEnabledProvider;
 
 final appDbProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
@@ -140,6 +145,9 @@ final sessionStudioEnabledProvider = FutureProvider.family<bool, String>((
   sessionId,
 ) async {
   if (sessionId.isEmpty) return false;
+  // Respect the global Experimental Features master switch: Studio is off
+  // everywhere when the feature is disabled, regardless of per-session config.
+  if (!ref.watch(studioFeatureEnabledProvider)) return false;
   final config = await ref.watch(studioConfigRepoProvider).getBySessionId(
     sessionId,
   );
