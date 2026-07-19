@@ -83,6 +83,11 @@ class MemoryStudioService {
   MemoryStudioService(this._ref);
 
   Future<StudioConfig?> getEnabledConfig(String sessionId) async {
+    // Global Experimental Features master switch overrides per-session config:
+    // Studio produces nothing when the feature is disabled app-wide.
+    if (!_ref.read(studioFeatureEnabledProvider)) {
+      return null;
+    }
     final config = await _ref
         .read(studioConfigRepoProvider)
         .getBySessionId(sessionId);

@@ -154,7 +154,8 @@ class PostGenCoordinator {
       final studioConfig = await ctx.ref
           .read(studioConfigRepoProvider)
           .getBySessionId(sessionId);
-      studioEnabled = studioConfig?.enabled == true;
+      studioEnabled = studioConfig?.enabled == true &&
+          ctx.ref.read(studioFeatureEnabledProvider);
     } catch (e) {
       debugPrint(
         '[PostGenCoordinator] StudioConfig load failed session=$sessionId: $e',

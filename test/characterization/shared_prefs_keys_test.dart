@@ -224,6 +224,7 @@ void main() {
         'chat_last_keyboard_height',
         'magic_drawer_items',
         'magic_drawer_deleted_items',
+        'feature_studio_enabled',
         'theme_presets',
         'theme_active_preset',
         'gz_embedding_max_chunk_tokens',
