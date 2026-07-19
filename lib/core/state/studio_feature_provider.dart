@@ -1,5 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'db_provider.dart';
 
 /// Global master switch for the **Studio** experimental feature.
 ///
@@ -16,19 +19,41 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// this provider covers Studio, which had no global on/off before.
 final studioFeatureEnabledProvider =
     StateNotifierProvider<StudioFeatureEnabledNotifier, bool>(
-      (ref) => StudioFeatureEnabledNotifier(),
+      (ref) => StudioFeatureEnabledNotifier(ref),
     );
 
 class StudioFeatureEnabledNotifier extends StateNotifier<bool> {
-  StudioFeatureEnabledNotifier() : super(false) {
+  StudioFeatureEnabledNotifier(this._ref) : super(false) {
     _load();
   }
+
+  final Ref _ref;
 
   static const _storageKey = 'feature_studio_enabled';
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    state = prefs.getBool(_storageKey) ?? false;
+    if (!mounted) return;
+    final stored = prefs.getBool(_storageKey);
+    if (stored != null) {
+      state = stored;
+      return;
+    }
+
+    // First launch after the Experimental Features update: the flag has never
+    // been written. Preserve behaviour for users who were already using Studio
+    // (any session/profile with Studio enabled) by turning the master switch
+    // on for them. Fresh installs have no enabled config and stay off. The
+    // result is persisted so this one-time probe never runs again.
+    var migrated = false;
+    try {
+      migrated = await _ref.read(studioConfigRepoProvider).hasAnyEnabledConfig();
+    } catch (_) {
+      migrated = false;
+    }
+    if (!mounted) return;
+    state = migrated;
+    await prefs.setBool(_storageKey, migrated);
   }
 
   Future<void> setEnabled(bool enabled) async {

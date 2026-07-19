@@ -63,6 +63,18 @@ class StudioConfigRepo implements SyncStudioConfigStore {
     return fallback == null ? null : _rowToModel(fallback);
   }
 
+  /// True if any Studio config row (session binding or profile) has ever been
+  /// enabled. Used to migrate pre-existing Studio users onto the global
+  /// Experimental Features master switch without losing their setup.
+  Future<bool> hasAnyEnabledConfig() async {
+    final row =
+        await (db.select(db.studioConfigRows)
+              ..where((t) => t.enabled.equals(true))
+              ..limit(1))
+            .getSingleOrNull();
+    return row != null;
+  }
+
   Future<List<StudioConfig>> getProfiles() async {
     final rows = await db.select(db.studioConfigRows).get();
     final byProfile = <String, StudioConfig>{};
