@@ -100,7 +100,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     Future(() async {
       try {
         final storage = await ref.read(imageStorageProvider.future);
-        final chars = await ref.read(characterRepoProvider).getAll();
+        final chars = await ref.read(charactersProvider.future);
         final made = await storage.backfillMissingThumbnails(
           chars.map((c) => c.avatarPath),
         );
