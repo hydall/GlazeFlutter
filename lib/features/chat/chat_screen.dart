@@ -1611,7 +1611,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
               left: 12,
               right: 12,
               top: messageListTop + memoryTopReserve + 112,
-              child: const PostGenStatusCard(),
+              child: PostGenStatusCard(sessionId: widget.state.session?.id),
             ),
             // Bottom panel: drawer + input bar
             Positioned.fill(

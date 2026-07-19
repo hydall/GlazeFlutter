@@ -90,7 +90,7 @@ class ExtensionPostGenService {
 
   /// Runs all enabled preset blocks for [messageId]. Used after chat
   /// generation and from the manual "Запустить блоки" control.
-  Future<void> runBlocksForMessage({
+  Future<bool> runBlocksForMessage({
     required String charId,
     required String sessionId,
     required String messageId,
@@ -100,9 +100,17 @@ class ExtensionPostGenService {
     required Character character,
     required Persona? persona,
     bool clearExisting = true,
+    void Function()? onStarted,
   }) async {
     final preset = _resolveActivePreset();
-    if (preset == null) return;
+    if (preset == null) return false;
+    final blocks = _blockProcessor.selectBlocks(
+      preset,
+      BlockTrigger.afterAssistant,
+    );
+    if (blocks.isEmpty) return false;
+
+    onStarted?.call();
 
     if (clearExisting) {
       await _ref
@@ -131,6 +139,7 @@ class ExtensionPostGenService {
       _finishBlockRun(cancelToken);
       _refreshPanelForMessage(charId, sessionId, messageId, swipeId, agentSwipeId);
     }
+    return true;
   }
 
   ExtensionPreset? _resolveActivePreset() {
@@ -157,21 +166,22 @@ class ExtensionPostGenService {
   /// cleaned sub-swipe the blocks should bind to (and read for content).
   /// When the cleaner is disabled or skipped, [agentSwipeId] stays -1
   /// (legacy: blocks bind to the top-level swipe only).
-  Future<void> processAfterGeneration({
+  Future<bool> processAfterGeneration({
     required String charId,
     required ChatSession session,
     required Character character,
     required Persona? persona,
     int agentSwipeId = -1,
+    void Function()? onStarted,
   }) async {
-    if (session.id.isEmpty || session.messages.isEmpty) return;
+    if (session.id.isEmpty || session.messages.isEmpty) return false;
 
     final lastMessage = session.messages.last;
     if (lastMessage.role == 'user') {
-      return;
+      return false;
     }
 
-    await runBlocksForMessage(
+    return runBlocksForMessage(
       charId: charId,
       sessionId: session.id,
       messageId: lastMessage.id,
@@ -180,6 +190,7 @@ class ExtensionPostGenService {
       messages: session.messages,
       character: character,
       persona: persona,
+      onStarted: onStarted,
     );
   }
 

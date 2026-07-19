@@ -7,7 +7,9 @@ import '../state/post_gen_status_provider.dart';
 /// (Ledger and extension blocks) are running. Auto-dismisses 2.5s after
 /// the last task completes.
 class PostGenStatusCard extends ConsumerStatefulWidget {
-  const PostGenStatusCard({super.key});
+  const PostGenStatusCard({super.key, required this.sessionId});
+
+  final String? sessionId;
 
   @override
   ConsumerState<PostGenStatusCard> createState() => _PostGenStatusCardState();
@@ -23,7 +25,10 @@ class _PostGenStatusCardState extends ConsumerState<PostGenStatusCard> {
     final cs = Theme.of(context).colorScheme;
 
     if (state.phase == PostGenTaskPhase.idle ||
-        state.task == PostGenTask.none) {
+        state.task == PostGenTask.none ||
+        state.sessionId != widget.sessionId) {
+      _lastSeenPhase = null;
+      _lastSeenTask = null;
       return const SizedBox.shrink();
     }
 
@@ -37,7 +42,7 @@ class _PostGenStatusCardState extends ConsumerState<PostGenStatusCard> {
       _lastSeenTask = state.task;
       if (state.phase == PostGenTaskPhase.done ||
           state.phase == PostGenTaskPhase.error) {
-        _scheduleAutoDismiss();
+        _scheduleAutoDismiss(state);
       }
     }
 
@@ -129,11 +134,11 @@ class _PostGenStatusCardState extends ConsumerState<PostGenStatusCard> {
     );
   }
 
-  void _scheduleAutoDismiss() {
+  void _scheduleAutoDismiss(PostGenStatusState expected) {
     Future<void>.delayed(const Duration(milliseconds: 2500), () {
       if (!mounted) return;
       final current = ref.read(postGenStatusProvider);
-      if (current.phase != PostGenTaskPhase.running) {
+      if (identical(current, expected)) {
         ref.read(postGenStatusProvider.notifier).state =
             const PostGenStatusState.idle();
       }

@@ -193,6 +193,8 @@ class GenerationPipeline {
               ctx.setState(AsyncData(after.copyWith(isPostGenRunning: false)));
             }
           }
+        } else {
+          await notifService.onGenerationAborted();
         }
         return regenOutcome;
       }

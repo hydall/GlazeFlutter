@@ -66,6 +66,28 @@ void main() {
       );
     });
 
+    test('selectBlocks excludes disabled and manual-only autorun blocks', () {
+      const processor = BlockProcessor();
+      const preset = ExtensionPreset(
+        id: 'p1',
+        name: 'Preset',
+        blocks: [
+          BlockConfig(id: 'disabled', name: 'Disabled', enabled: false),
+          BlockConfig(id: 'manual', name: 'Manual', manualOnly: true),
+          BlockConfig(
+            id: 'after-user',
+            name: 'After user',
+            trigger: BlockTrigger.afterUser,
+          ),
+        ],
+      );
+
+      expect(
+        processor.selectBlocks(preset, BlockTrigger.afterAssistant),
+        isEmpty,
+      );
+    });
+
     test('passes previous output to dependent block', () async {
       const processor = BlockProcessor();
       final preset = ExtensionPreset(
