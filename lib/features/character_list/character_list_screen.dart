@@ -99,11 +99,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   void _scheduleThumbnailBackfill() {
     Future(() async {
       try {
-        final storage = await ref.read(imageStorageProvider.future);
-        final chars = await ref.read(charactersProvider.future);
-        final made = await storage.backfillMissingThumbnails(
-          chars.map((c) => c.avatarPath),
-        );
+        final made = await ref
+            .read(charactersProvider.notifier)
+            .backfillMissingAvatarThumbnails();
         if (made > 0 && mounted) bumpAvatarVersion(ref);
       } catch (_) {
         // Non-fatal: the full-resolution fallback keeps rendering correctly.

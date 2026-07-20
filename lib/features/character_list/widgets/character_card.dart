@@ -109,6 +109,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(avatarVersionProvider);
     // The bulk-delete flow marks every selected id at once; each card starts its
     // own dust animation here so they all crumble together (not one-by-one). The
     // actual row removal is batched by the screen after the sweep.
@@ -281,10 +282,13 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
     // source: caps memory for the larger aspect-preserving thumbnails and the
     // full-res fallback alike, while keeping the portrait crisp (no upscaling).
     final cacheWidth = (mq.size.width * mq.devicePixelRatio / 2).ceil();
-    return Image.file(
-      File(resolved),
+    return Image(
+      image: ResizeImage(
+        FileImage(File(resolved)),
+        width: cacheWidth,
+        allowUpscaling: false,
+      ),
       fit: BoxFit.cover,
-      cacheWidth: cacheWidth,
       filterQuality: FilterQuality.high,
       errorBuilder: (_, _, _) => _buildPlaceholder(),
     );

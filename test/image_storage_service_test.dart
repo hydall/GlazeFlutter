@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:glaze_flutter/core/services/image_storage_service.dart';
 
@@ -23,6 +24,7 @@ void main() {
   late ImageStorageService service;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     tmpDir = await Directory.systemTemp.createTemp('glaze_image_test_');
     service = ImageStorageService(tmpDir.path);
   });
@@ -142,6 +144,44 @@ void main() {
     final thumbPath = service.thumbnailPath(avatarPath);
     expect(thumbPath, isNotNull);
     expect(await File(thumbPath!).exists(), isTrue);
+  });
+
+  test('thumbnail bounds both axes while preserving extreme aspect ratio', () {
+    final portrait = img.decodeJpg(
+      resizeAvatarBytes(makePng(500, 5000), 768)!,
+    )!;
+    final landscape = img.decodeJpg(
+      resizeAvatarBytes(makePng(5000, 500), 768)!,
+    )!;
+
+    expect(portrait.width, 410);
+    expect(portrait.height, kThumbnailLongSide);
+    expect(landscape.width, kThumbnailLongSide);
+    expect(landscape.height, 410);
+  });
+
+  test('incomplete backfill retries skipped avatars', () async {
+    final avatarDir = Directory(p.join(tmpDir.path, 'avatars'));
+    await avatarDir.create(recursive: true);
+    final valid = File(p.join(avatarDir.path, 'valid.png'));
+    final retry = File(p.join(avatarDir.path, 'retry.png'));
+    await valid.writeAsBytes(makePng(100, 100));
+    await retry.writeAsBytes([1, 2, 3]);
+
+    expect(
+      await service.backfillMissingThumbnails([valid.path, retry.path]),
+      1,
+    );
+    var prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('gz_thumb_v6_backfilled'), isNot(true));
+
+    await retry.writeAsBytes(makePng(100, 100));
+    expect(
+      await service.backfillMissingThumbnails([valid.path, retry.path]),
+      1,
+    );
+    prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('gz_thumb_v6_backfilled'), isTrue);
   });
 
   group('absolutePath rebasing (iOS sandbox UUID change)', () {
