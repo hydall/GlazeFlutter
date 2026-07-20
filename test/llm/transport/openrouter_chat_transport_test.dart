@@ -11,6 +11,7 @@ ChatTransportRequest _req({
   String sessionIdMode = 'openrouter',
   List<Map<String, dynamic>>? previousMessages,
   String endpoint = 'https://intentionally-ignored.example',
+  int? receiveTimeoutMs,
 }) {
   return ChatTransportRequest(
     endpoint: endpoint,
@@ -31,6 +32,7 @@ ChatTransportRequest _req({
     cacheBreakpointMode: cacheBreakpointMode,
     sessionIdMode: sessionIdMode,
     previousMessages: previousMessages,
+    receiveTimeoutMs: receiveTimeoutMs,
   );
 }
 
@@ -69,6 +71,14 @@ void main() {
       final body = OpenAiChatTransport.buildBody(r);
 
       expect(body['session_id'], 'sess-1');
+    });
+
+    test('preserves per-request receive timeout', () {
+      final r = OpenRouterChatTransport.buildRouterRequest(
+        _req(receiveTimeoutMs: 0),
+      );
+
+      expect(r.receiveTimeoutMs, 0);
     });
   });
 

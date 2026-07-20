@@ -82,6 +82,7 @@ class OpenAiChatTransport implements ChatTransport {
             onUpdate,
             onComplete,
             omitReasoning: request.omitReasoning,
+            receiveTimeoutMs: request.receiveTimeoutMs,
           );
         } else {
           await _oneShotResponse(
@@ -91,6 +92,7 @@ class OpenAiChatTransport implements ChatTransport {
             cancelToken,
             onComplete,
             omitReasoning: request.omitReasoning,
+            receiveTimeoutMs: request.receiveTimeoutMs,
           );
         }
         return; // success — no retry needed
@@ -179,6 +181,7 @@ class OpenAiChatTransport implements ChatTransport {
     ChatTransportOnUpdate? onUpdate,
     ChatTransportOnComplete? onComplete, {
     bool omitReasoning = false,
+    int? receiveTimeoutMs,
   }) async {
     final response = await _dio.post<ResponseBody>(
       url,
@@ -189,6 +192,7 @@ class OpenAiChatTransport implements ChatTransport {
           ..._extraHeaders,
         },
         responseType: ResponseType.stream,
+        receiveTimeout: _receiveTimeout(receiveTimeoutMs),
       ),
       data: body,
       cancelToken: cancelToken,
@@ -353,6 +357,7 @@ class OpenAiChatTransport implements ChatTransport {
     CancelToken? cancelToken,
     ChatTransportOnComplete? onComplete, {
     bool omitReasoning = false,
+    int? receiveTimeoutMs,
   }) async {
     final response = await _dio.post<dynamic>(
       url,
@@ -363,6 +368,7 @@ class OpenAiChatTransport implements ChatTransport {
           'Accept': 'application/json',
           ..._extraHeaders,
         },
+        receiveTimeout: _receiveTimeout(receiveTimeoutMs),
       ),
       data: body,
       cancelToken: cancelToken,
@@ -426,6 +432,9 @@ class OpenAiChatTransport implements ChatTransport {
       rawResponseJson: rawResponseJson ?? jsonEncode(data),
     );
   }
+
+  Duration? _receiveTimeout(int? timeoutMs) =>
+      timeoutMs == null ? null : Duration(milliseconds: timeoutMs);
 
   (String, String) _aggregateSseString(String body) {
     var fullText = '';

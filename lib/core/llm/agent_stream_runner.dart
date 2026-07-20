@@ -87,6 +87,9 @@ class AgentStreamRunner {
       omitTopP: resolved.omitTopP,
       omitReasoning: resolved.omitReasoning,
       omitReasoningEffort: resolved.omitReasoningEffort,
+      // The Studio timer owns first-chunk timeout semantics. A Dio receive
+      // timeout would incorrectly become a second total/idle timeout.
+      receiveTimeoutMs: 0,
       sessionId: sessionId,
       cacheControlTtl: resolved.cacheControlTtl,
       cacheBreakpointMode: resolved.cacheBreakpointMode,
@@ -119,6 +122,7 @@ class AgentStreamRunner {
               'Studio agent "${agent.name}" timed out after ${timeoutMs}ms',
             ),
           );
+          agentCancelToken?.cancel('Studio agent timeout');
         }
       });
     }

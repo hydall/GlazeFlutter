@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/llm/agent_runner.dart';
+import 'package:glaze_flutter/core/llm/studio/agent_config_resolver.dart';
 import 'package:glaze_flutter/core/llm/studio_api_config_resolver.dart';
 import 'package:glaze_flutter/core/models/api_config.dart';
 import 'package:glaze_flutter/core/models/memory_book_api_settings.dart';
@@ -168,6 +169,29 @@ void main() {
   });
 
   group('AgentRunner Studio final routing', () {
+    test('final timeout is not capped at 120 seconds', () {
+      const settings = PipelineSettings(
+        studioAgent: StudioAgentSettings(studioFinalTimeoutMs: 180000),
+      );
+      final runner = AgentRunner(
+        configResolver: AgentConfigResolver(
+          loadApiConfigs: () async => const [],
+          readActiveApiConfig: () => null,
+          readPipelineSettings: () => settings,
+          readRunApiConfigId: (_) async => '',
+        ),
+        readPipelineSettings: () => settings,
+      );
+
+      expect(
+        runner.effectiveTimeoutMs(
+          const StudioAgent(id: 'final', name: 'Final'),
+          true,
+        ),
+        180000,
+      );
+    });
+
     test(
       'final generator ignores MemoryBook generationModel override',
       () async {

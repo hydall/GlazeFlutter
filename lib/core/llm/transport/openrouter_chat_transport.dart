@@ -93,6 +93,7 @@ class OpenRouterChatTransport implements ChatTransport {
       omitTopP: input.omitTopP,
       omitReasoning: input.omitReasoning,
       omitReasoningEffort: input.omitReasoningEffort,
+      receiveTimeoutMs: input.receiveTimeoutMs,
       sessionId: input.sessionId,
       previousMessages: input.previousMessages,
       sessionIdMode: input.sessionIdMode,
