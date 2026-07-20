@@ -166,17 +166,28 @@ class LorebookVectorSearch {
     final allResults = <String, double>{};
     final allLorebookIds = <String, String>{};
 
-    Future<void> searchPool(
-      List<VectorCandidate> pool,
-      String query,
-    ) async {
-      if (query.isEmpty || pool.isEmpty) return;
+    Future<List<VectorChunk>> embedQuery(String query) async {
       final chunks = await _embeddingService.getEmbeddingsWithChunks(
         [query],
         config,
         cancelToken: cancelToken,
       );
-      final vecChunks = chunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
+      return chunks
+          .map((c) => VectorChunk(text: c.text, vector: c.vector))
+          .toList();
+    }
+
+    final focusedChunks = focusedQuery.isNotEmpty
+        ? embedQuery(focusedQuery)
+        : null;
+
+    Future<void> searchPool(
+      List<VectorCandidate> pool,
+      String query,
+      Future<List<VectorChunk>>? sharedChunks,
+    ) async {
+      if (query.isEmpty || pool.isEmpty) return;
+      final vecChunks = await (sharedChunks ?? embedQuery(query));
       final results = findTopKMulti(vecChunks, pool, pool.length, 0);
       for (final r in results) {
         final entry = r.metadata['entry'] as LorebookEntry;
@@ -194,54 +205,43 @@ class LorebookVectorSearch {
     // to avoid bursting the embedding endpoint with simultaneous requests.
     final mainFutures = <Future<void>>[];
     if (focusedQuery.isNotEmpty) {
-      mainFutures.add(searchPool(candidates, focusedQuery));
+      mainFutures.add(searchPool(candidates, focusedQuery, focusedChunks));
     }
     if (fallbackQuery.isNotEmpty && fallbackQuery != focusedQuery) {
       mainFutures.add(
         Future.delayed(
           const Duration(seconds: 1),
-          () => searchPool(candidates, fallbackQuery),
+          () => searchPool(candidates, fallbackQuery, null),
         ),
       );
     }
-    // Keyless fallback pool — also staggered by 1s relative to the
-    // fallback query. Shares the focused query embedding result, so the
-    // HTTP call is the same; the stagger avoids overlapping with the
-    // main pool's second HTTP call.
+    // Keyless fallback reuses the focused query's in-flight embedding request.
+    // Starting another identical request here bypasses the cache until the
+    // first one completes and can trigger rate limits on slower endpoints.
     final fallbackThreshold = settings.fallbackThreshold;
     final fallbackTopK = settings.fallbackTopK;
     final fallbackResults = <String, double>{};
     final fallbackLorebookIds = <String, String>{};
-    if (focusedQuery.isNotEmpty && fallbackCandidates.isNotEmpty) {
+    if (focusedChunks != null && fallbackCandidates.isNotEmpty) {
       mainFutures.add(
-        Future.delayed(
-          const Duration(seconds: 2),
-          () async {
-            final chunks = await _embeddingService.getEmbeddingsWithChunks(
-              [focusedQuery],
-              config,
-              cancelToken: cancelToken,
-            );
-            final vecChunks = chunks
-                .map((c) => VectorChunk(text: c.text, vector: c.vector))
-                .toList();
-            final results = findTopKMulti(
-              vecChunks,
-              fallbackCandidates,
-              fallbackCandidates.length,
-              0,
-            );
-            for (final r in results) {
-              final entry = r.metadata['entry'] as LorebookEntry;
-              final score = r.score;
-              if (score >= fallbackThreshold) {
-                fallbackResults[entry.id] = score;
-                fallbackLorebookIds[entry.id] =
-                    r.metadata['lorebookId'] as String;
-              }
+        () async {
+          final vecChunks = await focusedChunks;
+          final results = findTopKMulti(
+            vecChunks,
+            fallbackCandidates,
+            fallbackCandidates.length,
+            0,
+          );
+          for (final r in results) {
+            final entry = r.metadata['entry'] as LorebookEntry;
+            final score = r.score;
+            if (score >= fallbackThreshold) {
+              fallbackResults[entry.id] = score;
+              fallbackLorebookIds[entry.id] =
+                  r.metadata['lorebookId'] as String;
             }
-          },
-        ),
+          }
+        }(),
       );
     }
     await Future.wait(mainFutures);
