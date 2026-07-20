@@ -226,9 +226,9 @@ class AgentRunner {
   /// timeout.
   ///
   /// Resolution order:
-  /// 1. [StudioAgent.timeoutMs] (>4000ms, clamped to [1000, 120000]) —
+  /// 1. [StudioAgent.timeoutMs] (>4000ms, minimum 1000ms) —
   ///    per-agent override set at Studio build time.
-  /// 2. [PipelineSettings.studioAgent.studioTimeoutMs] (>0, clamped to [1000, 120000])
+  /// 2. [PipelineSettings.studioAgent.studioTimeoutMs] (>0, minimum 1000ms)
   ///    — global user setting from the Post-Building menu.
   /// 3. hardcoded fallback: final generator 90s, trackers 60s.
   int effectiveTimeoutMs(StudioAgent agent, bool isFinalResponse) {
@@ -240,14 +240,14 @@ class AgentRunner {
         ? pipeline.cleaner.postCleanerTimeoutMs
         : pipeline.studioAgent.studioTrackerTimeoutMs;
     if (slot > 0) {
-      return slot.clamp(1000, 120000);
+      return slot < 1000 ? 1000 : slot;
     }
     if (agent.timeoutMs > 4000) {
-      return agent.timeoutMs.clamp(1000, 120000);
+      return agent.timeoutMs < 1000 ? 1000 : agent.timeoutMs;
     }
     final global = pipeline.studioAgent.studioTimeoutMs;
     if (global > 0) {
-      return global.clamp(1000, 120000);
+      return global < 1000 ? 1000 : global;
     }
     return fallback;
   }

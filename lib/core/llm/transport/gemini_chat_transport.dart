@@ -189,6 +189,7 @@ class GeminiChatTransport implements ChatTransport {
             onUpdate: onUpdate,
             onComplete: onComplete,
             omitReasoning: request.omitReasoning,
+            receiveTimeoutMs: request.receiveTimeoutMs,
           );
         } else {
           await _oneShotResponse(
@@ -198,6 +199,7 @@ class GeminiChatTransport implements ChatTransport {
             cancelToken: cancelToken,
             onComplete: onComplete,
             omitReasoning: request.omitReasoning,
+            receiveTimeoutMs: request.receiveTimeoutMs,
           );
         }
         return; // success — no retry needed
@@ -226,10 +228,15 @@ class GeminiChatTransport implements ChatTransport {
     ChatTransportOnUpdate? onUpdate,
     ChatTransportOnComplete? onComplete,
     bool omitReasoning = false,
+    int? receiveTimeoutMs,
   }) async {
     final response = await _dio.post<ResponseBody>(
       url,
-      options: Options(headers: headers, responseType: ResponseType.stream),
+      options: Options(
+        headers: headers,
+        responseType: ResponseType.stream,
+        receiveTimeout: _receiveTimeout(receiveTimeoutMs),
+      ),
       data: body,
       cancelToken: cancelToken,
     );
@@ -354,10 +361,14 @@ class GeminiChatTransport implements ChatTransport {
     CancelToken? cancelToken,
     ChatTransportOnComplete? onComplete,
     bool omitReasoning = false,
+    int? receiveTimeoutMs,
   }) async {
     final response = await _dio.post<dynamic>(
       url,
-      options: Options(headers: {...headers, 'Accept': 'application/json'}),
+      options: Options(
+        headers: {...headers, 'Accept': 'application/json'},
+        receiveTimeout: _receiveTimeout(receiveTimeoutMs),
+      ),
       data: body,
       cancelToken: cancelToken,
     );
@@ -414,6 +425,9 @@ class GeminiChatTransport implements ChatTransport {
       rawResponseJson: rawJson ?? jsonEncode(data),
     );
   }
+
+  Duration? _receiveTimeout(int? timeoutMs) =>
+      timeoutMs == null ? null : Duration(milliseconds: timeoutMs);
 
   @override
   Future<List<Map<String, dynamic>>> fetchModels({

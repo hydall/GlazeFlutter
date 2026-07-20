@@ -31,6 +31,10 @@ class ChatTransportRequest {
   final bool omitReasoning;
   final bool omitReasoningEffort;
 
+  /// Optional per-call HTTP receive timeout. `0` disables the transport-level
+  /// timeout so a caller such as Studio can own first-chunk timeout semantics.
+  final int? receiveTimeoutMs;
+
   /// Optional session ID — forwarded as `session_id` in body when prompt
   /// caching is enabled (OpenRouter / Anthropic-via-OR scenarios).
   final String? sessionId;
@@ -74,6 +78,7 @@ class ChatTransportRequest {
     this.omitTopP = false,
     this.omitReasoning = false,
     this.omitReasoningEffort = false,
+    this.receiveTimeoutMs,
     this.sessionId,
     this.previousMessages,
     this.cacheControlTtl = 'off',
