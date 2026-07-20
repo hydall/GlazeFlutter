@@ -11,16 +11,14 @@ import '../utils/cast_helpers.dart';
 import '../utils/platform_paths.dart';
 import '../../features/cloud_sync/sync_repo_interfaces.dart';
 
-/// Shorter-side target (px) of the pre-generated list/card thumbnails. We
-/// constrain the *shorter* side — not the longer one — because the grid/card
-/// portraits paint with `BoxFit.cover`, which binds on the short axis: a very
-/// tall composite portrait (several stacked arts) throttled by its *long* side
-/// would collapse to a sliver-wide image and read badly upscaled/"шакал". By
-/// capping the short side the width stays crisp no matter how tall the source
-/// is (the long side is left free, only the decode is bounded per card).
+/// Shorter-side target (px) of the pre-generated list/card thumbnails.
 /// Changing this must be paired with a bump of the thumbnail migration key (see
 /// [_kThumbMigrationKey]) so stale thumbnails are regenerated.
 const int kThumbnailShortSide = 768;
+
+/// Upper bound for the long side. Without this, unusually tall or wide images
+/// can produce thumbnails too large for mobile image decoders and GPU textures.
+const int kThumbnailLongSide = 4096;
 
 /// JPEG quality for the generated thumbnails.
 const int _kThumbnailQuality = 92;
@@ -30,30 +28,30 @@ const int _kThumbnailQuality = 92;
 /// new [kThumbnailShortSide] / resize policy takes effect for existing
 /// libraries. Pair with [_kThumbBackfillKey] so the wiped thumbnails are
 /// regenerated in the background.
-const String _kThumbMigrationKey = 'gz_thumb_v5_migrated';
+const String _kThumbMigrationKey = 'gz_thumb_v6_migrated';
 
 /// SharedPreferences flag guarding the one-time background thumbnail backfill.
-const String _kThumbBackfillKey = 'gz_thumb_v5_backfilled';
+const String _kThumbBackfillKey = 'gz_thumb_v6_backfilled';
 
-/// Runs in a background isolate: decodes [imageBytes], scales it so its
-/// *shorter* side is at most [maxShortSide] (never upscaling, aspect preserved),
-/// and re-encodes as JPEG. Kept top-level (not an instance method) so it is
-/// safely sendable to [Isolate.run] — capturing `this` would not be.
-Uint8List? resizeAvatarBytes(Uint8List imageBytes, int maxShortSide) {
+/// Runs in a background isolate and scales without upscaling or changing the
+/// aspect ratio. Both axes are bounded to keep extreme images mobile-safe.
+Uint8List? resizeAvatarBytes(Uint8List imageBytes, int maxShortSide,
+    [int maxLongSide = kThumbnailLongSide]) {
   try {
     final image = img.decodeImage(imageBytes);
     if (image == null) return null;
-    // Scale by the shorter axis so the width of tall portraits (and the height
-    // of wide ones) survives — that is the axis `BoxFit.cover` keeps.
     final shortSide = image.width <= image.height ? image.width : image.height;
-    final img.Image scaled;
-    if (shortSide > maxShortSide) {
-      scaled = image.width <= image.height
-          ? img.copyResize(image, width: maxShortSide)
-          : img.copyResize(image, height: maxShortSide);
-    } else {
-      scaled = image; // already small enough — don't upscale
-    }
+    final longSide = image.width >= image.height ? image.width : image.height;
+    final shortScale = maxShortSide / shortSide;
+    final longScale = maxLongSide / longSide;
+    final scale = [1.0, shortScale, longScale].reduce((a, b) => a < b ? a : b);
+    final scaled = scale < 1
+        ? img.copyResize(
+            image,
+            width: (image.width * scale).round().clamp(1, maxLongSide),
+            height: (image.height * scale).round().clamp(1, maxLongSide),
+          )
+        : image;
     return Uint8List.fromList(img.encodeJpg(scaled, quality: _kThumbnailQuality));
   } catch (_) {
     return null;
@@ -101,29 +99,36 @@ class ImageStorageService implements SyncImageStore {
     if (!await dir.exists()) await dir.create(recursive: true);
 
     var made = 0;
+    var complete = true;
     for (final avatarPath in avatarPaths) {
       if (avatarPath == null || avatarPath.isEmpty) continue;
       if (thumbnailPath(avatarPath) != null) continue; // already has one
 
       final resolvedPath = absolutePath(avatarPath) ?? avatarPath;
       final avatarFile = File(resolvedPath);
-      if (!await avatarFile.exists()) continue;
+      if (!await avatarFile.exists()) {
+        complete = false;
+        continue;
+      }
 
       try {
         final bytes = await avatarFile.readAsBytes();
         final thumbnail = await Isolate.run(
           () => resizeAvatarBytes(bytes, kThumbnailShortSide),
         );
-        if (thumbnail == null) continue;
+        if (thumbnail == null) {
+          complete = false;
+          continue;
+        }
         final name = p.basenameWithoutExtension(resolvedPath);
         await File(p.join(dir.path, '$name.jpg')).writeAsBytes(thumbnail);
         made++;
       } catch (_) {
-        // Skip this one; the full-res fallback still renders it correctly.
+        complete = false;
       }
     }
 
-    await prefs.setBool(_kThumbBackfillKey, true);
+    if (complete) await prefs.setBool(_kThumbBackfillKey, true);
     return made;
   }
 

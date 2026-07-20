@@ -286,6 +286,12 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
     return initial;
   }
 
+  Future<int> backfillMissingAvatarThumbnails() async {
+    final chars = await ref.read(characterRepoProvider).getAll();
+    final storage = await ref.read(imageStorageProvider.future);
+    return storage.backfillMissingThumbnails(chars.map((c) => c.avatarPath));
+  }
+
   Future<void> add(Character character) async {
     final repo = ref.read(characterRepoProvider);
     await repo.put(character);
