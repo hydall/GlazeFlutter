@@ -75,10 +75,21 @@ export class EditController {
     // wheel handler's "bubble to the chat" behavior for touch input.
     let touchStartY = 0;
     let touchLastY = 0;
+    let touchLastT = 0;
+    let touchVelocity = 0; // px/ms, finger direction (smoothed)
     let touchScrolling = false;
+    let inertiaRAF = 0;
+
+    const cancelInertia = () => {
+      if (inertiaRAF) { cancelAnimationFrame(inertiaRAF); inertiaRAF = 0; }
+    };
+
     textarea.addEventListener('touchstart', (e) => {
       if (e.touches.length !== 1) return;
+      cancelInertia(); // a new touch grabs the scroll — stop any glide
       touchStartY = touchLastY = e.touches[0].clientY;
+      touchLastT = performance.now();
+      touchVelocity = 0;
       touchScrolling = false;
     }, { passive: true });
     textarea.addEventListener('touchmove', (e) => {
@@ -99,12 +110,44 @@ export class EditController {
       if (!touchScrolling && Math.abs(dyTotal) < 6) return;
       touchScrolling = true;
 
+      const now = performance.now();
       const dy = y - touchLastY;
+      const dt = now - touchLastT;
+      // Weighted-average the velocity so the release value reflects the last
+      // moments of the drag without a single jittery sample dominating.
+      if (dt > 0) touchVelocity = touchVelocity * 0.2 + (dy / dt) * 0.8;
       touchLastY = y;
+      touchLastT = now;
       e.preventDefault();
       e.stopPropagation();
       scrollTopFn(scrollTopFn() - dy);
     }, { passive: false });
+    // After the finger lifts, keep the chat gliding with a decaying velocity so
+    // the drag has the momentum users expect instead of stopping dead — the
+    // manual scrollTop drive above has no native inertia of its own.
+    const onTouchEnd = () => {
+      const wasScrolling = touchScrolling;
+      touchScrolling = false;
+      if (!wasScrolling || Math.abs(touchVelocity) < 0.05) return;
+      let v = touchVelocity; // px/ms
+      let lastT = performance.now();
+      const step = (now) => {
+        const dt = now - lastT;
+        lastT = now;
+        v *= Math.pow(0.95, dt / 16.67); // ~5% decay per 60fps frame (~1s glide)
+        if (Math.abs(v) < 0.02) { inertiaRAF = 0; return; }
+        const before = scrollTopFn();
+        const after = scrollTopFn(before - v * dt);
+        if (Math.abs(after - before) < 0.5) { inertiaRAF = 0; return; } // hit an edge
+        inertiaRAF = requestAnimationFrame(step);
+      };
+      inertiaRAF = requestAnimationFrame(step);
+    };
+    textarea.addEventListener('touchend', onTouchEnd, { passive: true });
+    textarea.addEventListener('touchcancel', () => {
+      touchScrolling = false;
+      cancelInertia();
+    }, { passive: true });
 
     const stopEditEventPropagation = (e) => e.stopPropagation();
     textarea.addEventListener('pointerdown', stopEditEventPropagation);
