@@ -34,6 +34,7 @@ void main() {
   late String interactionDispatchJs;
   late String panelHostJs;
   late String selectionManagerJs;
+  late String swipeHandlerJs;
   late String glazeSdkJs;
   late String indexHtml;
   late String headlessHtml;
@@ -58,6 +59,7 @@ void main() {
     interactionDispatchJs = _bridgeAsset('interaction_dispatch.js');
     panelHostJs = _bridgeAsset('panel_host.js');
     selectionManagerJs = _bridgeAsset('selection_manager.js');
+    swipeHandlerJs = _bridgeAsset('swipe_gesture_handler.js');
     glazeSdkJs = _asset('glaze_sdk.js');
     indexHtml = _asset('index.html');
     headlessHtml = _asset('headless.html');
@@ -499,6 +501,22 @@ void main() {
       expect(editControllerJs, contains('scrollTopFn(scrollTopFn() - dy)'));
     });
 
+    test('touch-drag on textarea keeps gliding with inertia after release', () {
+      // The manual scrollTop drive has no native momentum, so releasing the
+      // finger would stop the chat dead. touchend must launch a decaying glide.
+      expect(editControllerJs, contains("textarea.addEventListener('touchend'"));
+      expect(editControllerJs, contains('requestAnimationFrame(step)'));
+      // Velocity is tracked during the drag and decays each frame.
+      expect(editControllerJs, contains('touchVelocity'));
+      expect(editControllerJs, contains('Math.pow(0.95'));
+      // A fresh touch or a cancel must abort an in-flight glide.
+      expect(editControllerJs, contains('cancelInertia'));
+      expect(
+        editControllerJs,
+        contains("textarea.addEventListener('touchcancel'"),
+      );
+    });
+
     test(
       'wheel listener calls stopPropagation to prevent chat container from also scrolling',
       () {
@@ -531,6 +549,34 @@ void main() {
         editControllerJs,
         contains("this._sendToFlutter('onEditFocusChange'"),
       );
+    });
+  });
+
+  group('swipe gesture axis lock (SwipeGestureHandler)', () {
+    test('touchmove listener is passive:false so it can preventDefault', () {
+      expect(
+        swipeHandlerJs,
+        contains("addEventListener('touchmove', onMove, { passive: false })"),
+      );
+    });
+
+    test('gesture axis is only committed after a deliberate travel threshold',
+        () {
+      // Until the finger moves past the slop, the handler stays hands-off so
+      // the WebView's native vertical scroll can engage — grabbing a message
+      // with swipe variations must not trap a vertical scroll.
+      expect(swipeHandlerJs, contains('AXIS_LOCK_SLOP'));
+      expect(swipeHandlerJs, contains('axisLocked'));
+      expect(
+        swipeHandlerJs,
+        contains('if (absX < AXIS_LOCK_SLOP && absY < AXIS_LOCK_SLOP) return;'),
+      );
+    });
+
+    test('a tie or vertical-dominant drag becomes a native scroll', () {
+      // absY >= absX (not strict) biases equal drags toward scrolling.
+      expect(swipeHandlerJs, contains('if (absY >= absX)'));
+      expect(swipeHandlerJs, contains('scrollingVertical = true;'));
     });
   });
 

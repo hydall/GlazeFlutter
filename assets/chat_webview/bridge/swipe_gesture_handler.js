@@ -15,7 +15,14 @@ export class SwipeGestureHandler {
     let activeBody = null;
     let activeSection = null;
     let scrollingVertical = false;
+    let axisLocked = false;
     const self = this;
+
+    // Minimum net finger travel before we commit the gesture to an axis. Until
+    // this is reached we stay hands-off so the WebView's native vertical scroll
+    // can engage — critical on iOS, where calling preventDefault() on an early
+    // touchmove cancels scrolling for the rest of the gesture.
+    const AXIS_LOCK_SLOP = 12;
 
     const reset = (body) => {
       body.style.transition = 'transform 0.3s ease';
@@ -47,6 +54,7 @@ export class SwipeGestureHandler {
       startX = t.clientX;
       startY = t.clientY;
       scrollingVertical = false;
+      axisLocked = false;
       activeSection = section;
       activeBody = body;
       body.style.transition = 'none';
@@ -58,10 +66,21 @@ export class SwipeGestureHandler {
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
       if (scrollingVertical) return;
-      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
-        scrollingVertical = true;
-        activeBody.style.transform = '';
-        return;
+
+      // Decide the gesture axis once, only after a deliberate amount of travel.
+      // Ties and vertical-dominant drags become scrolls (native), so grabbing a
+      // message that has swipe variations no longer traps a vertical scroll in
+      // the horizontal swipe path.
+      if (!axisLocked) {
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
+        if (absX < AXIS_LOCK_SLOP && absY < AXIS_LOCK_SLOP) return;
+        if (absY >= absX) {
+          scrollingVertical = true;
+          activeBody.style.transform = '';
+          return;
+        }
+        axisLocked = true;
       }
 
       const swipeId = parseInt(activeSection.dataset.swipeId || '0', 10);
