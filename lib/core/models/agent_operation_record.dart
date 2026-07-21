@@ -62,7 +62,8 @@ enum AgentOperationKind {
   studioTracker,
   studioFinal,
   factChecker,
-  studioLedger;
+  studioLedger,
+  studioLedgerReconciliation;
 
   String get label => switch (this) {
     AgentOperationKind.memorySidecar => 'Memory sidecar',
@@ -74,6 +75,8 @@ enum AgentOperationKind {
     AgentOperationKind.studioFinal => 'Studio final',
     AgentOperationKind.factChecker => 'Fact checker',
     AgentOperationKind.studioLedger => 'Studio Ledger',
+    AgentOperationKind.studioLedgerReconciliation =>
+      'Studio Ledger reconciliation',
   };
 }
 

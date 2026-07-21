@@ -290,6 +290,8 @@ class OperationTile extends StatelessWidget {
       AgentOperationKind.studioFinal => Icons.edit_note,
       AgentOperationKind.factChecker => Icons.fact_check_outlined,
       AgentOperationKind.studioLedger => Icons.menu_book_outlined,
+      AgentOperationKind.studioLedgerReconciliation =>
+        Icons.fact_check_outlined,
     };
   }
 

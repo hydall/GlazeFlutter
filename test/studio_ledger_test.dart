@@ -6,14 +6,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/db/repositories/memory_book_repo.dart';
+import 'package:glaze_flutter/core/db/repositories/ledger_reconciliation_checkpoint_repo.dart';
 import 'package:glaze_flutter/core/db/repositories/tracker_repo.dart';
 import 'package:glaze_flutter/core/db/repositories/tracker_snapshot_repo.dart';
 import 'package:glaze_flutter/core/llm/studio_ledger_export_parser.dart';
+import 'package:glaze_flutter/core/llm/knowledge_cleanup_parser.dart';
 import 'package:glaze_flutter/core/llm/studio_ledger_prompt.dart';
+import 'package:glaze_flutter/core/llm/studio_ledger_reconciliation.dart';
 import 'package:glaze_flutter/core/llm/prompt/ledger_tracker_loader.dart';
 import 'package:glaze_flutter/core/llm/prompt_payload_builder.dart'
     show kCompileStudioSessionStateForTest;
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/character_knowledge_fact.dart';
+import 'package:glaze_flutter/core/models/chat_message.dart';
+import 'package:glaze_flutter/core/models/knowledge_cleanup.dart';
 import 'package:glaze_flutter/core/models/tracker.dart';
 import 'package:glaze_flutter/core/state/db_provider.dart';
 
@@ -116,6 +122,17 @@ List<Tracker> _makeTrackers(
       .toList();
 }
 
+List<ChatMessage> _conversation(int assistantCount) {
+  final messages = <ChatMessage>[];
+  for (var i = 1; i <= assistantCount; i++) {
+    messages.add(ChatMessage(id: 'u$i', role: 'user', content: 'User turn $i'));
+    messages.add(
+      ChatMessage(id: 'a$i', role: 'assistant', content: 'Assistant turn $i'),
+    );
+  }
+  return messages;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -150,6 +167,10 @@ void main() {
       expect(prompt, contains('"knowledgeFacts"'));
       expect(prompt, isNot(contains('durableFacts')));
       expect(prompt, isNot(contains('Max value length')));
+      expect(prompt, contains('Identity resolution overrides exact-key reuse'));
+      expect(prompt, contains('delete npc:Name.location'));
+      expect(prompt, contains('never use it as a backlog'));
+      expect(prompt, contains('accepted assistant prose as evidence'));
     });
 
     test('rejects append histories and legacy knowledge tracker keys', () {
@@ -165,6 +186,300 @@ void main() {
       final result = parser.parse(raw);
       expect(result.export, isNull);
       expect(result.rejectionReason, contains('all ops rejected'));
+    });
+  });
+
+  group('Ledger reconciliation', () {
+    const planner = LedgerReconciliationPlanner();
+
+    test('runs on N+1 once for the previous six assistant turns', () {
+      final messages = [
+        ..._conversation(6),
+        const ChatMessage(id: 'u7', role: 'user', content: 'User turn 7'),
+        const ChatMessage(
+          id: 'a7',
+          role: 'assistant',
+          content: 'Assistant turn 7',
+        ),
+      ];
+      final plan = planner.plan(
+        messages: messages,
+        currentAssistantMessageId: 'a7',
+      );
+      expect(plan, isNotNull);
+      expect(plan!.endMessage.id, 'a6');
+
+      final checkpoint = LedgerReconciliationCheckpoint(
+        sessionId: 's',
+        startMessageId: plan.startMessageId,
+        endMessageId: plan.endMessage.id,
+        endSwipeId: plan.endMessage.swipeId,
+        endAgentSwipeId: plan.endMessage.agentSwipeId,
+        messageIds: plan.messageIds,
+        rangeHash: plan.rangeHash,
+      );
+      expect(
+        planner.plan(
+          messages: messages,
+          currentAssistantMessageId: 'a7',
+          checkpoint: checkpoint,
+        ),
+        isNull,
+      );
+      expect(
+        planner.plan(
+          messages: [
+            ..._conversation(7),
+            const ChatMessage(id: 'a8', role: 'assistant', content: 'Current'),
+          ],
+          currentAssistantMessageId: 'a8',
+          checkpoint: checkpoint,
+        ),
+        isNull,
+      );
+    });
+
+    test('changed accepted content invalidates the range fingerprint', () {
+      final messages = [
+        ..._conversation(6),
+        const ChatMessage(id: 'a7', role: 'assistant', content: 'Current'),
+      ];
+      final original = planner.plan(
+        messages: messages,
+        currentAssistantMessageId: 'a7',
+      )!;
+      final checkpoint = LedgerReconciliationCheckpoint(
+        sessionId: 's',
+        startMessageId: original.startMessageId,
+        endMessageId: original.endMessage.id,
+        endSwipeId: original.endMessage.swipeId,
+        endAgentSwipeId: original.endMessage.agentSwipeId,
+        messageIds: original.messageIds,
+        rangeHash: original.rangeHash,
+      );
+      final changed = [...messages];
+      changed[11] = changed[11].copyWith(content: 'Changed accepted swipe');
+      expect(
+        planner.plan(
+          messages: changed,
+          currentAssistantMessageId: 'a7',
+          checkpoint: checkpoint,
+        ),
+        isNotNull,
+      );
+    });
+
+    test('hidden assistant messages do not advance cadence', () {
+      final messages = [
+        ..._conversation(6),
+        const ChatMessage(
+          id: 'hidden',
+          role: 'assistant',
+          content: 'Internal',
+          isHidden: true,
+        ),
+        const ChatMessage(id: 'a7', role: 'assistant', content: 'Current'),
+      ];
+      final plan = planner.plan(
+        messages: messages,
+        currentAssistantMessageId: 'a7',
+      );
+      expect(plan, isNotNull);
+      expect(plan!.endMessage.id, 'a6');
+      expect(plan.messageIds, isNot(contains('hidden')));
+    });
+
+    test('review range is bounded to twenty messages', () {
+      final messages = [
+        ..._conversation(12),
+        const ChatMessage(id: 'a13', role: 'assistant', content: 'Current'),
+      ];
+      final plan = planner.plan(
+        messages: messages,
+        currentAssistantMessageId: 'a13',
+      )!;
+      expect(plan.messages, hasLength(20));
+      expect(plan.endMessage.id, 'a12');
+    });
+
+    test(
+      'prompt includes stale placeholder state outside direct name match',
+      () {
+        final messages = [
+          ..._conversation(6),
+          const ChatMessage(id: 'a7', role: 'assistant', content: 'Current'),
+        ];
+        final plan = planner.plan(
+          messages: messages,
+          currentAssistantMessageId: 'a7',
+        )!;
+        final prompt = const StudioLedgerReconciliationPrompt().build(
+          systemPrompt: 'DB PROMPT',
+          plan: plan,
+          trackers: _makeTrackers('s', {
+            'npc:Unidentified Netrunner.location': 'Afterlife bar',
+            'npc:Rebecca.location': 'Elsewhere',
+          }),
+        );
+        expect(prompt, contains('DB PROMPT'));
+        expect(prompt, contains('npc:Unidentified Netrunner.location'));
+        expect(prompt, contains('npc:Rebecca.location'));
+        final state = RegExp(
+          r'<committed_state>([\s\S]*?)</committed_state>',
+        ).firstMatch(prompt)!.group(1)!;
+        expect(state, isNot(contains('npc:Rebecca.location')));
+      },
+    );
+
+    test(
+      'checkpoint is invalidated by delete and copied only with full range',
+      () async {
+        final db = _db();
+        final repo = LedgerReconciliationCheckpointRepo(db);
+        addTearDown(db.close);
+        const checkpoint = LedgerReconciliationCheckpoint(
+          sessionId: 'source',
+          startMessageId: 'm1',
+          endMessageId: 'm3',
+          endSwipeId: 0,
+          endAgentSwipeId: 0,
+          messageIds: ['m1', 'm2', 'm3'],
+          rangeHash: 'hash',
+        );
+        await repo.upsert(checkpoint);
+        await repo.copyForSessionBranch(
+          fromSessionId: 'source',
+          toSessionId: 'partial',
+          messageIds: {'m2', 'm3'},
+        );
+        await repo.copyForSessionBranch(
+          fromSessionId: 'source',
+          toSessionId: 'full',
+          messageIds: {'m1', 'm2', 'm3', 'm4'},
+        );
+        expect(await repo.get('partial'), isNull);
+        expect(await repo.get('full'), isNotNull);
+
+        await repo.deleteForMessages('source', {'m2'});
+        expect(await repo.get('source'), isNull);
+      },
+    );
+
+    test('knowledge cleanup accepts only offered bounded operations', () {
+      const offered = CharacterKnowledgeFact(
+        id: 'fact-1',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:unidentified_netrunner',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'identity',
+        object: 'Unknown netrunner',
+        epistemicState: CharacterKnowledgeEpistemicState.inferred,
+        sourceMessageId: 'a1',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+      );
+      const output = '''
+<glaze_knowledge_cleanup>
+{"ops":[
+  {"op":"retract","factId":"fact-1"},
+  {"op":"retract","factId":"guessed-id"},
+  {"op":"rename_entity","fromKey":"entity:unidentified_netrunner","toKey":"entity:lucy","canonicalName":"Lucy"}
+]}
+</glaze_knowledge_cleanup>
+''';
+
+      final ops = const KnowledgeCleanupParser().parse(
+        output: output,
+        offeredFacts: const [offered],
+        reviewText: 'Regina identifies the netrunner as Lucy.',
+      );
+
+      expect(ops, hasLength(2));
+      expect(ops.first.type, KnowledgeCleanupOpType.retract);
+      expect(ops.first.factId, 'fact-1');
+      expect(ops.last.type, KnowledgeCleanupOpType.renameEntity);
+      expect(ops.last.toKey, 'entity:lucy');
+    });
+
+    test('knowledge cleanup rejects unsafe identity migration', () {
+      const named = CharacterKnowledgeFact(
+        id: 'fact-1',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:rebecca',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'identity',
+        object: 'Rebecca',
+        epistemicState: CharacterKnowledgeEpistemicState.confirmed,
+        sourceMessageId: 'a1',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+      );
+      const output = '''
+<glaze_knowledge_cleanup>
+{"ops":[
+  {"op":"rename_entity","fromKey":"entity:rebecca","toKey":"entity:lucy","canonicalName":"Lucy"},
+  {"op":"rename_entity","fromKey":"entity:unknown_woman","toKey":"entity:lucy","canonicalName":"Lucy"}
+]}
+</glaze_knowledge_cleanup>
+''';
+
+      final ops = const KnowledgeCleanupParser().parse(
+        output: output,
+        offeredFacts: const [named],
+        reviewText: 'Rebecca remains at the bar.',
+      );
+
+      expect(ops, isEmpty);
+    });
+
+    test('prompt offers relevant inferred and placeholder facts', () {
+      final messages = [
+        ..._conversation(6),
+        const ChatMessage(id: 'a7', role: 'assistant', content: 'Current'),
+      ];
+      final plan = planner.plan(
+        messages: messages,
+        currentAssistantMessageId: 'a7',
+      )!;
+      const placeholder = CharacterKnowledgeFact(
+        id: 'placeholder',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:unknown_woman',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'location',
+        object: 'Afterlife',
+        epistemicState: CharacterKnowledgeEpistemicState.observed,
+        sourceMessageId: 'a1',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+      );
+      const inferred = CharacterKnowledgeFact(
+        id: 'inferred',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:rebecca',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'motive',
+        object: 'Secret motive',
+        epistemicState: CharacterKnowledgeEpistemicState.inferred,
+        sourceMessageId: 'a2',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+      );
+
+      final prompt = const StudioLedgerReconciliationPrompt().build(
+        systemPrompt: 'DB PROMPT',
+        plan: plan,
+        trackers: const [],
+        knowledgeFacts: const [placeholder, inferred],
+      );
+
+      expect(prompt, contains('"id":"placeholder"'));
+      expect(prompt, contains('"id":"inferred"'));
+      expect(prompt, contains('<glaze_knowledge_cleanup>'));
     });
   });
 

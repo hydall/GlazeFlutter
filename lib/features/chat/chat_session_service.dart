@@ -277,6 +277,13 @@ class ChatSessionService {
           toSessionId: session.id,
           messageIds: branchedMessageIds,
         );
+    await _ref
+        .read(ledgerReconciliationCheckpointRepoProvider)
+        .copyForSessionBranch(
+          fromSessionId: current.id,
+          toSessionId: session.id,
+          messageIds: branchedMessageIds,
+        );
     await saveCurrentSessionIndex(charId, nextIndex);
     return session;
   }
@@ -350,6 +357,9 @@ class ChatSessionService {
     await _ref.read(trackerSnapshotRepoProvider).deleteBySessionId(session.id);
     await _ref
         .read(characterKnowledgeFactRepoProvider)
+        .deleteBySessionId(session.id);
+    await _ref
+        .read(ledgerReconciliationCheckpointRepoProvider)
         .deleteBySessionId(session.id);
     // Also wipe the live `tracker_rows` store. Without this, the UI
     // ("Tracker values" tab) falls back to

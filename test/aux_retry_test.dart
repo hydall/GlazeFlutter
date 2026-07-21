@@ -247,6 +247,20 @@ void main() {
       expect(restored.canRegenerate, isTrue);
     });
 
+    test('Ledger reconciliation kind survives serialization', () {
+      final record = AgentOperationRecord(
+        id: 'reconcile-1',
+        kind: AgentOperationKind.studioLedgerReconciliation,
+        status: AgentOperationStatus.ok,
+        startedAtMs: 1000,
+        finishedAtMs: 1050,
+      );
+
+      final restored = AgentOperationRecord.fromJson(record.toJson());
+      expect(restored.kind, AgentOperationKind.studioLedgerReconciliation);
+      expect(restored.kind.label, 'Studio Ledger reconciliation');
+    });
+
     test('status.isFailure excludes ok/aborted/disabled', () {
       expect(AgentOperationStatus.ok.isFailure, isFalse);
       expect(AgentOperationStatus.aborted.isFailure, isFalse);

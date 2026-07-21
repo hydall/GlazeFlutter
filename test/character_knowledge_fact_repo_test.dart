@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/db/repositories/character_knowledge_fact_repo.dart';
 import 'package:glaze_flutter/core/models/character_knowledge_fact.dart';
+import 'package:glaze_flutter/core/models/knowledge_cleanup.dart';
 
 void main() {
   late AppDatabase db;
@@ -71,6 +72,74 @@ void main() {
       expect(atAnchor.map((item) => item.id), ['replacement']);
     },
   );
+
+  test('reconciliation retracts only an existing reviewable fact', () async {
+    await repo.insertTentative(fact());
+    await repo.activateAnchor(
+      sessionId: 'session-1',
+      messageId: 'message-1',
+      swipeId: 0,
+      agentSwipeId: 0,
+    );
+
+    final applied = await repo.applyReconciliationCleanup(
+      sessionId: 'session-1',
+      ops: const [
+        KnowledgeCleanupOp.retract('fact-1'),
+        KnowledgeCleanupOp.retract('missing'),
+      ],
+    );
+
+    expect(applied, 1);
+    expect(
+      (await repo.getById('fact-1'))!.lifecycle,
+      CharacterKnowledgeFactLifecycle.retracted,
+    );
+  });
+
+  test('identity migration deduplicates only the migrated slot', () async {
+    await repo.insertTentative(fact(id: 'canonical'));
+    await repo.activateAnchor(
+      sessionId: 'session-1',
+      messageId: 'message-1',
+      swipeId: 0,
+      agentSwipeId: 0,
+    );
+    await repo.insertTentative(
+      fact(id: 'placeholder', messageId: 'message-2').copyWith(
+        knowerKey: 'entity:unidentified_netrunner',
+        knowerName: 'Unidentified Netrunner',
+        importance: 0.2,
+      ),
+    );
+    await repo.activateAnchor(
+      sessionId: 'session-1',
+      messageId: 'message-2',
+      swipeId: 0,
+      agentSwipeId: 0,
+    );
+
+    final applied = await repo.applyReconciliationCleanup(
+      sessionId: 'session-1',
+      ops: const [
+        KnowledgeCleanupOp.renameEntity(
+          fromKey: 'entity:unidentified_netrunner',
+          toKey: 'entity:lucy',
+          canonicalName: 'Lucy',
+        ),
+      ],
+    );
+
+    expect(applied, 2);
+    expect(
+      (await repo.getById('canonical'))!.lifecycle,
+      CharacterKnowledgeFactLifecycle.active,
+    );
+    final placeholder = await repo.getById('placeholder');
+    expect(placeholder!.knowerKey, 'entity:lucy');
+    expect(placeholder.knowerName, 'Lucy');
+    expect(placeholder.lifecycle, CharacterKnowledgeFactLifecycle.retracted);
+  });
 
   test(
     'replaying an anchor with no facts clears stale tentative output',

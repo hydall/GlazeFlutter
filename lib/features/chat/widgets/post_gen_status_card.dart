@@ -52,6 +52,23 @@ class _PostGenStatusCardState extends ConsumerState<PostGenStatusCard> {
     final bool showSpinner;
 
     switch (state.task) {
+      case PostGenTask.ledgerReconciliation:
+        if (state.phase == PostGenTaskPhase.running) {
+          label = 'Ledger reconciliation running...';
+          icon = Icons.fact_check_outlined;
+          accent = cs.primary;
+          showSpinner = true;
+        } else if (state.phase == PostGenTaskPhase.done) {
+          label = state.detail ?? 'Ledger reconciliation done';
+          icon = Icons.check_circle_outline;
+          accent = Colors.green;
+          showSpinner = false;
+        } else {
+          label = state.detail ?? 'Ledger reconciliation failed';
+          icon = Icons.error_outline;
+          accent = Colors.redAccent;
+          showSpinner = false;
+        }
       case PostGenTask.ledger:
         if (state.phase == PostGenTaskPhase.running) {
           label = 'Ledger running...';

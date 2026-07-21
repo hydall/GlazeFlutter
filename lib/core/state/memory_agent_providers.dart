@@ -80,6 +80,9 @@ final studioLedgerServiceProvider = Provider<StudioLedgerService>((ref) {
     bookRepo: ref.read(memoryBookRepoProvider),
     snapshotRepo: ref.read(trackerSnapshotRepoProvider),
     knowledgeFactRepo: ref.read(characterKnowledgeFactRepoProvider),
+    reconciliationCheckpointRepo: ref.read(
+      ledgerReconciliationCheckpointRepoProvider,
+    ),
     ledgerTrackerLoader: ref.read(ledgerTrackerLoaderProvider),
   );
 });

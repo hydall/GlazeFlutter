@@ -661,6 +661,9 @@ class ChatRepo implements SyncChatStore {
         _db.trackerSnapshots,
       )..where((t) => t.sessionId.isIn(ids))).go();
       await (_db.delete(
+        _db.ledgerReconciliationCheckpoints,
+      )..where((t) => t.sessionId.isIn(ids))).go();
+      await (_db.delete(
         _db.chatSummaries,
       )..where((t) => t.sessionId.isIn(ids))).go();
       await (_db.delete(

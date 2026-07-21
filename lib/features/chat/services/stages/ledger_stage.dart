@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
 import '../../../../core/llm/macro_engine.dart';
 import '../../../../core/llm/studio_ledger_service.dart';
+import '../../../../core/llm/studio_ledger_reconciliation.dart';
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/models/agent_operation_record.dart';
 import '../../../../core/models/api_config.dart';
@@ -168,15 +169,6 @@ class LedgerStage {
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
-      if (ctx.ref.mounted) {
-        ctx.ref
-            .read(postGenStatusProvider.notifier)
-            .state = PostGenStatusState.running(
-          sessionId: sessionId,
-          task: PostGenTask.ledger,
-        );
-      }
-
       final service = ctx.ref.read(studioLedgerServiceProvider);
 
       // Build MacroContext for resolving preset-block macros.
@@ -192,6 +184,85 @@ class LedgerStage {
         charId: ctx.charId,
         sessionId: sessionId,
       );
+
+      LedgerRunResult? reconciliationResult;
+      if (!isManualRerun) {
+        final checkpointRepo = ctx.ref.read(
+          ledgerReconciliationCheckpointRepoProvider,
+        );
+        final checkpoint = await checkpointRepo.get(sessionId);
+        final plan = const LedgerReconciliationPlanner().plan(
+          messages: messages,
+          currentAssistantMessageId: targetMessage.id,
+          checkpoint: checkpoint,
+        );
+        if (plan != null && isCurrent()) {
+          if (ctx.ref.mounted) {
+            ctx.ref
+                .read(postGenStatusProvider.notifier)
+                .state = PostGenStatusState.running(
+              sessionId: sessionId,
+              task: PostGenTask.ledgerReconciliation,
+            );
+          }
+          reconciliationResult = await service.reconcile(
+            sessionId: sessionId,
+            settings: pipeline,
+            config: ledgerConfig,
+            plan: plan,
+            ledgerBlocks: studioPreset?.blocks ?? const [],
+            macroCtx: ledgerMacroCtx,
+            isStillCurrent: isCurrent,
+            cancelToken: cancelToken,
+          );
+          _recordOperation(
+            sessionId: sessionId,
+            targetMessage: targetMessage,
+            result: reconciliationResult,
+            kind: AgentOperationKind.studioLedgerReconciliation,
+            idPrefix: 'studio-ledger-reconciliation',
+            successSummary:
+                'range=${plan.startMessageId}..${plan.endMessage.id}, '
+                'ops=${reconciliationResult.opsApplied}',
+            canRegenerate: false,
+          );
+          if (ctx.ref.mounted) {
+            final detail =
+                'Ledger reconciliation ${reconciliationResult.status} '
+                '(ops=${reconciliationResult.opsApplied})';
+            ctx.ref
+                .read(postGenStatusProvider.notifier)
+                .state = reconciliationResult.status == 'ok'
+                ? PostGenStatusState.done(
+                    sessionId: sessionId,
+                    task: PostGenTask.ledgerReconciliation,
+                    detail: detail,
+                  )
+                : PostGenStatusState.error(
+                    sessionId: sessionId,
+                    task: PostGenTask.ledgerReconciliation,
+                    detail: detail,
+                  );
+          }
+          debugPrint(
+            '[StudioLedger] reconciliation session=$sessionId '
+            'range=${plan.startMessageId}..${plan.endMessage.id} '
+            'status=${reconciliationResult.status} '
+            'ops=${reconciliationResult.opsApplied} '
+            'error=${reconciliationResult.error ?? "none"}',
+          );
+          if (!isCurrent()) return;
+        }
+      }
+
+      if (ctx.ref.mounted) {
+        ctx.ref
+            .read(postGenStatusProvider.notifier)
+            .state = PostGenStatusState.running(
+          sessionId: sessionId,
+          task: PostGenTask.ledger,
+        );
+      }
 
       final result = await service.run(
         sessionId: sessionId,
@@ -213,6 +284,8 @@ class LedgerStage {
         sessionId: sessionId,
         targetMessage: targetMessage,
         reason:
+            '${reconciliationResult == null ? '' : 'reconcile=${reconciliationResult.status} '
+                      '(ops=${reconciliationResult.opsApplied}); '}'
             'ran, ${result.status} '
             '(ops=${result.opsApplied})'
             '${result.error == null ? '' : ': ${result.error}'}',
@@ -347,6 +420,10 @@ class LedgerStage {
     required String sessionId,
     required ChatMessage targetMessage,
     required LedgerRunResult result,
+    AgentOperationKind kind = AgentOperationKind.studioLedger,
+    String idPrefix = 'studio-ledger',
+    String? successSummary,
+    bool? canRegenerate,
   }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final startedAt = result.attempts.isNotEmpty
@@ -360,8 +437,8 @@ class LedgerStage {
         .read(agentOperationsLogProvider)
         .append(
           AgentOperationRecord(
-            id: 'studio-ledger-${targetMessage.id}-${DateTime.now().microsecondsSinceEpoch}',
-            kind: AgentOperationKind.studioLedger,
+            id: '$idPrefix-${targetMessage.id}-${DateTime.now().microsecondsSinceEpoch}',
+            kind: kind,
             status: status,
             sessionId: sessionId,
             messageId: targetMessage.id,
@@ -369,11 +446,11 @@ class LedgerStage {
             totalElapsedMs: result.elapsedMs,
             model: result.model,
             summary: status.isOk
-                ? 'ops=${result.opsApplied}'
+                ? successSummary ?? 'ops=${result.opsApplied}'
                 : result.error ?? result.status,
             startedAtMs: startedAt,
             finishedAtMs: finishedAt,
-            canRegenerate: status.isFailure,
+            canRegenerate: canRegenerate ?? status.isFailure,
           ),
         );
   }

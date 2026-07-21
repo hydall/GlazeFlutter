@@ -35,6 +35,7 @@ part 'app_db.g.dart';
     StudioPresetRows,
     TrackerRows,
     TrackerSnapshots,
+    LedgerReconciliationCheckpoints,
     CharacterKnowledgeFactRows,
     CharacterSessionBaselineRows,
     ExtensionPresets,
@@ -47,7 +48,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 72;
+  int get schemaVersion => 74;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1343,8 +1344,50 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(apiConfigs, apiConfigs.extraRequestParametersJson);
         }
       }
+      if (from < 73) {
+        await m.createTable(ledgerReconciliationCheckpoints);
+      }
+      if (from < 74) {
+        await _ensureLedgerPrompts();
+      }
     },
   );
+
+  Future<void> _ensureLedgerPrompts() async {
+    final rows = await customSelect(
+      'SELECT preset_id, blocks_json FROM studio_preset_rows',
+    ).get();
+    for (final row in rows) {
+      final blocks = (jsonDecode(row.read<String>('blocks_json')) as List)
+          .whereType<Map<dynamic, dynamic>>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      var changed = false;
+      final ledgerIndex = blocks.indexWhere(
+        (block) => block['id'] == 'ledger_system',
+      );
+      if (ledgerIndex < 0) {
+        blocks.add(_ledgerSystemPromptBlock());
+        changed = true;
+      } else if (blocks[ledgerIndex]['enabled'] != true) {
+        blocks[ledgerIndex] = {...blocks[ledgerIndex], 'enabled': true};
+        changed = true;
+      }
+      if (!blocks.any(
+        (block) => block['id'] == 'ledger_reconciliation_prompt',
+      )) {
+        blocks.add(_ledgerReconciliationPromptBlock());
+        changed = true;
+      }
+      if (!changed) continue;
+      await customStatement(
+        'UPDATE studio_preset_rows SET blocks_json = ?, '
+        "updated_at = CAST(strftime('%s','now') AS INTEGER) "
+        'WHERE preset_id = ?',
+        [jsonEncode(blocks), row.read<String>('preset_id')],
+      );
+    }
+  }
 
   /// Removes retired write-loop micro-memory while preserving range summaries,
   /// manual entries, Studio Ledger facts, and all MemoryBook settings.
@@ -1944,17 +1987,9 @@ PREFER
       'order': 99,
       'section': 'cleaner',
     },
-    // ─── ledger section (1 block) ───
-    {
-      'id': 'ledger_system',
-      'name': 'Ledger system prompt',
-      'kind': 'instruction',
-      'role': 'system',
-      'content': _boundedLedgerSystemPrompt,
-      'enabled': true,
-      'order': 0,
-      'section': 'ledger',
-    },
+    // ─── ledger section ───
+    _ledgerSystemPromptBlock(),
+    _ledgerReconciliationPromptBlock(),
     // ─── build section (build-time prompts) ───
     {
       'id': 'build_router',
@@ -2134,6 +2169,46 @@ ALLOWED CURRENT-STATE KEYS:
 - scene.present_entities, absent_backstory_entities, immediate_thread, active_tensions
 
 Return the mandatory <glaze_memory_export> JSON block followed by a compact diagnostic <studio_ledger> block. Never expose either in story prose.''';
+
+Map<String, dynamic> _ledgerReconciliationPromptBlock() => {
+  'id': 'ledger_reconciliation_prompt',
+  'name': 'Ledger reconciliation prompt',
+  'kind': 'instruction',
+  'role': 'system',
+  'content': _ledgerReconciliationSystemPrompt,
+  'enabled': true,
+  'order': 1,
+  'section': 'ledger',
+};
+
+Map<String, dynamic> _ledgerSystemPromptBlock() => {
+  'id': 'ledger_system',
+  'name': 'Ledger system prompt',
+  'kind': 'instruction',
+  'role': 'system',
+  'content': _boundedLedgerSystemPrompt,
+  'enabled': true,
+  'order': 0,
+  'section': 'ledger',
+};
+
+const String _ledgerReconciliationSystemPrompt =
+    '''You are Studio Ledger Reconciler. Audit a bounded, already accepted chat range against the committed Ledger state. You do not write story prose and you do not summarize the chat.
+
+Correct only durable state defects supported by accepted evidence:
+- merge placeholder identities and aliases into one canonical entity key;
+- delete every obsolete alias or placeholder key after a merge;
+- delete stale current locations when later evidence no longer establishes them;
+- remove completed or historical backlog from current_goal;
+- retract unsupported inference, guesses, motives, unseen research, ownership, causation, and off-screen events;
+- apply explicit user corrections across every affected key;
+- compact duplicated or contradictory current state.
+
+Use accepted chat as evidence, not as proof that every assistant assertion is objectively true. Preserve unchanged supported state. Never invent repair facts. When evidence is insufficient, prefer delete over a fabricated replacement. User corrections outrank assistant prose. Identity migration overrides exact-key reuse.
+
+Return exactly two blocks: the mandatory <glaze_memory_export> JSON block, then <glaze_knowledge_cleanup>{"ops":[]}</glaze_knowledge_cleanup>. Use only set and delete Ledger ops. Every set replaces the complete value. Return empty ops when no correction is needed. Do not emit knowledgeFacts during reconciliation.
+
+Knowledge cleanup may operate only on facts included in <knowledge_facts>. It may retract an existing offered fact ID when contradicted, unsupported, or duplicated. It may rename an offered placeholder entity only when the review range explicitly resolves the canonical identity. Never create a fact, rewrite fact content, retract merely because a fact is old or absent from the bounded review, or rename a non-placeholder entity.''';
 
 /// Slot blocks shared by the pregen and final sections. Each slot is a
 /// macro template that resolves at runtime via the StudioMessageBuilder /

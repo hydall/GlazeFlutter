@@ -339,6 +339,25 @@ class TrackerSnapshots extends Table {
   Set<Column> get primaryKey => {sessionId, messageId, swipeId, agentSwipeId};
 }
 
+/// Last successfully reconciled Ledger message range for a chat session.
+@DataClassName('LedgerReconciliationCheckpointRow')
+class LedgerReconciliationCheckpoints extends Table {
+  @override
+  String get tableName => 'ledger_reconciliation_checkpoints';
+
+  TextColumn get sessionId => text()();
+  TextColumn get startMessageId => text()();
+  TextColumn get endMessageId => text()();
+  IntColumn get endSwipeId => integer().withDefault(const Constant(0))();
+  IntColumn get endAgentSwipeId => integer().withDefault(const Constant(0))();
+  TextColumn get messageIdsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get rangeHash => text().withDefault(const Constant(''))();
+  IntColumn get reviewedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sessionId};
+}
+
 /// Append-only, provenance-backed character knowledge and development delta.
 /// Corrections point to prior rows; the earlier row remains inspectable.
 @DataClassName('CharacterKnowledgeFactRow')
