@@ -142,6 +142,135 @@ void main() {
       expect(text, isNot(contains('Studio controller briefs')));
     });
 
+    test('final run includes reasoning from the nearest assistant only', () {
+      final messages = builder.buildAgentMessages(
+        agent: const StudioAgent(id: 'final', name: 'Main Responder'),
+        promptResult: _result([
+          const PromptMessage(
+            role: 'assistant',
+            content: 'first',
+            reasoningContent: 'first reasoning',
+            isHistory: true,
+          ),
+          const PromptMessage(role: 'user', content: 'next', isHistory: true),
+          const PromptMessage(
+            role: 'assistant',
+            content: 'second',
+            reasoningContent: 'second reasoning',
+            isHistory: true,
+          ),
+          const PromptMessage(
+            role: 'assistant',
+            content: 'third',
+            reasoningContent: 'third reasoning',
+            isHistory: true,
+          ),
+          const PromptMessage(role: 'user', content: 'latest', isHistory: true),
+        ]),
+        promptPayload: promptPayload,
+        config: config,
+        studioPreset: const StudioPreset(
+          id: 'history',
+          blocks: [
+            StudioPresetBlock(
+              id: 'history',
+              kind: 'chat_history',
+              section: 'final',
+            ),
+          ],
+        ),
+        priorBriefs: const [],
+        isFinalResponse: true,
+        includeLastReasoning: true,
+      );
+
+      final first = messages.firstWhere((m) => m['content'] == 'first');
+      final next = messages.firstWhere((m) => m['content'] == 'next');
+      final second = messages.firstWhere((m) => m['content'] == 'second');
+      final third = messages.firstWhere((m) => m['content'] == 'third');
+      expect(first, isNot(contains('reasoning_content')));
+      expect(next, isNot(contains('reasoning_content')));
+      expect(second, isNot(contains('reasoning_content')));
+      expect(third['reasoning_content'], 'third reasoning');
+      expect(
+        messages.where((m) => m.containsKey('reasoning_content')),
+        hasLength(1),
+      );
+    });
+
+    test('final run does not fall back to stale assistant reasoning', () {
+      final messages = builder.buildAgentMessages(
+        agent: const StudioAgent(id: 'final', name: 'Main Responder'),
+        promptResult: _result([
+          const PromptMessage(
+            role: 'assistant',
+            content: 'older',
+            reasoningContent: 'stale reasoning',
+            isHistory: true,
+          ),
+          const PromptMessage(
+            role: 'assistant',
+            content: 'nearest',
+            isHistory: true,
+          ),
+          const PromptMessage(role: 'user', content: 'latest', isHistory: true),
+        ]),
+        promptPayload: promptPayload,
+        config: config,
+        studioPreset: const StudioPreset(
+          id: 'history',
+          blocks: [
+            StudioPresetBlock(
+              id: 'history',
+              kind: 'chat_history',
+              section: 'final',
+            ),
+          ],
+        ),
+        priorBriefs: const [],
+        isFinalResponse: true,
+        includeLastReasoning: true,
+      );
+
+      expect(
+        messages.where((m) => m.containsKey('reasoning_content')),
+        isEmpty,
+      );
+    });
+
+    test('final run omits historical reasoning by default', () {
+      final messages = builder.buildAgentMessages(
+        agent: const StudioAgent(id: 'final', name: 'Main Responder'),
+        promptResult: _result([
+          const PromptMessage(
+            role: 'assistant',
+            content: 'reply',
+            reasoningContent: 'hidden reasoning',
+            isHistory: true,
+          ),
+        ]),
+        promptPayload: promptPayload,
+        config: config,
+        studioPreset: const StudioPreset(
+          id: 'history',
+          blocks: [
+            StudioPresetBlock(
+              id: 'history',
+              kind: 'chat_history',
+              section: 'final',
+            ),
+          ],
+        ),
+        priorBriefs: const [],
+        isFinalResponse: true,
+      );
+
+      expect(
+        messages.where((m) => m.containsKey('reasoning_content')),
+        isEmpty,
+      );
+    });
+
     test('final blocks expand the dedicated studio state macro', () {
       final text = joinedMessages(
         builder.buildAgentMessages(

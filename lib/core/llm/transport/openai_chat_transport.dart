@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import 'chat_transport.dart';
 import 'chat_transport_request.dart';
+import 'extra_request_parameters.dart';
 
 /// OpenAI Chat Completions transport. Also handles any OpenAI-compatible
 /// custom endpoint (LM Studio, Koboldcpp, vLLM, OpenRouter-as-custom, etc.).
@@ -100,7 +101,9 @@ class OpenAiChatTransport implements ChatTransport {
         if (attempt < _maxRetries &&
             e.response?.statusCode == 408 &&
             cancelToken?.isCancelled != true) {
-          debugPrint('[OpenAI] HTTP 408 on attempt ${attempt + 1}/$_maxRetries — retrying');
+          debugPrint(
+            '[OpenAI] HTTP 408 on attempt ${attempt + 1}/$_maxRetries — retrying',
+          );
           await Future<void>.delayed(const Duration(seconds: 1));
           continue;
         }
@@ -169,6 +172,8 @@ class OpenAiChatTransport implements ChatTransport {
       body['tools'] = r.tools;
       body['tool_choice'] = r.toolChoice ?? 'auto';
     }
+
+    applyExtraRequestParameters(body, r.extraRequestParameters);
 
     return body;
   }

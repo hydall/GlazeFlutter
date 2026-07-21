@@ -47,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 71;
+  int get schemaVersion => 72;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1330,6 +1330,17 @@ class AppDatabase extends _$AppDatabase {
         } catch (e) {
           debugPrint('Migration 71 (retire Ledger durable facts) failed: $e');
           rethrow;
+        }
+      }
+      if (from < 72) {
+        final columns = await customSelect(
+          "PRAGMA table_info('api_configs')",
+        ).get();
+        final names = columns
+            .map((column) => column.read<String>('name'))
+            .toSet();
+        if (!names.contains('extra_request_parameters_json')) {
+          await m.addColumn(apiConfigs, apiConfigs.extraRequestParametersJson);
         }
       }
     },

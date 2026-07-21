@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'extra_request_parameter.dart';
+
 part 'cleaner_settings.freezed.dart';
 part 'cleaner_settings.g.dart';
 
@@ -49,6 +51,8 @@ abstract class CleanerSettings with _$CleanerSettings {
     @Default(false) bool postCleanerOmitTopP,
     @Default(true) bool postCleanerOmitReasoning,
     @Default(true) bool postCleanerOmitReasoningEffort,
+    @Default(<ExtraRequestParameter>[])
+    List<ExtraRequestParameter> postCleanerExtraRequestParameters,
     // ── Enable toggle ─────────────────────────────────────────────────────
     // Master toggle for the post-cleaner rewrite + fact-checker. When false,
     // both the cleaner LLM call and the audit pass are skipped on the auto

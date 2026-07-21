@@ -529,18 +529,13 @@ if (messageData.isEditing) classes.push('editing');
     /* --- Right: actions / edit buttons --- */
     if (m.isEditing) {
       footer.appendChild(this._createEditButtons(m.id));
-    } else if (!this.selectionManager || !this.selectionManager.shouldHideActions()) {
+    } else {
       const actions = document.createElement('div');
       actions.className = 'msg-actions-btn';
       actions.dataset.action = 'open-actions';
       actions.dataset.messageId = m.id;
       actions.innerHTML = ICON.menu;
       footer.appendChild(actions);
-    } else {
-      // empty grid cell placeholder
-      const ph = document.createElement('div');
-      ph.style.gridColumn = '3';
-      footer.appendChild(ph);
     }
 
     return footer;

@@ -179,6 +179,8 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
           fallback: activeApiConfig,
           errorLabel: 'ledger-rerun',
           modelOverride: pipeline.cleaner.postCleanerModel,
+          extraRequestParameterOverrides:
+              pipeline.cleaner.postCleanerExtraRequestParameters,
         );
       } catch (e) {
         if (mounted) {

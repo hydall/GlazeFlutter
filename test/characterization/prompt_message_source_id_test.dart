@@ -19,6 +19,19 @@ void main() {
       expect(copy.isHistory, isTrue);
     });
 
+    test('preserves optional reasoning content via toJson/fromJson', () {
+      const original = PromptMessage(
+        role: 'assistant',
+        content: 'answer',
+        reasoningContent: 'private reasoning',
+      );
+
+      final copy = PromptMessage.fromJson(original.toJson());
+
+      expect(copy.reasoningContent, 'private reasoning');
+      expect(copy.toApiMap(), isNot(contains('reasoning_content')));
+    });
+
     test('legacy JSON without sourceMessageId still deserialises', () {
       final legacy = <String, dynamic>{
         'role': 'user',
@@ -88,8 +101,9 @@ void main() {
       );
       final copy = original.copyWithVisible({'b', 'c'});
       expect(copy.visibleMessageIds, {'b', 'c'});
-      expect(original.visibleMessageIds, {'a'},
-          reason: 'original must remain immutable');
+      expect(original.visibleMessageIds, {
+        'a',
+      }, reason: 'original must remain immutable');
     });
   });
 
@@ -98,16 +112,8 @@ void main() {
       // Macro engine requires a context; empty mock to keep the test
       // focused on HistoryAssembler.
       final messages = [
-        ChatMessage(
-          id: 'm-1',
-          role: 'user',
-          content: 'hello there',
-        ),
-        ChatMessage(
-          id: 'm-2',
-          role: 'assistant',
-          content: 'world',
-        ),
+        ChatMessage(id: 'm-1', role: 'user', content: 'hello there'),
+        ChatMessage(id: 'm-2', role: 'assistant', content: 'world'),
       ];
       // The assembler takes a MacroContext. We don't have a real one
       // here, so we test the sourceMessageId plumbing indirectly via

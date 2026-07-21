@@ -20,6 +20,7 @@ class HistoryAssembler {
         PromptMessage(
           role: msg.role,
           content: normalized,
+          reasoningContent: msg.reasoning,
           isHistory: true,
           sourceMessageId: msg.id,
         ),
@@ -69,6 +70,7 @@ class PromptMessage {
   final bool isSummary;
   final String? blockName;
   final String? sourceMessageId;
+  final String? reasoningContent;
 
   const PromptMessage({
     required this.role,
@@ -81,6 +83,7 @@ class PromptMessage {
     this.isSummary = false,
     this.blockName,
     this.sourceMessageId,
+    this.reasoningContent,
   });
 
   Map<String, String> toApiMap() => {'role': role, 'content': content};
@@ -96,6 +99,7 @@ class PromptMessage {
     'isSummary': isSummary,
     'blockName': blockName,
     'sourceMessageId': sourceMessageId,
+    'reasoningContent': reasoningContent,
   };
 
   factory PromptMessage.fromJson(Map<String, dynamic> json) => PromptMessage(
@@ -109,6 +113,7 @@ class PromptMessage {
     isSummary: json['isSummary'] as bool? ?? false,
     blockName: json['blockName'] as String?,
     sourceMessageId: json['sourceMessageId'] as String?,
+    reasoningContent: json['reasoningContent'] as String?,
   );
 }
 

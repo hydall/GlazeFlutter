@@ -527,6 +527,8 @@ class ApiConfigs extends Table {
       text().withDefault(const Constant('openrouter'))();
   IntColumn get firstChunkTimeoutMs =>
       integer().withDefault(const Constant(60000))();
+  TextColumn get extraRequestParametersJson =>
+      text().withDefault(const Constant('[]'))();
 
   @override
   Set<Column> get primaryKey => {configId};

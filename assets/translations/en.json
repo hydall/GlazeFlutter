@@ -1,4 +1,10 @@
 {
+  "extra_request_parameters": "Extra request parameters",
+  "extra_request_parameters_desc": "Enabled parameters are added to the JSON request body",
+  "extra_request_parameters_studio_desc": "Overrides for the API selected for this Studio slot",
+  "extra_request_parameter_key": "Parameter",
+  "extra_request_parameter_value": "Value",
+  "extra_request_parameter_add": "Add parameter",
   "header_dialogs": "Messages",
   "header_characters": "Characters",
   "header_generation": "Presets",

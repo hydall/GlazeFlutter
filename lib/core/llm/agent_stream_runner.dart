@@ -57,9 +57,14 @@ class AgentStreamRunner {
 
     const defaultTagStart = '<think>';
     const defaultTagEnd = '</think>';
-    final effectiveTagStart = (tagStart?.isNotEmpty == true) ? tagStart! : defaultTagStart;
-    final effectiveTagEnd = (tagEnd?.isNotEmpty == true) ? tagEnd! : defaultTagEnd;
-    final hasInlineTags = effectiveTagStart.isNotEmpty && effectiveTagEnd.isNotEmpty;
+    final effectiveTagStart = (tagStart?.isNotEmpty == true)
+        ? tagStart!
+        : defaultTagStart;
+    final effectiveTagEnd = (tagEnd?.isNotEmpty == true)
+        ? tagEnd!
+        : defaultTagEnd;
+    final hasInlineTags =
+        effectiveTagStart.isNotEmpty && effectiveTagEnd.isNotEmpty;
 
     final accumulator = StreamAccumulator(
       tagStart: effectiveTagStart,
@@ -82,7 +87,9 @@ class AgentStreamRunner {
       presencePenalty: resolved.presencePenalty,
       stream: shouldStream,
       requestReasoning: resolved.requestReasoning,
-      reasoningEffort: resolved.requestReasoning ? resolved.reasoningEffort : null,
+      reasoningEffort: resolved.requestReasoning
+          ? resolved.reasoningEffort
+          : null,
       omitTemperature: resolved.omitTemperature,
       omitTopP: resolved.omitTopP,
       omitReasoning: resolved.omitReasoning,
@@ -94,6 +101,7 @@ class AgentStreamRunner {
       cacheControlTtl: resolved.cacheControlTtl,
       cacheBreakpointMode: resolved.cacheBreakpointMode,
       sessionIdMode: resolved.sessionIdMode,
+      extraRequestParameters: resolved.extraRequestParameters,
     );
     final transport = _pickTransport(resolved.protocol);
     final startedAt = DateTime.now();
@@ -104,16 +112,15 @@ class AgentStreamRunner {
       if (completer.isCompleted) return;
       final text = accumulator.text.trim();
       final reasoningText = isFinalResponse ? accumulator.reasoning : '';
-      completer.complete(
-        AgentRunResult(text: text, reasoning: reasoningText),
-      );
+      completer.complete(AgentRunResult(text: text, reasoning: reasoningText));
     }
 
     void resetAgentTimer() {
       idleTimer?.cancel();
       idleTimer = Timer(Duration(milliseconds: timeoutMs), () {
         if (completer.isCompleted) return;
-        if (shouldStream && (accumulator.text.isNotEmpty || accumulator.reasoning.isNotEmpty)) {
+        if (shouldStream &&
+            (accumulator.text.isNotEmpty || accumulator.reasoning.isNotEmpty)) {
           completeWithAccumulated('idle_timeout');
           agentCancelToken?.cancel('Studio agent idle timeout');
         } else if (!completer.isCompleted) {
@@ -167,10 +174,10 @@ class AgentStreamRunner {
           final effectiveText = accumulator.text.trimLeft();
           final effectiveReasoning = isFinalResponse
               ? (accumulator.reasoning.isNotEmpty
-                  ? accumulator.reasoning
-                  : finalReasoning?.trim().isNotEmpty == true
-                      ? finalReasoning!.trim()
-                      : null)
+                    ? accumulator.reasoning
+                    : finalReasoning?.trim().isNotEmpty == true
+                    ? finalReasoning!.trim()
+                    : null)
               : null;
           if (isFinalResponse) {
             if (effectiveText.isNotEmpty) {
@@ -194,8 +201,8 @@ class AgentStreamRunner {
                 : text.trim();
             final reasoningText = isFinalResponse
                 ? (accumulator.reasoning.isNotEmpty
-                    ? accumulator.reasoning
-                    : finalReasoning?.trim() ?? '')
+                      ? accumulator.reasoning
+                      : finalReasoning?.trim() ?? '')
                 : '';
             completer.complete(
               AgentRunResult(

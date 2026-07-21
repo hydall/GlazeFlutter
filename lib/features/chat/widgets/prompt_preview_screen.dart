@@ -242,111 +242,111 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       length: 2,
       onChanged: (i) => setState(() => _dataTabIndex = i),
       child: Builder(
-      builder: (context) {
-        final topPad = MediaQuery.paddingOf(context).top;
+        builder: (context) {
+          final topPad = MediaQuery.paddingOf(context).top;
 
-        if (_dataTabIndex == 0) {
-          if (_loading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (_result == null) {
-            return Center(
-              child: Text(
-                'no_preview_available'.tr(),
-                style: TextStyle(color: context.cs.onSurfaceVariant),
-              ),
-            );
-          }
-          if (_previewTabIndex == 1) {
-            return _buildRawView(_getRawPromptJson(), topPad);
-          }
-          return CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: SizedBox(height: topPad)),
-              if (_apiConfig != null) ...[
+          if (_dataTabIndex == 0) {
+            if (_loading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (_result == null) {
+              return Center(
+                child: Text(
+                  'no_preview_available'.tr(),
+                  style: TextStyle(color: context.cs.onSurfaceVariant),
+                ),
+              );
+            }
+            if (_previewTabIndex == 1) {
+              return _buildRawView(_getRawPromptJson(), topPad);
+            }
+            return CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: SizedBox(height: topPad)),
+                if (_apiConfig != null) ...[
+                  SliverToBoxAdapter(
+                    child: _SummaryBar(
+                      result: _result!,
+                      contextSize: _apiConfig!.contextSize,
+                      tokenOverride: null,
+                      messageCountOverride: _previewMessages.length,
+                    ),
+                  ),
+                  SliverToBoxAdapter(child: _SectionTitle(_protocolLabel)),
+                  if (_requestBody != null)
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverToBoxAdapter(
+                        child: _buildParamsGrid(_requestBody!),
+                      ),
+                    ),
+                ],
                 SliverToBoxAdapter(
-                  child: _SummaryBar(
-                    result: _result!,
-                    contextSize: _apiConfig!.contextSize,
-                    tokenOverride: null,
-                    messageCountOverride: _previewMessages.length,
-                  ),
+                  child: _SectionTitle('Messages (${_previewMessages.length})'),
                 ),
-                SliverToBoxAdapter(child: _SectionTitle(_protocolLabel)),
-                if (_requestBody != null)
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    sliver: SliverToBoxAdapter(
-                      child: _buildParamsGrid(_requestBody!),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: GlazeFilterChipBar<_SectionFilter>(
+                      current: _filter,
+                      options: _SectionFilter.values.toList(),
+                      labelBuilder: _labelForFilter,
+                      onSelected: (f) => setState(() => _filter = f),
                     ),
                   ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) => _PromptMessageCard(
+                        message: _filteredMessages[i],
+                        index: i,
+                      ),
+                      childCount: _filteredMessages.length,
+                    ),
+                  ),
+                ),
               ],
-              SliverToBoxAdapter(
-                child: _SectionTitle('Messages (${_previewMessages.length})'),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: GlazeFilterChipBar<_SectionFilter>(
-                    current: _filter,
-                    options: _SectionFilter.values.toList(),
-                    labelBuilder: _labelForFilter,
-                    onSelected: (f) => setState(() => _filter = f),
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) => _PromptMessageCard(
-                      message: _filteredMessages[i],
-                      index: i,
-                    ),
-                    childCount: _filteredMessages.length,
-                  ),
-                ),
-              ),
-            ],
-          );
-        } else {
-          final chatState = ref.watch(chatProvider(widget.charId)).value;
-          final raw = chatState?.lastRawResponse;
-          if (raw == null || raw.isEmpty) {
-            return Center(
-              child: Text(
-                'no_preview_available'.tr(),
-                style: TextStyle(color: context.cs.onSurfaceVariant),
-              ),
             );
-          }
-          String displayString = raw;
-          if (_previewTabIndex == 1) {
-            // Raw/code view: pretty-print the full JSON so fields like
-            // completion_tokens, usage, etc. are visible and readable.
-            try {
-              final decoded = jsonDecode(raw);
-              displayString = const JsonEncoder.withIndent(
-                '  ',
-              ).convert(decoded);
-            } catch (_) {}
           } else {
-            // Pretty/preview view: extract just the assistant text content.
-            try {
-              final decoded = jsonDecode(raw) as Map<String, dynamic>;
-              final choices = decoded['choices'] as List?;
-              final content =
-                  choices?.firstOrNull?['message']?['content'] ??
-                  choices?.firstOrNull?['delta']?['content'] ??
-                  decoded['content'];
-              if (content is String && content.isNotEmpty) {
-                displayString = content;
-              }
-            } catch (_) {}
+            final chatState = ref.watch(chatProvider(widget.charId)).value;
+            final raw = chatState?.lastRawResponse;
+            if (raw == null || raw.isEmpty) {
+              return Center(
+                child: Text(
+                  'no_preview_available'.tr(),
+                  style: TextStyle(color: context.cs.onSurfaceVariant),
+                ),
+              );
+            }
+            String displayString = raw;
+            if (_previewTabIndex == 1) {
+              // Raw/code view: pretty-print the full JSON so fields like
+              // completion_tokens, usage, etc. are visible and readable.
+              try {
+                final decoded = jsonDecode(raw);
+                displayString = const JsonEncoder.withIndent(
+                  '  ',
+                ).convert(decoded);
+              } catch (_) {}
+            } else {
+              // Pretty/preview view: extract just the assistant text content.
+              try {
+                final decoded = jsonDecode(raw) as Map<String, dynamic>;
+                final choices = decoded['choices'] as List?;
+                final content =
+                    choices?.firstOrNull?['message']?['content'] ??
+                    choices?.firstOrNull?['delta']?['content'] ??
+                    decoded['content'];
+                if (content is String && content.isNotEmpty) {
+                  displayString = content;
+                }
+              } catch (_) {}
+            }
+            return _buildRawView(displayString, topPad);
           }
-          return _buildRawView(displayString, topPad);
-        }
-      },
+        },
       ),
     );
   }
@@ -543,6 +543,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         cacheControlTtl: cfg.cacheControlTtl,
         cacheBreakpointMode: cfg.cacheBreakpointMode,
         sessionIdMode: cfg.sessionIdMode,
+        extraRequestParameters: cfg.extraRequestParameters,
       );
 
       return switch (cfg.protocol) {
@@ -948,4 +949,3 @@ class _SegmentedToggle extends StatelessWidget {
     );
   }
 }
-

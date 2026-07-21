@@ -1,4 +1,10 @@
 {
+  "extra_request_parameters": "Дополнительные параметры запроса",
+  "extra_request_parameters_desc": "Включённые параметры добавляются в JSON-тело запроса",
+  "extra_request_parameters_studio_desc": "Переопределения для API, выбранного в этом слоте Studio",
+  "extra_request_parameter_key": "Параметр",
+  "extra_request_parameter_value": "Значение",
+  "extra_request_parameter_add": "Добавить параметр",
   "header_dialogs": "Сообщения",
   "header_characters": "Персонажи",
   "header_generation": "Пресеты",

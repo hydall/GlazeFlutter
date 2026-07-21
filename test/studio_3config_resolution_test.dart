@@ -7,6 +7,7 @@ import 'package:glaze_flutter/core/llm/agent_runner.dart';
 import 'package:glaze_flutter/core/llm/studio/agent_config_resolver.dart';
 import 'package:glaze_flutter/core/llm/studio_api_config_resolver.dart';
 import 'package:glaze_flutter/core/models/api_config.dart';
+import 'package:glaze_flutter/core/models/extra_request_parameter.dart';
 import 'package:glaze_flutter/core/models/memory_book_api_settings.dart';
 import 'package:glaze_flutter/core/models/pipeline_settings.dart';
 import 'package:glaze_flutter/core/models/studio_agent_settings.dart';
@@ -166,6 +167,45 @@ void main() {
       );
       expect(resolved.model, 'override-model');
     });
+  });
+
+  test('Studio slot parameters override API parameters by key', () async {
+    const apiParameter = ExtraRequestParameter(
+      key: 'reasoning_effort',
+      value: 'high',
+    );
+    const studioParameter = ExtraRequestParameter(
+      key: 'reasoning_effort',
+      value: 'xhigh',
+    );
+    final api = ApiConfig(
+      id: 'api',
+      name: 'API',
+      endpoint: 'https://example.test',
+      apiKey: 'key',
+      model: 'model',
+      protocol: 'openai',
+      extraRequestParameters: const [apiParameter],
+    );
+    final resolver = AgentConfigResolver(
+      loadApiConfigs: () async => [api],
+      readActiveApiConfig: () => api,
+      readPipelineSettings: () => const PipelineSettings(
+        studioAgent: StudioAgentSettings(
+          studioFinalExtraRequestParameters: [studioParameter],
+        ),
+      ),
+      readRunApiConfigId: (_) async => api.id,
+    );
+
+    final resolved = await resolver.resolveAgentConfig(
+      const StudioAgent(id: 'final', name: 'Final'),
+      api,
+      'session',
+      isFinalResponse: true,
+    );
+
+    expect(resolved.extraRequestParameters, const [studioParameter]);
   });
 
   group('AgentRunner Studio final routing', () {

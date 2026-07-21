@@ -244,6 +244,7 @@ bool replaceDeferredMemoryPlaceholders(
       isSummary: message.isSummary,
       blockName: message.blockName,
       sourceMessageId: message.sourceMessageId,
+      reasoningContent: message.reasoningContent,
     );
     replaced = true;
   }

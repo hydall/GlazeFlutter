@@ -3,6 +3,7 @@ import '../../models/pipeline_settings.dart';
 import '../../models/studio_config.dart';
 import '../agent_runner.dart' show ResolvedAgentConfig;
 import '../studio_api_config_resolver.dart';
+import '../transport/extra_request_parameters.dart';
 
 /// Resolves which API config an agent uses.
 ///
@@ -62,6 +63,13 @@ class AgentConfigResolver {
             presencePenalty: pipeline.studioAgent.studioFinalPresencePenalty,
             omitTemperature: pipeline.studioAgent.studioFinalOmitTemperature,
             omitTopP: pipeline.studioAgent.studioFinalOmitTopP,
+            extraRequestParameters: mergeExtraRequestParameters(
+              resolver
+                      .resolveRunConfig(runApiConfigId)
+                      ?.extraRequestParameters ??
+                  const [],
+              pipeline.studioAgent.studioFinalExtraRequestParameters,
+            ),
           );
     } else if (agent.phase == 'post_processing') {
       if (pipeline.cleaner.postCleanerModel.isNotEmpty) {
@@ -78,6 +86,13 @@ class AgentConfigResolver {
               presencePenalty: pipeline.cleaner.postCleanerPresencePenalty,
               omitTemperature: pipeline.cleaner.postCleanerOmitTemperature,
               omitTopP: pipeline.cleaner.postCleanerOmitTopP,
+              extraRequestParameters: mergeExtraRequestParameters(
+                resolver
+                        .resolveRunConfig(runApiConfigId)
+                        ?.extraRequestParameters ??
+                    const [],
+                pipeline.cleaner.postCleanerExtraRequestParameters,
+              ),
             );
       }
       return resolver
@@ -89,6 +104,13 @@ class AgentConfigResolver {
             presencePenalty: pipeline.cleaner.postCleanerPresencePenalty,
             omitTemperature: pipeline.cleaner.postCleanerOmitTemperature,
             omitTopP: pipeline.cleaner.postCleanerOmitTopP,
+            extraRequestParameters: mergeExtraRequestParameters(
+              resolver
+                      .resolveRunConfig(runApiConfigId)
+                      ?.extraRequestParameters ??
+                  const [],
+              pipeline.cleaner.postCleanerExtraRequestParameters,
+            ),
           );
     } else if (pipeline.studioAgent.studioTrackerModelOverride.isNotEmpty) {
       return resolver
@@ -105,6 +127,13 @@ class AgentConfigResolver {
             presencePenalty: pipeline.studioAgent.studioTrackerPresencePenalty,
             omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
             omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,
+            extraRequestParameters: mergeExtraRequestParameters(
+              resolver
+                      .resolveRunConfig(runApiConfigId)
+                      ?.extraRequestParameters ??
+                  const [],
+              pipeline.studioAgent.studioTrackerExtraRequestParameters,
+            ),
           );
     }
     return resolver
@@ -116,6 +145,11 @@ class AgentConfigResolver {
           presencePenalty: pipeline.studioAgent.studioTrackerPresencePenalty,
           omitTemperature: pipeline.studioAgent.studioTrackerOmitTemperature,
           omitTopP: pipeline.studioAgent.studioTrackerOmitTopP,
+          extraRequestParameters: mergeExtraRequestParameters(
+            resolver.resolveRunConfig(runApiConfigId)?.extraRequestParameters ??
+                const [],
+            pipeline.studioAgent.studioTrackerExtraRequestParameters,
+          ),
         );
   }
 }

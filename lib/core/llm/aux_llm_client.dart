@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 
 import '../models/pipeline_settings.dart';
+import '../models/extra_request_parameter.dart';
 import 'aux_retry_runner.dart';
 import 'idle_timeout_guard.dart';
 import 'transport/chat_transport_request.dart';
@@ -14,12 +15,14 @@ class AuxApiConfig {
   final String apiKey;
   final String model;
   final String protocol;
+  final List<ExtraRequestParameter> extraRequestParameters;
 
   const AuxApiConfig({
     required this.endpoint,
     required this.apiKey,
     required this.model,
     required this.protocol,
+    this.extraRequestParameters = const [],
   });
 }
 
@@ -263,6 +266,7 @@ class AuxLlmClient {
           requestReasoning: requestReasoning,
           omitReasoning: omitReasoning,
           omitReasoningEffort: omitReasoningEffort,
+          extraRequestParameters: config.extraRequestParameters,
         ),
         cancelToken: cancelToken,
         onUpdate: (delta, reasoningDelta) {
@@ -330,6 +334,7 @@ class AuxLlmClient {
           requestReasoning: requestReasoning,
           omitReasoning: omitReasoning,
           omitReasoningEffort: omitReasoningEffort,
+          extraRequestParameters: config.extraRequestParameters,
         ),
         cancelToken: cancelToken,
         onUpdate: (delta, reasoningDelta) {
