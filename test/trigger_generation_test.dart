@@ -10,6 +10,7 @@ import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/features/chat/chat_provider.dart';
 import 'package:glaze_flutter/features/chat/chat_state.dart';
+import 'package:glaze_flutter/features/chat/editing_message_provider.dart';
 import 'package:glaze_flutter/features/extensions/models/trigger_mode.dart';
 import 'package:glaze_flutter/features/extensions/models/trigger_result.dart';
 import 'package:glaze_flutter/features/extensions/services/generation_dispatcher.dart';
@@ -44,11 +45,18 @@ class _MockChatNotifier extends ChatNotifier {
   }
 
   @override
-  Future<void> regenerateLastAssistant({
-    String? guidanceText,
-  }) async {
+  Future<void> regenerateLastAssistant({String? guidanceText}) async {
     calls.add('regenerate');
   }
+}
+
+class _GuardedChatNotifier extends ChatNotifier {
+  _GuardedChatNotifier(this._initial, String charId) : super(charId);
+
+  final ChatState _initial;
+
+  @override
+  Future<ChatState> build() async => _initial;
 }
 
 ProviderContainer _container({
@@ -163,6 +171,31 @@ void main() {
 
       expect(result, isA<TriggerBusy>());
       expect((result as TriggerBusy).busyKind, 'memory_draft');
+    });
+
+    test('rejects with TriggerBusy while a message is being edited', () async {
+      final state = ChatState(
+        session: ChatSession(
+          id: 's1',
+          characterId: 'c1',
+          sessionIndex: 0,
+          sessionVars: const {},
+          messages: [_msg('m1', 'user', 'Hi')],
+        ),
+      );
+      final container = _container(charId: 'c1', initial: state);
+      addTearDown(container.dispose);
+      container.read(editingMessageIdProvider('c1').notifier).state = 'm1';
+
+      final dispatcher = container.read(generationDispatcherProvider);
+      final result = await dispatcher.dispatch(charId: 'c1');
+
+      expect(result, isA<TriggerBusy>());
+      expect((result as TriggerBusy).busyKind, 'message_edit');
+      expect(dispatcher.peekResolvedMode(charId: 'c1'), isNull);
+      final notifier =
+          container.read(chatProvider('c1').notifier) as _MockChatNotifier;
+      expect(notifier.calls, isEmpty);
     });
 
     test('auto-resolves to continue when last message is assistant', () async {
@@ -310,6 +343,38 @@ void main() {
       );
     });
   });
+
+  test(
+    'ChatNotifier blocks every generation entry point during editing',
+    () async {
+      final initial = ChatState(
+        session: ChatSession(
+          id: 's1',
+          characterId: 'c1',
+          sessionIndex: 0,
+          sessionVars: const {},
+          messages: [_msg('m1', 'user', 'Hi')],
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          chatProvider.overrideWith2(
+            (charId) => _GuardedChatNotifier(initial, charId),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(chatProvider('c1').future);
+      container.read(editingMessageIdProvider('c1').notifier).state = 'm1';
+      final notifier = container.read(chatProvider('c1').notifier);
+
+      await notifier.sendMessage('Blocked');
+      await notifier.regenerateLastAssistant();
+      await notifier.continueMessage();
+
+      expect(container.read(chatProvider('c1')).value, same(initial));
+    },
+  );
 
   group('TriggerGenerationHandler', () {
     test('returns no_session map when charId is null', () async {

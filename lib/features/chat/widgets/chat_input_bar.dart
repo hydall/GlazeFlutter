@@ -245,6 +245,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   }
 
   void _handleSend() {
+    if (widget.isEditingMessage) return;
     final text = _controller.text;
     final hasImage = _attachedImageDataUrl != null;
     if (text.trim().isEmpty && !hasImage) return;
@@ -657,6 +658,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   onTap: () {
                     if (isGenerating) {
                       widget.onStop?.call();
+                    } else if (widget.isEditingMessage) {
+                      return;
                     } else if (hasContent) {
                       _handleSend();
                     } else {

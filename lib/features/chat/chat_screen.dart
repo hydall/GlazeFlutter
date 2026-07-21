@@ -1347,12 +1347,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       },
                     ),
                     editActions: EditActionsCallbacks(
-                      onEditSave: (id, text) {
+                      onEditSave: (id, text) async {
                         final idx = widget.state.messages.indexWhere(
                           (m) => m.id == id,
                         );
                         if (idx >= 0 && text.isNotEmpty) {
-                          ref
+                          await ref
                               .read(chatProvider(widget.charId).notifier)
                               .editMessage(
                                 idx,
@@ -1360,6 +1360,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                 tagStart: '<think>',
                                 tagEnd: '</think>',
                               );
+                        }
+                        if (!mounted ||
+                            ref.read(editingMessageIdProvider(widget.charId)) !=
+                                id) {
+                          return;
                         }
                         ref
                                 .read(
