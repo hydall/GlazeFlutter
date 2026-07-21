@@ -17,6 +17,7 @@ import 'abort_handler.dart';
 import 'chat_generation_service.dart';
 import 'chat_session_service.dart';
 import 'chat_state.dart';
+import 'editing_message_provider.dart';
 import 'generating_sessions_provider.dart';
 import 'unread_sessions_provider.dart';
 import 'image_recovery_service.dart';
@@ -287,6 +288,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     String? imageDataUrl,
   }) async {
     if (!ref.mounted) return;
+    if (ref.read(editingMessageIdProvider(arg)) != null) return;
     final current = state.value;
     if (current == null || current.isGenerating || current.isPostGenRunning) {
       return;
@@ -413,6 +415,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
     if (!ref.mounted) return;
+    if (ref.read(editingMessageIdProvider(arg)) != null) return;
     if (state.value?.isGenerating == true ||
         state.value?.isPostGenRunning == true) {
       abortGeneration();
@@ -523,6 +526,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   Future<void> continueMessage() async {
     if (!ref.mounted) return;
+    if (ref.read(editingMessageIdProvider(arg)) != null) return;
     final current = state.value;
     if (current == null ||
         current.session == null ||

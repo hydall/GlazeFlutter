@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../chat/chat_provider.dart';
 import '../../chat/chat_state.dart';
+import '../../chat/editing_message_provider.dart';
 import '../../memory/state/memory_active_drafts_provider.dart';
 import '../models/trigger_mode.dart';
 import '../models/trigger_result.dart';
@@ -55,6 +56,10 @@ class GenerationDispatcher {
       return TriggerNoSession(mode: mode);
     }
 
+    if (ref.read(editingMessageIdProvider(charId)) != null) {
+      return TriggerBusy(busyKind: 'message_edit', mode: mode);
+    }
+
     final memoryActive = ref
         .read(memoryActiveDraftsProvider)
         .contains(current.session!.id);
@@ -91,6 +96,7 @@ class GenerationDispatcher {
     final ref = _ref!;
     final current = ref.read(chatProvider(charId)).value;
     if (current == null || current.session == null) return null;
+    if (ref.read(editingMessageIdProvider(charId)) != null) return null;
     if (current.isGenerating || current.isPostGenRunning) return null;
     if (ref.read(memoryActiveDraftsProvider).contains(current.session!.id)) {
       return null;

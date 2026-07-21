@@ -17,6 +17,9 @@ void main() {
       FocusNode? focusNode,
       bool virtualKeyboardSend = false,
       bool enterToSend = true,
+      bool isEditingMessage = false,
+      String initialDraft = '',
+      VoidCallback? onImpersonate,
     }) {
       sentMessages = [];
       return ProviderScope(
@@ -28,6 +31,9 @@ void main() {
               focusNode: focusNode,
               virtualKeyboardSend: virtualKeyboardSend,
               enterToSend: enterToSend,
+              isEditingMessage: isEditingMessage,
+              initialDraft: initialDraft,
+              onImpersonate: onImpersonate,
             ),
           ),
         ),
@@ -85,6 +91,30 @@ void main() {
       await tester.pumpWidget(buildChatInputBar(virtualKeyboardSend: false));
       final textField = tester.widget<TextField>(find.byType(TextField));
       expect(textField.textInputAction, TextInputAction.newline);
+    });
+
+    testWidgets('editing blocks impersonate action', (tester) async {
+      var impersonateCalls = 0;
+      await tester.pumpWidget(
+        buildChatInputBar(
+          isEditingMessage: true,
+          onImpersonate: () => impersonateCalls++,
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.account_circle_rounded));
+
+      expect(impersonateCalls, 0);
+    });
+
+    testWidgets('editing blocks sending an existing draft', (tester) async {
+      await tester.pumpWidget(
+        buildChatInputBar(isEditingMessage: true, initialDraft: 'draft'),
+      );
+
+      await tester.tap(find.byIcon(Icons.send_rounded));
+
+      expect(sentMessages, isEmpty);
     });
   });
 
