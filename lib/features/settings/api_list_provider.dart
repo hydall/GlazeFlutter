@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/models/api_config.dart';
+import '../../core/llm/embedding_request_gate.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/shared_prefs_provider.dart';
 import '../../core/utils/sync_deletion_tracker.dart';
@@ -40,6 +41,19 @@ class ApiListNotifier extends AsyncNotifier<List<ApiConfig>> {
   Future<void> put(ApiConfig config) async {
     await ref.read(apiConfigRepoProvider).put(config);
     ref.invalidateSelf();
+  }
+
+  void setEmbeddingEnabled(String id, bool enabled) {
+    EmbeddingRequestGate.setEnabled(enabled);
+    final configs = state.value;
+    if (configs == null) return;
+    state = AsyncData([
+      for (final config in configs)
+        if (config.id == id)
+          config.copyWith(embeddingEnabled: enabled)
+        else
+          config,
+    ]);
   }
 
   Future<void> remove(String id) async {
