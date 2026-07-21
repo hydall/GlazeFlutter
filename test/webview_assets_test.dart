@@ -799,6 +799,25 @@ void main() {
     });
   });
 
+  group('message actions during selection', () {
+    test('renderer always creates the actions button', () {
+      expect(
+        rendererMessageJs,
+        contains("actions.className = 'msg-actions-btn'"),
+      );
+      expect(rendererMessageJs, isNot(contains('shouldHideActions()')));
+    });
+
+    test('selection mode hides actions without removing them', () {
+      expect(
+        stylessCss,
+        contains(
+          '.message-section.selection-mode .msg-actions-btn {\n  visibility: hidden;\n}',
+        ),
+      );
+    });
+  });
+
   // ─── Streaming fast path (Phase 4.1) ───────────────────────────────────────
   group('updateMessageContent fast path (renderer modules)', () {
     test('updateMessageContent has fast path for text-only updates', () {
