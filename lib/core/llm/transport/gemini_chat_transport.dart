@@ -8,6 +8,7 @@ import '../converters/gemini_messages.dart';
 import '../converters/thinking_budget.dart';
 import 'chat_transport.dart';
 import 'chat_transport_request.dart';
+import 'extra_request_parameters.dart';
 
 /// Result of [GeminiChatTransport.buildRequest] — URL/body/headers ready to
 /// POST. Exposed for unit testing.
@@ -144,6 +145,7 @@ class GeminiChatTransport implements ChatTransport {
         request.sessionId!.isNotEmpty) {
       body['session_id'] = request.sessionId;
     }
+    applyExtraRequestParameters(body, request.extraRequestParameters);
 
     final url = buildGenerateUrl(
       endpoint: request.endpoint,
@@ -207,7 +209,9 @@ class GeminiChatTransport implements ChatTransport {
         if (attempt < _maxRetries &&
             e.response?.statusCode == 408 &&
             cancelToken?.isCancelled != true) {
-          debugPrint('[Gemini] HTTP 408 on attempt ${attempt + 1}/$_maxRetries — retrying');
+          debugPrint(
+            '[Gemini] HTTP 408 on attempt ${attempt + 1}/$_maxRetries — retrying',
+          );
           await Future<void>.delayed(const Duration(seconds: 1));
           continue;
         }

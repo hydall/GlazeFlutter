@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/api_config.dart';
+import '../models/extra_request_parameter.dart';
 import 'aux_llm_client.dart';
+import 'transport/extra_request_parameters.dart';
 
 /// Resolves a Studio API-config slot to an [AuxApiConfig] for auxiliary LLM
 /// calls (cleaner, fact-checker, Ledger).
@@ -36,6 +38,7 @@ class StudioSlotResolver {
     ApiConfig? fallback,
     String errorLabel = 'studio-slot',
     String modelOverride = '',
+    List<ExtraRequestParameter> extraRequestParameterOverrides = const [],
   }) {
     if (apiConfigId.isEmpty) {
       if (fallback != null) {
@@ -49,6 +52,10 @@ class StudioSlotResolver {
           apiKey: fallback.apiKey,
           model: model,
           protocol: fallback.protocol,
+          extraRequestParameters: mergeExtraRequestParameters(
+            fallback.extraRequestParameters,
+            extraRequestParameterOverrides,
+          ),
         );
       }
       debugPrint(
@@ -82,6 +89,10 @@ class StudioSlotResolver {
       apiKey: selected.apiKey,
       model: model,
       protocol: selected.protocol,
+      extraRequestParameters: mergeExtraRequestParameters(
+        selected.extraRequestParameters,
+        extraRequestParameterOverrides,
+      ),
     );
   }
 }

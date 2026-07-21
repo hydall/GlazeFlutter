@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../../core/models/pipeline_settings.dart';
+import '../../../core/models/extra_request_parameter.dart';
 import '../../../shared/widgets/menu_group.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/extra_request_parameters_editor.dart';
 
 /// Which Studio model slot is being configured.
 enum StudioSlot { finalGenerator, tracker, cleaner }
@@ -22,6 +25,7 @@ class StudioSlotSettings {
   final bool omitReasoningEffort;
   final int maxTokens;
   final int timeoutMs;
+  final List<ExtraRequestParameter> extraRequestParameters;
 
   const StudioSlotSettings({
     required this.temperature,
@@ -37,6 +41,7 @@ class StudioSlotSettings {
     required this.omitReasoningEffort,
     required this.maxTokens,
     required this.timeoutMs,
+    required this.extraRequestParameters,
   });
 
   PipelineSettings applyTo(PipelineSettings pipeline, StudioSlot slot) {
@@ -57,6 +62,7 @@ class StudioSlotSettings {
             studioFinalOmitReasoningEffort: omitReasoningEffort,
             studioFinalMaxTokens: maxTokens,
             studioFinalTimeoutMs: timeoutMs,
+            studioFinalExtraRequestParameters: extraRequestParameters,
           ),
         );
       case StudioSlot.tracker:
@@ -75,6 +81,7 @@ class StudioSlotSettings {
             studioTrackerOmitReasoningEffort: omitReasoningEffort,
             studioTrackerMaxTokens: maxTokens,
             studioTrackerTimeoutMs: timeoutMs,
+            studioTrackerExtraRequestParameters: extraRequestParameters,
           ),
         );
       case StudioSlot.cleaner:
@@ -93,6 +100,7 @@ class StudioSlotSettings {
             postCleanerOmitReasoningEffort: omitReasoningEffort,
             postCleanerMaxTokens: maxTokens,
             postCleanerTimeoutMs: timeoutMs,
+            postCleanerExtraRequestParameters: extraRequestParameters,
           ),
         );
     }
@@ -128,6 +136,7 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
   late bool _omitReasoningEffort;
   late TextEditingController _maxTokensCtrl;
   late TextEditingController _timeoutCtrl;
+  late List<ExtraRequestParameter> _extraRequestParameters;
 
   @override
   void initState() {
@@ -147,13 +156,17 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
         _omitReasoning = p.studioAgent.studioFinalOmitReasoning;
         _omitReasoningEffort = p.studioAgent.studioFinalOmitReasoningEffort;
         _maxTokensCtrl = TextEditingController(
-          text: p.studioAgent.studioFinalMaxTokens > 0 ? '${p.studioAgent.studioFinalMaxTokens}' : '',
+          text: p.studioAgent.studioFinalMaxTokens > 0
+              ? '${p.studioAgent.studioFinalMaxTokens}'
+              : '',
         );
         _timeoutCtrl = TextEditingController(
           text: p.studioAgent.studioFinalTimeoutMs > 0
               ? '${p.studioAgent.studioFinalTimeoutMs ~/ 1000}'
               : '',
         );
+        _extraRequestParameters =
+            p.studioAgent.studioFinalExtraRequestParameters;
       case StudioSlot.tracker:
         _temperature = p.studioAgent.studioTrackerTemperature;
         _topP = p.studioAgent.studioTrackerTopP;
@@ -176,6 +189,8 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
               ? '${p.studioAgent.studioTrackerTimeoutMs ~/ 1000}'
               : '',
         );
+        _extraRequestParameters =
+            p.studioAgent.studioTrackerExtraRequestParameters;
       case StudioSlot.cleaner:
         _temperature = p.cleaner.postCleanerTemperature;
         _topP = p.cleaner.postCleanerTopP;
@@ -189,13 +204,16 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
         _omitReasoning = p.cleaner.postCleanerOmitReasoning;
         _omitReasoningEffort = p.cleaner.postCleanerOmitReasoningEffort;
         _maxTokensCtrl = TextEditingController(
-          text: p.cleaner.postCleanerMaxTokens > 0 ? '${p.cleaner.postCleanerMaxTokens}' : '',
+          text: p.cleaner.postCleanerMaxTokens > 0
+              ? '${p.cleaner.postCleanerMaxTokens}'
+              : '',
         );
         _timeoutCtrl = TextEditingController(
           text: p.cleaner.postCleanerTimeoutMs > 0
               ? '${p.cleaner.postCleanerTimeoutMs ~/ 1000}'
               : '',
         );
+        _extraRequestParameters = p.cleaner.postCleanerExtraRequestParameters;
     }
   }
 
@@ -365,6 +383,17 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                   ),
                 ],
               ),
+              ExtraRequestParametersEditor(
+                parameters: _extraRequestParameters,
+                title: 'extra_request_parameters'.tr(),
+                description: 'extra_request_parameters_studio_desc'.tr(),
+                keyLabel: 'extra_request_parameter_key'.tr(),
+                valueLabel: 'extra_request_parameter_value'.tr(),
+                addLabel: 'extra_request_parameter_add'.tr(),
+                onChanged: (parameters) {
+                  _extraRequestParameters = parameters;
+                },
+              ),
               const SizedBox(height: 8),
               MenuGroup(
                 compact: true,
@@ -443,6 +472,7 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                 omitReasoningEffort: _omitReasoningEffort,
                 maxTokens: maxTokens,
                 timeoutMs: timeoutMs,
+                extraRequestParameters: _extraRequestParameters,
               ),
             );
           },

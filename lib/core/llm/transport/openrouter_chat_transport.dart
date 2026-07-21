@@ -102,6 +102,7 @@ class OpenRouterChatTransport implements ChatTransport {
       // top-level `cache_control` field. Cache markers are now on the
       // message parts via the helpers above.
       cacheControlTtl: 'off',
+      extraRequestParameters: input.extraRequestParameters,
     );
   }
 

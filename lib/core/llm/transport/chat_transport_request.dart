@@ -1,3 +1,5 @@
+import '../../models/extra_request_parameter.dart';
+
 /// Provider-neutral input for [ChatTransport.stream].
 ///
 /// Mirrors the shape of OpenAI Chat Completions request body — that's also
@@ -60,6 +62,8 @@ class ChatTransportRequest {
   /// Only sent when [tools] is non-null.
   final String? toolChoice;
 
+  final List<ExtraRequestParameter> extraRequestParameters;
+
   const ChatTransportRequest({
     required this.endpoint,
     required this.apiKey,
@@ -86,5 +90,6 @@ class ChatTransportRequest {
     this.sessionIdMode = 'openrouter',
     this.tools,
     this.toolChoice,
+    this.extraRequestParameters = const [],
   });
 }

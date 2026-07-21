@@ -76,7 +76,8 @@ class LedgerStage {
         final studioConfig = await ctx.ref
             .read(studioConfigRepoProvider)
             .getBySessionId(sessionId);
-        studioConfigEnabled = studioConfig?.enabled == true &&
+        studioConfigEnabled =
+            studioConfig?.enabled == true &&
             ctx.ref.read(studioFeatureEnabledProvider);
         studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
         studioPresetId = await ctx.ref.read(activeStudioPresetProvider.future);
@@ -106,11 +107,7 @@ class LedgerStage {
           .length;
       final cadenceReason = studioConfigEnabled
           ? null
-          : _resolveCadence(
-              pipeline,
-              assistantTurnCount,
-              finalAssistantText,
-            );
+          : _resolveCadence(pipeline, assistantTurnCount, finalAssistantText);
       if (cadenceReason != null) {
         await _recordDiag(
           sessionId: sessionId,
@@ -155,6 +152,8 @@ class LedgerStage {
             fallback: ctx.ref.read(activeApiConfigProvider),
             errorLabel: 'studio-ledger',
             modelOverride: pipeline.cleaner.postCleanerModel,
+            extraRequestParameterOverrides:
+                pipeline.cleaner.postCleanerExtraRequestParameters,
           );
         } catch (e) {
           debugPrint('[StudioLedger] slot resolution failed: $e');
@@ -170,11 +169,12 @@ class LedgerStage {
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
       if (ctx.ref.mounted) {
-        ctx.ref.read(postGenStatusProvider.notifier).state =
-            PostGenStatusState.running(
-              sessionId: sessionId,
-              task: PostGenTask.ledger,
-            );
+        ctx.ref
+            .read(postGenStatusProvider.notifier)
+            .state = PostGenStatusState.running(
+          sessionId: sessionId,
+          task: PostGenTask.ledger,
+        );
       }
 
       final service = ctx.ref.read(studioLedgerServiceProvider);
@@ -225,20 +225,20 @@ class LedgerStage {
       );
 
       if (ctx.ref.mounted) {
-        final detail =
-            'Ledger ${result.status} (ops=${result.opsApplied})';
-        ctx.ref.read(postGenStatusProvider.notifier).state =
-            result.status == 'ok'
-                ? PostGenStatusState.done(
-                    sessionId: sessionId,
-                    task: PostGenTask.ledger,
-                    detail: detail,
-                  )
-                : PostGenStatusState.error(
-                    sessionId: sessionId,
-                    task: PostGenTask.ledger,
-                    detail: detail,
-                  );
+        final detail = 'Ledger ${result.status} (ops=${result.opsApplied})';
+        ctx.ref
+            .read(postGenStatusProvider.notifier)
+            .state = result.status == 'ok'
+            ? PostGenStatusState.done(
+                sessionId: sessionId,
+                task: PostGenTask.ledger,
+                detail: detail,
+              )
+            : PostGenStatusState.error(
+                sessionId: sessionId,
+                task: PostGenTask.ledger,
+                detail: detail,
+              );
       }
 
       if (ledgerStatusToOp(result.status).isFailure) {

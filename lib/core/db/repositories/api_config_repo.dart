@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../app_db.dart';
 import '../../models/api_config.dart';
 import '../../../features/cloud_sync/sync_repo_interfaces.dart';
+import '../../models/extra_request_parameter.dart';
 
 class ApiConfigRepo implements SyncApiConfigStore {
   final AppDatabase _db;
@@ -74,6 +77,14 @@ class ApiConfigRepo implements SyncApiConfigStore {
     cacheBreakpointMode: c.cacheBreakpointMode,
     sessionIdMode: c.sessionIdMode,
     firstChunkTimeoutMs: c.firstChunkTimeoutMs,
+    extraRequestParameters:
+        (jsonDecode(c.extraRequestParametersJson) as List<dynamic>)
+            .map(
+              (value) => ExtraRequestParameter.fromJson(
+                Map<String, dynamic>.from(value as Map),
+              ),
+            )
+            .toList(growable: false),
   );
 
   ApiConfigsCompanion _toCompanion(ApiConfig m) => ApiConfigsCompanion(
@@ -111,5 +122,10 @@ class ApiConfigRepo implements SyncApiConfigStore {
     cacheBreakpointMode: Value(m.cacheBreakpointMode),
     sessionIdMode: Value(m.sessionIdMode),
     firstChunkTimeoutMs: Value(m.firstChunkTimeoutMs),
+    extraRequestParametersJson: Value(
+      jsonEncode(
+        m.extraRequestParameters.map((value) => value.toJson()).toList(),
+      ),
+    ),
   );
 }

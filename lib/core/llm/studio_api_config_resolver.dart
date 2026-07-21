@@ -10,18 +10,16 @@ class StudioApiConfigResolver {
   final List<ApiConfig> apiConfigs;
   final ApiConfig? activeConfig;
 
-  const StudioApiConfigResolver({
-    required this.apiConfigs,
-    this.activeConfig,
-  });
+  const StudioApiConfigResolver({required this.apiConfigs, this.activeConfig});
 
   /// Resolve the [ApiConfig] used to RUN trackers / agents: the studio's
   /// `runApiConfigId` if it resolves to a saved config, otherwise the active
   /// chat config. Returns `null` when neither is available.
   ApiConfig? resolveRunConfig(String runApiConfigId) {
     if (runApiConfigId.isNotEmpty) {
-      final byRunId =
-          apiConfigs.where((c) => c.id == runApiConfigId).firstOrNull;
+      final byRunId = apiConfigs
+          .where((c) => c.id == runApiConfigId)
+          .firstOrNull;
       if (byRunId != null) return byRunId;
     }
     return activeConfig;

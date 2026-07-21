@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
 import '../models/api_config.dart';
+import '../models/extra_request_parameter.dart';
 import '../models/pipeline_settings.dart';
 import '../models/studio_config.dart';
 import '../state/db_provider.dart';
@@ -156,7 +157,8 @@ class AgentRunner {
             omitReasoning: pipeline.studioAgent.studioFinalDisableReasoning
                 ? true
                 : pipeline.studioAgent.studioFinalOmitReasoning,
-            omitReasoningEffort: pipeline.studioAgent.studioFinalOmitReasoningEffort,
+            omitReasoningEffort:
+                pipeline.studioAgent.studioFinalOmitReasoningEffort,
             reasoningEffort: pipeline.studioAgent.studioFinalReasoningEffort,
           )
         : agent.phase == 'post_processing'
@@ -167,7 +169,8 @@ class AgentRunner {
             omitReasoning: pipeline.cleaner.postCleanerDisableReasoning
                 ? true
                 : pipeline.cleaner.postCleanerOmitReasoning,
-            omitReasoningEffort: pipeline.cleaner.postCleanerOmitReasoningEffort,
+            omitReasoningEffort:
+                pipeline.cleaner.postCleanerOmitReasoningEffort,
             reasoningEffort: pipeline.cleaner.postCleanerReasoningEffort,
           )
         : resolved.copyWithReasoning(
@@ -177,7 +180,8 @@ class AgentRunner {
             omitReasoning: pipeline.studioAgent.studioTrackerDisableReasoning
                 ? true
                 : pipeline.studioAgent.studioTrackerOmitReasoning,
-            omitReasoningEffort: pipeline.studioAgent.studioTrackerOmitReasoningEffort,
+            omitReasoningEffort:
+                pipeline.studioAgent.studioTrackerOmitReasoningEffort,
             reasoningEffort: pipeline.studioAgent.studioTrackerReasoningEffort,
           );
     return _streamRunner.run(
@@ -267,13 +271,13 @@ class AgentRunner {
       return null;
     }
     if (agent.phase == 'post_processing') {
-      final cleanerGlobal = _readPipelineSettings()
-          .cleaner.postCleanerMaxTokens;
+      final cleanerGlobal =
+          _readPipelineSettings().cleaner.postCleanerMaxTokens;
       if (cleanerGlobal > 0) return cleanerGlobal;
       return null;
     }
-    final trackerGlobal = _readPipelineSettings()
-        .studioAgent.studioTrackerMaxTokens;
+    final trackerGlobal =
+        _readPipelineSettings().studioAgent.studioTrackerMaxTokens;
     if (trackerGlobal > 0) return trackerGlobal;
     return null;
   }
@@ -295,8 +299,8 @@ class AgentRunner {
     if (agent.phase == 'post_processing') {
       return _readPipelineSettings().cleaner.postCleanerTemperature;
     }
-    final trackerGlobal = _readPipelineSettings()
-        .studioAgent.studioTrackerTemperature;
+    final trackerGlobal =
+        _readPipelineSettings().studioAgent.studioTrackerTemperature;
     if (trackerGlobal >= 0) return trackerGlobal;
     return null;
   }
@@ -362,6 +366,7 @@ class ResolvedAgentConfig {
   final String cacheBreakpointMode;
   final String sessionIdMode;
   final int contextSize;
+  final List<ExtraRequestParameter> extraRequestParameters;
 
   const ResolvedAgentConfig({
     required this.endpoint,
@@ -383,6 +388,7 @@ class ResolvedAgentConfig {
     this.cacheBreakpointMode = 'depth',
     this.sessionIdMode = 'openrouter',
     this.contextSize = 32000,
+    this.extraRequestParameters = const [],
   });
 
   factory ResolvedAgentConfig.fromApiConfig(
@@ -409,6 +415,7 @@ class ResolvedAgentConfig {
       cacheBreakpointMode: config.cacheBreakpointMode,
       sessionIdMode: config.sessionIdMode,
       contextSize: config.contextSize,
+      extraRequestParameters: config.extraRequestParameters,
     );
   }
 
@@ -440,6 +447,7 @@ class ResolvedAgentConfig {
       cacheBreakpointMode: cacheBreakpointMode,
       sessionIdMode: sessionIdMode,
       contextSize: contextSize,
+      extraRequestParameters: extraRequestParameters,
     );
   }
 
@@ -450,6 +458,7 @@ class ResolvedAgentConfig {
     double? presencePenalty,
     bool? omitTemperature,
     bool? omitTopP,
+    List<ExtraRequestParameter>? extraRequestParameters,
   }) {
     return ResolvedAgentConfig(
       endpoint: endpoint,
@@ -471,6 +480,8 @@ class ResolvedAgentConfig {
       cacheBreakpointMode: cacheBreakpointMode,
       sessionIdMode: sessionIdMode,
       contextSize: contextSize,
+      extraRequestParameters:
+          extraRequestParameters ?? this.extraRequestParameters,
     );
   }
 }

@@ -4,13 +4,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/llm/aux_llm_client.dart' show AuxApiConfig, AuxLlmClient;
+import '../../../../core/llm/aux_llm_client.dart'
+    show AuxApiConfig, AuxLlmClient;
 import '../../../../core/llm/beauty_state_parser.dart';
 import '../../../../core/llm/macro_engine.dart';
 import '../../../../core/llm/prompt_builder.dart' show PromptPayload;
 import '../../../../core/llm/studio_slot_resolver.dart';
 import '../../../../core/llm/tokenizer.dart';
-import '../../../../core/llm/cleaner/audit_prompt_builder.dart' show AuditResult;
+import '../../../../core/llm/cleaner/audit_prompt_builder.dart'
+    show AuditResult;
 import '../../../../core/models/agent_operation_record.dart';
 import '../../../../core/models/api_config.dart';
 import '../../../../core/models/character.dart';
@@ -160,7 +162,9 @@ class CleanerStage {
         final effectiveChar =
             character ?? ctx.ref.read(characterByIdProvider(ctx.charId));
         if (effectiveChar != null && ctx.ref.mounted) {
-          final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+          final refreshed = await ctx.ref
+              .read(chatRepoProvider)
+              .getById(sessionId);
           if (refreshed != null) {
             await extBlocks.launchForSwipe(
               session: refreshed,
@@ -200,7 +204,8 @@ class CleanerStage {
             .read(studioConfigRepoProvider)
             .getBySessionId(sessionId);
         broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
-        studioConfigEnabled = studioConfig?.enabled == true &&
+        studioConfigEnabled =
+            studioConfig?.enabled == true &&
             ctx.ref.read(studioFeatureEnabledProvider);
         studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
         studioPresetId = await ctx.ref.read(activeStudioPresetProvider.future);
@@ -241,6 +246,8 @@ class CleanerStage {
           fallback: ctx.ref.read(activeApiConfigProvider),
           errorLabel: 'post-cleaner',
           modelOverride: pipeline.cleaner.postCleanerModel,
+          extraRequestParameterOverrides:
+              pipeline.cleaner.postCleanerExtraRequestParameters,
         );
       } catch (e) {
         debugPrint('[PostCleaner] slot resolution failed: $e');
@@ -252,8 +259,8 @@ class CleanerStage {
       var beautyBrief = '';
       String? beautyState;
       Map<String, String> sessionVars = {};
-      final Character? effectiveChar = character ??
-          ctx.ref.read(characterByIdProvider(ctx.charId));
+      final Character? effectiveChar =
+          character ?? ctx.ref.read(characterByIdProvider(ctx.charId));
       try {
         beautyBrief = BeautyStateHandler.extractBeautyBrief(lastAssistant);
         // Load current beauty state from session vars.
@@ -314,21 +321,25 @@ class CleanerStage {
           try {
             if (_lastStreamedText.trim().isNotEmpty) {
               // Save partial text the user saw live before the throw.
-              await ctx.ref.read(chatRepoProvider).updateAgentSwipeContent(
-                sessionId: sessionId,
-                messageId: _preCreatedMessageId ?? '',
-                agentSwipeId: _preCreatedCleanerSwipeId,
-                content: _lastStreamedText,
-                genTime: '0.0s',
-                tokens: estimateTokens(_lastStreamedText),
-              );
+              await ctx.ref
+                  .read(chatRepoProvider)
+                  .updateAgentSwipeContent(
+                    sessionId: sessionId,
+                    messageId: _preCreatedMessageId ?? '',
+                    agentSwipeId: _preCreatedCleanerSwipeId,
+                    content: _lastStreamedText,
+                    genTime: '0.0s',
+                    tokens: estimateTokens(_lastStreamedText),
+                  );
             } else {
               // No partial text — revert to the parent 'final'.
-              await ctx.ref.read(chatRepoProvider).removeAgentSwipe(
-                sessionId: sessionId,
-                messageId: _preCreatedMessageId ?? '',
-                agentSwipeId: _preCreatedCleanerSwipeId,
-              );
+              await ctx.ref
+                  .read(chatRepoProvider)
+                  .removeAgentSwipe(
+                    sessionId: sessionId,
+                    messageId: _preCreatedMessageId ?? '',
+                    agentSwipeId: _preCreatedCleanerSwipeId,
+                  );
             }
             final reverted = await ctx.ref
                 .read(chatRepoProvider)
@@ -357,14 +368,16 @@ class CleanerStage {
       // 'cleaned' bubble lingering in the UI.
       if (!_finalized && _preCreatedCleanerSwipeId >= 0 && ctx.ref.mounted) {
         try {
-          await ctx.ref.read(chatRepoProvider).removeAgentSwipe(
-            sessionId: sessionId,
-            messageId: _preCreatedMessageId ?? '',
-            agentSwipeId: _preCreatedCleanerSwipeId,
-          );
-          final reverted = await ctx.ref.read(chatRepoProvider).getById(
-            sessionId,
-          );
+          await ctx.ref
+              .read(chatRepoProvider)
+              .removeAgentSwipe(
+                sessionId: sessionId,
+                messageId: _preCreatedMessageId ?? '',
+                agentSwipeId: _preCreatedCleanerSwipeId,
+              );
+          final reverted = await ctx.ref
+              .read(chatRepoProvider)
+              .getById(sessionId);
           if (reverted != null) {
             ChatSessionService.updateCache(reverted);
             ctx.ref.invalidate(chatHistoryProvider);
@@ -406,12 +419,14 @@ class CleanerStage {
   }) async {
     final isManualRerun = genId < 0;
     bool abortCheck() =>
-        ctx.ref.mounted && (isManualRerun || ctx.abortHandler.isCurrentGen(genId));
+        ctx.ref.mounted &&
+        (isManualRerun || ctx.abortHandler.isCurrentGen(genId));
 
     // Manual rerun explicitly runs the cleaner even when the auto-cleaner
     // toggle is off. In that case ExtBlocks/Ledger already ran on the raw auto
     // response, so do not launch them a second time after the manual rewrite.
-    final skipPostGenOnRerun = isManualRerun && !pipeline.cleaner.postCleanerEnabled;
+    final skipPostGenOnRerun =
+        isManualRerun && !pipeline.cleaner.postCleanerEnabled;
 
     final cleanerTimeout = const AuxLlmClient().resolveCleanerTimeout(pipeline);
     debugPrint(
@@ -458,7 +473,8 @@ class CleanerStage {
       // Dedicated cancel token so Stop can abort the auditor before the
       // cleaner prompt is built.
       _auditCancelToken = CancelToken();
-      ctx.ref.read(cleanerCancelTokenProvider.notifier).state = _auditCancelToken;
+      ctx.ref.read(cleanerCancelTokenProvider.notifier).state =
+          _auditCancelToken;
       auditStartedAt = DateTime.now().millisecondsSinceEpoch;
       auditFuture = cleanerService
           .runCharacterAudit(
@@ -573,7 +589,8 @@ class CleanerStage {
     }
 
     _cleanerCancelToken = CancelToken();
-    ctx.ref.read(cleanerCancelTokenProvider.notifier).state = _cleanerCancelToken;
+    ctx.ref.read(cleanerCancelTokenProvider.notifier).state =
+        _cleanerCancelToken;
     if (factCheckEnabled) {
       ctx.ref
           .read(postCleanerStateProvider.notifier)
@@ -590,7 +607,7 @@ class CleanerStage {
     // sees the actual speakers in the response.
     final effectiveBeautyBrief = auditBeauty != null
         ? 'Speaker colors: ${auditBeauty['speakers'] ?? <String, dynamic>{}}\n'
-            'Thought colors: ${auditBeauty['thoughts'] ?? <String, dynamic>{}}'
+              'Thought colors: ${auditBeauty['thoughts'] ?? <String, dynamic>{}}'
         : beautyBrief;
     final result = await cleanerService.runCleaner(
       sessionId: sessionId,
@@ -615,8 +632,12 @@ class CleanerStage {
         // Deterministically wrap Lumia OOC blocks so the color is visible
         // during streaming, not only after the cleaner finalizes.
         displayText = wrapLumiaOocColors(displayText);
-        ctx.ref.read(streamingStateProvider(ctx.charId).notifier).state =
-            StreamingState(text: displayText, targetMessageId: targetMessage.id);
+        ctx.ref
+            .read(streamingStateProvider(ctx.charId).notifier)
+            .state = StreamingState(
+          text: displayText,
+          targetMessageId: targetMessage.id,
+        );
         if (text.length >= _lastStreamedText.length) {
           _lastStreamedText = text;
         }
@@ -747,7 +768,9 @@ class CleanerStage {
       // Skip on manual rerun when both auto toggles were off — ExtBlocks
       // already ran on the raw text during auto post-gen.
       if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
-        final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+        final refreshed = await ctx.ref
+            .read(chatRepoProvider)
+            .getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
             session: refreshed,
@@ -766,7 +789,9 @@ class CleanerStage {
       }
       _finalized = true;
       if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
-        final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+        final refreshed = await ctx.ref
+            .read(chatRepoProvider)
+            .getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
             session: refreshed,
@@ -801,7 +826,9 @@ class CleanerStage {
       }
       _finalized = true;
       if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
-        final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+        final refreshed = await ctx.ref
+            .read(chatRepoProvider)
+            .getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
             session: refreshed,
@@ -822,7 +849,9 @@ class CleanerStage {
       }
       _finalized = true;
       if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
-        final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+        final refreshed = await ctx.ref
+            .read(chatRepoProvider)
+            .getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
             session: refreshed,
@@ -839,7 +868,9 @@ class CleanerStage {
       );
       _finalized = true;
       if (character != null && ctx.ref.mounted && !skipPostGenOnRerun) {
-        final refreshed = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+        final refreshed = await ctx.ref
+            .read(chatRepoProvider)
+            .getById(sessionId);
         if (refreshed != null) {
           await extBlocks.launchForSwipe(
             session: refreshed,
@@ -856,17 +887,14 @@ class CleanerStage {
         result.beautyStateJson!.trim().isNotEmpty &&
         ctx.ref.mounted) {
       try {
-        await ctx.ref.read(chatRepoProvider).updateSessionVarsJson(
-          sessionId,
-          (vars) {
-            final updated = Map<String, dynamic>.from(vars);
-            updated[beautyStateVarKey] = result.beautyStateJson!;
-            return updated;
-          },
-        );
-        debugPrint(
-          '[PostCleaner] beauty state persisted session=$sessionId',
-        );
+        await ctx.ref.read(chatRepoProvider).updateSessionVarsJson(sessionId, (
+          vars,
+        ) {
+          final updated = Map<String, dynamic>.from(vars);
+          updated[beautyStateVarKey] = result.beautyStateJson!;
+          return updated;
+        });
+        debugPrint('[PostCleaner] beauty state persisted session=$sessionId');
       } catch (e) {
         debugPrint(
           '[PostCleaner] beauty state persist failed session=$sessionId error=$e',
@@ -897,9 +925,7 @@ class CleanerStage {
         // here — the pipeline owns those transitions (it clears
         // isPostGenRunning after Future.wait(postGenFutures) settles).
         if (current != null && current.session?.id == sessionId) {
-          ctx.setState(
-            AsyncData(current.copyWith(session: refreshed)),
-          );
+          ctx.setState(AsyncData(current.copyWith(session: refreshed)));
         }
         ctx.ref.invalidate(chatHistoryProvider);
       }
@@ -1008,7 +1034,8 @@ class CleanerStage {
           .read(studioConfigRepoProvider)
           .getBySessionId(sessionId);
       broadcastBlocks = studioConfig?.broadcastBlocks ?? const [];
-      studioConfigEnabled = studioConfig?.enabled == true &&
+      studioConfigEnabled =
+          studioConfig?.enabled == true &&
           ctx.ref.read(studioFeatureEnabledProvider);
       studioCleanerApiConfigId = studioConfig?.cleanerApiConfigId ?? '';
       studioPresetId = await ctx.ref.read(activeStudioPresetProvider.future);
@@ -1048,6 +1075,8 @@ class CleanerStage {
         fallback: ctx.ref.read(activeApiConfigProvider),
         errorLabel: 'post-cleaner-rerun',
         modelOverride: pipeline.cleaner.postCleanerModel,
+        extraRequestParameterOverrides:
+            pipeline.cleaner.postCleanerExtraRequestParameters,
       );
     } catch (e) {
       debugPrint('[PostCleaner] rerun slot resolution failed: $e');
@@ -1065,7 +1094,9 @@ class CleanerStage {
     Map<String, String> sessionVars = {};
     try {
       beautyBrief = BeautyStateHandler.extractBeautyBrief(target);
-      final rerunSession = await ctx.ref.read(chatRepoProvider).getById(sessionId);
+      final rerunSession = await ctx.ref
+          .read(chatRepoProvider)
+          .getById(sessionId);
       if (rerunSession != null) {
         sessionVars = rerunSession.sessionVars;
         beautyState = BeautyStateHandler.extractBeautyState(sessionVars);

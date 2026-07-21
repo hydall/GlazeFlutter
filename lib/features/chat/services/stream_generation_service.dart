@@ -114,7 +114,10 @@ class StreamGenerationService {
               studioFinalContextSize,
             );
       final finalPayload = studioConfig != null
-          ? StudioStreamInterceptor.payloadWithSourceWindow(payload, studioFinalVisibleMessageIds)
+          ? StudioStreamInterceptor.payloadWithSourceWindow(
+              payload,
+              studioFinalVisibleMessageIds,
+            )
           : payload;
 
       final promptResult = await buildPromptInIsolate(finalPayload);
@@ -186,10 +189,11 @@ class StreamGenerationService {
       if (studioConfig != null) {
         final trackerContextSize =
             pipelineSettings.studioAgent.studioTrackerContextSize;
-        final trackerVisibleMessageIds = StudioStreamInterceptor.computeStudioFinalVisibleMessageIds(
-          payload.history,
-          trackerContextSize,
-        );
+        final trackerVisibleMessageIds =
+            StudioStreamInterceptor.computeStudioFinalVisibleMessageIds(
+              payload.history,
+              trackerContextSize,
+            );
         final trackerPayload = StudioStreamInterceptor.payloadWithSourceWindow(
           payload,
           trackerVisibleMessageIds,
@@ -329,7 +333,9 @@ class StreamGenerationService {
           'elapsedMs=$elapsed chars=${studioResult.response.length} '
           'briefs=${studioResult.stageBriefs.length}',
         );
-        _ref.read(studioCycleStateProvider.notifier).state = StudioStreamInterceptor.studioFinalState(
+        _ref
+            .read(studioCycleStateProvider.notifier)
+            .state = StudioStreamInterceptor.studioFinalState(
           session.id,
           studioResult,
           StudioCyclePhase.done,
@@ -365,7 +371,9 @@ class StreamGenerationService {
               triggeredMemories: triggeredMemories,
               regenTargetId: regenTargetId,
               visibleStartIndex: vsi,
-              studioOutputs: StudioStreamInterceptor.studioOutputsToJson(studioResult.stageBriefs),
+              studioOutputs: StudioStreamInterceptor.studioOutputsToJson(
+                studioResult.stageBriefs,
+              ),
             )
             .copyWith(promptPayload: finalPayload);
         _recordModelUsage(apiConfig.model);
@@ -463,6 +471,7 @@ class StreamGenerationService {
           cacheControlTtl: apiConfig.cacheControlTtl,
           cacheBreakpointMode: apiConfig.cacheBreakpointMode,
           sessionIdMode: apiConfig.sessionIdMode,
+          extraRequestParameters: apiConfig.extraRequestParameters,
         ),
         cancelToken: cancelToken,
         onUpdate: (delta, reasoningDelta) {
@@ -515,10 +524,7 @@ class StreamGenerationService {
             );
           }
 
-          final beautyApplied = applyBeautyState(
-            finalText,
-            pendingSessionVars,
-          );
+          final beautyApplied = applyBeautyState(finalText, pendingSessionVars);
           finalText = wrapLumiaOocColors(beautyApplied.text);
           pendingSessionVars = beautyApplied.vars;
 
@@ -593,7 +599,8 @@ class StreamGenerationService {
         onError: (error) {
           idleGuard.dispose();
           if (idleTimedOut) {
-            final msg = 'Нет ответа от модели за ${idleTimeoutMs ~/ 1000}с — '
+            final msg =
+                'Нет ответа от модели за ${idleTimeoutMs ~/ 1000}с — '
                 'соединение прервано. Проверьте endpoint или увеличьте '
                 'таймаут в настройках API.';
             if (regenTargetId != null && saveSession != null) {
@@ -694,11 +701,10 @@ class StreamGenerationService {
   static Set<String> computeStudioFinalVisibleMessageIds(
     List<ChatMessage> history,
     int finalContextSize,
-  ) =>
-      StudioStreamInterceptor.computeStudioFinalVisibleMessageIds(
-        history,
-        finalContextSize,
-      );
+  ) => StudioStreamInterceptor.computeStudioFinalVisibleMessageIds(
+    history,
+    finalContextSize,
+  );
 
   static String? _lastAssistantId(ChatSession session, String? regenTargetId) {
     if (regenTargetId != null &&
@@ -725,7 +731,8 @@ class StreamGenerationService {
   String _resolvedTrackerModel(ApiConfig apiConfig) {
     final override = _ref
         .read(pipelineSettingsProvider)
-        .studioAgent.studioTrackerModelOverride;
+        .studioAgent
+        .studioTrackerModelOverride;
     return override.isNotEmpty ? override : apiConfig.model;
   }
 }

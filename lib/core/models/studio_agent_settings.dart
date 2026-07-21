@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'extra_request_parameter.dart';
+
 part 'studio_agent_settings.freezed.dart';
 part 'studio_agent_settings.g.dart';
 
@@ -58,6 +60,8 @@ abstract class StudioAgentSettings with _$StudioAgentSettings {
     // Studio final API config model, or the active chat model when no final
     // API config is selected.
     @Default('') String studioFinalModelOverride,
+    @Default(<ExtraRequestParameter>[])
+    List<ExtraRequestParameter> studioFinalExtraRequestParameters,
 
     // ── Studio trackers (intermediate agents) ─────────────────────────────
     // The 7 pre-gen controllers share one logical batch. Model id override
@@ -89,6 +93,8 @@ abstract class StudioAgentSettings with _$StudioAgentSettings {
     // Context size for ALL non-final Studio agents (batch + individual).
     // This is the single source of truth — per-agent contextSize is ignored.
     @Default(8) int studioTrackerContextSize,
+    @Default(<ExtraRequestParameter>[])
+    List<ExtraRequestParameter> studioTrackerExtraRequestParameters,
 
     // ── Post-processing trackers ──────────────────────────────────────────
     // Number of trailing chat messages forwarded to post-processing

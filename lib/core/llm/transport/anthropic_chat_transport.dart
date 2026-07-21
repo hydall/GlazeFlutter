@@ -9,6 +9,7 @@ import '../converters/cache_breakpoint_marker.dart';
 import '../converters/thinking_budget.dart';
 import 'chat_transport.dart';
 import 'chat_transport_request.dart';
+import 'extra_request_parameters.dart';
 
 /// Result of [AnthropicChatTransport.buildRequest] — body + headers + the
 /// detected prefill text (null when no trailing assistant turn was used).
@@ -122,7 +123,9 @@ class AnthropicChatTransport implements ChatTransport {
         if (attempt < _maxRetries &&
             e.response?.statusCode == 408 &&
             cancelToken?.isCancelled != true) {
-          debugPrint('[Anthropic] HTTP 408 on attempt ${attempt + 1}/$_maxRetries — retrying');
+          debugPrint(
+            '[Anthropic] HTTP 408 on attempt ${attempt + 1}/$_maxRetries — retrying',
+          );
           await Future<void>.delayed(const Duration(seconds: 1));
           continue;
         }
@@ -245,6 +248,8 @@ class AnthropicChatTransport implements ChatTransport {
       }
       // budget == null → 'auto', omit thinking config entirely.
     }
+
+    applyExtraRequestParameters(body, request.extraRequestParameters);
 
     final headers = <String, String>{
       'Content-Type': 'application/json',

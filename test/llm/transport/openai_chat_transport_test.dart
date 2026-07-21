@@ -5,11 +5,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/llm/transport/chat_transport_request.dart';
 import 'package:glaze_flutter/core/llm/transport/openai_chat_transport.dart';
+import 'package:glaze_flutter/core/models/extra_request_parameter.dart';
 
 ChatTransportRequest _req({
   String endpoint = 'https://api.openai.com',
   String sessionIdMode = 'openrouter',
   int? receiveTimeoutMs,
+  List<ExtraRequestParameter> extraRequestParameters = const [],
 }) {
   return ChatTransportRequest(
     endpoint: endpoint,
@@ -24,6 +26,7 @@ ChatTransportRequest _req({
     sessionId: 'sess-1',
     sessionIdMode: sessionIdMode,
     receiveTimeoutMs: receiveTimeoutMs,
+    extraRequestParameters: extraRequestParameters,
   );
 }
 
@@ -88,6 +91,46 @@ void main() {
       );
 
       expect(body.containsKey('session_id'), isFalse);
+    });
+  });
+
+  group('extra request parameters', () {
+    test('adds enabled values and parses valid JSON', () {
+      final body = OpenAiChatTransport.buildBody(
+        _req(
+          extraRequestParameters: const [
+            ExtraRequestParameter(key: 'reasoning_effort', value: 'xhigh'),
+            ExtraRequestParameter(key: 'seed', value: '42'),
+            ExtraRequestParameter(key: 'metadata', value: '{"source":"test"}'),
+            ExtraRequestParameter(
+              key: 'disabled',
+              value: 'true',
+              enabled: false,
+            ),
+          ],
+        ),
+      );
+
+      expect(body['reasoning_effort'], 'xhigh');
+      expect(body['seed'], 42);
+      expect(body['metadata'], {'source': 'test'});
+      expect(body, isNot(contains('disabled')));
+    });
+
+    test('does not override structural request fields', () {
+      final body = OpenAiChatTransport.buildBody(
+        _req(
+          extraRequestParameters: const [
+            ExtraRequestParameter(key: 'model', value: 'hijacked'),
+            ExtraRequestParameter(key: 'stream', value: 'false'),
+            ExtraRequestParameter(key: 'messages', value: '[]'),
+          ],
+        ),
+      );
+
+      expect(body['model'], 'gpt-test');
+      expect(body['stream'], isTrue);
+      expect(body['messages'], isNotEmpty);
     });
   });
 }

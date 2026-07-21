@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'extra_request_parameter.dart';
+
 part 'api_config.freezed.dart';
 part 'api_config.g.dart';
 
@@ -40,6 +42,8 @@ abstract class ApiConfig with _$ApiConfig {
     @Default('depth') String cacheBreakpointMode,
     @Default('openrouter') String sessionIdMode,
     @Default(60000) int firstChunkTimeoutMs,
+    @Default(<ExtraRequestParameter>[])
+    List<ExtraRequestParameter> extraRequestParameters,
   }) = _ApiConfig;
 
   factory ApiConfig.fromJson(Map<String, dynamic> json) =>

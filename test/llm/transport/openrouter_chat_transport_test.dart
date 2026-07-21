@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/llm/transport/chat_transport_request.dart';
 import 'package:glaze_flutter/core/llm/transport/openai_chat_transport.dart';
 import 'package:glaze_flutter/core/llm/transport/openrouter_chat_transport.dart';
+import 'package:glaze_flutter/core/models/extra_request_parameter.dart';
 
 ChatTransportRequest _req({
   String model = 'openai/gpt-4o',
@@ -12,6 +13,7 @@ ChatTransportRequest _req({
   List<Map<String, dynamic>>? previousMessages,
   String endpoint = 'https://intentionally-ignored.example',
   int? receiveTimeoutMs,
+  List<ExtraRequestParameter> extraRequestParameters = const [],
 }) {
   return ChatTransportRequest(
     endpoint: endpoint,
@@ -33,6 +35,7 @@ ChatTransportRequest _req({
     sessionIdMode: sessionIdMode,
     previousMessages: previousMessages,
     receiveTimeoutMs: receiveTimeoutMs,
+    extraRequestParameters: extraRequestParameters,
   );
 }
 
@@ -79,6 +82,19 @@ void main() {
       );
 
       expect(r.receiveTimeoutMs, 0);
+    });
+
+    test('preserves extra request parameters', () {
+      final r = OpenRouterChatTransport.buildRouterRequest(
+        _req(
+          extraRequestParameters: const [
+            ExtraRequestParameter(key: 'reasoning_effort', value: 'xhigh'),
+          ],
+        ),
+      );
+
+      expect(r.extraRequestParameters.single.key, 'reasoning_effort');
+      expect(OpenAiChatTransport.buildBody(r)['reasoning_effort'], 'xhigh');
     });
   });
 

@@ -9,6 +9,7 @@ import '../../core/llm/transport/llm_protocol.dart';
 import '../../core/llm/transport/transport_factory.dart';
 import '../../core/services/api_connection_tester.dart';
 import '../../core/models/api_config.dart';
+import '../../core/models/extra_request_parameter.dart';
 import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
@@ -20,6 +21,7 @@ import '../../shared/widgets/sheet_view.dart';
 import 'api_list_provider.dart';
 import 'widgets/connection_status.dart';
 import '../../shared/widgets/menu_group.dart';
+import '../../shared/widgets/extra_request_parameters_editor.dart';
 
 class ApiSettingsScreen extends ConsumerStatefulWidget {
   final bool startExpanded;
@@ -71,6 +73,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   String _cacheBreakpointMode = 'depth';
   String _sessionIdMode = 'openrouter';
   String _protocol = LlmProtocol.openai;
+  List<ExtraRequestParameter> _extraRequestParameters = const [];
 
   String? _loadedPresetId;
   final _scrollController = ScrollController();
@@ -186,8 +189,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     _modelCtrl.text = config.model;
     _maxTokensCtrl.text = config.maxTokens.toString();
     _contextSizeCtrl.text = config.contextSize.toString();
-    _firstChunkTimeoutCtrl.text =
-        (config.firstChunkTimeoutMs ~/ 1000).toString();
+    _firstChunkTimeoutCtrl.text = (config.firstChunkTimeoutMs ~/ 1000)
+        .toString();
     _embEndpointCtrl.text = config.embeddingEndpoint;
     _embApiKeyCtrl.text = config.embeddingApiKey;
     _embModelCtrl.text = config.embeddingModel;
@@ -214,6 +217,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       _protocol = LlmProtocol.isValid(config.protocol)
           ? config.protocol
           : LlmProtocol.openai;
+      _extraRequestParameters = config.extraRequestParameters;
       _applyProtocolUiPolicy(_protocol);
       _fetchedModels = [];
     });
@@ -261,6 +265,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             embeddingMaxChunkTokens:
                 int.tryParse(_embChunkTokensCtrl.text) ??
                 config.embeddingMaxChunkTokens,
+            extraRequestParameters: _extraRequestParameters,
           ),
         );
   }
@@ -743,6 +748,19 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   ),
               ],
             ),
+          ExtraRequestParametersEditor(
+            key: ValueKey('api-extra-parameters-$_loadedPresetId'),
+            parameters: _extraRequestParameters,
+            title: 'extra_request_parameters'.tr(),
+            description: 'extra_request_parameters_desc'.tr(),
+            keyLabel: 'extra_request_parameter_key'.tr(),
+            valueLabel: 'extra_request_parameter_value'.tr(),
+            addLabel: 'extra_request_parameter_add'.tr(),
+            onChanged: (parameters) {
+              _extraRequestParameters = parameters;
+              _scheduleSave();
+            },
+          ),
         ],
       ),
     );
@@ -1205,7 +1223,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           _llmStatus = ApiConnectionStatus.failed;
           _llmError = error.toString();
         });
-        GlazeErrorDialog.show(context, error, prefix: 'settings_err_conn_failed'.tr());
+        GlazeErrorDialog.show(
+          context,
+          error,
+          prefix: 'settings_err_conn_failed'.tr(),
+        );
     }
   }
 
@@ -1241,7 +1263,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         GlazeToast.show(context, message);
       case ApiTestFailure(:final error):
         setState(() => _embStatus = ApiConnectionStatus.failed);
-        GlazeErrorDialog.show(context, error, prefix: 'settings_err_conn_failed'.tr());
+        GlazeErrorDialog.show(
+          context,
+          error,
+          prefix: 'settings_err_conn_failed'.tr(),
+        );
     }
   }
 }
