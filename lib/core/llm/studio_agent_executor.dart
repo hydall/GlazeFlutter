@@ -140,8 +140,8 @@ class StudioAgentExecutor {
         );
       }
       try {
-        final override = _readPipelineSettings()
-            .studioAgent.studioPostTrackerContextSize;
+        final override =
+            _readPipelineSettings().studioAgent.studioPostTrackerContextSize;
         final effectiveAgent = override > 0
             ? agent.copyWith(contextSize: override)
             : agent;
@@ -268,8 +268,10 @@ class StudioAgentExecutor {
       studioPreset: studioPreset,
       priorBriefs: priorBriefs,
       isFinalResponse: true,
-      finalContextOverride: _readPipelineSettings()
-          .studioAgent.studioFinalContextSize,
+      finalContextOverride:
+          _readPipelineSettings().studioAgent.studioFinalContextSize,
+      includeLastReasoning:
+          _readPipelineSettings().studioAgent.studioFinalIncludeLastReasoning,
     );
     final runner = _runner;
     final result = await runner.runAgent(

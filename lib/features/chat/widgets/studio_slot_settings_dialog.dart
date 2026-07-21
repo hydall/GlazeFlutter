@@ -23,6 +23,7 @@ class StudioSlotSettings {
   final bool omitTopP;
   final bool omitReasoning;
   final bool omitReasoningEffort;
+  final bool includeLastReasoning;
   final int maxTokens;
   final int timeoutMs;
   final List<ExtraRequestParameter> extraRequestParameters;
@@ -39,6 +40,7 @@ class StudioSlotSettings {
     required this.omitTopP,
     required this.omitReasoning,
     required this.omitReasoningEffort,
+    this.includeLastReasoning = false,
     required this.maxTokens,
     required this.timeoutMs,
     required this.extraRequestParameters,
@@ -60,6 +62,7 @@ class StudioSlotSettings {
             studioFinalOmitTopP: omitTopP,
             studioFinalOmitReasoning: omitReasoning,
             studioFinalOmitReasoningEffort: omitReasoningEffort,
+            studioFinalIncludeLastReasoning: includeLastReasoning,
             studioFinalMaxTokens: maxTokens,
             studioFinalTimeoutMs: timeoutMs,
             studioFinalExtraRequestParameters: extraRequestParameters,
@@ -134,6 +137,7 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
   late bool _omitTopP;
   late bool _omitReasoning;
   late bool _omitReasoningEffort;
+  late bool _includeLastReasoning;
   late TextEditingController _maxTokensCtrl;
   late TextEditingController _timeoutCtrl;
   late List<ExtraRequestParameter> _extraRequestParameters;
@@ -155,6 +159,7 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
         _omitTopP = p.studioAgent.studioFinalOmitTopP;
         _omitReasoning = p.studioAgent.studioFinalOmitReasoning;
         _omitReasoningEffort = p.studioAgent.studioFinalOmitReasoningEffort;
+        _includeLastReasoning = p.studioAgent.studioFinalIncludeLastReasoning;
         _maxTokensCtrl = TextEditingController(
           text: p.studioAgent.studioFinalMaxTokens > 0
               ? '${p.studioAgent.studioFinalMaxTokens}'
@@ -179,6 +184,7 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
         _omitTopP = p.studioAgent.studioTrackerOmitTopP;
         _omitReasoning = p.studioAgent.studioTrackerOmitReasoning;
         _omitReasoningEffort = p.studioAgent.studioTrackerOmitReasoningEffort;
+        _includeLastReasoning = false;
         _maxTokensCtrl = TextEditingController(
           text: p.studioAgent.studioTrackerMaxTokens > 0
               ? '${p.studioAgent.studioTrackerMaxTokens}'
@@ -203,6 +209,7 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
         _omitTopP = p.cleaner.postCleanerOmitTopP;
         _omitReasoning = p.cleaner.postCleanerOmitReasoning;
         _omitReasoningEffort = p.cleaner.postCleanerOmitReasoningEffort;
+        _includeLastReasoning = false;
         _maxTokensCtrl = TextEditingController(
           text: p.cleaner.postCleanerMaxTokens > 0
               ? '${p.cleaner.postCleanerMaxTokens}'
@@ -441,6 +448,15 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                     value: _omitReasoningEffort,
                     onChanged: (v) => setState(() => _omitReasoningEffort = v),
                   ),
+                  if (widget.slot == StudioSlot.finalGenerator)
+                    MenuSwitchItem(
+                      label: 'Передавать последний reasoning блок',
+                      description:
+                          'Добавлять последний reasoning_content из истории',
+                      value: _includeLastReasoning,
+                      onChanged: (v) =>
+                          setState(() => _includeLastReasoning = v),
+                    ),
                 ],
               ),
             ],
@@ -470,6 +486,7 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                 omitTopP: _omitTopP,
                 omitReasoning: _omitReasoning,
                 omitReasoningEffort: _omitReasoningEffort,
+                includeLastReasoning: _includeLastReasoning,
                 maxTokens: maxTokens,
                 timeoutMs: timeoutMs,
                 extraRequestParameters: _extraRequestParameters,

@@ -51,6 +51,10 @@ abstract class StudioAgentSettings with _$StudioAgentSettings {
     @Default(false) bool studioFinalOmitTopP,
     @Default(true) bool studioFinalOmitReasoning,
     @Default(true) bool studioFinalOmitReasoningEffort,
+    // Include only the most recent non-empty assistant reasoning block in the
+    // final generator's chat history. Required by models with preserved
+    // thinking; disabled by default for broad provider compatibility.
+    @Default(false) bool studioFinalIncludeLastReasoning,
     // When true, the final generator's request forces requestReasoning=false
     // and omitReasoning=true regardless of the ApiConfig. Targeted at Gemini
     // Flash thinking models that spend most of the token budget on a

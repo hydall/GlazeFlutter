@@ -1,4 +1,5 @@
 import '../models/studio_config.dart';
+import 'history_assembler.dart';
 import 'prompt_builder.dart';
 import 'studio_brief_deduper.dart';
 import 'studio_context_bucketizer.dart';
@@ -23,11 +24,7 @@ class StudioMessageBuilder {
   late final StudioRuntimeBlockExpander _blockExpander =
       StudioRuntimeBlockExpander(_briefMacroRenderer);
 
-  StudioMessageBuilder(
-    this._bucketizer,
-    this._promptText,
-    this._briefDeduper,
-  );
+  StudioMessageBuilder(this._bucketizer, this._promptText, this._briefDeduper);
 
   /// Build the message list for a single agent run (pre-gen tracker,
   /// post-processing tracker, or final generator). [mainResponse] non-empty
@@ -44,6 +41,7 @@ class StudioMessageBuilder {
     required bool isFinalResponse,
     String mainResponse = '',
     int finalContextOverride = 0,
+    bool includeLastReasoning = false,
   }) {
     final context = _bucketizer.bucketize(
       promptResult,
@@ -55,11 +53,15 @@ class StudioMessageBuilder {
         studioPreset.blocks
             .where((b) => b.enabled && b.section == section)
             .where((b) => !_blockExpander.isRuntimeComputedBlock(b))
-            .where((b) => _blockExpander.blockAppliesToAgent(b, agent, isFinalResponse))
+            .where(
+              (b) =>
+                  _blockExpander.blockAppliesToAgent(b, agent, isFinalResponse),
+            )
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order));
     final hasExplicitBriefMacros =
-        isFinalResponse && blocks.any((b) => _briefMacroRenderer.hasStudioBriefMacro(b.content));
+        isFinalResponse &&
+        blocks.any((b) => _briefMacroRenderer.hasStudioBriefMacro(b.content));
     final messages = <Map<String, dynamic>>[];
 
     for (final block in blocks) {
@@ -67,14 +69,16 @@ class StudioMessageBuilder {
         case 'agent_instruction':
           final control = StringBuffer();
           control.writeln(
-            _blockExpander.expandStudioBlockContent(
-              block.content,
-              promptPayload: promptPayload,
-              promptResult: promptResult,
-              context: context,
-              priorBriefs: priorBriefs,
-              config: config,
-            ).trim(),
+            _blockExpander
+                .expandStudioBlockContent(
+                  block.content,
+                  promptPayload: promptPayload,
+                  promptResult: promptResult,
+                  context: context,
+                  priorBriefs: priorBriefs,
+                  config: config,
+                )
+                .trim(),
           );
           if (!isFinalResponse) {
             control
@@ -133,9 +137,17 @@ class StudioMessageBuilder {
                   context.history,
                   config,
                   pipelineOverride: finalContextOverride,
+                  includeLastReasoning: includeLastReasoning,
                 )
-              : StudioHistoryLimiter.limitTrackerHistory(context.history, agent.contextSize);
-          messages.addAll(history.map((m) => m.toApiMap()));
+              : StudioHistoryLimiter.limitTrackerHistory(
+                  context.history,
+                  agent.contextSize,
+                );
+          if (isFinalResponse && includeLastReasoning) {
+            messages.addAll(_historyWithLastReasoning(history));
+          } else {
+            messages.addAll(history.map((m) => m.toApiMap()));
+          }
           break;
         case 'dynamic_context':
           messages.addAll(context.dynamicContext.map((m) => m.toApiMap()));
@@ -146,14 +158,16 @@ class StudioMessageBuilder {
             messages.addAll(promptMessages.map((m) => m.toApiMap()));
             break;
           }
-          final content = _blockExpander.expandStudioBlockContent(
-            block.content,
-            promptPayload: promptPayload,
-            promptResult: promptResult,
-            context: context,
-            priorBriefs: priorBriefs,
-            config: config,
-          ).trim();
+          final content = _blockExpander
+              .expandStudioBlockContent(
+                block.content,
+                promptPayload: promptPayload,
+                promptResult: promptResult,
+                context: context,
+                priorBriefs: priorBriefs,
+                config: config,
+              )
+              .trim();
           if (content.isNotEmpty) {
             messages.add({
               'role': _blockExpander.normalizeInstructionRole(block.role),
@@ -182,6 +196,24 @@ class StudioMessageBuilder {
     return messages;
   }
 
+  List<Map<String, dynamic>> _historyWithLastReasoning(
+    List<PromptMessage> history,
+  ) {
+    final messages = history
+        .map<Map<String, dynamic>>((message) => message.toApiMap())
+        .toList();
+    for (var i = history.length - 1; i >= 0; i--) {
+      final message = history[i];
+      if (message.role != 'assistant') continue;
+      final reasoning = message.reasoningContent?.trim();
+      if (reasoning?.isNotEmpty == true) {
+        messages[i]['reasoning_content'] = reasoning;
+      }
+      break;
+    }
+    return messages;
+  }
+
   /// Shared messages for a batch: `static_context` + `dynamic_context` +
   /// `chat_history` (trimmed to [batchContextSize]).
   List<Map<String, dynamic>> buildSharedBatchMessages({
@@ -194,7 +226,10 @@ class StudioMessageBuilder {
     final messages = <Map<String, dynamic>>[];
     messages.addAll(context.staticContext.map((m) => m.toApiMap()));
     messages.addAll(context.dynamicContext.map((m) => m.toApiMap()));
-    final history = StudioHistoryLimiter.limitTrackerHistory(context.history, batchContextSize);
+    final history = StudioHistoryLimiter.limitTrackerHistory(
+      context.history,
+      batchContextSize,
+    );
     messages.addAll(history.map((m) => m.toApiMap()));
     return messages;
   }
@@ -216,19 +251,24 @@ class StudioMessageBuilder {
               (b) =>
                   b.kind == 'agent_instruction' ||
                   (b.kind == 'tracker_instruction' &&
-                      _blockExpander.trackerInstructionAppliesToAgent(b, agent)),
+                      _blockExpander.trackerInstructionAppliesToAgent(
+                        b,
+                        agent,
+                      )),
             )
             .where((b) => !_blockExpander.isRuntimeComputedBlock(b))
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order));
     final buf = StringBuffer();
     for (final block in blocks) {
-      final content = _blockExpander.expandStudioBlockContent(
-        block.content,
-        promptPayload: promptPayload,
-        promptResult: promptResult,
-        context: context,
-      ).trim();
+      final content = _blockExpander
+          .expandStudioBlockContent(
+            block.content,
+            promptPayload: promptPayload,
+            promptResult: promptResult,
+            context: context,
+          )
+          .trim();
       if (content.isNotEmpty) {
         buf.writeln(content);
         buf.writeln();
@@ -267,12 +307,14 @@ class StudioMessageBuilder {
         }
         continue;
       }
-      final content = _blockExpander.expandStudioBlockContent(
-        block.content,
-        promptPayload: promptPayload,
-        promptResult: promptResult,
-        context: context,
-      ).trim();
+      final content = _blockExpander
+          .expandStudioBlockContent(
+            block.content,
+            promptPayload: promptPayload,
+            promptResult: promptResult,
+            context: context,
+          )
+          .trim();
       if (content.isNotEmpty) {
         buf.writeln(content);
       }

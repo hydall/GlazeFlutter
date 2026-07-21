@@ -60,6 +60,8 @@ List<PromptMessage> applyPromptRegexes({
           isHistory: msg.isHistory,
           isDepth: msg.isDepth,
           depth: msg.depth,
+          sourceMessageId: msg.sourceMessageId,
+          reasoningContent: msg.reasoningContent,
         ),
       );
       historySeen++;
@@ -82,6 +84,8 @@ List<PromptMessage> applyPromptRegexes({
           isHistory: msg.isHistory,
           isDepth: msg.isDepth,
           depth: msg.depth,
+          sourceMessageId: msg.sourceMessageId,
+          reasoningContent: msg.reasoningContent,
         ),
       );
     }

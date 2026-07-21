@@ -35,6 +35,7 @@ class StudioHistoryLimiter {
     List<PromptMessage> history,
     StudioConfig config, {
     int pipelineOverride = 0,
+    bool includeLastReasoning = false,
   }) {
     final msgLimit = pipelineOverride > 0
         ? pipelineOverride
@@ -45,15 +46,33 @@ class StudioHistoryLimiter {
     // Walk backwards from the end, stop at msgLimit or tokenBudget.
     final selected = <PromptMessage>[];
     var totalTokens = 0;
+    var nearestAssistantSeen = false;
     for (var i = history.length - 1; i >= 0; i--) {
       final m = history[i];
       final cleaned = stripFontTags(m.content);
-      final tokens = estimateTokens(cleaned);
+      var tokens = estimateTokens(cleaned);
+      final reasoning = m.reasoningContent?.trim();
+      if (includeLastReasoning &&
+          !nearestAssistantSeen &&
+          m.role == 'assistant') {
+        nearestAssistantSeen = true;
+        if (reasoning?.isNotEmpty == true) {
+          tokens += estimateTokens(reasoning!);
+        }
+      }
       // Always keep at least the last message.
-      if (selected.isNotEmpty && totalTokens + tokens > finalHistoryTokenBudget) {
+      if (selected.isNotEmpty &&
+          totalTokens + tokens > finalHistoryTokenBudget) {
         break;
       }
-      selected.insert(0, PromptMessage(role: m.role, content: cleaned));
+      selected.insert(
+        0,
+        PromptMessage(
+          role: m.role,
+          content: cleaned,
+          reasoningContent: m.reasoningContent,
+        ),
+      );
       totalTokens += tokens;
       if (msgLimit > 0 && selected.length >= msgLimit) break;
     }
@@ -75,20 +94,15 @@ class StudioHistoryLimiter {
     if (history.length <= normalized) {
       return history
           .map(
-            (m) => PromptMessage(
-              role: m.role,
-              content: stripHtmlTags(m.content),
-            ),
+            (m) =>
+                PromptMessage(role: m.role, content: stripHtmlTags(m.content)),
           )
           .toList();
     }
     final trimmed = history.sublist(history.length - normalized);
     return trimmed
         .map(
-          (m) => PromptMessage(
-            role: m.role,
-            content: stripHtmlTags(m.content),
-          ),
+          (m) => PromptMessage(role: m.role, content: stripHtmlTags(m.content)),
         )
         .toList();
   }
