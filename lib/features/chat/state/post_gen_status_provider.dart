@@ -45,7 +45,7 @@ class PostGenStatusState {
   }) : phase = PostGenTaskPhase.error;
 }
 
-enum PostGenTask { none, ledger, extBlocks }
+enum PostGenTask { none, ledgerReconciliation, ledger, extBlocks }
 
 enum PostGenTaskPhase { idle, running, done, error }
 

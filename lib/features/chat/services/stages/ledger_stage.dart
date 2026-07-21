@@ -169,15 +169,6 @@ class LedgerStage {
 
       final recentHistory = extractRecentHistoryText(messages, maxMessages: 10);
 
-      if (ctx.ref.mounted) {
-        ctx.ref
-            .read(postGenStatusProvider.notifier)
-            .state = PostGenStatusState.running(
-          sessionId: sessionId,
-          task: PostGenTask.ledger,
-        );
-      }
-
       final service = ctx.ref.read(studioLedgerServiceProvider);
 
       // Build MacroContext for resolving preset-block macros.
@@ -206,6 +197,14 @@ class LedgerStage {
           checkpoint: checkpoint,
         );
         if (plan != null && isCurrent()) {
+          if (ctx.ref.mounted) {
+            ctx.ref
+                .read(postGenStatusProvider.notifier)
+                .state = PostGenStatusState.running(
+              sessionId: sessionId,
+              task: PostGenTask.ledgerReconciliation,
+            );
+          }
           reconciliationResult = await service.reconcile(
             sessionId: sessionId,
             settings: pipeline,
@@ -216,6 +215,35 @@ class LedgerStage {
             isStillCurrent: isCurrent,
             cancelToken: cancelToken,
           );
+          _recordOperation(
+            sessionId: sessionId,
+            targetMessage: targetMessage,
+            result: reconciliationResult,
+            kind: AgentOperationKind.studioLedgerReconciliation,
+            idPrefix: 'studio-ledger-reconciliation',
+            successSummary:
+                'range=${plan.startMessageId}..${plan.endMessage.id}, '
+                'ops=${reconciliationResult.opsApplied}',
+            canRegenerate: false,
+          );
+          if (ctx.ref.mounted) {
+            final detail =
+                'Ledger reconciliation ${reconciliationResult.status} '
+                '(ops=${reconciliationResult.opsApplied})';
+            ctx.ref
+                .read(postGenStatusProvider.notifier)
+                .state = reconciliationResult.status == 'ok'
+                ? PostGenStatusState.done(
+                    sessionId: sessionId,
+                    task: PostGenTask.ledgerReconciliation,
+                    detail: detail,
+                  )
+                : PostGenStatusState.error(
+                    sessionId: sessionId,
+                    task: PostGenTask.ledgerReconciliation,
+                    detail: detail,
+                  );
+          }
           debugPrint(
             '[StudioLedger] reconciliation session=$sessionId '
             'range=${plan.startMessageId}..${plan.endMessage.id} '
@@ -225,6 +253,15 @@ class LedgerStage {
           );
           if (!isCurrent()) return;
         }
+      }
+
+      if (ctx.ref.mounted) {
+        ctx.ref
+            .read(postGenStatusProvider.notifier)
+            .state = PostGenStatusState.running(
+          sessionId: sessionId,
+          task: PostGenTask.ledger,
+        );
       }
 
       final result = await service.run(
@@ -383,6 +420,10 @@ class LedgerStage {
     required String sessionId,
     required ChatMessage targetMessage,
     required LedgerRunResult result,
+    AgentOperationKind kind = AgentOperationKind.studioLedger,
+    String idPrefix = 'studio-ledger',
+    String? successSummary,
+    bool? canRegenerate,
   }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final startedAt = result.attempts.isNotEmpty
@@ -396,8 +437,8 @@ class LedgerStage {
         .read(agentOperationsLogProvider)
         .append(
           AgentOperationRecord(
-            id: 'studio-ledger-${targetMessage.id}-${DateTime.now().microsecondsSinceEpoch}',
-            kind: AgentOperationKind.studioLedger,
+            id: '$idPrefix-${targetMessage.id}-${DateTime.now().microsecondsSinceEpoch}',
+            kind: kind,
             status: status,
             sessionId: sessionId,
             messageId: targetMessage.id,
@@ -405,11 +446,11 @@ class LedgerStage {
             totalElapsedMs: result.elapsedMs,
             model: result.model,
             summary: status.isOk
-                ? 'ops=${result.opsApplied}'
+                ? successSummary ?? 'ops=${result.opsApplied}'
                 : result.error ?? result.status,
             startedAtMs: startedAt,
             finishedAtMs: finishedAt,
-            canRegenerate: status.isFailure,
+            canRegenerate: canRegenerate ?? status.isFailure,
           ),
         );
   }
