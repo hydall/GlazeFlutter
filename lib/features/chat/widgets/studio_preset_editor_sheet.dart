@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -26,6 +27,7 @@ class _StudioPresetEditorSheetState
   StudioPreset? _preset;
   bool _loading = true;
   String _activeSection = 'pregen';
+  final _sectionTabsController = ScrollController();
 
   static const _userSections = [
     ('pregen', 'Trackers'),
@@ -40,6 +42,12 @@ class _StudioPresetEditorSheetState
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _sectionTabsController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -184,23 +192,40 @@ class _StudioPresetEditorSheetState
 
   Widget _buildSectionTabs() {
     return SizedBox(
-      height: 48,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: _userSections.map((section) {
-          final isActive = section.$1 == _activeSection;
-          final count = (_preset?.blocks ?? const <StudioPresetBlock>[])
-              .where((b) => b.section == section.$1)
-              .length;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-            child: FilterChip(
-              label: Text('${section.$2} ($count)'),
-              selected: isActive,
-              onSelected: (_) => setState(() => _activeSection = section.$1),
-            ),
-          );
-        }).toList(),
+      height: 52,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          dragDevices: {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.trackpad,
+            PointerDeviceKind.stylus,
+          },
+        ),
+        child: Scrollbar(
+          controller: _sectionTabsController,
+          thumbVisibility: true,
+          interactive: true,
+          child: ListView(
+            controller: _sectionTabsController,
+            scrollDirection: Axis.horizontal,
+            children: _userSections.map((section) {
+              final isActive = section.$1 == _activeSection;
+              final count = (_preset?.blocks ?? const <StudioPresetBlock>[])
+                  .where((b) => b.section == section.$1)
+                  .length;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                child: FilterChip(
+                  label: Text('${section.$2} ($count)'),
+                  selected: isActive,
+                  onSelected: (_) =>
+                      setState(() => _activeSection = section.$1),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
   }
