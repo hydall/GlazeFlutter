@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import '../db/repositories/ledger_reconciliation_checkpoint_repo.dart';
+import '../models/character_knowledge_fact.dart';
 import '../models/chat_message.dart';
 import '../models/tracker.dart';
 
@@ -111,6 +112,7 @@ class StudioLedgerReconciliationPrompt {
     required String systemPrompt,
     required LedgerReconciliationPlan plan,
     required List<Tracker> trackers,
+    List<CharacterKnowledgeFact> knowledgeFacts = const [],
   }) {
     final chat = plan.messages
         .map(
@@ -126,6 +128,10 @@ class StudioLedgerReconciliationPrompt {
     final keys =
         trackers.where(_isLedgerTracker).map((row) => row.name).toSet().toList()
           ..sort();
+    final facts = relevantKnowledgeFacts(knowledgeFacts, chat);
+    final factLines = facts.isEmpty
+        ? '(no reviewable knowledge facts)'
+        : facts.map(_factLine).join('\n');
 
     return '''$systemPrompt
 
@@ -141,14 +147,83 @@ $state
 ${keys.isEmpty ? '(no keys)' : keys.join('\n')}
 </existing_keys>
 
+<knowledge_facts>
+$factLines
+</knowledge_facts>
+
 Return exactly:
 <glaze_memory_export>
 {"ops":[],"knowledgeFacts":[]}
 </glaze_memory_export>
 
+<glaze_knowledge_cleanup>
+{"ops":[]}
+</glaze_knowledge_cleanup>
+
 Allowed namespaces: npc:, relationship:, arc:, world:, scene.
-Allowed ops: set, delete. Keep set values under 1200 characters.''';
+Allowed Ledger ops: set, delete. Keep set values under 1200 characters.
+
+Knowledge cleanup may only repair facts listed in <knowledge_facts>:
+- retract: {"op":"retract","factId":"existing id"} for unsupported,
+  contradicted, or duplicate facts.
+- rename_entity: {"op":"rename_entity","fromKey":"entity:placeholder",
+  "toKey":"entity:canonical","canonicalName":"Name"} only when the review
+  range explicitly resolves that identity.
+Never create facts, rewrite fact content, or retract a fact merely because it is
+old or absent from the review range.''';
   }
+
+  List<CharacterKnowledgeFact> relevantKnowledgeFacts(
+    List<CharacterKnowledgeFact> facts,
+    String chat,
+  ) {
+    final terms = _terms(chat);
+    final candidates =
+        facts
+            .map((fact) {
+              final text = [
+                fact.knowerKey,
+                fact.knowerName,
+                fact.subjectKey,
+                fact.subjectName,
+                fact.predicate,
+                fact.object,
+              ].join(' ').toLowerCase();
+              var score = terms.where(text.contains).length * 10;
+              if (_isPlaceholder(text)) score += 1000;
+              if (fact.epistemicState ==
+                  CharacterKnowledgeEpistemicState.inferred) {
+                score += 100;
+              }
+              return (fact: fact, score: score);
+            })
+            .where((item) => item.score > 0)
+            .toList()
+          ..sort((a, b) => b.score.compareTo(a.score));
+
+    const characterBudget = 60000;
+    var used = 0;
+    final selected = <CharacterKnowledgeFact>[];
+    for (final item in candidates) {
+      final size = _factLine(item.fact).length + 1;
+      if (used + size > characterBudget) continue;
+      selected.add(item.fact);
+      used += size;
+    }
+    return selected;
+  }
+
+  String _factLine(CharacterKnowledgeFact fact) => jsonEncode({
+    'id': fact.id,
+    'knowerKey': fact.knowerKey,
+    'knowerName': fact.knowerName,
+    'subjectKey': fact.subjectKey,
+    'subjectName': fact.subjectName,
+    'predicate': fact.predicate,
+    'object': fact.object,
+    'epistemicState': fact.epistemicState.wireName,
+    'lifecycle': fact.lifecycle.wireName,
+  });
 
   List<Tracker> _relevantTrackers(List<Tracker> trackers, String chat) {
     final terms = _terms(chat);
@@ -189,7 +264,7 @@ Allowed ops: set, delete. Keep set values under 1200 characters.''';
       .toSet();
 
   bool _isPlaceholder(String text) => RegExp(
-    r'\b(unknown|unidentified|stranger|неизвестн\p{L}*|незнаком\p{L}*)\b',
+    r'(unknown|unidentified|stranger|неизвестн\p{L}*|незнаком\p{L}*)',
     unicode: true,
   ).hasMatch(text);
 
@@ -217,4 +292,7 @@ entity's location is no longer established. Keep current_goal limited to the
 immediate active objective, not a backlog. Remove unsupported inference rather
 than inventing a replacement fact.
 
-Return only the required JSON export block. Do not emit knowledgeFacts.''';
+Return only the required Ledger export and Knowledge cleanup blocks. Do not
+emit knowledgeFacts. Knowledge cleanup may only retract listed fact IDs or
+rename an explicitly resolved placeholder entity; it must never create or
+rewrite facts.''';

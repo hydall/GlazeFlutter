@@ -2206,7 +2206,9 @@ Correct only durable state defects supported by accepted evidence:
 
 Use accepted chat as evidence, not as proof that every assistant assertion is objectively true. Preserve unchanged supported state. Never invent repair facts. When evidence is insufficient, prefer delete over a fabricated replacement. User corrections outrank assistant prose. Identity migration overrides exact-key reuse.
 
-Return only the mandatory <glaze_memory_export> JSON block. Use only set and delete ops. Every set replaces the complete value. Return empty ops when no correction is needed. Do not emit knowledgeFacts during reconciliation.''';
+Return exactly two blocks: the mandatory <glaze_memory_export> JSON block, then <glaze_knowledge_cleanup>{"ops":[]}</glaze_knowledge_cleanup>. Use only set and delete Ledger ops. Every set replaces the complete value. Return empty ops when no correction is needed. Do not emit knowledgeFacts during reconciliation.
+
+Knowledge cleanup may operate only on facts included in <knowledge_facts>. It may retract an existing offered fact ID when contradicted, unsupported, or duplicated. It may rename an offered placeholder entity only when the review range explicitly resolves the canonical identity. Never create a fact, rewrite fact content, retract merely because a fact is old or absent from the bounded review, or rename a non-placeholder entity.''';
 
 /// Slot blocks shared by the pregen and final sections. Each slot is a
 /// macro template that resolves at runtime via the StudioMessageBuilder /

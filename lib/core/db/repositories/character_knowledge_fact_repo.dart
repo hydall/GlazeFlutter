@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../models/character_knowledge_fact.dart';
+import '../../models/knowledge_cleanup.dart';
 import '../../utils/time_helpers.dart';
 import '../app_db.dart';
 
@@ -215,6 +216,120 @@ class CharacterKnowledgeFactRepo {
       sessionId,
     ).get().then((rows) => rows.map(_fromRow).toList(growable: false));
   }
+
+  Future<List<CharacterKnowledgeFact>> getReviewableForSession(
+    String sessionId,
+  ) async {
+    final rows =
+        await (db.select(db.characterKnowledgeFactRows)
+              ..where((row) => row.chatSessionId.equals(sessionId))
+              ..where(
+                (row) => row.lifecycle.isIn(const ['active', 'tentative']),
+              ))
+            .get();
+    return rows.map(_fromRow).toList(growable: false);
+  }
+
+  Future<int> applyReconciliationCleanup({
+    required String sessionId,
+    required List<KnowledgeCleanupOp> ops,
+  }) async {
+    var applied = 0;
+    final migratedKeys = <String>{};
+    for (final op in ops) {
+      if (op.type == KnowledgeCleanupOpType.retract) {
+        applied +=
+            await (db.update(db.characterKnowledgeFactRows)
+                  ..where((row) => row.chatSessionId.equals(sessionId))
+                  ..where((row) => row.id.equals(op.factId))
+                  ..where(
+                    (row) => row.lifecycle.isIn(const ['active', 'tentative']),
+                  ))
+                .write(
+                  CharacterKnowledgeFactRowsCompanion(
+                    lifecycle: const Value('retracted'),
+                    updatedAt: Value(currentTimestampSeconds()),
+                  ),
+                );
+        continue;
+      }
+
+      migratedKeys.add(op.toKey);
+      final rows =
+          await (db.select(db.characterKnowledgeFactRows)
+                ..where((row) => row.chatSessionId.equals(sessionId))
+                ..where(
+                  (row) => row.lifecycle.isIn(const ['active', 'tentative']),
+                )
+                ..where(
+                  (row) =>
+                      row.knowerKey.equals(op.fromKey) |
+                      row.subjectKey.equals(op.fromKey),
+                ))
+              .get();
+      for (final row in rows) {
+        await (db.update(
+          db.characterKnowledgeFactRows,
+        )..where((candidate) => candidate.id.equals(row.id))).write(
+          CharacterKnowledgeFactRowsCompanion(
+            knowerKey: row.knowerKey == op.fromKey
+                ? Value(op.toKey)
+                : const Value.absent(),
+            knowerName: row.knowerKey == op.fromKey
+                ? Value(op.canonicalName)
+                : const Value.absent(),
+            subjectKey: row.subjectKey == op.fromKey
+                ? Value(op.toKey)
+                : const Value.absent(),
+            subjectName: row.subjectKey == op.fromKey
+                ? Value(op.canonicalName)
+                : const Value.absent(),
+            updatedAt: Value(currentTimestampSeconds()),
+          ),
+        );
+        applied++;
+      }
+    }
+
+    if (migratedKeys.isEmpty) return applied;
+
+    // Identity migration can collapse two aliases into one semantic slot.
+    final reviewable = await getReviewableForSession(sessionId);
+    final bySlot = <String, List<CharacterKnowledgeFact>>{};
+    for (final fact in reviewable.where(
+      (fact) =>
+          migratedKeys.contains(fact.knowerKey) ||
+          migratedKeys.contains(fact.subjectKey),
+    )) {
+      bySlot.putIfAbsent(semanticSlotKey(fact), () => []).add(fact);
+    }
+    for (final duplicates in bySlot.values.where((items) => items.length > 1)) {
+      duplicates.sort((a, b) {
+        final lifecycle = _cleanupLifecycleRank(
+          b.lifecycle,
+        ).compareTo(_cleanupLifecycleRank(a.lifecycle));
+        if (lifecycle != 0) return lifecycle;
+        final importance = b.importance.compareTo(a.importance);
+        if (importance != 0) return importance;
+        return b.updatedAt.compareTo(a.updatedAt);
+      });
+      for (final duplicate in duplicates.skip(1)) {
+        applied +=
+            await (db.update(
+              db.characterKnowledgeFactRows,
+            )..where((row) => row.id.equals(duplicate.id))).write(
+              CharacterKnowledgeFactRowsCompanion(
+                lifecycle: const Value('retracted'),
+                updatedAt: Value(currentTimestampSeconds()),
+              ),
+            );
+      }
+    }
+    return applied;
+  }
+
+  int _cleanupLifecycleRank(CharacterKnowledgeFactLifecycle lifecycle) =>
+      lifecycle == CharacterKnowledgeFactLifecycle.active ? 1 : 0;
 
   Future<List<CharacterKnowledgeFact>> getActiveForKnowers(
     String sessionId,

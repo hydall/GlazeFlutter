@@ -18,6 +18,7 @@ import '../models/tracker.dart';
 import '../utils/id_generator.dart';
 import 'aux_llm_client.dart';
 import 'ledger/ledger_op_applier.dart';
+import 'knowledge_cleanup_parser.dart';
 import 'macro_engine.dart';
 import 'prompt/ledger_tracker_loader.dart';
 import 'studio/studio_aux_prompt_assembler.dart';
@@ -153,6 +154,9 @@ class StudioLedgerService {
 
       final promptTrackers = await _ledgerTrackerLoader
           .loadEffectiveLedgerTrackers(sessionId);
+      final promptFacts = await _knowledgeFactRepo.getReviewableForSession(
+        sessionId,
+      );
       final promptBlock = ledgerBlocks
           .where(
             (block) =>
@@ -167,10 +171,19 @@ class StudioLedgerService {
           : macroCtx == null
           ? promptBlock.content
           : replaceMacros(promptBlock.content, macroCtx).text;
-      final prompt = const StudioLedgerReconciliationPrompt().build(
+      const reconciliationPrompt = StudioLedgerReconciliationPrompt();
+      final reviewText = plan.messages
+          .map((message) => message.content)
+          .join('\n');
+      final offeredFacts = reconciliationPrompt.relevantKnowledgeFacts(
+        promptFacts,
+        reviewText,
+      );
+      final prompt = reconciliationPrompt.build(
         systemPrompt: systemPrompt,
         plan: plan,
         trackers: promptTrackers,
+        knowledgeFacts: offeredFacts,
       );
       final outcome = await _llm.callOnceWithLog(
         config: config,
@@ -225,6 +238,21 @@ class StudioLedgerService {
       if (token.isCancelled || isStillCurrent?.call() == false) {
         return LedgerRunResult.aborted;
       }
+      const cleanupParser = KnowledgeCleanupParser();
+      if (!cleanupParser.hasValidBlock(outcome.text!)) {
+        return LedgerRunResult(
+          status: 'error',
+          error: 'Reconciliation returned no valid knowledge cleanup block',
+          elapsedMs: sw.elapsedMilliseconds,
+          attempts: outcome.attempts,
+          model: config.model,
+        );
+      }
+      final cleanupOps = cleanupParser.parse(
+        output: outcome.text!,
+        offeredFacts: offeredFacts,
+        reviewText: reviewText,
+      );
 
       var opsApplied = 0;
       await _trackerRepo.db.transaction(() async {
@@ -243,6 +271,10 @@ class StudioLedgerService {
           );
           opsApplied++;
         }
+        opsApplied += await _knowledgeFactRepo.applyReconciliationCleanup(
+          sessionId: sessionId,
+          ops: cleanupOps,
+        );
         final updated = await _trackerRepo.getBySessionId(sessionId);
         await _snapshotRepo.upsertTrackers(
           sessionId: sessionId,

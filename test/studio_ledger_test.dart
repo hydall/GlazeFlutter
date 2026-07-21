@@ -10,13 +10,16 @@ import 'package:glaze_flutter/core/db/repositories/ledger_reconciliation_checkpo
 import 'package:glaze_flutter/core/db/repositories/tracker_repo.dart';
 import 'package:glaze_flutter/core/db/repositories/tracker_snapshot_repo.dart';
 import 'package:glaze_flutter/core/llm/studio_ledger_export_parser.dart';
+import 'package:glaze_flutter/core/llm/knowledge_cleanup_parser.dart';
 import 'package:glaze_flutter/core/llm/studio_ledger_prompt.dart';
 import 'package:glaze_flutter/core/llm/studio_ledger_reconciliation.dart';
 import 'package:glaze_flutter/core/llm/prompt/ledger_tracker_loader.dart';
 import 'package:glaze_flutter/core/llm/prompt_payload_builder.dart'
     show kCompileStudioSessionStateForTest;
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/models/character_knowledge_fact.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
+import 'package:glaze_flutter/core/models/knowledge_cleanup.dart';
 import 'package:glaze_flutter/core/models/tracker.dart';
 import 'package:glaze_flutter/core/state/db_provider.dart';
 
@@ -361,6 +364,123 @@ void main() {
         expect(await repo.get('source'), isNull);
       },
     );
+
+    test('knowledge cleanup accepts only offered bounded operations', () {
+      const offered = CharacterKnowledgeFact(
+        id: 'fact-1',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:unidentified_netrunner',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'identity',
+        object: 'Unknown netrunner',
+        epistemicState: CharacterKnowledgeEpistemicState.inferred,
+        sourceMessageId: 'a1',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+      );
+      const output = '''
+<glaze_knowledge_cleanup>
+{"ops":[
+  {"op":"retract","factId":"fact-1"},
+  {"op":"retract","factId":"guessed-id"},
+  {"op":"rename_entity","fromKey":"entity:unidentified_netrunner","toKey":"entity:lucy","canonicalName":"Lucy"}
+]}
+</glaze_knowledge_cleanup>
+''';
+
+      final ops = const KnowledgeCleanupParser().parse(
+        output: output,
+        offeredFacts: const [offered],
+        reviewText: 'Regina identifies the netrunner as Lucy.',
+      );
+
+      expect(ops, hasLength(2));
+      expect(ops.first.type, KnowledgeCleanupOpType.retract);
+      expect(ops.first.factId, 'fact-1');
+      expect(ops.last.type, KnowledgeCleanupOpType.renameEntity);
+      expect(ops.last.toKey, 'entity:lucy');
+    });
+
+    test('knowledge cleanup rejects unsafe identity migration', () {
+      const named = CharacterKnowledgeFact(
+        id: 'fact-1',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:rebecca',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'identity',
+        object: 'Rebecca',
+        epistemicState: CharacterKnowledgeEpistemicState.confirmed,
+        sourceMessageId: 'a1',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+      );
+      const output = '''
+<glaze_knowledge_cleanup>
+{"ops":[
+  {"op":"rename_entity","fromKey":"entity:rebecca","toKey":"entity:lucy","canonicalName":"Lucy"},
+  {"op":"rename_entity","fromKey":"entity:unknown_woman","toKey":"entity:lucy","canonicalName":"Lucy"}
+]}
+</glaze_knowledge_cleanup>
+''';
+
+      final ops = const KnowledgeCleanupParser().parse(
+        output: output,
+        offeredFacts: const [named],
+        reviewText: 'Rebecca remains at the bar.',
+      );
+
+      expect(ops, isEmpty);
+    });
+
+    test('prompt offers relevant inferred and placeholder facts', () {
+      final messages = [
+        ..._conversation(6),
+        const ChatMessage(id: 'a7', role: 'assistant', content: 'Current'),
+      ];
+      final plan = planner.plan(
+        messages: messages,
+        currentAssistantMessageId: 'a7',
+      )!;
+      const placeholder = CharacterKnowledgeFact(
+        id: 'placeholder',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:unknown_woman',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'location',
+        object: 'Afterlife',
+        epistemicState: CharacterKnowledgeEpistemicState.observed,
+        sourceMessageId: 'a1',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+      );
+      const inferred = CharacterKnowledgeFact(
+        id: 'inferred',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:rebecca',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'motive',
+        object: 'Secret motive',
+        epistemicState: CharacterKnowledgeEpistemicState.inferred,
+        sourceMessageId: 'a2',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+      );
+
+      final prompt = const StudioLedgerReconciliationPrompt().build(
+        systemPrompt: 'DB PROMPT',
+        plan: plan,
+        trackers: const [],
+        knowledgeFacts: const [placeholder, inferred],
+      );
+
+      expect(prompt, contains('"id":"placeholder"'));
+      expect(prompt, contains('"id":"inferred"'));
+      expect(prompt, contains('<glaze_knowledge_cleanup>'));
+    });
   });
 
   // ── Parser tests
