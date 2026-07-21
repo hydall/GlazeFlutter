@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/debug/perf_debug.dart';
 
-/// Gradient-masked blur across the top edge of [child].
+/// Gradient-masked blur and surface scrim across the top edge of [child].
 ///
 /// Renders the same effect as `package:soft_edge_blur` (of which this is a
 /// specialised fork — top edge only), but cheap enough for per-frame use:
@@ -18,8 +18,9 @@ import '../../core/debug/perf_debug.dart';
 ///    (modal slide-in/out, sheet drag — pure translations), a fingerprint of
 ///    the child layer tree detects it and the previously sampled picture is
 ///    reused instead of re-rasterising the subtree.
-///  * [enabled] toggles the effect without unmounting the child subtree, so
-///    focus/scroll state survives and no GlobalKey tricks are needed.
+///  * [enabled] toggles the expensive blur without unmounting the child
+///    subtree. The tint scrim remains visible so battery-saver mode still
+///    keeps scrolling content legible beneath pinned chrome.
 class TopEdgeBlur extends StatelessWidget {
   final Widget child;
   final bool enabled;
@@ -46,14 +47,40 @@ class TopEdgeBlur extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRect(
-      child: _TopEdgeBlurRenderWidget(
-        enabled: enabled && !PerfDebug.noEdgeBlur && height > 0 && sigma > 0,
-        devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-        height: height,
-        sigma: sigma,
-        tintColor: tintColor,
-        fadeStart: fadeStart,
-        child: child,
+      child: Stack(
+        fit: StackFit.passthrough,
+        children: [
+          _TopEdgeBlurRenderWidget(
+            enabled:
+                enabled && !PerfDebug.noEdgeBlur && height > 0 && sigma > 0,
+            devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+            height: height,
+            sigma: sigma,
+            // The tint is painted separately so it remains when blur is off.
+            tintColor: null,
+            fadeStart: fadeStart,
+            child: child,
+          ),
+          if (tintColor case final tint?)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: height,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [tint, tint, tint.withValues(alpha: 0)],
+                      stops: [0, fadeStart.clamp(0.0, 1.0), 1],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
