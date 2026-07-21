@@ -438,12 +438,19 @@ class _SheetViewState extends ConsumerState<SheetView>
                     ),
                   );
 
-                  return MediaQuery(
-                    data: mediaQuery.copyWith(padding: newPadding),
-                    child: _MaybeScrollbar(
-                      controller:
-                          widget.scrollController ?? _fallbackScrollController,
-                      child: innerChild,
+                  return TopEdgeBlur(
+                    enabled: _hasHeader && !batterySaver,
+                    height: extraTop + 8,
+                    sigma: 24,
+                    tintColor: context.cs.surface.withValues(alpha: 0.88),
+                    child: MediaQuery(
+                      data: mediaQuery.copyWith(padding: newPadding),
+                      child: _MaybeScrollbar(
+                        controller:
+                            widget.scrollController ??
+                            _fallbackScrollController,
+                        child: innerChild,
+                      ),
                     ),
                   );
                 },
@@ -549,7 +556,12 @@ class _SheetViewState extends ConsumerState<SheetView>
     // sigma-20 BackdropFilter variant cost a full-width backdrop blur on
     // every frame the sheet moved or resized, and over dark themes the 20%
     // show-through read as a solid fill anyway.
-    final content = _sheetContent(context, bottomInset, batterySaver, opaque: true);
+    final content = _sheetContent(
+      context,
+      bottomInset,
+      batterySaver,
+      opaque: true,
+    );
 
     return ConstrainedBox(
       constraints: BoxConstraints(
@@ -660,7 +672,7 @@ class _SheetViewState extends ConsumerState<SheetView>
       enabled: _hasHeader && !batterySaver,
       height: _headerH + 8,
       sigma: 24,
-      tintColor: context.cs.surface.withValues(alpha: 0.4),
+      tintColor: context.cs.surface.withValues(alpha: 0.88),
       child: _buildScrollConfig(context, bottomInset, isKeyboardOpen),
     );
   }

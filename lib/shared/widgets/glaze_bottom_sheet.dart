@@ -321,7 +321,7 @@ class _GlazeBottomSheetContentState
               enabled: !batterySaver,
               height: _headerH + 8,
               sigma: 24,
-              tintColor: context.cs.surface.withValues(alpha: 0.4),
+              tintColor: context.cs.surface.withValues(alpha: 0.88),
               child: Padding(
                 // Only the header is reserved as an *outer* inset. The
                 // nav-bar/keyboard inset goes *inside* the scroll view as

@@ -45,7 +45,7 @@ class DrawerPanelScaffold extends StatelessWidget {
               enabled: !disableEffects,
               height: 68,
               sigma: 24,
-              tintColor: context.cs.surface.withValues(alpha: 0.4),
+              tintColor: const Color(0xFF1E1E1E).withValues(alpha: 0.88),
               child: content,
             ),
           ),
