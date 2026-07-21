@@ -28,6 +28,8 @@ class ChatSessionController {
 
   Future<void> switchSession(int sessionIndex) async {
     final epoch = ++_switchEpoch;
+    final current = _getState().value;
+    if (current?.session?.sessionIndex == sessionIndex) return;
     try {
       final raw = await _sessionSvc.switchToSession(_charId, sessionIndex);
       if (!_ref.mounted || epoch != _switchEpoch) return;
