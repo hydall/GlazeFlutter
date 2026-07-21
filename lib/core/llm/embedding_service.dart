@@ -3,6 +3,8 @@ import 'dart:collection';
 
 import 'package:dio/dio.dart';
 
+import 'embedding_request_gate.dart';
+
 class EmbeddingConfig {
   final String endpoint;
   final String apiKey;
@@ -284,12 +286,16 @@ class EmbeddingService {
       headers['Authorization'] = 'Bearer ${config.apiKey}';
     }
 
+    final requestToken = EmbeddingRequestGate.beginRequest(cancelToken);
     try {
+      if (requestToken.isCancelled) {
+        throw requestToken.cancelError!;
+      }
       final response = await _dio.post<Map<String, dynamic>>(
         url,
         data: {'model': config.model, 'input': texts},
         options: Options(headers: headers),
-        cancelToken: cancelToken,
+        cancelToken: requestToken,
       );
 
       final data = response.data;
@@ -322,6 +328,8 @@ class EmbeddingService {
         throw RateLimitException(retryAfter);
       }
       throw 'Network error: ${e.message}';
+    } finally {
+      EmbeddingRequestGate.endRequest(requestToken);
     }
   }
 

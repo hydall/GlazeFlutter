@@ -792,6 +792,12 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 value: _embeddingEnabled,
                 onChanged: (v) {
                   setState(() => _embeddingEnabled = v);
+                  final config = ref.read(activeApiConfigProvider);
+                  if (config != null) {
+                    ref
+                        .read(apiListProvider.notifier)
+                        .setEmbeddingEnabled(config.id, v);
+                  }
                   _scheduleSave();
                 },
               ),
