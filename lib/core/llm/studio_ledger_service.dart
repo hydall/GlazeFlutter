@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../db/repositories/character_knowledge_fact_repo.dart';
+import '../db/repositories/ledger_reconciliation_checkpoint_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
 import '../db/repositories/tracker_repo.dart';
 import '../db/repositories/tracker_snapshot_repo.dart';
@@ -22,6 +23,7 @@ import 'prompt/ledger_tracker_loader.dart';
 import 'studio/studio_aux_prompt_assembler.dart';
 import 'studio_ledger_export_parser.dart';
 import 'studio_ledger_prompt.dart';
+import 'studio_ledger_reconciliation.dart';
 
 export 'ledger/ledger_op_applier.dart';
 
@@ -99,6 +101,7 @@ class StudioLedgerService {
   final MemoryBookRepo _bookRepo;
   final TrackerSnapshotRepo _snapshotRepo;
   final CharacterKnowledgeFactRepo _knowledgeFactRepo;
+  final LedgerReconciliationCheckpointRepo _reconciliationCheckpointRepo;
   final LedgerTrackerLoader _ledgerTrackerLoader;
   final StudioLedgerExportParser _parser;
   final StudioLedgerPrompt _promptBuilder;
@@ -110,10 +113,177 @@ class StudioLedgerService {
     required this._bookRepo,
     required this._snapshotRepo,
     required this._knowledgeFactRepo,
+    required this._reconciliationCheckpointRepo,
     required this._ledgerTrackerLoader,
   }) : _parser = const StudioLedgerExportParser(),
        _promptBuilder = const StudioLedgerPrompt(),
        _opApplier = const LedgerOpApplier();
+
+  Future<LedgerRunResult> reconcile({
+    required String sessionId,
+    required PipelineSettings settings,
+    required AuxApiConfig config,
+    required LedgerReconciliationPlan plan,
+    List<StudioPresetBlock> ledgerBlocks = const [],
+    MacroContext? macroCtx,
+    bool Function()? isStillCurrent,
+    CancelToken? cancelToken,
+  }) async {
+    final token = cancelToken ?? CancelToken();
+    if (token.isCancelled || isStillCurrent?.call() == false) {
+      return LedgerRunResult.aborted;
+    }
+    final sw = Stopwatch()..start();
+    try {
+      final endpointSnapshot = await _snapshotRepo.getByAnchor(
+        sessionId: sessionId,
+        messageId: plan.endMessage.id,
+        swipeId: plan.endMessage.swipeId,
+        agentSwipeId: plan.endMessage.agentSwipeId,
+      );
+      if (endpointSnapshot == null || !endpointSnapshot.committed) {
+        return LedgerRunResult(
+          status: 'skipped',
+          error: 'review endpoint snapshot is not committed',
+          elapsedMs: sw.elapsedMilliseconds,
+        );
+      }
+
+      final promptTrackers = await _ledgerTrackerLoader
+          .loadEffectiveLedgerTrackers(sessionId);
+      final promptBlock = ledgerBlocks
+          .where(
+            (block) =>
+                block.id == ledgerReconciliationPromptBlockId &&
+                block.enabled &&
+                block.section == 'ledger' &&
+                block.content.trim().isNotEmpty,
+          )
+          .firstOrNull;
+      final systemPrompt = promptBlock == null
+          ? fallbackLedgerReconciliationPrompt
+          : macroCtx == null
+          ? promptBlock.content
+          : replaceMacros(promptBlock.content, macroCtx).text;
+      final prompt = const StudioLedgerReconciliationPrompt().build(
+        systemPrompt: systemPrompt,
+        plan: plan,
+        trackers: promptTrackers,
+      );
+      final outcome = await _llm.callOnceWithLog(
+        config: config,
+        prompt: prompt,
+        maxTokens: settings.ledger.studioLedgerMaxTokens > 0
+            ? settings.ledger.studioLedgerMaxTokens
+            : 15000,
+        temperature: settings.ledger.studioLedgerTemperature >= 0
+            ? settings.ledger.studioLedgerTemperature
+            : 0.2,
+        timeoutMs: _llm.resolveLedgerTimeout(settings),
+        cancelToken: token,
+        omitReasoning: true,
+      );
+      if (token.isCancelled || isStillCurrent?.call() == false) {
+        return LedgerRunResult.aborted;
+      }
+      if (!outcome.isOk || outcome.text == null || outcome.text!.isEmpty) {
+        final attempt = outcome.attempts.lastOrNull;
+        return LedgerRunResult(
+          status: 'error',
+          error: 'Reconciliation LLM call failed: ${attempt?.status}',
+          elapsedMs: sw.elapsedMilliseconds,
+          attempts: outcome.attempts,
+          model: config.model,
+        );
+      }
+
+      final parsed = _parser.parse(outcome.text!);
+      final isEmptyExport =
+          parsed.rejectionReason == 'empty export (no ops or knowledge facts)';
+      if (!parsed.hasExport && !isEmptyExport) {
+        return LedgerRunResult(
+          status: 'error',
+          visibleLedger: parsed.visibleLedger,
+          error: parsed.rejectionReason,
+          elapsedMs: sw.elapsedMilliseconds,
+          attempts: outcome.attempts,
+          model: config.model,
+        );
+      }
+      final export = parsed.export ?? const StudioLedgerExport();
+      if (export.knowledgeFacts.isNotEmpty) {
+        return LedgerRunResult(
+          status: 'error',
+          error: 'Reconciliation must not emit knowledgeFacts',
+          elapsedMs: sw.elapsedMilliseconds,
+          attempts: outcome.attempts,
+          model: config.model,
+        );
+      }
+      if (token.isCancelled || isStillCurrent?.call() == false) {
+        return LedgerRunResult.aborted;
+      }
+
+      var opsApplied = 0;
+      await _trackerRepo.db.transaction(() async {
+        await _trackerRepo.replaceLedgerState(sessionId, promptTrackers);
+        for (final op in export.ops) {
+          if (token.isCancelled || isStillCurrent?.call() == false) {
+            throw const _LedgerReconciliationAborted();
+          }
+          await _opApplier.applyOp(
+            op: op,
+            sessionId: sessionId,
+            messageId: plan.endMessage.id,
+            swipeId: plan.endMessage.swipeId,
+            agentSwipeId: plan.endMessage.agentSwipeId,
+            trackerRepo: _trackerRepo,
+          );
+          opsApplied++;
+        }
+        final updated = await _trackerRepo.getBySessionId(sessionId);
+        await _snapshotRepo.upsertTrackers(
+          sessionId: sessionId,
+          messageId: plan.endMessage.id,
+          swipeId: plan.endMessage.swipeId,
+          agentSwipeId: plan.endMessage.agentSwipeId,
+          trackers: updated,
+          committed: true,
+        );
+        await _reconciliationCheckpointRepo.upsert(
+          LedgerReconciliationCheckpoint(
+            sessionId: sessionId,
+            startMessageId: plan.startMessageId,
+            endMessageId: plan.endMessage.id,
+            endSwipeId: plan.endMessage.swipeId,
+            endAgentSwipeId: plan.endMessage.agentSwipeId,
+            messageIds: plan.messageIds,
+            rangeHash: plan.rangeHash,
+          ),
+        );
+      });
+      return LedgerRunResult(
+        status: 'ok',
+        visibleLedger: parsed.visibleLedger,
+        opsApplied: opsApplied,
+        elapsedMs: sw.elapsedMilliseconds,
+        attempts: outcome.attempts,
+        model: config.model,
+      );
+    } on _LedgerReconciliationAborted {
+      return LedgerRunResult.aborted;
+    } catch (e) {
+      if (token.isCancelled || (e is DioException && CancelToken.isCancel(e))) {
+        return LedgerRunResult.aborted;
+      }
+      debugPrint('[StudioLedger] reconciliation failed: $e');
+      return LedgerRunResult(
+        status: 'error',
+        error: '$e',
+        elapsedMs: sw.elapsedMilliseconds,
+      );
+    }
+  }
 
   /// Run the Studio Ledger for [sessionId] on [finalAssistantText].
   ///
@@ -415,7 +585,14 @@ class StudioLedgerService {
     List<StudioPresetBlock> ledgerBlocks = const [],
     MacroContext? macroCtx,
   }) {
-    if (ledgerBlocks.isEmpty || macroCtx == null) {
+    final hasActiveLedgerBlocks = ledgerBlocks.any(
+      (block) =>
+          block.id != ledgerReconciliationPromptBlockId &&
+          block.enabled &&
+          block.section == 'ledger' &&
+          block.content.trim().isNotEmpty,
+    );
+    if (!hasActiveLedgerBlocks || macroCtx == null) {
       return _promptBuilder.build(
         finalAssistantText: finalAssistantText,
         recentHistoryText: recentHistoryText,
@@ -486,6 +663,7 @@ Allowed eventState: planned, suggested, threatened, attempted, completed, failed
       section: 'ledger',
       macroCtx: macroCtx,
       runtimeSuffix: runtimeSuffix,
+      skipBlockIds: const {ledgerReconciliationPromptBlockId},
     );
   }
 
@@ -509,4 +687,8 @@ Allowed eventState: planned, suggested, threatened, attempted, completed, failed
     }
     return false;
   }
+}
+
+class _LedgerReconciliationAborted implements Exception {
+  const _LedgerReconciliationAborted();
 }

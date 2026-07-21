@@ -78,7 +78,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 72);
+      expect(version, 73);
     });
 
     test(
@@ -115,7 +115,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 72);
+        expect(version.first.read<int>('user_version'), 73);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },
@@ -145,12 +145,12 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 72);
+      expect(version.read<int>('user_version'), 73);
     });
 
     test('current schema includes atomic character fact tables', () async {
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.read<int>('user_version'), 72);
+      expect(version.read<int>('user_version'), 73);
 
       final factColumns = await db
           .customSelect("PRAGMA table_info('character_knowledge_fact_rows')")
@@ -260,7 +260,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 72);
+      expect(version.read<int>('user_version'), 73);
       final row = await upgraded
           .customSelect(
             'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
@@ -277,6 +277,10 @@ void main() {
       );
       expect(ledger['content'], isNot(contains('durableFacts')));
       expect(custom['content'], 'keep this customization');
+      expect(
+        blocks.any((block) => block['id'] == 'ledger_reconciliation_prompt'),
+        isTrue,
+      );
     });
 
     test('v67 upgrades to atomic character fact schema', () async {
@@ -303,7 +307,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 72);
+      expect(version.read<int>('user_version'), 73);
       final check = await upgraded.customSelect('PRAGMA integrity_check').get();
       expect(check.single.read<String>('integrity_check'), 'ok');
     });

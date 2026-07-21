@@ -164,6 +164,9 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
     await ref.read(memoryBookRepoProvider).deleteBySessionId(sessionId);
     await ref.read(trackerRepoProvider).clearForSession(sessionId);
     await ref.read(trackerSnapshotRepoProvider).deleteBySessionId(sessionId);
+    await ref
+        .read(ledgerReconciliationCheckpointRepoProvider)
+        .deleteBySessionId(sessionId);
     await ref.read(studioConfigRepoProvider).deleteBySessionId(sessionId);
     ChatSessionService.clearCache();
     await SyncDeletionTracker.record('chat', sessionId);
@@ -193,6 +196,9 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
     // Wipe tracker snapshots so stale state from before the clear does not
     // leak into the fresh chat.
     await ref.read(trackerSnapshotRepoProvider).deleteBySessionId(sessionId);
+    await ref
+        .read(ledgerReconciliationCheckpointRepoProvider)
+        .deleteBySessionId(sessionId);
   }
 
   Future<void> renameSession(String sessionId, String newName) async {

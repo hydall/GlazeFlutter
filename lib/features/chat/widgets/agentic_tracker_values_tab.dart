@@ -83,6 +83,9 @@ class _AgenticTrackerValuesTabState
     if (confirmed != true) return;
     await ref.read(trackerRepoProvider).clearForSession(sessionId);
     await ref.read(trackerSnapshotRepoProvider).deleteBySessionId(sessionId);
+    await ref
+        .read(ledgerReconciliationCheckpointRepoProvider)
+        .deleteBySessionId(sessionId);
     if (!mounted) return;
     setState(() {
       _trackers = const <Tracker>[];

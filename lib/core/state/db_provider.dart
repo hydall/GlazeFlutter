@@ -20,6 +20,7 @@ import '../db/repositories/studio_preset_repo.dart';
 import '../models/studio_config.dart';
 import '../db/repositories/tracker_repo.dart';
 import '../db/repositories/tracker_snapshot_repo.dart';
+import '../db/repositories/ledger_reconciliation_checkpoint_repo.dart';
 import '../db/repositories/character_knowledge_fact_repo.dart';
 import '../db/repositories/character_session_baseline_repo.dart';
 import '../db/repositories/extension_presets_repository.dart';
@@ -161,6 +162,11 @@ final trackerRepoProvider = Provider<TrackerRepo>((ref) {
 final trackerSnapshotRepoProvider = Provider<TrackerSnapshotRepo>((ref) {
   return TrackerSnapshotRepo(ref.watch(appDbProvider));
 });
+
+final ledgerReconciliationCheckpointRepoProvider =
+    Provider<LedgerReconciliationCheckpointRepo>((ref) {
+      return LedgerReconciliationCheckpointRepo(ref.watch(appDbProvider));
+    });
 
 final characterKnowledgeFactRepoProvider = Provider<CharacterKnowledgeFactRepo>(
   (ref) {

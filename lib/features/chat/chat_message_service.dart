@@ -121,6 +121,9 @@ class ChatMessageService {
           .read(characterKnowledgeFactRepoProvider)
           .retractForMessages(session.id, messageIds),
       snapshotRepo.deleteForMessages(session.id, messageIds),
+      _ref
+          .read(ledgerReconciliationCheckpointRepoProvider)
+          .deleteForMessages(session.id, messageIds),
     ]).catchError((Object e) {
       debugPrint('[ChatMessageService] failed to clean deleted messages: $e');
       return <void>[];

@@ -190,6 +190,13 @@ Use the final assistant response, latest user message, previous ledger, recent c
 
 Rules:
 - Preserve prior state unless contradicted by the final response.
+- Treat accepted assistant prose as evidence of what was narrated, not proof of
+  hidden motives, unseen research, ownership, causation, or off-screen events.
+  Persist only explicit observations, actions, dialogue, user corrections, and
+  already-established canon. If a claim is merely plausible, omit it from
+  current state; use an epistemically qualified knowledgeFact only when useful.
+- Never turn guesses, rhetorical flourishes, metaphors, probabilistic language,
+  or a character's interpretation into objective current state.
 - Temporary posture/outfit/props stay in the visible ledger unless they became important.
 - Do not create quests unless an explicit task/goal exists.
 - Do not create persona stats unless already tracked.
@@ -216,9 +223,22 @@ Rules:
 - Distinguish planned, suggested, threatened, attempted, completed, failed, cancelled, and unknown event states.
 - Do not mark an entity present only because it is mentioned.
 - Do not mark an entity absent unless it explicitly leaves, dies, is left behind, or the scene changes.
+- Locations are current state, not history. When the scene or time advances and
+  an NPC's current location is no longer established, delete npc:Name.location
+  instead of retaining a stale location or inventing where the NPC went.
+- Keep current_goal limited to the entity's active immediate objective. Remove
+  completed, abandoned, and merely remembered tasks; never use it as a backlog.
 - Return <studio_ledger> plus <glaze_memory_export> JSON.
 - Prefer patch ops in the ops list for persistence. Do not rewrite the whole world state.
 - Reuse an exact key from <current_state> or <existing_keys> when it represents the same fact. Update it with set; do not create a synonym key.
+- Identity resolution overrides exact-key reuse. When chat establishes that a
+  placeholder or alias (for example "Unidentified Netrunner") is a named
+  entity, migrate every relevant field to one canonical npc:Name key and emit
+  delete ops for every obsolete placeholder/alias key. Preserve only supported
+  values during the merge; do not duplicate the entity under two names.
+- Explicit user corrections have highest priority. Apply the correction to all
+  affected current-state keys and delete incompatible or obsolete keys in the
+  same patch.
 - Keep entity/relationship/arc/world state compact. Update current truth; do not create a history log.
 - Never output ledger text as story prose or a chat message.
 - Entity state keys: npc:Name.relationship_to_user, npc:Name.attitude_to_user, npc:Name.trust_to_user, npc:Name.boundaries, npc:Name.card_overrides, npc:Name.location, npc:Name.current_emotional_residue, npc:Name.current_goal, npc:Name.persistent_condition
