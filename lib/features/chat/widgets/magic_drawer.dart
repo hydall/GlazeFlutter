@@ -188,6 +188,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   int? _draggingIndex;
   int? _hoverIndex;
   MagicDrawerStats _stats = const MagicDrawerStats();
+  int _statsRequest = 0;
   Timer? _debounceTimer;
   final _scrollController = ScrollController();
 
@@ -235,7 +236,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _loadStats() async {
-    _stats = await MagicDrawerStatsService(ref).computeStats(widget.charId);
+    final request = ++_statsRequest;
+    final stats = await MagicDrawerStatsService(
+      ref,
+    ).computeStats(widget.charId);
+    if (request == _statsRequest) _stats = stats;
   }
 
   void _scheduleTokenStats() {
@@ -249,10 +254,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   Future<void> _loadTokenStats() async {
     if (!mounted) return;
     setState(() => _loadingTokens = true);
+    final request = _statsRequest;
     final updated = await MagicDrawerStatsService(
       ref,
     ).computeTokenStats(widget.charId, _stats);
-    if (!mounted) return;
+    if (!mounted || request != _statsRequest) return;
     setState(() {
       _stats = updated;
       _loadingTokens = false;
@@ -411,8 +417,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     final available = _allItems
         .where((item) => !_itemIds.contains(item.id))
         .where(
-          (item) =>
-              _featureVisible(item.id, extSettings, studioFeatureEnabled),
+          (item) => _featureVisible(item.id, extSettings, studioFeatureEnabled),
         )
         .toList();
     if (available.isEmpty) return;
@@ -438,106 +443,110 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   Future<void> _handleTap(MagicDrawerItemDef item) async {
     if (_editing) return;
 
-    switch (item.id) {
-      case 'inspector':
-        showPromptInspectorSheet(context, widget.charId);
-        return;
-      case 'summary':
-        await showSummarySheet(context, widget.charId);
-        return;
-      case 'sessions':
-        await _showSessionsSheet();
-        return;
-      case 'char-card':
-        final result = await showModalBottomSheet<String>(
-          context: context,
-          isScrollControlled: true,
-          useRootNavigator: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) => CharacterDetailScreen(charId: widget.charId),
-        );
-        if (result != null && result.isNotEmpty && mounted) {
-          // Real navigation away from the chat - close the panel first.
-          widget.onClose?.call();
-          context.go(result);
-        }
-        return;
-      case 'lorebooks':
-        await showModalBottomSheet<void>(
-          context: context,
-          useRootNavigator: true,
-          backgroundColor: Colors.transparent,
-          barrierColor: Colors.black54,
-          isScrollControlled: true,
-          builder: (_) => const LorebookListScreen(),
-        );
-        return;
-      case 'memory-books':
-        await _showMemoryBooks();
-        return;
-      case 'regex':
-        await showModalBottomSheet<void>(
-          context: context,
-          useRootNavigator: true,
-          backgroundColor: Colors.transparent,
-          barrierColor: Colors.black54,
-          isScrollControlled: true,
-          builder: (_) => const RegexSheet(),
-        );
-        return;
-      case 'api':
-        await showModalBottomSheet<void>(
-          context: context,
-          useRootNavigator: true,
-          backgroundColor: Colors.transparent,
-          barrierColor: Colors.black54,
-          isScrollControlled: true,
-          builder: (_) => const ApiSettingsScreen(),
-        );
-        return;
-      case 'presets':
-        await showModalBottomSheet<void>(
-          context: context,
-          useRootNavigator: true,
-          backgroundColor: Colors.transparent,
-          barrierColor: Colors.black54,
-          isScrollControlled: true,
-          builder: (_) => PresetListScreen(charId: widget.charId),
-        );
-        return;
-      case 'personas':
-        await showModalBottomSheet<void>(
-          context: context,
-          useRootNavigator: true,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) => const PersonaListScreen(),
-        );
-        return;
-      case 'image-gen':
-        await showModalBottomSheet<void>(
-          context: context,
-          useRootNavigator: true,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) => ImageGenSheet(charId: widget.charId),
-        );
-        return;
-      case 'authors-note':
-        await showAuthorsNoteSheet(context, widget.charId);
-        return;
-      case 'glossary':
-        await GlossarySheet.show(context);
-        return;
-      case 'ext-blocks':
-        await _showExtBlocksSheet();
-        return;
-      case 'studio':
-        await _showStudioMenu();
-        return;
-      case 'agent-ops':
-        await _showAgentOpsLog();
-        return;
+    try {
+      switch (item.id) {
+        case 'inspector':
+          await showPromptInspectorSheet(context, widget.charId);
+          break;
+        case 'summary':
+          await showSummarySheet(context, widget.charId);
+          break;
+        case 'sessions':
+          await _showSessionsSheet();
+          break;
+        case 'char-card':
+          final result = await showModalBottomSheet<String>(
+            context: context,
+            isScrollControlled: true,
+            useRootNavigator: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => CharacterDetailScreen(charId: widget.charId),
+          );
+          if (result != null && result.isNotEmpty && mounted) {
+            // Real navigation away from the chat - close the panel first.
+            widget.onClose?.call();
+            context.go(result);
+          }
+          break;
+        case 'lorebooks':
+          await showModalBottomSheet<void>(
+            context: context,
+            useRootNavigator: true,
+            backgroundColor: Colors.transparent,
+            barrierColor: Colors.black54,
+            isScrollControlled: true,
+            builder: (_) => const LorebookListScreen(),
+          );
+          break;
+        case 'memory-books':
+          await _showMemoryBooks();
+          break;
+        case 'regex':
+          await showModalBottomSheet<void>(
+            context: context,
+            useRootNavigator: true,
+            backgroundColor: Colors.transparent,
+            barrierColor: Colors.black54,
+            isScrollControlled: true,
+            builder: (_) => const RegexSheet(),
+          );
+          break;
+        case 'api':
+          await showModalBottomSheet<void>(
+            context: context,
+            useRootNavigator: true,
+            backgroundColor: Colors.transparent,
+            barrierColor: Colors.black54,
+            isScrollControlled: true,
+            builder: (_) => const ApiSettingsScreen(),
+          );
+          break;
+        case 'presets':
+          await showModalBottomSheet<void>(
+            context: context,
+            useRootNavigator: true,
+            backgroundColor: Colors.transparent,
+            barrierColor: Colors.black54,
+            isScrollControlled: true,
+            builder: (_) => PresetListScreen(charId: widget.charId),
+          );
+          break;
+        case 'personas':
+          await showModalBottomSheet<void>(
+            context: context,
+            useRootNavigator: true,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const PersonaListScreen(),
+          );
+          break;
+        case 'image-gen':
+          await showModalBottomSheet<void>(
+            context: context,
+            useRootNavigator: true,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => ImageGenSheet(charId: widget.charId),
+          );
+          break;
+        case 'authors-note':
+          await showAuthorsNoteSheet(context, widget.charId);
+          break;
+        case 'glossary':
+          await GlossarySheet.show(context);
+          break;
+        case 'ext-blocks':
+          await _showExtBlocksSheet();
+          break;
+        case 'studio':
+          await _showStudioMenu();
+          break;
+        case 'agent-ops':
+          await _showAgentOpsLog();
+          break;
+      }
+    } finally {
+      if (mounted) await _refreshStats();
     }
   }
 

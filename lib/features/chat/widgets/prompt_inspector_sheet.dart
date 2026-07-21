@@ -83,12 +83,12 @@ class _PromptInspectorSheetState extends State<PromptInspectorSheet> {
   }
 }
 
-void showPromptInspectorSheet(
+Future<void> showPromptInspectorSheet(
   BuildContext context,
   String charId, {
   String initialTabId = PromptInspectorSheet._tabContext,
 }) {
-  showModalBottomSheet<void>(
+  return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

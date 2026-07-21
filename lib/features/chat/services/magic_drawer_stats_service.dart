@@ -13,6 +13,7 @@ import '../../../core/state/db_provider.dart';
 import '../../extensions/providers/extension_presets_provider.dart';
 import '../../extensions/providers/extensions_settings_provider.dart';
 import '../../image_gen/image_gen_provider.dart';
+import '../../settings/api_list_provider.dart';
 import '../chat_provider.dart';
 import '../state/cached_token_breakdown.dart';
 import '../state/token_breakdown_cache.dart';
@@ -34,14 +35,13 @@ class MagicDrawerStatsService {
     final charRepo = _ref.read(characterRepoProvider);
     final presetRepo = _ref.read(presetRepoProvider);
     final personaRepo = _ref.read(personaRepoProvider);
-    final apiRepo = _ref.read(apiConfigRepoProvider);
     final lorebookRepo = _ref.read(lorebookRepoProvider);
     final memoryRepo = _ref.read(memoryBookRepoProvider);
 
     final character = await charRepo.getById(charId);
     final presets = await presetRepo.getAll();
     final personas = await personaRepo.getAll();
-    final apiConfigs = await apiRepo.getAll();
+    await _ref.read(apiListProvider.future);
     final lorebooks = await lorebookRepo.getAll();
     final activePresetId = _ref.read(activePresetIdProvider);
     final activePersonaId = _ref.read(activePersonaIdProvider);
@@ -51,9 +51,7 @@ class MagicDrawerStatsService {
     final activePersona = activePersonaId != null
         ? personas.where((p) => p.id == activePersonaId).firstOrNull
         : personas.firstOrNull;
-    final chatApi = apiConfigs
-        .where((cfg) => cfg.mode != 'embedding')
-        .firstOrNull;
+    final chatApi = _ref.read(activeApiConfigProvider);
     List<PresetRegex> regexes;
     try {
       regexes = await _ref.read(activeRegexesProvider.future);
@@ -92,7 +90,8 @@ class MagicDrawerStatsService {
 
     bool imageGenEnabled = false;
     try {
-      imageGenEnabled = _ref.read(imageGenSettingsProvider).value?.enabled == true;
+      imageGenEnabled =
+          _ref.read(imageGenSettingsProvider).value?.enabled == true;
     } catch (_) {}
 
     final extSettings = _ref.read(extensionsSettingsProvider);
@@ -100,16 +99,16 @@ class MagicDrawerStatsService {
     final extActivePresetName = extSettings.activePresetId == null
         ? null
         : extPresets
-            .where((p) => p.id == extSettings.activePresetId)
-            .firstOrNull
-            ?.name;
+              .where((p) => p.id == extSettings.activePresetId)
+              .firstOrNull
+              ?.name;
 
     final cached = _ref.read(cachedTokenBreakdownProvider(charId));
 
     final approxHistoryTokens = session != null
         ? session.messages
-            .where((m) => !m.isHidden && !m.isTyping)
-            .fold<int>(0, (sum, m) => sum + (m.content.length / 4).round())
+              .where((m) => !m.isHidden && !m.isTyping)
+              .fold<int>(0, (sum, m) => sum + (m.content.length / 4).round())
         : 0;
 
     final lastMsg = session?.messages.lastOrNull;
@@ -130,12 +129,20 @@ class MagicDrawerStatsService {
       promptTokens: cached?.totalTokens ?? 0,
       approximateHistoryTokens: approxHistoryTokens,
       contextSize: chatApi?.contextSize ?? 0,
-      characterTokens: (cached?.sourceTokens['description'] ?? 0) > 0 ? cached!.sourceTokens['description']! : (cached?.macroTokens['description'] ?? 0),
+      characterTokens: (cached?.sourceTokens['description'] ?? 0) > 0
+          ? cached!.sourceTokens['description']!
+          : (cached?.macroTokens['description'] ?? 0),
       presetTokens: cached?.presetNetTokens ?? 0,
-      personaTokens: (cached?.sourceTokens['persona'] ?? 0) > 0 ? cached!.sourceTokens['persona']! : (cached?.macroTokens['persona'] ?? 0),
-      summaryTokens: (cached?.sourceTokens['summary'] ?? 0) > 0 ? cached!.sourceTokens['summary']! : (cached?.macroTokens['summary'] ?? 0),
+      personaTokens: (cached?.sourceTokens['persona'] ?? 0) > 0
+          ? cached!.sourceTokens['persona']!
+          : (cached?.macroTokens['persona'] ?? 0),
+      summaryTokens: (cached?.sourceTokens['summary'] ?? 0) > 0
+          ? cached!.sourceTokens['summary']!
+          : (cached?.macroTokens['summary'] ?? 0),
       vectorLoreTokens: cached?.vectorLoreTokens ?? 0,
-      keywordLoreTokens: ((cached?.sourceTokens['lorebook'] ?? 0) + (cached?.macroTokens['lorebooks'] ?? 0)),
+      keywordLoreTokens:
+          ((cached?.sourceTokens['lorebook'] ?? 0) +
+          (cached?.macroTokens['lorebooks'] ?? 0)),
       imageGenEnabled: imageGenEnabled,
       lorebooks: lorebooks,
       summaryContent: summaryContent,
@@ -144,7 +151,10 @@ class MagicDrawerStatsService {
     );
   }
 
-  Future<MagicDrawerStats> computeTokenStats(String charId, MagicDrawerStats base) async {
+  Future<MagicDrawerStats> computeTokenStats(
+    String charId,
+    MagicDrawerStats base,
+  ) async {
     final session = base.session;
     final character = base.character;
     final chatApi = base.apiConfig;
@@ -187,7 +197,8 @@ class MagicDrawerStatsService {
               ? cached.sourceTokens['summary']!
               : (cached.macroTokens['summary'] ?? 0),
           vectorLoreTokens: cached.vectorLoreTokens,
-          keywordLoreTokens: (cached.sourceTokens['lorebook'] ?? 0) +
+          keywordLoreTokens:
+              (cached.sourceTokens['lorebook'] ?? 0) +
               (cached.macroTokens['lorebooks'] ?? 0),
         );
       }
@@ -224,7 +235,8 @@ class MagicDrawerStatsService {
       final sourceTokens = breakdown.sourceTokens;
 
       TokenBreakdownCache.set(hash, breakdown);
-      _ref.read(cachedTokenBreakdownProvider(charId).notifier).state = breakdown;
+      _ref.read(cachedTokenBreakdownProvider(charId).notifier).state =
+          breakdown;
 
       return base.copyWith(
         promptTokens: breakdown.totalTokens,
@@ -239,7 +251,8 @@ class MagicDrawerStatsService {
             ? sourceTokens['summary']!
             : (breakdown.macroTokens['summary'] ?? 0),
         vectorLoreTokens: breakdown.vectorLoreTokens,
-        keywordLoreTokens: (sourceTokens['lorebook'] ?? 0) +
+        keywordLoreTokens:
+            (sourceTokens['lorebook'] ?? 0) +
             (breakdown.macroTokens['lorebooks'] ?? 0),
       );
     } catch (e) {
@@ -260,5 +273,3 @@ class MagicDrawerStatsService {
     }
   }
 }
-
-
