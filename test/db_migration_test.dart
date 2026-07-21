@@ -78,7 +78,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 73);
+      expect(version, 74);
     });
 
     test(
@@ -115,7 +115,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 73);
+        expect(version.first.read<int>('user_version'), 74);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },
@@ -145,12 +145,12 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 73);
+      expect(version.read<int>('user_version'), 74);
     });
 
     test('current schema includes atomic character fact tables', () async {
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.read<int>('user_version'), 73);
+      expect(version.read<int>('user_version'), 74);
 
       final factColumns = await db
           .customSelect("PRAGMA table_info('character_knowledge_fact_rows')")
@@ -260,7 +260,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 73);
+      expect(version.read<int>('user_version'), 74);
       final row = await upgraded
           .customSelect(
             'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
@@ -276,11 +276,80 @@ void main() {
         (block) => block['id'] == 'custom_block',
       );
       expect(ledger['content'], isNot(contains('durableFacts')));
+      expect(ledger['enabled'], isTrue);
       expect(custom['content'], 'keep this customization');
       expect(
         blocks.any((block) => block['id'] == 'ledger_reconciliation_prompt'),
         isTrue,
       );
+    });
+
+    test('v73 enables Ledger prompt without replacing its text', () async {
+      final file = File(
+        '${Directory.systemTemp.path}/glaze_mig_ledger_prompts_${DateTime.now().microsecondsSinceEpoch}.db',
+      );
+      addTearDown(() async {
+        if (file.existsSync()) await file.delete();
+      });
+
+      final seeded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      await seeded.customSelect('SELECT 1').get();
+      final blocks = [
+        {
+          'id': 'ledger_system',
+          'name': 'Ledger system prompt',
+          'kind': 'instruction',
+          'role': 'system',
+          'content': 'custom Ledger prompt',
+          'enabled': false,
+          'order': 0,
+          'section': 'ledger',
+        },
+        {
+          'id': 'ledger_reconciliation_prompt',
+          'name': 'Ledger reconciliation prompt',
+          'kind': 'instruction',
+          'role': 'system',
+          'content': 'custom reconciliation prompt',
+          'enabled': true,
+          'order': 1,
+          'section': 'ledger',
+        },
+      ];
+      await seeded.customStatement(
+        'INSERT INTO studio_preset_rows '
+        '(preset_id, name, blocks_json, updated_at) VALUES (?, ?, ?, ?)',
+        ['separate_prompts', 'Separate prompts', jsonEncode(blocks), 1],
+      );
+      await seeded.customStatement('PRAGMA user_version = 73');
+      await seeded.close();
+
+      final upgraded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      addTearDown(() async => upgraded.close());
+      final row = await upgraded
+          .customSelect(
+            'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
+            variables: [Variable.withString('separate_prompts')],
+          )
+          .getSingle();
+      final upgradedBlocks =
+          (jsonDecode(row.read<String>('blocks_json')) as List)
+              .cast<Map<String, dynamic>>();
+      final ledger = upgradedBlocks.singleWhere(
+        (block) => block['id'] == 'ledger_system',
+      );
+      final reconciliation = upgradedBlocks.singleWhere(
+        (block) => block['id'] == 'ledger_reconciliation_prompt',
+      );
+
+      expect(ledger['enabled'], isTrue);
+      expect(ledger['content'], 'custom Ledger prompt');
+      expect(reconciliation['enabled'], isTrue);
+      expect(reconciliation['content'], 'custom reconciliation prompt');
     });
 
     test('v67 upgrades to atomic character fact schema', () async {
@@ -307,7 +376,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 73);
+      expect(version.read<int>('user_version'), 74);
       final check = await upgraded.customSelect('PRAGMA integrity_check').get();
       expect(check.single.read<String>('integrity_check'), 'ok');
     });

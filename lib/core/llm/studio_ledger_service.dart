@@ -27,6 +27,8 @@ import 'studio_ledger_reconciliation.dart';
 
 export 'ledger/ledger_op_applier.dart';
 
+const _ledgerSystemPromptBlockId = 'ledger_system';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // StudioLedgerService
 //
@@ -587,7 +589,7 @@ class StudioLedgerService {
   }) {
     final hasActiveLedgerBlocks = ledgerBlocks.any(
       (block) =>
-          block.id != ledgerReconciliationPromptBlockId &&
+          block.id == _ledgerSystemPromptBlockId &&
           block.enabled &&
           block.section == 'ledger' &&
           block.content.trim().isNotEmpty,
@@ -663,7 +665,10 @@ Allowed eventState: planned, suggested, threatened, attempted, completed, failed
       section: 'ledger',
       macroCtx: macroCtx,
       runtimeSuffix: runtimeSuffix,
-      skipBlockIds: const {ledgerReconciliationPromptBlockId},
+      skipBlockIds: {
+        for (final block in ledgerBlocks)
+          if (block.id != _ledgerSystemPromptBlockId) block.id,
+      },
     );
   }
 

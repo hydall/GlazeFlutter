@@ -48,7 +48,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 73;
+  int get schemaVersion => 74;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1346,12 +1346,14 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 73) {
         await m.createTable(ledgerReconciliationCheckpoints);
-        await _ensureLedgerReconciliationPrompt();
+      }
+      if (from < 74) {
+        await _ensureLedgerPrompts();
       }
     },
   );
 
-  Future<void> _ensureLedgerReconciliationPrompt() async {
+  Future<void> _ensureLedgerPrompts() async {
     final rows = await customSelect(
       'SELECT preset_id, blocks_json FROM studio_preset_rows',
     ).get();
@@ -1360,12 +1362,24 @@ class AppDatabase extends _$AppDatabase {
           .whereType<Map<dynamic, dynamic>>()
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
-      if (blocks.any(
+      var changed = false;
+      final ledgerIndex = blocks.indexWhere(
+        (block) => block['id'] == 'ledger_system',
+      );
+      if (ledgerIndex < 0) {
+        blocks.add(_ledgerSystemPromptBlock());
+        changed = true;
+      } else if (blocks[ledgerIndex]['enabled'] != true) {
+        blocks[ledgerIndex] = {...blocks[ledgerIndex], 'enabled': true};
+        changed = true;
+      }
+      if (!blocks.any(
         (block) => block['id'] == 'ledger_reconciliation_prompt',
       )) {
-        continue;
+        blocks.add(_ledgerReconciliationPromptBlock());
+        changed = true;
       }
-      blocks.add(_ledgerReconciliationPromptBlock());
+      if (!changed) continue;
       await customStatement(
         'UPDATE studio_preset_rows SET blocks_json = ?, '
         "updated_at = CAST(strftime('%s','now') AS INTEGER) "
@@ -1973,17 +1987,9 @@ PREFER
       'order': 99,
       'section': 'cleaner',
     },
-    // ─── ledger section (1 block) ───
-    {
-      'id': 'ledger_system',
-      'name': 'Ledger system prompt',
-      'kind': 'instruction',
-      'role': 'system',
-      'content': _boundedLedgerSystemPrompt,
-      'enabled': true,
-      'order': 0,
-      'section': 'ledger',
-    },
+    // ─── ledger section ───
+    _ledgerSystemPromptBlock(),
+    _ledgerReconciliationPromptBlock(),
     // ─── build section (build-time prompts) ───
     {
       'id': 'build_router',
@@ -2172,6 +2178,17 @@ Map<String, dynamic> _ledgerReconciliationPromptBlock() => {
   'content': _ledgerReconciliationSystemPrompt,
   'enabled': true,
   'order': 1,
+  'section': 'ledger',
+};
+
+Map<String, dynamic> _ledgerSystemPromptBlock() => {
+  'id': 'ledger_system',
+  'name': 'Ledger system prompt',
+  'kind': 'instruction',
+  'role': 'system',
+  'content': _boundedLedgerSystemPrompt,
+  'enabled': true,
+  'order': 0,
   'section': 'ledger',
 };
 
