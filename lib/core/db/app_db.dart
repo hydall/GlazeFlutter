@@ -48,7 +48,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 75;
+  int get schemaVersion => 76;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1359,6 +1359,30 @@ class AppDatabase extends _$AppDatabase {
             .toSet();
         if (!names.contains('include_last_reasoning')) {
           await m.addColumn(apiConfigs, apiConfigs.includeLastReasoning);
+        }
+      }
+      if (from < 76) {
+        final columns = await customSelect(
+          "PRAGMA table_info('api_configs')",
+        ).get();
+        final names = columns
+            .map((column) => column.read<String>('name'))
+            .toSet();
+        if (!names.contains('show_native_reasoning')) {
+          await m.addColumn(apiConfigs, apiConfigs.showNativeReasoning);
+          await customStatement(
+            'UPDATE api_configs SET show_native_reasoning = '
+            'CASE WHEN omit_reasoning = 0 THEN 1 ELSE 0 END',
+          );
+        }
+        if (!names.contains('omit_top_k')) {
+          await m.addColumn(apiConfigs, apiConfigs.omitTopK);
+        }
+        if (!names.contains('omit_frequency_penalty')) {
+          await m.addColumn(apiConfigs, apiConfigs.omitFrequencyPenalty);
+        }
+        if (!names.contains('omit_presence_penalty')) {
+          await m.addColumn(apiConfigs, apiConfigs.omitPresencePenalty);
         }
       }
     },

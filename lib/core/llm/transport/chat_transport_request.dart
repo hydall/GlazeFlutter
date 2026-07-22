@@ -30,8 +30,12 @@ class ChatTransportRequest {
   final String? reasoningEffort;
   final bool omitTemperature;
   final bool omitTopP;
+  final bool omitTopK;
+  final bool omitFrequencyPenalty;
+  final bool omitPresencePenalty;
   final bool omitReasoning;
   final bool omitReasoningEffort;
+  final bool? showNativeReasoning;
 
   /// Optional per-call HTTP receive timeout. `0` disables the transport-level
   /// timeout so a caller such as Studio can own first-chunk timeout semantics.
@@ -80,8 +84,12 @@ class ChatTransportRequest {
     this.reasoningEffort,
     this.omitTemperature = false,
     this.omitTopP = false,
+    this.omitTopK = false,
+    this.omitFrequencyPenalty = false,
+    this.omitPresencePenalty = false,
     this.omitReasoning = false,
     this.omitReasoningEffort = false,
+    this.showNativeReasoning,
     this.receiveTimeoutMs,
     this.sessionId,
     this.previousMessages,

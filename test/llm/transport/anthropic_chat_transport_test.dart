@@ -8,6 +8,8 @@ ChatTransportRequest _req({
   int maxTokens = 4000,
   double temperature = 0.7,
   double topP = 0.9,
+  int topK = 0,
+  bool omitTopK = false,
   bool stream = true,
   bool requestReasoning = false,
   String? reasoningEffort,
@@ -28,6 +30,8 @@ ChatTransportRequest _req({
     maxTokens: maxTokens,
     temperature: temperature,
     topP: topP,
+    topK: topK,
+    omitTopK: omitTopK,
     stream: stream,
     requestReasoning: requestReasoning,
     reasoningEffort: reasoningEffort,
@@ -112,6 +116,16 @@ void main() {
       final built = AnthropicChatTransport.buildRequest(_req());
       expect(built.body['temperature'], 0.7);
       expect(built.body['top_p'], 0.9);
+    });
+
+    test('omitTopK removes top_k', () {
+      final included = AnthropicChatTransport.buildRequest(_req(topK: 40));
+      final omitted = AnthropicChatTransport.buildRequest(
+        _req(topK: 40, omitTopK: true),
+      );
+
+      expect(included.body['top_k'], 40);
+      expect(omitted.body, isNot(contains('top_k')));
     });
 
     test('detects prefill from trailing assistant turn', () {

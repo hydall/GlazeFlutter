@@ -8,19 +8,21 @@ import '_sse_adapter.dart';
 ChatTransportRequest _req({
   required bool stream,
   bool omitReasoning = false,
+  bool? showNativeReasoning,
 }) => ChatTransportRequest(
-      endpoint: 'https://api.anthropic.com',
-      apiKey: 'sk-ant-test',
-      model: 'claude-3-7-sonnet',
-      messages: const [
-        {'role': 'user', 'content': 'hi'},
-      ],
-      maxTokens: 1000,
-      temperature: 0.7,
-      topP: 0.9,
-      stream: stream,
-      omitReasoning: omitReasoning,
-    );
+  endpoint: 'https://api.anthropic.com',
+  apiKey: 'sk-ant-test',
+  model: 'claude-3-7-sonnet',
+  messages: const [
+    {'role': 'user', 'content': 'hi'},
+  ],
+  maxTokens: 1000,
+  temperature: 0.7,
+  topP: 0.9,
+  stream: stream,
+  omitReasoning: omitReasoning,
+  showNativeReasoning: showNativeReasoning,
+);
 
 /// Anthropic SSE body interleaving thinking_delta with text_delta, ending with
 /// message_stop.
@@ -89,6 +91,27 @@ void main() {
       expect(reasoningDeltas, isEmpty);
       expect(completeReasoning, isNull);
       expect(completeText, 'answer');
+    });
+
+    test('showNativeReasoning overrides the legacy request gate', () async {
+      final dio = Dio()
+        ..httpClientAdapter = SseAdapter(_anthropicSseWithThinking);
+      final transport = AnthropicChatTransport(dio: dio);
+      String? completeReasoning;
+
+      await transport.stream(
+        request: _req(
+          stream: true,
+          omitReasoning: true,
+          showNativeReasoning: true,
+        ),
+        onComplete: (text, reasoning, {rawResponseJson}) {
+          completeReasoning = reasoning;
+        },
+        onError: (e) => fail('unexpected error: $e'),
+      );
+
+      expect(completeReasoning, 'secret thoughts');
     });
   });
 }

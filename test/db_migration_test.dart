@@ -78,7 +78,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 75);
+      expect(version, 76);
     });
 
     test(
@@ -115,7 +115,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 75);
+        expect(version.first.read<int>('user_version'), 76);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },
@@ -145,12 +145,12 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 75);
+      expect(version.read<int>('user_version'), 76);
     });
 
     test('current schema includes atomic character fact tables', () async {
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.read<int>('user_version'), 75);
+      expect(version.read<int>('user_version'), 76);
 
       final factColumns = await db
           .customSelect("PRAGMA table_info('character_knowledge_fact_rows')")
@@ -210,8 +210,73 @@ void main() {
           containsAll([
             'extra_request_parameters_json',
             'include_last_reasoning',
+            'show_native_reasoning',
+            'omit_top_k',
+            'omit_frequency_penalty',
+            'omit_presence_penalty',
           ]),
         );
+      },
+    );
+
+    test(
+      'v76 preserves native reasoning visibility from omit_reasoning',
+      () async {
+        final file = File(
+          '${Directory.systemTemp.path}/glaze_mig_reasoning_${DateTime.now().microsecondsSinceEpoch}.db',
+        );
+        addTearDown(() async {
+          if (file.existsSync()) await file.delete();
+        });
+
+        final seeded = AppDatabase.forTesting(
+          NativeDatabase.createInBackground(file),
+        );
+        await seeded.customSelect('SELECT 1').get();
+        await seeded.customStatement(
+          "INSERT INTO api_configs (config_id, name, omit_reasoning) "
+          "VALUES ('shown', 'Shown', 0)",
+        );
+        await seeded.customStatement(
+          "INSERT INTO api_configs (config_id, name, omit_reasoning) "
+          "VALUES ('hidden', 'Hidden', 1)",
+        );
+        await seeded.customStatement(
+          'ALTER TABLE api_configs DROP COLUMN show_native_reasoning',
+        );
+        await seeded.customStatement(
+          'ALTER TABLE api_configs DROP COLUMN omit_top_k',
+        );
+        await seeded.customStatement(
+          'ALTER TABLE api_configs DROP COLUMN omit_frequency_penalty',
+        );
+        await seeded.customStatement(
+          'ALTER TABLE api_configs DROP COLUMN omit_presence_penalty',
+        );
+        await seeded.customStatement('PRAGMA user_version = 75');
+        await seeded.close();
+
+        final upgraded = AppDatabase.forTesting(
+          NativeDatabase.createInBackground(file),
+        );
+        addTearDown(() async => upgraded.close());
+        final rows = await upgraded
+            .customSelect(
+              'SELECT config_id, show_native_reasoning, omit_top_k, '
+              'omit_frequency_penalty, omit_presence_penalty '
+              'FROM api_configs ORDER BY config_id',
+            )
+            .get();
+
+        expect(rows[0].read<String>('config_id'), 'hidden');
+        expect(rows[0].read<bool>('show_native_reasoning'), isFalse);
+        expect(rows[1].read<String>('config_id'), 'shown');
+        expect(rows[1].read<bool>('show_native_reasoning'), isTrue);
+        for (final row in rows) {
+          expect(row.read<bool>('omit_top_k'), isFalse);
+          expect(row.read<bool>('omit_frequency_penalty'), isFalse);
+          expect(row.read<bool>('omit_presence_penalty'), isFalse);
+        }
       },
     );
 
@@ -266,7 +331,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 75);
+      expect(version.read<int>('user_version'), 76);
       final row = await upgraded
           .customSelect(
             'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
@@ -382,7 +447,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 75);
+      expect(version.read<int>('user_version'), 76);
       final check = await upgraded.customSelect('PRAGMA integrity_check').get();
       expect(check.single.read<String>('integrity_check'), 'ok');
     });

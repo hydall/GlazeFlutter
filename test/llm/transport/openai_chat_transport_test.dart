@@ -11,6 +11,12 @@ ChatTransportRequest _req({
   String endpoint = 'https://api.openai.com',
   String sessionIdMode = 'openrouter',
   int? receiveTimeoutMs,
+  int topK = 0,
+  double frequencyPenalty = 0,
+  double presencePenalty = 0,
+  bool omitTopK = false,
+  bool omitFrequencyPenalty = false,
+  bool omitPresencePenalty = false,
   List<ExtraRequestParameter> extraRequestParameters = const [],
 }) {
   return ChatTransportRequest(
@@ -23,6 +29,12 @@ ChatTransportRequest _req({
     maxTokens: 100,
     temperature: 0.7,
     topP: 0.9,
+    topK: topK,
+    frequencyPenalty: frequencyPenalty,
+    presencePenalty: presencePenalty,
+    omitTopK: omitTopK,
+    omitFrequencyPenalty: omitFrequencyPenalty,
+    omitPresencePenalty: omitPresencePenalty,
     sessionId: 'sess-1',
     sessionIdMode: sessionIdMode,
     receiveTimeoutMs: receiveTimeoutMs,
@@ -92,6 +104,29 @@ void main() {
 
       expect(body.containsKey('session_id'), isFalse);
     });
+  });
+
+  test('sampling omit flags remove top K and penalties', () {
+    final included = OpenAiChatTransport.buildBody(
+      _req(topK: 40, frequencyPenalty: 0.5, presencePenalty: -0.5),
+    );
+    final omitted = OpenAiChatTransport.buildBody(
+      _req(
+        topK: 40,
+        frequencyPenalty: 0.5,
+        presencePenalty: -0.5,
+        omitTopK: true,
+        omitFrequencyPenalty: true,
+        omitPresencePenalty: true,
+      ),
+    );
+
+    expect(included, containsPair('top_k', 40));
+    expect(included, containsPair('frequency_penalty', 0.5));
+    expect(included, containsPair('presence_penalty', -0.5));
+    expect(omitted, isNot(contains('top_k')));
+    expect(omitted, isNot(contains('frequency_penalty')));
+    expect(omitted, isNot(contains('presence_penalty')));
   });
 
   group('extra request parameters', () {

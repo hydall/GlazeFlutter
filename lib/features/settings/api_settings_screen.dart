@@ -62,10 +62,14 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   int _topK = 0;
   bool _stream = true;
   bool _requestReasoning = false;
+  bool _showNativeReasoning = true;
   bool _includeLastReasoning = false;
   String _reasoningEffort = 'medium';
   bool _omitTemperature = false;
   bool _omitTopP = false;
+  bool _omitTopK = false;
+  bool _omitFrequencyPenalty = false;
+  bool _omitPresencePenalty = false;
   bool _omitReasoning = false;
   bool _omitReasoningEffort = false;
   bool _embeddingEnabled = false;
@@ -204,11 +208,15 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       _frequencyPenalty = config.frequencyPenalty;
       _presencePenalty = config.presencePenalty;
       _stream = config.stream;
-      _requestReasoning = config.requestReasoning;
+      _requestReasoning = config.requestReasoning && !config.omitReasoning;
+      _showNativeReasoning = config.showNativeReasoning;
       _includeLastReasoning = config.includeLastReasoning;
       _reasoningEffort = config.reasoningEffort;
       _omitTemperature = config.omitTemperature;
       _omitTopP = config.omitTopP;
+      _omitTopK = config.omitTopK;
+      _omitFrequencyPenalty = config.omitFrequencyPenalty;
+      _omitPresencePenalty = config.omitPresencePenalty;
       _omitReasoning = config.omitReasoning;
       _omitReasoningEffort = config.omitReasoningEffort;
       _embeddingEnabled = config.embeddingEnabled;
@@ -250,10 +258,14 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             presencePenalty: _presencePenalty,
             stream: _stream,
             requestReasoning: _requestReasoning,
+            showNativeReasoning: _showNativeReasoning,
             includeLastReasoning: _includeLastReasoning,
             reasoningEffort: _reasoningEffort,
             omitTemperature: _omitTemperature,
             omitTopP: _omitTopP,
+            omitTopK: _omitTopK,
+            omitFrequencyPenalty: _omitFrequencyPenalty,
+            omitPresencePenalty: _omitPresencePenalty,
             omitReasoning: _omitReasoning,
             omitReasoningEffort: _omitReasoningEffort,
             embeddingEnabled: _embeddingEnabled,
@@ -295,9 +307,6 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   bool get _supportsReasoning => true;
 
   bool get _showsOmitSamplingControls =>
-      _protocol == LlmProtocol.openai || _protocol == LlmProtocol.openrouter;
-
-  bool get _showsOmitReasoningControls =>
       _protocol == LlmProtocol.openai || _protocol == LlmProtocol.openrouter;
 
   bool get _hideSamplingWhileReasoningAnthropic =>
@@ -634,6 +643,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   divisions: 200,
                   editableValue: true,
                   decimalPlaces: 0,
+                  included: !_omitTopK,
+                  onIncludedChanged: (v) {
+                    setState(() => _omitTopK = !v);
+                    _scheduleSave();
+                  },
                   onChanged: (v) {
                     setState(() => _topK = v.round());
                     _scheduleSave();
@@ -647,6 +661,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   max: 2,
                   divisions: 80,
                   editableValue: true,
+                  included: !_omitFrequencyPenalty,
+                  onIncludedChanged: (v) {
+                    setState(() => _omitFrequencyPenalty = !v);
+                    _scheduleSave();
+                  },
                   onChanged: (v) {
                     setState(() => _frequencyPenalty = v);
                     _scheduleSave();
@@ -660,6 +679,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   max: 2,
                   divisions: 80,
                   editableValue: true,
+                  included: !_omitPresencePenalty,
+                  onIncludedChanged: (v) {
+                    setState(() => _omitPresencePenalty = !v);
+                    _scheduleSave();
+                  },
                   onChanged: (v) {
                     setState(() => _presencePenalty = v);
                     _scheduleSave();
@@ -694,18 +718,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 MenuSwitchItem(
                   label: 'label_reasoning'.tr(),
                   description: 'desc_reasoning'.tr(),
-                  included: _showsOmitReasoningControls
-                      ? !_omitReasoning
-                      : null,
-                  onIncludedChanged: _showsOmitReasoningControls
-                      ? (v) {
-                          setState(() => _omitReasoning = !v);
-                          _scheduleSave();
-                        }
-                      : null,
-                  value: _requestReasoning,
+                  value: _showNativeReasoning,
                   onChanged: (v) {
-                    setState(() => _requestReasoning = v);
+                    setState(() => _showNativeReasoning = v);
                     _scheduleSave();
                   },
                 ),
@@ -713,15 +728,15 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 MenuSelectorItem(
                   label: 'label_reasoning_effort'.tr(),
                   currentValue: _reasoningEffortLabel(_reasoningEffort),
-                  included: _showsOmitReasoningControls
-                      ? !_omitReasoningEffort
-                      : null,
-                  onIncludedChanged: _showsOmitReasoningControls
-                      ? (v) {
-                          setState(() => _omitReasoningEffort = !v);
-                          _scheduleSave();
-                        }
-                      : null,
+                  included: _requestReasoning,
+                  onIncludedChanged: (v) {
+                    setState(() {
+                      _requestReasoning = v;
+                      _omitReasoning = !v;
+                      _omitReasoningEffort = !v;
+                    });
+                    _scheduleSave();
+                  },
                   onTap: _openReasoningEffortSelector,
                 ),
               if (_supportsReasoning)
