@@ -521,6 +521,8 @@ class ApiConfigs extends Table {
   TextColumn get reasoningEffort => text().nullable()();
   BoolColumn get requestReasoning =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get showNativeReasoning =>
+      boolean().withDefault(const Constant(true))();
   BoolColumn get includeLastReasoning =>
       boolean().withDefault(const Constant(false))();
   TextColumn get reasoningTagStart => text().nullable()();
@@ -528,6 +530,11 @@ class ApiConfigs extends Table {
   BoolColumn get omitTemperature =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get omitTopP => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitTopK => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitFrequencyPenalty =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get omitPresencePenalty =>
+      boolean().withDefault(const Constant(false))();
   BoolColumn get omitReasoning =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get omitReasoningEffort =>

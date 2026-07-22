@@ -26,11 +26,15 @@ abstract class ApiConfig with _$ApiConfig {
     @Default(true) bool stream,
     @Default('medium') String reasoningEffort,
     @Default(false) bool requestReasoning,
+    @Default(true) bool showNativeReasoning,
     @Default(false) bool includeLastReasoning,
     String? reasoningTagStart,
     String? reasoningTagEnd,
     @Default(false) bool omitTemperature,
     @Default(false) bool omitTopP,
+    @Default(false) bool omitTopK,
+    @Default(false) bool omitFrequencyPenalty,
+    @Default(false) bool omitPresencePenalty,
     @Default(false) bool omitReasoning,
     @Default(false) bool omitReasoningEffort,
     @Default(true) bool embeddingUseSame,
@@ -47,6 +51,9 @@ abstract class ApiConfig with _$ApiConfig {
     List<ExtraRequestParameter> extraRequestParameters,
   }) = _ApiConfig;
 
-  factory ApiConfig.fromJson(Map<String, dynamic> json) =>
-      _$ApiConfigFromJson(json);
+  factory ApiConfig.fromJson(Map<String, dynamic> json) => _$ApiConfigFromJson({
+    ...json,
+    if (!json.containsKey('showNativeReasoning'))
+      'showNativeReasoning': json['omitReasoning'] != true,
+  });
 }

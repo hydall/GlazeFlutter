@@ -82,7 +82,8 @@ class OpenAiChatTransport implements ChatTransport {
             cancelToken,
             onUpdate,
             onComplete,
-            omitReasoning: request.omitReasoning,
+            omitReasoning:
+                !(request.showNativeReasoning ?? !request.omitReasoning),
             receiveTimeoutMs: request.receiveTimeoutMs,
           );
         } else {
@@ -92,7 +93,8 @@ class OpenAiChatTransport implements ChatTransport {
             body,
             cancelToken,
             onComplete,
-            omitReasoning: request.omitReasoning,
+            omitReasoning:
+                !(request.showNativeReasoning ?? !request.omitReasoning),
             receiveTimeoutMs: request.receiveTimeoutMs,
           );
         }
@@ -135,13 +137,13 @@ class OpenAiChatTransport implements ChatTransport {
     if (!r.omitTopP && r.topP > 0 && r.topP < 1) {
       body['top_p'] = r.topP;
     }
-    if (r.topK > 0) {
+    if (!r.omitTopK && r.topK > 0) {
       body['top_k'] = r.topK;
     }
-    if (r.frequencyPenalty != 0) {
+    if (!r.omitFrequencyPenalty && r.frequencyPenalty != 0) {
       body['frequency_penalty'] = r.frequencyPenalty;
     }
-    if (r.presencePenalty != 0) {
+    if (!r.omitPresencePenalty && r.presencePenalty != 0) {
       body['presence_penalty'] = r.presencePenalty;
     }
     if (!r.omitReasoning &&

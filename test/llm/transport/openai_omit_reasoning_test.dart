@@ -8,19 +8,21 @@ import '_sse_adapter.dart';
 ChatTransportRequest _req({
   required bool stream,
   bool omitReasoning = false,
+  bool? showNativeReasoning,
 }) => ChatTransportRequest(
-      endpoint: 'https://api.openai.com',
-      apiKey: 'sk-test',
-      model: 'gpt-test',
-      messages: const [
-        {'role': 'user', 'content': 'hi'},
-      ],
-      maxTokens: 100,
-      temperature: 0.7,
-      topP: 0.9,
-      stream: stream,
-      omitReasoning: omitReasoning,
-    );
+  endpoint: 'https://api.openai.com',
+  apiKey: 'sk-test',
+  model: 'gpt-test',
+  messages: const [
+    {'role': 'user', 'content': 'hi'},
+  ],
+  maxTokens: 100,
+  temperature: 0.7,
+  topP: 0.9,
+  stream: stream,
+  omitReasoning: omitReasoning,
+  showNativeReasoning: showNativeReasoning,
+);
 
 /// SSE body that interleaves native `reasoning_content` with normal `content`.
 final _sseWithReasoning = [
@@ -91,6 +93,26 @@ void main() {
       expect(reasoningDeltas, isEmpty);
       expect(completeReasoning, isNull);
       expect(completeText, 'answer');
+    });
+
+    test('showNativeReasoning overrides the legacy request gate', () async {
+      final dio = Dio()..httpClientAdapter = SseAdapter(_sseWithReasoning);
+      final transport = OpenAiChatTransport(dio: dio);
+      String? completeReasoning;
+
+      await transport.stream(
+        request: _req(
+          stream: true,
+          omitReasoning: true,
+          showNativeReasoning: true,
+        ),
+        onComplete: (text, reasoning, {rawResponseJson}) {
+          completeReasoning = reasoning;
+        },
+        onError: (e) => fail('unexpected error: $e'),
+      );
+
+      expect(completeReasoning, 'thinking more');
     });
   });
 }

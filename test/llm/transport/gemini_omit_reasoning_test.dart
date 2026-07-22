@@ -8,19 +8,21 @@ import '_sse_adapter.dart';
 ChatTransportRequest _req({
   required bool stream,
   bool omitReasoning = false,
+  bool? showNativeReasoning,
 }) => ChatTransportRequest(
-      endpoint: 'https://generativelanguage.googleapis.com',
-      apiKey: 'AIza-test',
-      model: 'gemini-2.5-flash',
-      messages: const [
-        {'role': 'user', 'content': 'hi'},
-      ],
-      maxTokens: 1000,
-      temperature: 0.7,
-      topP: 0.9,
-      stream: stream,
-      omitReasoning: omitReasoning,
-    );
+  endpoint: 'https://generativelanguage.googleapis.com',
+  apiKey: 'AIza-test',
+  model: 'gemini-2.5-flash',
+  messages: const [
+    {'role': 'user', 'content': 'hi'},
+  ],
+  maxTokens: 1000,
+  temperature: 0.7,
+  topP: 0.9,
+  stream: stream,
+  omitReasoning: omitReasoning,
+  showNativeReasoning: showNativeReasoning,
+);
 
 /// Gemini SSE body interleaving thought parts with normal text parts.
 final _geminiSseWithThoughts = [
@@ -84,6 +86,26 @@ void main() {
       expect(reasoningDeltas, isEmpty);
       expect(completeReasoning, isNull);
       expect(completeText, 'answer');
+    });
+
+    test('showNativeReasoning overrides the legacy request gate', () async {
+      final dio = Dio()..httpClientAdapter = SseAdapter(_geminiSseWithThoughts);
+      final transport = GeminiChatTransport(dio: dio);
+      String? completeReasoning;
+
+      await transport.stream(
+        request: _req(
+          stream: true,
+          omitReasoning: true,
+          showNativeReasoning: true,
+        ),
+        onComplete: (text, reasoning, {rawResponseJson}) {
+          completeReasoning = reasoning;
+        },
+        onError: (e) => fail('unexpected error: $e'),
+      );
+
+      expect(completeReasoning, 'thinking more');
     });
   });
 }

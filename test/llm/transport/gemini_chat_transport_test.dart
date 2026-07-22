@@ -8,6 +8,8 @@ ChatTransportRequest _req({
   int maxTokens = 4000,
   double temperature = 0.7,
   double topP = 0.9,
+  int topK = 0,
+  bool omitTopK = false,
   bool stream = true,
   bool requestReasoning = false,
   String? reasoningEffort,
@@ -16,7 +18,8 @@ ChatTransportRequest _req({
     endpoint: 'https://generativelanguage.googleapis.com',
     apiKey: 'AIza-test',
     model: model,
-    messages: messages ??
+    messages:
+        messages ??
         [
           {'role': 'system', 'content': 'be helpful'},
           {'role': 'user', 'content': 'hi'},
@@ -24,6 +27,8 @@ ChatTransportRequest _req({
     maxTokens: maxTokens,
     temperature: temperature,
     topP: topP,
+    topK: topK,
+    omitTopK: omitTopK,
     stream: stream,
     requestReasoning: requestReasoning,
     reasoningEffort: reasoningEffort,
@@ -99,32 +104,37 @@ void main() {
     });
 
     test(
-        'multi-turn chat: leading merged system survives as systemInstruction',
-        () {
-      // With a real chat (system + first user + first assistant + new user),
-      // the merge collapses only the leading non-assistant block, and the
-      // converter extracts that block into systemInstruction because
-      // messages remain after pop.
-      final built = GeminiChatTransport.buildRequest(_req(
-        messages: [
-          {'role': 'system', 'content': 'sysA'},
-          {'role': 'user', 'content': 'q1'},
-          {'role': 'assistant', 'content': 'a1'},
-          {'role': 'user', 'content': 'q2'},
-        ],
-      ));
-      final sys = built.body['systemInstruction'] as Map;
-      expect((sys['parts'] as List).first['text'], 'sysA\n\nq1');
-      final contents = built.body['contents'] as List;
-      expect(contents.first['role'], 'model');
-    });
+      'multi-turn chat: leading merged system survives as systemInstruction',
+      () {
+        // With a real chat (system + first user + first assistant + new user),
+        // the merge collapses only the leading non-assistant block, and the
+        // converter extracts that block into systemInstruction because
+        // messages remain after pop.
+        final built = GeminiChatTransport.buildRequest(
+          _req(
+            messages: [
+              {'role': 'system', 'content': 'sysA'},
+              {'role': 'user', 'content': 'q1'},
+              {'role': 'assistant', 'content': 'a1'},
+              {'role': 'user', 'content': 'q2'},
+            ],
+          ),
+        );
+        final sys = built.body['systemInstruction'] as Map;
+        expect((sys['parts'] as List).first['text'], 'sysA\n\nq1');
+        final contents = built.body['contents'] as List;
+        expect(contents.first['role'], 'model');
+      },
+    );
 
     test('omits systemInstruction when no leading system run', () {
-      final built = GeminiChatTransport.buildRequest(_req(
-        messages: [
-          {'role': 'user', 'content': 'hi'},
-        ],
-      ));
+      final built = GeminiChatTransport.buildRequest(
+        _req(
+          messages: [
+            {'role': 'user', 'content': 'hi'},
+          ],
+        ),
+      );
       expect(built.body.containsKey('systemInstruction'), isFalse);
     });
 
@@ -137,17 +147,29 @@ void main() {
       expect(cfg['candidateCount'], 1);
     });
 
+    test('omitTopK removes topK', () {
+      final included = GeminiChatTransport.buildRequest(_req(topK: 40));
+      final omitted = GeminiChatTransport.buildRequest(
+        _req(topK: 40, omitTopK: true),
+      );
+
+      expect((included.body['generationConfig'] as Map)['topK'], 40);
+      expect(omitted.body['generationConfig'] as Map, isNot(contains('topK')));
+    });
+
     test('assistant role mapped to model in contents', () {
       // After mergeNonAssistant collapses [system, user] → one block, the
       // converter extracts it as systemInstruction (length > 1 remaining),
       // leaving only the assistant turn → contents[0] is role=model.
-      final built = GeminiChatTransport.buildRequest(_req(
-        messages: [
-          {'role': 'system', 'content': 's'},
-          {'role': 'user', 'content': 'q'},
-          {'role': 'assistant', 'content': 'a'},
-        ],
-      ));
+      final built = GeminiChatTransport.buildRequest(
+        _req(
+          messages: [
+            {'role': 'system', 'content': 's'},
+            {'role': 'user', 'content': 'q'},
+            {'role': 'assistant', 'content': 'a'},
+          ],
+        ),
+      );
       final contents = built.body['contents'] as List;
       expect(contents, hasLength(1));
       expect(contents[0]['role'], 'model');
@@ -156,12 +178,14 @@ void main() {
 
   group('buildRequest — thinking', () {
     test('gemini-2.5-flash medium → integer budget in thinkingConfig', () {
-      final built = GeminiChatTransport.buildRequest(_req(
-        model: 'gemini-2.5-flash',
-        requestReasoning: true,
-        reasoningEffort: 'medium',
-        maxTokens: 10000,
-      ));
+      final built = GeminiChatTransport.buildRequest(
+        _req(
+          model: 'gemini-2.5-flash',
+          requestReasoning: true,
+          reasoningEffort: 'medium',
+          maxTokens: 10000,
+        ),
+      );
       final cfg = built.body['generationConfig'] as Map;
       final tc = cfg['thinkingConfig'] as Map;
       expect(tc['includeThoughts'], true);
@@ -169,11 +193,13 @@ void main() {
     });
 
     test('gemini-3-pro medium → thinkingLevel symbolic', () {
-      final built = GeminiChatTransport.buildRequest(_req(
-        model: 'gemini-3-pro',
-        requestReasoning: true,
-        reasoningEffort: 'medium',
-      ));
+      final built = GeminiChatTransport.buildRequest(
+        _req(
+          model: 'gemini-3-pro',
+          requestReasoning: true,
+          reasoningEffort: 'medium',
+        ),
+      );
       final cfg = built.body['generationConfig'] as Map;
       final tc = cfg['thinkingConfig'] as Map;
       // gemini-3-pro maps medium → 'low' (per port).
@@ -182,21 +208,25 @@ void main() {
     });
 
     test('non-thinking model omits thinkingConfig', () {
-      final built = GeminiChatTransport.buildRequest(_req(
-        model: 'gemini-2.0-flash',
-        requestReasoning: true,
-        reasoningEffort: 'medium',
-      ));
+      final built = GeminiChatTransport.buildRequest(
+        _req(
+          model: 'gemini-2.0-flash',
+          requestReasoning: true,
+          reasoningEffort: 'medium',
+        ),
+      );
       final cfg = built.body['generationConfig'] as Map;
       expect(cfg.containsKey('thinkingConfig'), isFalse);
     });
 
     test('requestReasoning=false omits thinkingConfig', () {
-      final built = GeminiChatTransport.buildRequest(_req(
-        model: 'gemini-2.5-pro',
-        requestReasoning: false,
-        reasoningEffort: 'high',
-      ));
+      final built = GeminiChatTransport.buildRequest(
+        _req(
+          model: 'gemini-2.5-pro',
+          requestReasoning: false,
+          reasoningEffort: 'high',
+        ),
+      );
       final cfg = built.body['generationConfig'] as Map;
       expect(cfg.containsKey('thinkingConfig'), isFalse);
     });
@@ -204,16 +234,18 @@ void main() {
 
   group('buildRequest — merge', () {
     test('non-assistant chrome merged before convert (alternating roles)', () {
-      final built = GeminiChatTransport.buildRequest(_req(
-        messages: [
-          {'role': 'system', 'content': 'sysA'},
-          {'role': 'user', 'content': 'first'},
-          {'role': 'system', 'content': 'sysB'},
-          {'role': 'user', 'content': 'second'},
-          {'role': 'assistant', 'content': 'ack'},
-          {'role': 'user', 'content': 'follow'},
-        ],
-      ));
+      final built = GeminiChatTransport.buildRequest(
+        _req(
+          messages: [
+            {'role': 'system', 'content': 'sysA'},
+            {'role': 'user', 'content': 'first'},
+            {'role': 'system', 'content': 'sysB'},
+            {'role': 'user', 'content': 'second'},
+            {'role': 'assistant', 'content': 'ack'},
+            {'role': 'user', 'content': 'follow'},
+          ],
+        ),
+      );
       final contents = built.body['contents'] as List;
       // Every role in contents must be user or model — no system in body.
       for (final c in contents) {

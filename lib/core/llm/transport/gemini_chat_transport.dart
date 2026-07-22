@@ -109,7 +109,7 @@ class GeminiChatTransport implements ChatTransport {
     if (!request.omitTopP && request.topP > 0 && request.topP < 1) {
       generationConfig['topP'] = request.topP;
     }
-    if (request.topK > 0) {
+    if (!request.omitTopK && request.topK > 0) {
       generationConfig['topK'] = request.topK;
     }
 
@@ -190,7 +190,8 @@ class GeminiChatTransport implements ChatTransport {
             cancelToken: cancelToken,
             onUpdate: onUpdate,
             onComplete: onComplete,
-            omitReasoning: request.omitReasoning,
+            omitReasoning:
+                !(request.showNativeReasoning ?? !request.omitReasoning),
             receiveTimeoutMs: request.receiveTimeoutMs,
           );
         } else {
@@ -200,7 +201,8 @@ class GeminiChatTransport implements ChatTransport {
             built.body,
             cancelToken: cancelToken,
             onComplete: onComplete,
-            omitReasoning: request.omitReasoning,
+            omitReasoning:
+                !(request.showNativeReasoning ?? !request.omitReasoning),
             receiveTimeoutMs: request.receiveTimeoutMs,
           );
         }

@@ -103,7 +103,8 @@ class AnthropicChatTransport implements ChatTransport {
             cancelToken: cancelToken,
             onUpdate: onUpdate,
             onComplete: onComplete,
-            omitReasoning: request.omitReasoning,
+            omitReasoning:
+                !(request.showNativeReasoning ?? !request.omitReasoning),
             receiveTimeoutMs: request.receiveTimeoutMs,
           );
         } else {
@@ -114,7 +115,8 @@ class AnthropicChatTransport implements ChatTransport {
             prefill: built.prefill,
             cancelToken: cancelToken,
             onComplete: onComplete,
-            omitReasoning: request.omitReasoning,
+            omitReasoning:
+                !(request.showNativeReasoning ?? !request.omitReasoning),
             receiveTimeoutMs: request.receiveTimeoutMs,
           );
         }
@@ -209,7 +211,7 @@ class AnthropicChatTransport implements ChatTransport {
     if (!request.omitTopP && request.topP > 0 && request.topP < 1) {
       body['top_p'] = request.topP;
     }
-    if (request.topK > 0) {
+    if (!request.omitTopK && request.topK > 0) {
       body['top_k'] = request.topK;
     }
 
