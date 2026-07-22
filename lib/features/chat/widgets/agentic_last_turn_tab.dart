@@ -7,6 +7,7 @@ import '../../../core/llm/studio_ledger_service.dart';
 import '../../../core/llm/studio_slot_resolver.dart';
 import '../../../core/models/agent_operation_record.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/models/tracker.dart';
 import '../../../core/services/generation_notification_service.dart';
 import '../../../core/services/post_gen_foreground_guard.dart';
 import '../../../core/state/active_studio_preset_provider.dart';
@@ -99,6 +100,46 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
                   ),
                 ),
               ),
+            FutureBuilder<Tracker?>(
+              future: ref
+                  .read(trackerRepoProvider)
+                  .get(sessionId, '_ledger_diag:studio_ledger_reconciliation'),
+              builder: (context, diagnosticSnapshot) {
+                final diagnostic = diagnosticSnapshot.data;
+                if (diagnostic == null) return const SizedBox.shrink();
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: context.cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Latest Ledger reconciliation',
+                        style: TextStyle(
+                          color: context.cs.onSurface,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        diagnostic.value,
+                        style: TextStyle(
+                          color: context.cs.onSurfaceVariant,
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
             Expanded(
               child: records.isEmpty
                   ? Center(
