@@ -676,9 +676,11 @@ If abort fails to clear `isGenerating`, the subsequent check rejects.
 ### INV-CM1: Continue message appends to the last assistant message
 
 `ChatNotifier.continueMessage()` calls `ChatGenerationService.generate()` directly
-(not `GenerationPipeline.run()`). After the stream completes, it concatenates
-`lastMsg.content + generatedMsg.content` onto the existing last assistant message
-and persists via `chatRepo.put`. It does not create a new swipe.
+(not `GenerationPipeline.run()`). After the stream completes, it joins the
+original and generated content with a paragraph boundary, replaces the existing
+assistant message while preserving its id, and persists via `chatRepo.put`. It
+does not create a new swipe or keep the temporary generated message. The active
+green and nested swipes are updated to the same merged content.
 
 Mutex: `continueMessage()` rejects when `_isMemoryDraftActive` (same as
 `sendMessage` / `regenerateLastAssistant`) — see INV-M4.

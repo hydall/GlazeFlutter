@@ -993,8 +993,13 @@ class Bridge {
     const updateHeader = () => {
       ticking = false;
       const st = container.scrollTop;
-      // Skip when generating or at top/bottom bounds.
+      // Streaming auto-follow must not hide the header, but an explicit upward
+      // scroll should still restore an already-hidden header.
       if (this.isGenerating) {
+        if (st < headerLastTop - 3 && headerHidden) {
+          headerHidden = false;
+          this._sendToFlutter('onHeaderScroll', [false]);
+        }
         headerLastTop = st <= 0 ? 0 : st;
         return;
       }
