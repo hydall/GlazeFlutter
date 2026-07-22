@@ -36,6 +36,7 @@ part 'app_db.g.dart';
     TrackerRows,
     TrackerSnapshots,
     LedgerReconciliationCheckpoints,
+    LedgerReconciliationCleanupJournals,
     CharacterKnowledgeFactRows,
     CharacterSessionBaselineRows,
     ExtensionPresets,
@@ -48,7 +49,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 76;
+  int get schemaVersion => 77;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1384,6 +1385,9 @@ class AppDatabase extends _$AppDatabase {
         if (!names.contains('omit_presence_penalty')) {
           await m.addColumn(apiConfigs, apiConfigs.omitPresencePenalty);
         }
+      }
+      if (from < 77) {
+        await m.createTable(ledgerReconciliationCleanupJournals);
       }
     },
   );

@@ -316,11 +316,47 @@ class CharacterKnowledgeFactRepo {
   Future<int> applyReconciliationCleanup({
     required String sessionId,
     required List<KnowledgeCleanupOp> ops,
+    Set<String>? allowedFactIds,
+    String? endpointMessageId,
+    List<String> messageIds = const [],
+  }) => db.transaction(
+    () => _applyReconciliationCleanup(
+      sessionId: sessionId,
+      ops: ops,
+      allowedFactIds: allowedFactIds,
+      endpointMessageId: endpointMessageId,
+      messageIds: messageIds,
+    ),
+  );
+
+  Future<int> _applyReconciliationCleanup({
+    required String sessionId,
+    required List<KnowledgeCleanupOp> ops,
+    required Set<String>? allowedFactIds,
+    required String? endpointMessageId,
+    required List<String> messageIds,
   }) async {
+    final beforeRows = <String, CharacterKnowledgeFactRow>{};
+    Future<void> remember(CharacterKnowledgeFactRow row) async {
+      beforeRows.putIfAbsent(row.id, () => row);
+    }
+
     var applied = 0;
     final migratedKeys = <String>{};
     for (final op in ops) {
       if (op.type == KnowledgeCleanupOpType.retract) {
+        if (allowedFactIds != null && !allowedFactIds.contains(op.factId)) {
+          continue;
+        }
+        final existing =
+            await (db.select(db.characterKnowledgeFactRows)
+                  ..where((row) => row.chatSessionId.equals(sessionId))
+                  ..where((row) => row.id.equals(op.factId))
+                  ..where(
+                    (row) => row.lifecycle.isIn(const ['active', 'tentative']),
+                  ))
+                .getSingleOrNull();
+        if (existing != null) await remember(existing);
         applied +=
             await (db.update(db.characterKnowledgeFactRows)
                   ..where((row) => row.chatSessionId.equals(sessionId))
@@ -351,6 +387,10 @@ class CharacterKnowledgeFactRepo {
                 ))
               .get();
       for (final row in rows) {
+        if (allowedFactIds != null && !allowedFactIds.contains(row.id)) {
+          continue;
+        }
+        await remember(row);
         await (db.update(
           db.characterKnowledgeFactRows,
         )..where((candidate) => candidate.id.equals(row.id))).write(
@@ -374,42 +414,123 @@ class CharacterKnowledgeFactRepo {
       }
     }
 
-    if (migratedKeys.isEmpty) return applied;
-
-    // Identity migration can collapse two aliases into one semantic slot.
-    final reviewable = await getReviewableForSession(sessionId);
-    final bySlot = <String, List<CharacterKnowledgeFact>>{};
-    for (final fact in reviewable.where(
-      (fact) =>
-          migratedKeys.contains(fact.knowerKey) ||
-          migratedKeys.contains(fact.subjectKey),
-    )) {
-      bySlot.putIfAbsent(semanticSlotKey(fact), () => []).add(fact);
-    }
-    for (final duplicates in bySlot.values.where((items) => items.length > 1)) {
-      duplicates.sort((a, b) {
-        final lifecycle = _cleanupLifecycleRank(
-          b.lifecycle,
-        ).compareTo(_cleanupLifecycleRank(a.lifecycle));
-        if (lifecycle != 0) return lifecycle;
-        final importance = b.importance.compareTo(a.importance);
-        if (importance != 0) return importance;
-        return b.updatedAt.compareTo(a.updatedAt);
-      });
-      for (final duplicate in duplicates.skip(1)) {
-        applied +=
-            await (db.update(
-              db.characterKnowledgeFactRows,
-            )..where((row) => row.id.equals(duplicate.id))).write(
-              CharacterKnowledgeFactRowsCompanion(
-                lifecycle: const Value('retracted'),
-                updatedAt: Value(currentTimestampSeconds()),
-              ),
-            );
+    if (migratedKeys.isNotEmpty) {
+      // Identity migration can collapse two aliases into one semantic slot.
+      final reviewable = await getReviewableForSession(sessionId);
+      final bySlot = <String, List<CharacterKnowledgeFact>>{};
+      for (final fact in reviewable.where(
+        (fact) =>
+            (allowedFactIds == null || allowedFactIds.contains(fact.id)) &&
+            (migratedKeys.contains(fact.knowerKey) ||
+                migratedKeys.contains(fact.subjectKey)),
+      )) {
+        bySlot.putIfAbsent(semanticSlotKey(fact), () => []).add(fact);
       }
+      for (final duplicates in bySlot.values.where(
+        (items) => items.length > 1,
+      )) {
+        duplicates.sort((a, b) {
+          final lifecycle = _cleanupLifecycleRank(
+            b.lifecycle,
+          ).compareTo(_cleanupLifecycleRank(a.lifecycle));
+          if (lifecycle != 0) return lifecycle;
+          final importance = b.importance.compareTo(a.importance);
+          if (importance != 0) return importance;
+          return b.updatedAt.compareTo(a.updatedAt);
+        });
+        for (final duplicate in duplicates.skip(1)) {
+          final row =
+              await (db.select(db.characterKnowledgeFactRows)
+                    ..where((candidate) => candidate.id.equals(duplicate.id)))
+                  .getSingle();
+          await remember(row);
+          applied +=
+              await (db.update(
+                db.characterKnowledgeFactRows,
+              )..where((row) => row.id.equals(duplicate.id))).write(
+                CharacterKnowledgeFactRowsCompanion(
+                  lifecycle: const Value('retracted'),
+                  updatedAt: Value(currentTimestampSeconds()),
+                ),
+              );
+        }
+      }
+    }
+    if (beforeRows.isNotEmpty && endpointMessageId != null) {
+      await db
+          .into(db.ledgerReconciliationCleanupJournals)
+          .insert(
+            LedgerReconciliationCleanupJournalsCompanion.insert(
+              sessionId: sessionId,
+              endpointMessageId: endpointMessageId,
+              messageIdsJson: Value(jsonEncode(messageIds)),
+              beforeImagesJson: Value(
+                jsonEncode(beforeRows.values.map(_cleanupBeforeImage).toList()),
+              ),
+              createdAt: Value(currentTimestampSeconds()),
+            ),
+          );
     }
     return applied;
   }
+
+  Future<void> rollbackReconciliationCleanupForMessages(
+    String sessionId,
+    Set<String> invalidatedMessageIds,
+  ) async {
+    if (invalidatedMessageIds.isEmpty) return;
+    await db.transaction(
+      () => _rollbackReconciliationCleanupForMessages(
+        sessionId,
+        invalidatedMessageIds,
+      ),
+    );
+  }
+
+  Future<void> _rollbackReconciliationCleanupForMessages(
+    String sessionId,
+    Set<String> invalidatedMessageIds,
+  ) async {
+    final journals =
+        await (db.select(db.ledgerReconciliationCleanupJournals)
+              ..where((row) => row.sessionId.equals(sessionId))
+              ..orderBy([(row) => OrderingTerm.desc(row.id)]))
+            .get();
+    for (final journal in journals) {
+      final messageIds = (jsonDecode(journal.messageIdsJson) as List)
+          .whereType<String>();
+      if (!messageIds.any(invalidatedMessageIds.contains)) continue;
+      final images = (jsonDecode(journal.beforeImagesJson) as List)
+          .whereType<Map<String, dynamic>>();
+      for (final image in images) {
+        await (db.update(
+          db.characterKnowledgeFactRows,
+        )..where((row) => row.id.equals(image['id'] as String))).write(
+          CharacterKnowledgeFactRowsCompanion(
+            knowerKey: Value(image['knowerKey'] as String),
+            knowerName: Value(image['knowerName'] as String),
+            subjectKey: Value(image['subjectKey'] as String),
+            subjectName: Value(image['subjectName'] as String),
+            lifecycle: Value(image['lifecycle'] as String),
+            updatedAt: Value(image['updatedAt'] as int),
+          ),
+        );
+      }
+      await (db.delete(
+        db.ledgerReconciliationCleanupJournals,
+      )..where((row) => row.id.equals(journal.id))).go();
+    }
+  }
+
+  Map<String, Object> _cleanupBeforeImage(CharacterKnowledgeFactRow row) => {
+    'id': row.id,
+    'knowerKey': row.knowerKey,
+    'knowerName': row.knowerName,
+    'subjectKey': row.subjectKey,
+    'subjectName': row.subjectName,
+    'lifecycle': row.lifecycle,
+    'updatedAt': row.updatedAt,
+  };
 
   int _cleanupLifecycleRank(CharacterKnowledgeFactLifecycle lifecycle) =>
       lifecycle == CharacterKnowledgeFactLifecycle.active ? 1 : 0;
@@ -484,13 +605,42 @@ class CharacterKnowledgeFactRepo {
               ),
             );
       }
+      final journals = await (db.select(
+        db.ledgerReconciliationCleanupJournals,
+      )..where((row) => row.sessionId.equals(fromSessionId))).get();
+      for (final journal in journals) {
+        final journalMessageIds = (jsonDecode(journal.messageIdsJson) as List)
+            .whereType<String>()
+            .toList(growable: false);
+        if (!journalMessageIds.every(messageIds.contains)) continue;
+        final beforeImages = (jsonDecode(journal.beforeImagesJson) as List)
+            .whereType<Map<String, dynamic>>()
+            .map((image) => {...image, 'id': '${image['id']}@$toSessionId'})
+            .toList(growable: false);
+        await db
+            .into(db.ledgerReconciliationCleanupJournals)
+            .insert(
+              LedgerReconciliationCleanupJournalsCompanion.insert(
+                sessionId: toSessionId,
+                endpointMessageId: journal.endpointMessageId,
+                messageIdsJson: Value(journal.messageIdsJson),
+                beforeImagesJson: Value(jsonEncode(beforeImages)),
+                createdAt: Value(journal.createdAt),
+              ),
+            );
+      }
     });
   }
 
-  Future<void> deleteBySessionId(String sessionId) {
-    return (db.delete(
-      db.characterKnowledgeFactRows,
-    )..where((row) => row.chatSessionId.equals(sessionId))).go();
+  Future<void> deleteBySessionId(String sessionId) async {
+    await db.transaction(() async {
+      await (db.delete(
+        db.ledgerReconciliationCleanupJournals,
+      )..where((row) => row.sessionId.equals(sessionId))).go();
+      await (db.delete(
+        db.characterKnowledgeFactRows,
+      )..where((row) => row.chatSessionId.equals(sessionId))).go();
+    });
   }
 
   SimpleSelectStatement<

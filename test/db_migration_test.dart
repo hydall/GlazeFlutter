@@ -78,7 +78,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 76);
+      expect(version, 77);
     });
 
     test(
@@ -115,7 +115,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 76);
+        expect(version.first.read<int>('user_version'), 77);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },
@@ -145,12 +145,12 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 76);
+      expect(version.read<int>('user_version'), 77);
     });
 
     test('current schema includes atomic character fact tables', () async {
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.read<int>('user_version'), 76);
+      expect(version.read<int>('user_version'), 77);
 
       final factColumns = await db
           .customSelect("PRAGMA table_info('character_knowledge_fact_rows')")
@@ -218,6 +218,51 @@ void main() {
         );
       },
     );
+
+    test('v77 adds reversible reconciliation cleanup journal', () async {
+      final file = File(
+        '${Directory.systemTemp.path}/glaze_mig_reconcile_journal_${DateTime.now().microsecondsSinceEpoch}.db',
+      );
+      addTearDown(() async {
+        if (file.existsSync()) await file.delete();
+      });
+
+      final seeded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      await seeded.customSelect('SELECT 1').get();
+      await seeded.customStatement(
+        'DROP TABLE ledger_reconciliation_cleanup_journals',
+      );
+      await seeded.customStatement('PRAGMA user_version = 76');
+      await seeded.close();
+
+      final upgraded = AppDatabase.forTesting(
+        NativeDatabase.createInBackground(file),
+      );
+      addTearDown(() async => upgraded.close());
+      final columns = await upgraded
+          .customSelect(
+            "PRAGMA table_info('ledger_reconciliation_cleanup_journals')",
+          )
+          .get();
+
+      expect(
+        columns.map((row) => row.read<String>('name')),
+        containsAll([
+          'id',
+          'session_id',
+          'endpoint_message_id',
+          'message_ids_json',
+          'before_images_json',
+          'created_at',
+        ]),
+      );
+      final version = await upgraded
+          .customSelect('PRAGMA user_version')
+          .getSingle();
+      expect(version.read<int>('user_version'), 77);
+    });
 
     test(
       'v76 preserves native reasoning visibility from omit_reasoning',
@@ -331,7 +376,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 76);
+      expect(version.read<int>('user_version'), 77);
       final row = await upgraded
           .customSelect(
             'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
@@ -447,7 +492,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 76);
+      expect(version.read<int>('user_version'), 77);
       final check = await upgraded.customSelect('PRAGMA integrity_check').get();
       expect(check.single.read<String>('integrity_check'), 'ok');
     });

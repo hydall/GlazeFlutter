@@ -156,9 +156,11 @@ class StudioLedgerService {
       final promptTrackers = await _ledgerTrackerLoader
           .loadEffectiveLedgerTrackers(sessionId);
       _throwIfReconciliationAborted(token, isStillCurrent);
-      final promptFacts = await _knowledgeFactRepo.getReviewableForSession(
-        sessionId,
-      );
+      final reviewMessageIds = plan.messageIds.toSet();
+      final promptFacts =
+          (await _knowledgeFactRepo.getReviewableForSession(sessionId))
+              .where((fact) => reviewMessageIds.contains(fact.sourceMessageId))
+              .toList();
       _throwIfReconciliationAborted(token, isStillCurrent);
       final promptBlock = ledgerBlocks
           .where(
@@ -278,6 +280,9 @@ class StudioLedgerService {
         opsApplied += await _knowledgeFactRepo.applyReconciliationCleanup(
           sessionId: sessionId,
           ops: cleanupOps,
+          allowedFactIds: offeredFacts.map((fact) => fact.id).toSet(),
+          endpointMessageId: plan.endMessage.id,
+          messageIds: plan.messageIds,
         );
         _throwIfReconciliationAborted(token, isStillCurrent);
         final updated = await _trackerRepo.getBySessionId(sessionId);

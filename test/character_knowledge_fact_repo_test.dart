@@ -142,6 +142,110 @@ void main() {
   });
 
   test(
+    'reconciliation cleanup cannot mutate facts outside its range',
+    () async {
+      await repo.insertTentative(fact(id: 'inside', messageId: 'message-1'));
+      await repo.activateAnchor(
+        sessionId: 'session-1',
+        messageId: 'message-1',
+        swipeId: 0,
+        agentSwipeId: 0,
+      );
+      await repo.insertTentative(fact(id: 'future', messageId: 'message-2'));
+      await repo.activateAnchor(
+        sessionId: 'session-1',
+        messageId: 'message-2',
+        swipeId: 0,
+        agentSwipeId: 0,
+      );
+
+      final applied = await repo.applyReconciliationCleanup(
+        sessionId: 'session-1',
+        ops: const [KnowledgeCleanupOp.retract('future')],
+        allowedFactIds: const {'inside'},
+        endpointMessageId: 'message-1',
+        messageIds: const ['message-1'],
+      );
+
+      expect(applied, 0);
+      expect(
+        (await repo.getById('future'))!.lifecycle,
+        CharacterKnowledgeFactLifecycle.active,
+      );
+    },
+  );
+
+  test('reconciliation cleanup journal restores renamed facts', () async {
+    await repo.insertTentative(
+      fact(
+        id: 'placeholder',
+      ).copyWith(knowerKey: 'entity:unknown', knowerName: 'Unknown'),
+    );
+    await repo.activateAnchor(
+      sessionId: 'session-1',
+      messageId: 'message-1',
+      swipeId: 0,
+      agentSwipeId: 0,
+    );
+    await repo.applyReconciliationCleanup(
+      sessionId: 'session-1',
+      ops: const [
+        KnowledgeCleanupOp.renameEntity(
+          fromKey: 'entity:unknown',
+          toKey: 'entity:lucy',
+          canonicalName: 'Lucy',
+        ),
+      ],
+      allowedFactIds: const {'placeholder'},
+      endpointMessageId: 'message-2',
+      messageIds: const ['message-1', 'message-2'],
+    );
+
+    expect((await repo.getById('placeholder'))!.knowerKey, 'entity:lucy');
+    await repo.rollbackReconciliationCleanupForMessages('session-1', const {
+      'message-2',
+    });
+
+    final restored = await repo.getById('placeholder');
+    expect(restored!.knowerKey, 'entity:unknown');
+    expect(restored.knowerName, 'Unknown');
+    expect(
+      await db.select(db.ledgerReconciliationCleanupJournals).get(),
+      isEmpty,
+    );
+  });
+
+  test('reconciliation cleanup journal restores retracted facts', () async {
+    await repo.insertTentative(fact());
+    await repo.activateAnchor(
+      sessionId: 'session-1',
+      messageId: 'message-1',
+      swipeId: 0,
+      agentSwipeId: 0,
+    );
+    await repo.applyReconciliationCleanup(
+      sessionId: 'session-1',
+      ops: const [KnowledgeCleanupOp.retract('fact-1')],
+      allowedFactIds: const {'fact-1'},
+      endpointMessageId: 'message-2',
+      messageIds: const ['message-1', 'message-2'],
+    );
+
+    expect(
+      (await repo.getById('fact-1'))!.lifecycle,
+      CharacterKnowledgeFactLifecycle.retracted,
+    );
+    await repo.rollbackReconciliationCleanupForMessages('session-1', const {
+      'message-2',
+    });
+
+    expect(
+      (await repo.getById('fact-1'))!.lifecycle,
+      CharacterKnowledgeFactLifecycle.active,
+    );
+  });
+
+  test(
     'replaying an anchor with no facts clears stale tentative output',
     () async {
       await repo.insertTentative(fact(id: 'stale'));

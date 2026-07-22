@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/llm/tokenizer.dart';
 import '../../core/models/chat_message.dart';
+import '../../core/models/tracker_snapshot.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/widgets/glaze_toast.dart';
@@ -103,8 +104,10 @@ class ChatMessageService {
         .toSet();
     if (validIndices.isEmpty) return session;
 
-    final messageIds = validIndices
-        .map((index) => session.messages[index].id)
+    final earliestDeletedIndex = validIndices.reduce((a, b) => a < b ? a : b);
+    final invalidatedMessageIds = session.messages
+        .skip(earliestDeletedIndex)
+        .map((message) => message.id)
         .where((id) => id.isNotEmpty)
         .toSet();
     final newMessages = <ChatMessage>[
@@ -115,31 +118,48 @@ class ChatMessageService {
     final snapshotRepo = _ref.read(trackerSnapshotRepoProvider);
     final trackerRepo = _ref.read(trackerRepoProvider);
     final memoryBookRepo = _ref.read(memoryBookRepoProvider);
+    final knowledgeRepo = _ref.read(characterKnowledgeFactRepoProvider);
+    final checkpointRepo = _ref.read(
+      ledgerReconciliationCheckpointRepoProvider,
+    );
+    final chatRepo = _ref.read(chatRepoProvider);
+    final updated = session.copyWith(
+      messages: newMessages,
+      updatedAt: currentTimestampSeconds(),
+    );
 
-    await Future.wait([
-      memoryBookRepo.deleteForMessages(session.id, messageIds),
-      _ref
-          .read(characterKnowledgeFactRepoProvider)
-          .retractForMessages(session.id, messageIds),
-      snapshotRepo.deleteForMessages(session.id, messageIds),
-      _ref
-          .read(ledgerReconciliationCheckpointRepoProvider)
-          .deleteForMessages(session.id, messageIds),
-    ]).catchError((Object e) {
-      debugPrint('[ChatMessageService] failed to clean deleted messages: $e');
-      return <void>[];
-    });
-
-    try {
-      final snapshot = await snapshotRepo.getLatestCommitted(session.id);
-      if (snapshot == null) {
-        await trackerRepo.clearForSession(session.id);
-      } else {
-        await trackerRepo.replaceForSession(session.id, snapshot.trackers);
+    // Select the rollback base by chat order. Snapshot timestamps have
+    // second-level precision and cannot reliably order adjacent turns.
+    TrackerSnapshot? fallbackSnapshot;
+    for (final message
+        in session.messages.take(earliestDeletedIndex).toList().reversed) {
+      final candidate = await snapshotRepo.getByAnchor(
+        sessionId: session.id,
+        messageId: message.id,
+        swipeId: message.swipeId,
+        agentSwipeId: message.agentSwipeId,
+      );
+      if (candidate?.committed == true) {
+        fallbackSnapshot = candidate;
+        break;
       }
-    } catch (e) {
-      debugPrint('[ChatMessageService] failed to roll back trackers: $e');
     }
+
+    await chatRepo.transaction(() async {
+      await knowledgeRepo.rollbackReconciliationCleanupForMessages(
+        session.id,
+        invalidatedMessageIds,
+      );
+      await knowledgeRepo.retractForMessages(session.id, invalidatedMessageIds);
+      await memoryBookRepo.deleteForMessages(session.id, invalidatedMessageIds);
+      await snapshotRepo.deleteForMessages(session.id, invalidatedMessageIds);
+      await checkpointRepo.deleteBySessionId(session.id);
+      await trackerRepo.replaceLedgerState(
+        session.id,
+        fallbackSnapshot?.trackers ?? const [],
+      );
+      await chatRepo.put(updated);
+    });
 
     // Current chunk indices no longer map to the same message ranges. Drop the
     // session index now; post-generation indexing will rebuild current chunks.
@@ -151,7 +171,8 @@ class ChatMessageService {
       debugPrint('[ChatMessageService] failed to clear message index: $e');
     }
 
-    return _persistAndWait(session, newMessages);
+    ChatSessionService.updateCache(updated);
+    return updated;
   }
 
   ChatSession toggleMessageHidden(ChatSession session, int index) {
@@ -840,29 +861,6 @@ class ChatMessageService {
         duration: 5000,
       );
     });
-    ChatSessionService.updateCache(updated);
-    return updated;
-  }
-
-  Future<ChatSession> _persistAndWait(
-    ChatSession session,
-    List<ChatMessage> newMessages,
-  ) async {
-    final updated = session.copyWith(
-      messages: newMessages,
-      updatedAt: currentTimestampSeconds(),
-    );
-    if (!_ref.mounted) return updated;
-    try {
-      await _ref.read(chatRepoProvider).put(updated);
-    } catch (e) {
-      debugPrint('[ChatMessageService] failed to persist session: $e');
-      GlazeToast.showWithoutContext(
-        'Failed to save changes: $e',
-        isError: true,
-        duration: 5000,
-      );
-    }
     ChatSessionService.updateCache(updated);
     return updated;
   }
