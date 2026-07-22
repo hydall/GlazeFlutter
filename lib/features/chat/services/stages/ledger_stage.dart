@@ -215,6 +215,13 @@ class LedgerStage {
             isStillCurrent: isCurrent,
             cancelToken: cancelToken,
           );
+          await _recordReconciliationDiag(
+            sessionId: sessionId,
+            targetMessage: targetMessage,
+            startMessageId: plan.startMessageId,
+            endMessageId: plan.endMessage.id,
+            result: reconciliationResult,
+          );
           _recordOperation(
             sessionId: sessionId,
             targetMessage: targetMessage,
@@ -414,6 +421,51 @@ class LedgerStage {
             'agentSwipe=${targetMessage.agentSwipeId}',
       );
     } catch (_) {}
+  }
+
+  Future<void> _recordReconciliationDiag({
+    required String sessionId,
+    required ChatMessage targetMessage,
+    required String startMessageId,
+    required String endMessageId,
+    required LedgerRunResult result,
+  }) async {
+    if (!ctx.ref.mounted) return;
+    final attempts = result.attempts.isEmpty
+        ? 'none'
+        : result.attempts
+              .map(
+                (attempt) =>
+                    '${attempt.attempt}:${attempt.status}'
+                    '/http=${attempt.statusCode}'
+                    '/ms=${attempt.elapsedMs}'
+                    '${attempt.error == null ? '' : '/error=${attempt.error}'}',
+              )
+              .join(',');
+    final value =
+        'trigger=${targetMessage.id} • range=$startMessageId..$endMessageId '
+        '• status=${result.status} • ops=${result.opsApplied} '
+        '• elapsedMs=${result.elapsedMs} • model=${result.model ?? 'unknown'} '
+        '• attempts=$attempts'
+        '${result.error == null ? '' : ' • error=${result.error}'}';
+    try {
+      await ctx.ref
+          .read(trackerRepoProvider)
+          .upsertValue(
+            sessionId,
+            '_ledger_diag:studio_ledger_reconciliation',
+            value,
+            scope: 'ledger_diagnostic',
+            provenance:
+                'message=${targetMessage.id}|swipe=${targetMessage.swipeId}|'
+                'agentSwipe=${targetMessage.agentSwipeId}|range=$startMessageId..$endMessageId',
+          );
+    } catch (e) {
+      debugPrint(
+        '[StudioLedger] reconciliation diagnostic write failed '
+        'session=$sessionId: $e',
+      );
+    }
   }
 
   void _recordOperation({
