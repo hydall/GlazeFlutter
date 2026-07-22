@@ -25,6 +25,7 @@ import 'controllers/chat_message_ops_controller.dart';
 import 'controllers/chat_swipe_controller.dart';
 import 'controllers/chat_session_controller.dart';
 import 'controllers/chat_draft_controller.dart';
+import 'services/continuation_message_merger.dart';
 import 'services/generation_pipeline.dart';
 import 'utils/message_preview.dart';
 import '../extensions/services/extension_post_gen_service.dart';
@@ -567,16 +568,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
     if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
 
-    final generatedMsg = result.messages.isNotEmpty
-        ? result.messages.last
-        : null;
-    if (generatedMsg != null && generatedMsg.role == 'assistant') {
-      final appendedContent = '${lastMsg.content}${generatedMsg.content}';
-      final appendedMsg = generatedMsg.copyWith(content: appendedContent);
-      final updatedMessages = [
-        ...result.messages.sublist(0, result.messages.length - 1),
-        appendedMsg,
-      ];
+    var completedResult = result;
+    final updatedMessages = mergeContinuationMessages(result.messages, lastMsg);
+    if (updatedMessages != null) {
       final finalSession = result.session!.copyWith(
         messages: updatedMessages,
         updatedAt: currentTimestampSeconds(),
@@ -585,26 +579,27 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
       ChatSessionService.updateCache(finalSession);
       _invalidateHistory();
-      state = AsyncData(
-        current.copyWith(
-          session: finalSession,
-          isGenerating: false,
-          isGeneratingImage: false,
-          isPostGenRunning: false,
-        ),
+      completedResult = result.copyWith(
+        session: finalSession,
+        isGenerating: false,
+        isGeneratingImage: false,
+        isPostGenRunning: false,
       );
+      state = AsyncData(completedResult);
     } else {
       state = AsyncData(result);
     }
 
-    final preview = buildMessagePreview(result.messages);
-    final finalSessionId = result.session?.id;
+    final preview = buildMessagePreview(completedResult.messages);
+    final finalSessionId = completedResult.session?.id;
     await notifService.onGenerationCompleted(
       character?.name ?? 'Unknown',
       arg,
       messagePreview: preview,
       sessionId: finalSessionId,
-      msgId: result.messages.isNotEmpty ? result.messages.last.id : null,
+      msgId: completedResult.messages.isNotEmpty
+          ? completedResult.messages.last.id
+          : null,
       avatarPath: character?.avatarPath,
     );
 

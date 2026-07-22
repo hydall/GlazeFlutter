@@ -63,7 +63,7 @@ void main() {
     glazeSdkJs = _asset('glaze_sdk.js');
     indexHtml = _asset('index.html');
     headlessHtml = _asset('headless.html');
-    stylessCss = _asset('styles.css');
+    stylessCss = _asset('styles.css').replaceAll('\r\n', '\n');
   });
 
   group('window.glaze SDK', () {
@@ -712,6 +712,17 @@ void main() {
       expect(idx, isNot(-1));
       final body = _extractBlockBody(bridgeControllerJs, idx);
       expect(body, contains('this._syncGenerationActivity()'));
+    });
+
+    test('upward scroll restores a hidden header during generation', () {
+      final marker = 'if (this.isGenerating) {';
+      final idx = bridgeControllerJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeControllerJs, idx);
+      expect(body, contains('st < headerLastTop - 3'));
+      expect(body, contains('this._headerHidden = false'));
+      expect(body, contains("this._sendToFlutter('onHeaderScroll', [false])"));
+      expect(body, isNot(contains('[true]')));
     });
 
     test('post-gen activity keeps the generation timer active separately', () {
