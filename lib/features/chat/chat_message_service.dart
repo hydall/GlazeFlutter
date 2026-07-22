@@ -6,6 +6,7 @@ import '../../core/models/chat_message.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import '../extensions/providers/info_blocks_provider.dart';
 import 'chat_session_service.dart';
 
 class ChatMessageService {
@@ -353,6 +354,295 @@ class ChatMessageService {
     final newMessages = List<ChatMessage>.from(session.messages);
     newMessages[messageIndex] = updated;
     return _persist(session, newMessages);
+  }
+
+  Future<ChatSession> deleteActiveSwipe(
+    ChatSession session,
+    int messageIndex,
+  ) async {
+    if (messageIndex < 0 || messageIndex >= session.messages.length) {
+      return session;
+    }
+    final original = session.messages[messageIndex];
+    if (removeActiveSwipe(original) == null) return session;
+    return _deleteSwipeVariation(
+      session: session,
+      messageId: original.id,
+      removeAgentSwipe: false,
+    );
+  }
+
+  Future<ChatSession> deleteActiveAgentSwipe(
+    ChatSession session,
+    int messageIndex,
+  ) async {
+    if (messageIndex < 0 || messageIndex >= session.messages.length) {
+      return session;
+    }
+    final original = session.messages[messageIndex];
+    if (removeActiveAgentSwipe(original) == null) return session;
+    return _deleteSwipeVariation(
+      session: session,
+      messageId: original.id,
+      removeAgentSwipe: true,
+    );
+  }
+
+  Future<ChatSession> _deleteSwipeVariation({
+    required ChatSession session,
+    required String messageId,
+    required bool removeAgentSwipe,
+  }) async {
+    final chatRepo = _ref.read(chatRepoProvider);
+    final snapshots = _ref.read(trackerSnapshotRepoProvider);
+    final facts = _ref.read(characterKnowledgeFactRepoProvider);
+    final memory = _ref.read(memoryBookRepoProvider);
+    final blocks = _ref.read(infoBlocksRepoProvider);
+    late ChatSession updatedSession;
+    late ChatMessage updatedMessage;
+
+    await chatRepo.transaction(() async {
+      final latest = await chatRepo.getById(session.id);
+      if (latest == null) throw StateError('Chat session no longer exists.');
+      final messageIndex = latest.messages.indexWhere(
+        (message) => message.id == messageId,
+      );
+      if (messageIndex < 0) throw StateError('Chat message no longer exists.');
+      final original = latest.messages[messageIndex];
+      final removedSwipeId = original.swipeId;
+      final removedAgentSwipeId = removeAgentSwipe
+          ? original.agentSwipeId
+          : null;
+      final replacement = removeAgentSwipe
+          ? removeActiveAgentSwipe(original)
+          : removeActiveSwipe(original);
+      if (replacement == null) {
+        throw StateError('The last remaining swipe cannot be deleted.');
+      }
+      updatedMessage = replacement;
+      updatedSession = latest.copyWith(
+        messages: List<ChatMessage>.from(latest.messages)
+          ..[messageIndex] = replacement,
+        updatedAt: currentTimestampSeconds(),
+      );
+
+      if (!removeAgentSwipe) {
+        await snapshots.deleteSwipe(
+          sessionId: session.id,
+          messageId: messageId,
+          swipeId: removedSwipeId,
+        );
+        await snapshots.shiftSwipeIdsAfterRemoval(
+          sessionId: session.id,
+          messageId: messageId,
+          removedSwipeId: removedSwipeId,
+        );
+        await facts.deleteSwipeAndShift(
+          sessionId: session.id,
+          messageId: messageId,
+          removedSwipeId: removedSwipeId,
+        );
+        await memory.deleteSwipeAndShift(
+          sessionId: session.id,
+          messageId: messageId,
+          removedSwipeId: removedSwipeId,
+        );
+        await blocks.deleteSwipeAndShift(
+          sessionId: session.id,
+          messageId: messageId,
+          removedSwipeId: removedSwipeId,
+        );
+      } else {
+        await snapshots.deleteAnchor(
+          sessionId: session.id,
+          messageId: messageId,
+          swipeId: removedSwipeId,
+          agentSwipeId: removedAgentSwipeId!,
+        );
+        await snapshots.shiftAgentSwipeIdsAfterRemoval(
+          sessionId: session.id,
+          messageId: messageId,
+          swipeId: removedSwipeId,
+          removedAgentSwipeId: removedAgentSwipeId,
+        );
+        await facts.deleteAgentSwipeAndShift(
+          sessionId: session.id,
+          messageId: messageId,
+          swipeId: removedSwipeId,
+          removedAgentSwipeId: removedAgentSwipeId,
+        );
+        await memory.deleteAgentSwipeAndShift(
+          sessionId: session.id,
+          messageId: messageId,
+          swipeId: removedSwipeId,
+          removedAgentSwipeId: removedAgentSwipeId,
+        );
+        await blocks.deleteAgentSwipeAndShift(
+          sessionId: session.id,
+          messageId: messageId,
+          swipeId: removedSwipeId,
+          removedAgentSwipeId: removedAgentSwipeId,
+        );
+      }
+      await _ref
+          .read(ledgerReconciliationCheckpointRepoProvider)
+          .deleteForMessages(session.id, {messageId});
+      await _ref
+          .read(embeddingRepoProvider)
+          .deleteBySource('chat_message', session.id);
+      await chatRepo.put(updatedSession);
+    });
+
+    final activeSnapshot = await snapshots.getByAnchor(
+      sessionId: session.id,
+      messageId: messageId,
+      swipeId: updatedMessage.swipeId,
+      agentSwipeId: updatedMessage.agentSwipeId,
+    );
+    final fallback =
+        activeSnapshot ?? await snapshots.getLatestCommitted(session.id);
+    if (fallback == null) {
+      await _ref.read(trackerRepoProvider).clearForSession(session.id);
+    } else {
+      await _ref
+          .read(trackerRepoProvider)
+          .replaceForSession(session.id, fallback.trackers);
+    }
+
+    ChatSessionService.updateCache(updatedSession);
+    _ref.invalidate(memoryBookProvider(session.id));
+    await _ref.read(infoBlocksProvider(session.id).notifier).refresh();
+    return updatedSession;
+  }
+
+  @visibleForTesting
+  static ChatMessage? removeActiveSwipe(ChatMessage message) {
+    if (message.swipes.length <= 1 ||
+        message.swipeId < 0 ||
+        message.swipeId >= message.swipes.length) {
+      return null;
+    }
+    final removed = message.swipeId;
+    final swipes = List<String>.from(message.swipes);
+    final meta = List<Map<String, dynamic>>.generate(
+      swipes.length,
+      (index) => index < message.swipesMeta.length
+          ? Map<String, dynamic>.from(message.swipesMeta[index])
+          : <String, dynamic>{},
+    );
+    meta[removed] = {
+      ...meta[removed],
+      'agentSwipes': message.agentSwipes.map((e) => e.toJson()).toList(),
+      'agentSwipeId': message.agentSwipeId,
+    };
+    swipes.removeAt(removed);
+    meta.removeAt(removed);
+    final nextSwipeId = removed.clamp(0, swipes.length - 1);
+    final nextMeta = meta[nextSwipeId];
+    final stored = _agentSwipesFromMeta(nextMeta);
+    final agentSwipes = stored == null || stored.isEmpty
+        ? [
+            AgentSwipe(
+              content: swipes[nextSwipeId],
+              reasoning: nextMeta['reasoning'] as String?,
+              genTime: nextMeta['genTime'] as String?,
+              tokens: nextMeta['tokens'] as int?,
+              studioOutputs: _studioOutputsFromMeta(nextMeta),
+            ),
+          ]
+        : stored;
+    final agentSwipeId = ((nextMeta['agentSwipeId'] as int?) ?? 0).clamp(
+      0,
+      agentSwipes.length - 1,
+    );
+    final active = agentSwipes[agentSwipeId];
+    meta[nextSwipeId] = {
+      ...nextMeta,
+      'agentSwipes': agentSwipes.map((e) => e.toJson()).toList(),
+      'agentSwipeId': agentSwipeId,
+    };
+    return message.copyWith(
+      swipes: swipes,
+      swipeId: nextSwipeId,
+      swipesMeta: meta,
+      agentSwipes: agentSwipes,
+      agentSwipeId: agentSwipeId,
+      content: active.content,
+      reasoning: active.reasoning,
+      isAllReasoning:
+          active.content.isEmpty && (active.reasoning?.isNotEmpty ?? false),
+      genTime: active.genTime,
+      tokens: active.tokens,
+      studioOutputs: active.studioOutputs,
+      isError: nextMeta['isError'] == true,
+      triggeredLorebooks: _triggeredFromMeta(nextMeta, 'triggeredLorebooks'),
+      triggeredMemories: _triggeredFromMeta(nextMeta, 'triggeredMemories'),
+    );
+  }
+
+  @visibleForTesting
+  static ChatMessage? removeActiveAgentSwipe(ChatMessage message) {
+    if (message.agentSwipes.length <= 1 ||
+        message.agentSwipeId < 0 ||
+        message.agentSwipeId >= message.agentSwipes.length) {
+      return null;
+    }
+    final removed = message.agentSwipeId;
+    final removedSwipe = message.agentSwipes[removed];
+    final swipes = List<AgentSwipe>.from(message.agentSwipes)
+      ..removeAt(removed);
+    final fallbackParent = swipes.indexWhere((swipe) => swipe.kind == 'final');
+    for (var i = 0; i < swipes.length; i++) {
+      final swipe = swipes[i];
+      var parent = swipe.parentSwipeId;
+      if (parent != null) {
+        if (parent > removed) {
+          parent--;
+        } else if (parent == removed) {
+          parent = fallbackParent >= 0 ? fallbackParent : null;
+        }
+      }
+      swipes[i] = AgentSwipe(
+        content: swipe.content,
+        kind: swipe.kind,
+        reasoning: swipe.reasoning,
+        genTime: swipe.genTime,
+        tokens: swipe.tokens,
+        studioOutputs: swipe.studioOutputs,
+        parentSwipeId: parent,
+      );
+    }
+    final nextAgentSwipeId = removed.clamp(0, swipes.length - 1);
+    final active = swipes[nextAgentSwipeId];
+    final greenSwipes = List<String>.from(message.swipes);
+    if (removedSwipe.kind == 'final' &&
+        message.swipeId >= 0 &&
+        message.swipeId < greenSwipes.length) {
+      final replacement = swipes.firstWhere(
+        (swipe) => swipe.kind == 'final',
+        orElse: () => active,
+      );
+      greenSwipes[message.swipeId] = replacement.content;
+    }
+    final meta = _syncAgentSwipesToMeta(
+      message.swipesMeta,
+      message.swipeId,
+      swipes,
+      nextAgentSwipeId,
+    );
+    return message.copyWith(
+      content: active.content,
+      reasoning: active.reasoning,
+      isAllReasoning:
+          active.content.isEmpty && (active.reasoning?.isNotEmpty ?? false),
+      genTime: active.genTime,
+      tokens: active.tokens,
+      studioOutputs: active.studioOutputs,
+      swipes: greenSwipes,
+      swipesMeta: meta,
+      agentSwipes: swipes,
+      agentSwipeId: nextAgentSwipeId,
+    );
   }
 
   /// Sync agentSwipes + agentSwipeId into swipesMeta[swipeId].

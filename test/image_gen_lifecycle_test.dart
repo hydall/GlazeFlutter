@@ -92,4 +92,81 @@ void main() {
       expect(liveState.isGenerating, isTrue);
     });
   });
+
+  group('Imagen green swipes', () {
+    test('regeneration appends a selected swipe and preserves old image', () {
+      final message = ChatMessage(
+        id: 'assistant',
+        role: 'assistant',
+        content: '[IMG:RESULT:/old.png|{"prompt":"scene"}]',
+        swipes: const ['[IMG:RESULT:/old.png|{"prompt":"scene"}]'],
+        swipesMeta: [
+          <String, dynamic>{
+            'agentSwipes': [
+              const AgentSwipe(
+                content: '[IMG:RESULT:/old.png|{"prompt":"scene"}]',
+              ).toJson(),
+            ],
+            'agentSwipeId': 0,
+          },
+        ],
+        agentSwipes: const [
+          AgentSwipe(content: '[IMG:RESULT:/old.png|{"prompt":"scene"}]'),
+        ],
+      );
+
+      final result = ImageGenProcessor.appendImageRegenerationSwipe(
+        message,
+        '[IMG:GEN:{"prompt":"scene"}]',
+      );
+
+      expect(result.swipes, [
+        '[IMG:RESULT:/old.png|{"prompt":"scene"}]',
+        '[IMG:GEN:{"prompt":"scene"}]',
+      ]);
+      expect(result.swipeId, 1);
+      expect(result.swipesMeta, hasLength(2));
+      expect(result.agentSwipes.single.content, contains('[IMG:GEN:'));
+      expect(
+        AgentSwipe.fromJson(
+          Map<String, dynamic>.from(
+            (result.swipesMeta[1]['agentSwipes'] as List).single as Map,
+          ),
+        ).content,
+        contains('[IMG:GEN:'),
+      );
+    });
+
+    test('image completion keeps green, blue and metadata content aligned', () {
+      final candidate = ChatMessage(
+        id: 'assistant',
+        role: 'assistant',
+        content: '[IMG:GEN]',
+        swipes: const ['old', '[IMG:GEN]'],
+        swipeId: 1,
+        swipesMeta: [
+          <String, dynamic>{},
+          <String, dynamic>{
+            'agentSwipes': [const AgentSwipe(content: '[IMG:GEN]').toJson()],
+          },
+        ],
+        agentSwipes: const [AgentSwipe(content: '[IMG:GEN]')],
+      );
+
+      final result = ImageGenProcessor.replaceActiveImageContent(
+        candidate,
+        '[IMG:RESULT:/new.png]',
+      );
+
+      expect(result.content, '[IMG:RESULT:/new.png]');
+      expect(result.swipes, ['old', '[IMG:RESULT:/new.png]']);
+      expect(result.agentSwipes.single.content, '[IMG:RESULT:/new.png]');
+      final stored = AgentSwipe.fromJson(
+        Map<String, dynamic>.from(
+          (result.swipesMeta[1]['agentSwipes'] as List).single as Map,
+        ),
+      );
+      expect(stored.content, '[IMG:RESULT:/new.png]');
+    });
+  });
 }

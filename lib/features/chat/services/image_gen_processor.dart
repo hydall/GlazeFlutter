@@ -29,7 +29,10 @@ class ImageGenProcessor {
     required this._onStateUpdate,
   });
 
-  Future<void> process(ChatState currentState) async {
+  Future<void> process(
+    ChatState currentState, {
+    String? targetMessageId,
+  }) async {
     final session = currentState.session;
     if (session == null) return;
 
@@ -43,14 +46,18 @@ class ImageGenProcessor {
     }
     final imgGenSettings = await _ref.read(imageGenSettingsProvider.future);
 
-    final lastIdx = session.messages.length - 1;
-    if (lastIdx < 0) return;
-    final lastMsg = session.messages[lastIdx];
-    if (lastMsg.role != 'assistant') return;
+    final targetIdx = targetMessageId == null
+        ? session.messages.length - 1
+        : session.messages.indexWhere(
+            (message) => message.id == targetMessageId,
+          );
+    if (targetIdx < 0) return;
+    final targetMsg = session.messages[targetIdx];
+    if (targetMsg.role != 'assistant') return;
 
     final notifier = _ref.read(imageGenSettingsProvider.notifier);
     final service = await notifier.getServiceAsync();
-    if (!ImageTagMarkup.hasImageGenTags(lastMsg.content)) return;
+    if (!ImageTagMarkup.hasImageGenTags(targetMsg.content)) return;
 
     final apiConfigSync = _ref.read(activeApiConfigProvider);
     final ApiConfig apiConfig;
@@ -94,7 +101,7 @@ class ImageGenProcessor {
 
     try {
       final updatedContent = await service.processMessageImages(
-        text: lastMsg.content,
+        text: targetMsg.content,
         settings: imgGenSettings,
         llmEndpoint: apiConfig.endpoint,
         llmApiKey: apiConfig.apiKey,
@@ -108,10 +115,10 @@ class ImageGenProcessor {
           // Ownership checks at the caller prevent callbacks from an old
           // operation from reaching a replacement generation.
           if (!_ownsOperation) return;
-          latestSession = _replaceLastMessage(
+          latestSession = _replaceMessage(
             session,
-            lastIdx,
-            lastMsg,
+            targetIdx,
+            targetMsg,
             updatedText,
           );
           _onStateUpdate(
@@ -135,28 +142,30 @@ class ImageGenProcessor {
 
       if (_cancelToken?.isCancelled == true) {
         var cancelContent = updatedContent;
-        int idx = 0;
         while (ImageTagMarkup.hasImageGenTags(cancelContent)) {
-          cancelContent = ImageTagMarkup.replaceTagWithError(
+          final replaced = ImageTagMarkup.replaceTagWithError(
             cancelContent,
-            idx,
+            0,
             'Cancelled by user',
           );
-          idx++;
+          if (replaced == cancelContent) break;
+          cancelContent = replaced;
         }
-        latestSession = _replaceLastMessage(
+        latestSession = _replaceMessage(
           session,
-          lastIdx,
-          lastMsg,
+          targetIdx,
+          targetMsg,
           cancelContent,
         );
+        await _ref.read(chatRepoProvider).put(latestSession);
+        ChatSessionService.updateCache(latestSession);
         return;
       }
 
-      latestSession = _replaceLastMessage(
+      latestSession = _replaceMessage(
         session,
-        lastIdx,
-        lastMsg,
+        targetIdx,
+        targetMsg,
         updatedContent,
       );
       await _ref.read(chatRepoProvider).put(latestSession);
@@ -197,27 +206,126 @@ class ImageGenProcessor {
     );
   }
 
-  ChatSession _replaceLastMessage(
+  ChatSession _replaceMessage(
     ChatSession session,
-    int lastIdx,
-    ChatMessage lastMsg,
+    int messageIndex,
+    ChatMessage message,
     String content,
   ) {
     final newMessages = List<ChatMessage>.from(session.messages);
-    final swipeIdx = lastMsg.swipeId;
-    final updatedSwipes =
-        lastMsg.swipes.isNotEmpty &&
-            swipeIdx >= 0 &&
-            swipeIdx < lastMsg.swipes.length
-        ? (List<String>.from(lastMsg.swipes)..[swipeIdx] = content)
-        : lastMsg.swipes;
-    newMessages[lastIdx] = lastMsg.copyWith(
-      content: content,
-      swipes: updatedSwipes,
-    );
+    newMessages[messageIndex] = replaceActiveImageContent(message, content);
     return session.copyWith(
       messages: newMessages,
       updatedAt: currentTimestampSeconds(),
+    );
+  }
+
+  static ChatMessage appendImageRegenerationSwipe(
+    ChatMessage message,
+    String pendingContent,
+  ) {
+    final swipes = message.swipes.isEmpty
+        ? <String>[message.content]
+        : List<String>.from(message.swipes);
+    final activeSwipeId = message.swipeId.clamp(0, swipes.length - 1);
+    final meta = List<Map<String, dynamic>>.generate(
+      swipes.length,
+      (index) => index < message.swipesMeta.length
+          ? Map<String, dynamic>.from(message.swipesMeta[index])
+          : <String, dynamic>{},
+    );
+    final activeAgentSwipes = message.agentSwipes.isEmpty
+        ? <AgentSwipe>[
+            AgentSwipe(
+              content: message.content,
+              reasoning: message.reasoning,
+              genTime: message.genTime,
+              tokens: message.tokens,
+              studioOutputs: message.studioOutputs,
+            ),
+          ]
+        : List<AgentSwipe>.from(message.agentSwipes);
+    final activeAgentSwipeId = message.agentSwipeId.clamp(
+      0,
+      activeAgentSwipes.length - 1,
+    );
+    meta[activeSwipeId] = {
+      ...meta[activeSwipeId],
+      'agentSwipes': activeAgentSwipes.map((swipe) => swipe.toJson()).toList(),
+      'agentSwipeId': activeAgentSwipeId,
+    };
+
+    final candidateAgentSwipes = List<AgentSwipe>.from(activeAgentSwipes);
+    candidateAgentSwipes[activeAgentSwipeId] =
+        candidateAgentSwipes[activeAgentSwipeId].copyWith(
+          content: pendingContent,
+        );
+    final candidateMeta = Map<String, dynamic>.from(meta[activeSwipeId])
+      ..remove('isError')
+      ..['agentSwipes'] = candidateAgentSwipes
+          .map((swipe) => swipe.toJson())
+          .toList()
+      ..['agentSwipeId'] = activeAgentSwipeId;
+    swipes.add(pendingContent);
+    meta.add(candidateMeta);
+
+    return message.copyWith(
+      content: pendingContent,
+      swipes: swipes,
+      swipeId: swipes.length - 1,
+      swipesMeta: meta,
+      agentSwipes: candidateAgentSwipes,
+      agentSwipeId: activeAgentSwipeId,
+      isError: false,
+    );
+  }
+
+  static ChatMessage replaceActiveImageContent(
+    ChatMessage message,
+    String content,
+  ) {
+    final swipes = List<String>.from(message.swipes);
+    if (message.swipeId >= 0 && message.swipeId < swipes.length) {
+      swipes[message.swipeId] = content;
+    }
+
+    final agentSwipes = message.agentSwipes.isEmpty && swipes.isNotEmpty
+        ? <AgentSwipe>[
+            AgentSwipe(
+              content: content,
+              reasoning: message.reasoning,
+              genTime: message.genTime,
+              tokens: message.tokens,
+              studioOutputs: message.studioOutputs,
+            ),
+          ]
+        : List<AgentSwipe>.from(message.agentSwipes);
+    if (message.agentSwipeId >= 0 &&
+        message.agentSwipeId < agentSwipes.length) {
+      agentSwipes[message.agentSwipeId] = agentSwipes[message.agentSwipeId]
+          .copyWith(content: content);
+    }
+
+    final meta = List<Map<String, dynamic>>.generate(
+      swipes.length,
+      (index) => index < message.swipesMeta.length
+          ? Map<String, dynamic>.from(message.swipesMeta[index])
+          : <String, dynamic>{},
+    );
+    if (message.swipeId >= 0 && message.swipeId < meta.length) {
+      meta[message.swipeId] = {
+        ...meta[message.swipeId],
+        if (agentSwipes.isNotEmpty)
+          'agentSwipes': agentSwipes.map((swipe) => swipe.toJson()).toList(),
+        if (agentSwipes.isNotEmpty) 'agentSwipeId': message.agentSwipeId,
+      };
+    }
+
+    return message.copyWith(
+      content: content,
+      swipes: swipes,
+      swipesMeta: meta,
+      agentSwipes: agentSwipes,
     );
   }
 

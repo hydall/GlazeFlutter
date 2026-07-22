@@ -267,6 +267,12 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     bool fromSwipe = false,
   }) => _swipeCtrl.changeAgentSwipe(messageIndex, dir, fromSwipe: fromSwipe);
 
+  Future<void> deleteActiveSwipe(int messageIndex) =>
+      _swipeCtrl.deleteActiveSwipe(messageIndex);
+
+  Future<void> deleteActiveAgentSwipe(int messageIndex) =>
+      _swipeCtrl.deleteActiveAgentSwipe(messageIndex);
+
   Future<void> setGreeting(int messageIndex, int direction) =>
       _swipeCtrl.setGreeting(messageIndex, direction);
 
@@ -291,7 +297,10 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     if (!ref.mounted) return;
     if (ref.read(editingMessageIdProvider(arg)) != null) return;
     final current = state.value;
-    if (current == null || current.isGenerating || current.isPostGenRunning) {
+    if (current == null ||
+        current.isGenerating ||
+        current.isGeneratingImage ||
+        current.isPostGenRunning) {
       return;
     }
     if (_isMemoryDraftActive(current)) return;
@@ -425,6 +434,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     if (current == null ||
         current.session == null ||
         current.isGenerating ||
+        current.isGeneratingImage ||
         current.isPostGenRunning) {
       return;
     }
@@ -532,6 +542,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     if (current == null ||
         current.session == null ||
         current.isGenerating ||
+        current.isGeneratingImage ||
         current.isPostGenRunning) {
       return;
     }
