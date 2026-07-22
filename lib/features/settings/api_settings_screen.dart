@@ -588,6 +588,16 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   min: 0,
                   max: 2,
                   divisions: 200,
+                  editableValue: true,
+                  included: _showsOmitSamplingControls
+                      ? !_omitTemperature
+                      : null,
+                  onIncludedChanged: _showsOmitSamplingControls
+                      ? (v) {
+                          setState(() => _omitTemperature = !v);
+                          _scheduleSave();
+                        }
+                      : null,
                   onChanged: (v) {
                     setState(() => _temperature = v);
                     _scheduleSave();
@@ -600,6 +610,14 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   min: 0,
                   max: 1,
                   divisions: 100,
+                  editableValue: true,
+                  included: _showsOmitSamplingControls ? !_omitTopP : null,
+                  onIncludedChanged: _showsOmitSamplingControls
+                      ? (v) {
+                          setState(() => _omitTopP = !v);
+                          _scheduleSave();
+                        }
+                      : null,
                   onChanged: (v) {
                     setState(() => _topP = v);
                     _scheduleSave();
@@ -612,6 +630,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   min: 0,
                   max: 200,
                   divisions: 200,
+                  editableValue: true,
+                  decimalPlaces: 0,
                   onChanged: (v) {
                     setState(() => _topK = v.round());
                     _scheduleSave();
@@ -624,6 +644,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   min: -2,
                   max: 2,
                   divisions: 80,
+                  editableValue: true,
                   onChanged: (v) {
                     setState(() => _frequencyPenalty = v);
                     _scheduleSave();
@@ -636,6 +657,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   min: -2,
                   max: 2,
                   divisions: 80,
+                  editableValue: true,
                   onChanged: (v) {
                     setState(() => _presencePenalty = v);
                     _scheduleSave();
@@ -670,6 +692,15 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 MenuSwitchItem(
                   label: 'label_reasoning'.tr(),
                   description: 'desc_reasoning'.tr(),
+                  included: _showsOmitReasoningControls
+                      ? !_omitReasoning
+                      : null,
+                  onIncludedChanged: _showsOmitReasoningControls
+                      ? (v) {
+                          setState(() => _omitReasoning = !v);
+                          _scheduleSave();
+                        }
+                      : null,
                   value: _requestReasoning,
                   onChanged: (v) {
                     setState(() => _requestReasoning = v);
@@ -680,6 +711,15 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 MenuSelectorItem(
                   label: 'label_reasoning_effort'.tr(),
                   currentValue: _reasoningEffortLabel(_reasoningEffort),
+                  included: _showsOmitReasoningControls
+                      ? !_omitReasoningEffort
+                      : null,
+                  onIncludedChanged: _showsOmitReasoningControls
+                      ? (v) {
+                          setState(() => _omitReasoningEffort = !v);
+                          _scheduleSave();
+                        }
+                      : null,
                   onTap: _openReasoningEffortSelector,
                 ),
               if (_supportsPromptCache)
@@ -701,53 +741,6 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               ),
             ],
           ),
-          if (_showsOmitSamplingControls || _showsOmitReasoningControls)
-            MenuGroup(
-              compact: true,
-              header: 'section_omit_params'.tr(),
-              items: [
-                if (_showsOmitSamplingControls)
-                  MenuSwitchItem(
-                    label: 'label_omit_temperature'.tr(),
-                    description: 'desc_omit_temperature'.tr(),
-                    value: _omitTemperature,
-                    onChanged: (v) {
-                      setState(() => _omitTemperature = v);
-                      _scheduleSave();
-                    },
-                  ),
-                if (_showsOmitSamplingControls)
-                  MenuSwitchItem(
-                    label: 'label_omit_top_p'.tr(),
-                    description: 'desc_omit_top_p'.tr(),
-                    value: _omitTopP,
-                    onChanged: (v) {
-                      setState(() => _omitTopP = v);
-                      _scheduleSave();
-                    },
-                  ),
-                if (_showsOmitReasoningControls)
-                  MenuSwitchItem(
-                    label: 'label_omit_reasoning'.tr(),
-                    description: 'desc_omit_reasoning'.tr(),
-                    value: _omitReasoning,
-                    onChanged: (v) {
-                      setState(() => _omitReasoning = v);
-                      _scheduleSave();
-                    },
-                  ),
-                if (_showsOmitReasoningControls)
-                  MenuSwitchItem(
-                    label: 'label_omit_reasoning_effort'.tr(),
-                    description: 'desc_omit_reasoning_effort'.tr(),
-                    value: _omitReasoningEffort,
-                    onChanged: (v) {
-                      setState(() => _omitReasoningEffort = v);
-                      _scheduleSave();
-                    },
-                  ),
-              ],
-            ),
           ExtraRequestParametersEditor(
             key: ValueKey('api-extra-parameters-$_loadedPresetId'),
             parameters: _extraRequestParameters,
