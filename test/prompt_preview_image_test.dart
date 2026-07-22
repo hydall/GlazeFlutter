@@ -64,4 +64,36 @@ void main() {
       },
     ]);
   });
+
+  test('preview request includes only the nearest assistant reasoning', () {
+    final messages = buildPreviewApiMessages(const [
+      PromptMessage(
+        role: 'assistant',
+        content: 'first',
+        reasoningContent: 'old reasoning',
+      ),
+      PromptMessage(role: 'user', content: 'next'),
+      PromptMessage(
+        role: 'assistant',
+        content: 'second',
+        reasoningContent: '  latest reasoning  ',
+      ),
+    ], includeLastReasoning: true);
+
+    expect(messages[0], isNot(contains('reasoning_content')));
+    expect(messages[2]['reasoning_content'], 'latest reasoning');
+  });
+
+  test('preview request does not fall back to stale reasoning', () {
+    final messages = buildPreviewApiMessages(const [
+      PromptMessage(
+        role: 'assistant',
+        content: 'first',
+        reasoningContent: 'old reasoning',
+      ),
+      PromptMessage(role: 'assistant', content: 'second'),
+    ], includeLastReasoning: true);
+
+    expect(messages, everyElement(isNot(contains('reasoning_content'))));
+  });
 }

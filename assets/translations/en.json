@@ -139,6 +139,8 @@
   "reasoning_effort_high": "High",
   "reasoning_effort_max": "Maximum",
   "label_reasoning": "Request Native Reasoning",
+  "label_include_last_reasoning": "Send Last Reasoning Block",
+  "desc_include_last_reasoning": "Append the latest reasoning_content block from chat history",
   "label_prompt_cache_ttl": "Anthropic Prompt Cache",
   "desc_prompt_cache_ttl": "Inject cache_control: ephemeral for Anthropic or custom OpenAI-compatible backends. 1 hour keeps cache alive across long pauses (expensive write, cheap read).",
   "prompt_cache_ttl_off": "Off",

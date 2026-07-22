@@ -62,6 +62,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   int _topK = 0;
   bool _stream = true;
   bool _requestReasoning = false;
+  bool _includeLastReasoning = false;
   String _reasoningEffort = 'medium';
   bool _omitTemperature = false;
   bool _omitTopP = false;
@@ -204,6 +205,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       _presencePenalty = config.presencePenalty;
       _stream = config.stream;
       _requestReasoning = config.requestReasoning;
+      _includeLastReasoning = config.includeLastReasoning;
       _reasoningEffort = config.reasoningEffort;
       _omitTemperature = config.omitTemperature;
       _omitTopP = config.omitTopP;
@@ -248,6 +250,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             presencePenalty: _presencePenalty,
             stream: _stream,
             requestReasoning: _requestReasoning,
+            includeLastReasoning: _includeLastReasoning,
             reasoningEffort: _reasoningEffort,
             omitTemperature: _omitTemperature,
             omitTopP: _omitTopP,
@@ -308,7 +311,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       case LlmProtocol.openai:
       case LlmProtocol.openrouter:
       default:
-        return const ['auto', 'low', 'medium', 'high'];
+        return const ['auto', 'low', 'medium', 'high', 'max'];
     }
   }
 
@@ -316,10 +319,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     final allowed =
         protocol == LlmProtocol.anthropic || protocol == LlmProtocol.gemini
         ? const ['auto', 'min', 'low', 'medium', 'high', 'max']
-        : const ['auto', 'low', 'medium', 'high'];
+        : const ['auto', 'low', 'medium', 'high', 'max'];
     if (allowed.contains(effort)) return effort;
     if (effort == 'min') return 'low';
-    if (effort == 'max') return 'high';
     return 'medium';
   }
 
@@ -721,6 +723,16 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                         }
                       : null,
                   onTap: _openReasoningEffortSelector,
+                ),
+              if (_supportsReasoning)
+                MenuSwitchItem(
+                  label: 'label_include_last_reasoning'.tr(),
+                  description: 'desc_include_last_reasoning'.tr(),
+                  value: _includeLastReasoning,
+                  onChanged: (value) {
+                    setState(() => _includeLastReasoning = value);
+                    _scheduleSave();
+                  },
                 ),
               if (_supportsPromptCache)
                 MenuSelectorItem(

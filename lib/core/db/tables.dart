@@ -521,6 +521,8 @@ class ApiConfigs extends Table {
   TextColumn get reasoningEffort => text().nullable()();
   BoolColumn get requestReasoning =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get includeLastReasoning =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get reasoningTagStart => text().nullable()();
   TextColumn get reasoningTagEnd => text().nullable()();
   BoolColumn get omitTemperature =>

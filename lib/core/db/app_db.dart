@@ -48,7 +48,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 74;
+  int get schemaVersion => 75;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1349,6 +1349,17 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 74) {
         await _ensureLedgerPrompts();
+      }
+      if (from < 75) {
+        final columns = await customSelect(
+          "PRAGMA table_info('api_configs')",
+        ).get();
+        final names = columns
+            .map((column) => column.read<String>('name'))
+            .toSet();
+        if (!names.contains('include_last_reasoning')) {
+          await m.addColumn(apiConfigs, apiConfigs.includeLastReasoning);
+        }
       }
     },
   );

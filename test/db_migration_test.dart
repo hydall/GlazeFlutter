@@ -78,7 +78,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 74);
+      expect(version, 75);
     });
 
     test(
@@ -115,7 +115,7 @@ void main() {
         final version = await upgraded
             .customSelect('PRAGMA user_version')
             .get();
-        expect(version.first.read<int>('user_version'), 74);
+        expect(version.first.read<int>('user_version'), 75);
         expect(names, contains('variant_group_id'));
         expect(names, contains('hidden'));
       },
@@ -145,12 +145,12 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 74);
+      expect(version.read<int>('user_version'), 75);
     });
 
     test('current schema includes atomic character fact tables', () async {
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.read<int>('user_version'), 74);
+      expect(version.read<int>('user_version'), 75);
 
       final factColumns = await db
           .customSelect("PRAGMA table_info('character_knowledge_fact_rows')")
@@ -205,7 +205,13 @@ void main() {
             .get();
         final names = columns.map((row) => row.read<String>('name')).toSet();
 
-        expect(names, contains('extra_request_parameters_json'));
+        expect(
+          names,
+          containsAll([
+            'extra_request_parameters_json',
+            'include_last_reasoning',
+          ]),
+        );
       },
     );
 
@@ -260,7 +266,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 74);
+      expect(version.read<int>('user_version'), 75);
       final row = await upgraded
           .customSelect(
             'SELECT blocks_json FROM studio_preset_rows WHERE preset_id = ?',
@@ -376,7 +382,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 74);
+      expect(version.read<int>('user_version'), 75);
       final check = await upgraded.customSelect('PRAGMA integrity_check').get();
       expect(check.single.read<String>('integrity_check'), 'ok');
     });
