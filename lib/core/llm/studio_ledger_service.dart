@@ -144,6 +144,7 @@ class StudioLedgerService {
         swipeId: plan.endMessage.swipeId,
         agentSwipeId: plan.endMessage.agentSwipeId,
       );
+      _throwIfReconciliationAborted(token, isStillCurrent);
       if (endpointSnapshot == null || !endpointSnapshot.committed) {
         return LedgerRunResult(
           status: 'skipped',
@@ -154,9 +155,13 @@ class StudioLedgerService {
 
       final promptTrackers = await _ledgerTrackerLoader
           .loadEffectiveLedgerTrackers(sessionId);
-      final promptFacts = await _knowledgeFactRepo.getReviewableForSession(
-        sessionId,
-      );
+      _throwIfReconciliationAborted(token, isStillCurrent);
+      final reviewMessageIds = plan.messageIds.toSet();
+      final promptFacts =
+          (await _knowledgeFactRepo.getReviewableForSession(sessionId))
+              .where((fact) => reviewMessageIds.contains(fact.sourceMessageId))
+              .toList();
+      _throwIfReconciliationAborted(token, isStillCurrent);
       final promptBlock = ledgerBlocks
           .where(
             (block) =>
@@ -185,6 +190,7 @@ class StudioLedgerService {
         trackers: promptTrackers,
         knowledgeFacts: offeredFacts,
       );
+      _throwIfReconciliationAborted(token, isStillCurrent);
       final outcome = await _llm.callOnceWithLog(
         config: config,
         prompt: prompt,
@@ -257,10 +263,9 @@ class StudioLedgerService {
       var opsApplied = 0;
       await _trackerRepo.db.transaction(() async {
         await _trackerRepo.replaceLedgerState(sessionId, promptTrackers);
+        _throwIfReconciliationAborted(token, isStillCurrent);
         for (final op in export.ops) {
-          if (token.isCancelled || isStillCurrent?.call() == false) {
-            throw const _LedgerReconciliationAborted();
-          }
+          _throwIfReconciliationAborted(token, isStillCurrent);
           await _opApplier.applyOp(
             op: op,
             sessionId: sessionId,
@@ -271,11 +276,17 @@ class StudioLedgerService {
           );
           opsApplied++;
         }
+        _throwIfReconciliationAborted(token, isStillCurrent);
         opsApplied += await _knowledgeFactRepo.applyReconciliationCleanup(
           sessionId: sessionId,
           ops: cleanupOps,
+          allowedFactIds: offeredFacts.map((fact) => fact.id).toSet(),
+          endpointMessageId: plan.endMessage.id,
+          messageIds: plan.messageIds,
         );
+        _throwIfReconciliationAborted(token, isStillCurrent);
         final updated = await _trackerRepo.getBySessionId(sessionId);
+        _throwIfReconciliationAborted(token, isStillCurrent);
         await _snapshotRepo.upsertTrackers(
           sessionId: sessionId,
           messageId: plan.endMessage.id,
@@ -284,6 +295,7 @@ class StudioLedgerService {
           trackers: updated,
           committed: true,
         );
+        _throwIfReconciliationAborted(token, isStillCurrent);
         await _reconciliationCheckpointRepo.upsert(
           LedgerReconciliationCheckpoint(
             sessionId: sessionId,
@@ -295,6 +307,7 @@ class StudioLedgerService {
             rangeHash: plan.rangeHash,
           ),
         );
+        _throwIfReconciliationAborted(token, isStillCurrent);
       });
       return LedgerRunResult(
         status: 'ok',
@@ -316,6 +329,15 @@ class StudioLedgerService {
         error: '$e',
         elapsedMs: sw.elapsedMilliseconds,
       );
+    }
+  }
+
+  void _throwIfReconciliationAborted(
+    CancelToken token,
+    bool Function()? isStillCurrent,
+  ) {
+    if (token.isCancelled || isStillCurrent?.call() == false) {
+      throw const _LedgerReconciliationAborted();
     }
   }
 

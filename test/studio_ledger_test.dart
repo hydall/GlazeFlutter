@@ -190,6 +190,25 @@ void main() {
   });
 
   group('Ledger reconciliation', () {
+    test('manual plan ends at the requested assistant and stays bounded', () {
+      final messages = <ChatMessage>[
+        for (var i = 1; i <= 12; i++) ...[
+          ChatMessage(id: 'u$i', role: 'user', content: 'User $i'),
+          ChatMessage(id: 'a$i', role: 'assistant', content: 'Assistant $i'),
+        ],
+      ];
+
+      final plan = const LedgerReconciliationPlanner().planForEndpoint(
+        messages: messages,
+        endAssistantMessageId: 'a12',
+      );
+
+      expect(plan, isNotNull);
+      expect(plan!.endMessage.id, 'a12');
+      expect(plan.messages, hasLength(20));
+      expect(plan.startMessageId, 'u3');
+    });
+
     const planner = LedgerReconciliationPlanner();
 
     test('runs on N+1 once for the previous six assistant turns', () {

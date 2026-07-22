@@ -197,6 +197,16 @@ class LedgerStage {
           checkpoint: checkpoint,
         );
         if (plan != null && isCurrent()) {
+          await _recordReconciliationDiag(
+            sessionId: sessionId,
+            targetMessage: targetMessage,
+            startMessageId: plan.startMessageId,
+            endMessageId: plan.endMessage.id,
+            result: LedgerRunResult(
+              status: 'running',
+              model: ledgerConfig.model,
+            ),
+          );
           if (ctx.ref.mounted) {
             ctx.ref
                 .read(postGenStatusProvider.notifier)

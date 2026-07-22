@@ -358,6 +358,20 @@ class LedgerReconciliationCheckpoints extends Table {
   Set<Column> get primaryKey => {sessionId};
 }
 
+/// Before-images for reversible knowledge cleanup performed by reconciliation.
+@DataClassName('LedgerReconciliationCleanupJournalRow')
+class LedgerReconciliationCleanupJournals extends Table {
+  @override
+  String get tableName => 'ledger_reconciliation_cleanup_journals';
+
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get sessionId => text()();
+  TextColumn get endpointMessageId => text()();
+  TextColumn get messageIdsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get beforeImagesJson => text().withDefault(const Constant('[]'))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+}
+
 /// Append-only, provenance-backed character knowledge and development delta.
 /// Corrections point to prior rows; the earlier row remains inspectable.
 @DataClassName('CharacterKnowledgeFactRow')

@@ -69,7 +69,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **71**
+Current version: **77**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -112,6 +112,8 @@ Migration history:
 - v58: data migration — `<lumiaooc>` coloring moved out of the LLM cleaner prompt into deterministic code (`wrapLumiaOocColors` in `beauty_state_parser.dart`). Force-updates the `cleaner_beauty` and `final_lumia_ooc` blocks in the existing `default` preset from the updated seed so the old lumiaooc coloring rule and the `reserved.lumia_ooc` JSON-shape field are dropped. Existing user customizations to other blocks are preserved.
 - v68: added `character_knowledge_fact_rows` and `character_session_baseline_rows` for provenance-backed character developments and card baselines.
 - v71: removed the retired `durableFacts` contract from the default Ledger prompt.
+- v73: added `ledger_reconciliation_checkpoints` for reconciliation cadence and deduplication.
+- v77: added `ledger_reconciliation_cleanup_journals` for reversible knowledge cleanup when deleting reconciled history.
 
 ---
 

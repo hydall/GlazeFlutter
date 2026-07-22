@@ -30,6 +30,20 @@ class LedgerReconciliationPlanner {
 
   const LedgerReconciliationPlanner();
 
+  /// Builds an on-demand review ending at an explicitly accepted assistant
+  /// turn. Unlike [plan], this does not apply the six-turn cadence or
+  /// checkpoint deduplication.
+  LedgerReconciliationPlan? planForEndpoint({
+    required List<ChatMessage> messages,
+    required String endAssistantMessageId,
+  }) {
+    final endIndex = messages.indexWhere(
+      (message) => message.id == endAssistantMessageId,
+    );
+    if (endIndex < 0 || !_isAcceptedAssistant(messages[endIndex])) return null;
+    return _buildPlan(messages: messages, endIndex: endIndex);
+  }
+
   LedgerReconciliationPlan? plan({
     required List<ChatMessage> messages,
     required String currentAssistantMessageId,
@@ -52,8 +66,27 @@ class LedgerReconciliationPlanner {
     // Review boundary N only while N+1 is being generated. A reroll of N+1
     // has the same boundary and is deduplicated by the checkpoint; N+2 must
     // never re-run or rewrite the older boundary.
-    final end = acceptedAssistants.last;
-    final endIndex = messages.indexWhere((message) => message.id == end.id);
+    final endIndex = messages.indexWhere(
+      (message) => message.id == acceptedAssistants.last.id,
+    );
+    final plan = _buildPlan(messages: messages, endIndex: endIndex);
+    if (plan == null) return null;
+    final end = plan.endMessage;
+    final hash = plan.rangeHash;
+    if (checkpoint?.endMessageId == end.id &&
+        checkpoint?.endSwipeId == end.swipeId &&
+        checkpoint?.endAgentSwipeId == end.agentSwipeId &&
+        checkpoint?.rangeHash == hash) {
+      return null;
+    }
+    return plan;
+  }
+
+  LedgerReconciliationPlan? _buildPlan({
+    required List<ChatMessage> messages,
+    required int endIndex,
+  }) {
+    final end = messages[endIndex];
     final startIndex = endIndex + 1 > maxMessages
         ? endIndex + 1 - maxMessages
         : 0;
@@ -77,12 +110,6 @@ class LedgerReconciliationPlanner {
           ),
         )
         .toString();
-    if (checkpoint?.endMessageId == end.id &&
-        checkpoint?.endSwipeId == end.swipeId &&
-        checkpoint?.endAgentSwipeId == end.agentSwipeId &&
-        checkpoint?.rangeHash == hash) {
-      return null;
-    }
     return LedgerReconciliationPlan(
       messages: range,
       endMessage: end,

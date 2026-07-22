@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/aux_llm_client.dart' show AuxApiConfig;
 import '../../../core/llm/macro_engine.dart';
 import '../../../core/llm/studio_ledger_service.dart';
+import '../../../core/llm/studio_ledger_reconciliation.dart';
 import '../../../core/llm/studio_slot_resolver.dart';
+import '../../../core/db/repositories/tracker_repo.dart';
 import '../../../core/models/agent_operation_record.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/tracker.dart';
@@ -29,6 +31,7 @@ class AgenticLastTurnTab extends ConsumerStatefulWidget {
 
 class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
   bool _runningLedger = false;
+  bool _runningReconciliation = false;
 
   @override
   Widget build(BuildContext context) {
@@ -59,32 +62,61 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      last == null
-                          ? 'No assistant turn found.'
-                          : 'Latest assistant turn: ${last.id}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: context.cs.onSurfaceVariant,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  Text(
+                    last == null
+                        ? 'No assistant turn found.'
+                        : 'Latest assistant turn: ${last.id}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.cs.onSurfaceVariant,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  FilledButton.icon(
-                    onPressed: last == null || _runningLedger
-                        ? null
-                        : () => _rerunLedger(sessionId, last),
-                    icon: _runningLedger
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.replay_outlined, size: 16),
-                    label: const Text('Rerun Studio Ledger'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed:
+                            last == null ||
+                                _runningLedger ||
+                                _runningReconciliation
+                            ? null
+                            : () => _runReconciliation(sessionId),
+                        icon: _runningReconciliation
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.rule_folder_outlined, size: 16),
+                        label: const Text('Run reconciliation'),
+                      ),
+                      FilledButton.icon(
+                        onPressed:
+                            last == null ||
+                                _runningLedger ||
+                                _runningReconciliation
+                            ? null
+                            : () => _rerunLedger(sessionId, last),
+                        icon: _runningLedger
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.replay_outlined, size: 16),
+                        label: const Text('Rerun Studio Ledger'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -314,12 +346,148 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
     }
   }
 
+  Future<void> _runReconciliation(String sessionId) async {
+    if (_runningReconciliation) return;
+    setState(() => _runningReconciliation = true);
+    final chatRepo = ref.read(chatRepoProvider);
+    final studioConfigRepo = ref.read(studioConfigRepoProvider);
+    final snapshotRepo = ref.read(trackerSnapshotRepoProvider);
+    final pipeline = ref.read(pipelineSettingsProvider);
+    final apiConfigsFuture = ref.read(apiListProvider.future);
+    final activeApiConfig = ref.read(activeApiConfigProvider);
+    final ledgerService = ref.read(studioLedgerServiceProvider);
+    final trackerRepo = ref.read(trackerRepoProvider);
+    final presetRepo = ref.read(studioPresetRepoProvider);
+    final characterRepo = ref.read(characterRepoProvider);
+    try {
+      final session = await chatRepo.getById(sessionId);
+      if (session == null) throw StateError('Session not found');
+      final snapshots = await snapshotRepo.getBySessionId(sessionId);
+      final committedAnchors = snapshots
+          .where((snapshot) => snapshot.committed)
+          .map(
+            (snapshot) =>
+                '${snapshot.messageId}\u001f${snapshot.swipeId}\u001f'
+                '${snapshot.agentSwipeId}',
+          )
+          .toSet();
+      final endpoint = session.messages.reversed.where((message) {
+        final anchor =
+            '${message.id}\u001f${message.swipeId}\u001f${message.agentSwipeId}';
+        return message.role == 'assistant' &&
+            !message.isError &&
+            !message.isTyping &&
+            !message.isHidden &&
+            message.content.trim().isNotEmpty &&
+            committedAnchors.contains(anchor);
+      }).firstOrNull;
+      if (endpoint == null) {
+        throw StateError('No committed Ledger snapshot to reconcile');
+      }
+      final plan = const LedgerReconciliationPlanner().planForEndpoint(
+        messages: session.messages,
+        endAssistantMessageId: endpoint.id,
+      );
+      if (plan == null) {
+        throw StateError(
+          'No reviewable messages end at the committed snapshot',
+        );
+      }
+
+      final studioConfig = await studioConfigRepo.getBySessionId(sessionId);
+      final apiConfigs = await apiConfigsFuture;
+      final ledgerConfig = StudioSlotResolver.resolve(
+        apiConfigs: apiConfigs,
+        apiConfigId: studioConfig?.cleanerApiConfigId ?? '',
+        fallback: activeApiConfig,
+        errorLabel: 'ledger-reconciliation-manual',
+        modelOverride: pipeline.cleaner.postCleanerModel,
+        extraRequestParameterOverrides:
+            pipeline.cleaner.postCleanerExtraRequestParameters,
+      );
+      final studioPreset = await presetRepo.getById(
+        await ref.read(activeStudioPresetProvider.future),
+      );
+      final character = await characterRepo.getById(session.characterId);
+      final macroCtx = MacroContext(
+        charName: character?.name ?? '',
+        charDescription: character?.description,
+        charScenario: character?.scenario,
+        charPersonality: character?.personality,
+        charMesExample: character?.mesExample,
+        userName: 'User',
+        macroName: character?.macroName,
+        charId: session.characterId,
+        sessionId: sessionId,
+      );
+      final startedAt = DateTime.now().millisecondsSinceEpoch;
+      await _writeReconciliationDiagnostic(
+        trackerRepo: trackerRepo,
+        sessionId: sessionId,
+        trigger: endpoint,
+        plan: plan,
+        result: LedgerRunResult(status: 'running', model: ledgerConfig.model),
+        manual: true,
+      );
+      final result = await runWithPostGenForeground(
+        onStarted: GenerationNotificationService.instance.onPostGenStarted,
+        action: () => ledgerService.reconcile(
+          sessionId: sessionId,
+          settings: pipeline,
+          config: ledgerConfig,
+          plan: plan,
+          ledgerBlocks: studioPreset?.blocks ?? const [],
+          macroCtx: macroCtx,
+        ),
+        onFinished: GenerationNotificationService.instance.onPostGenFinished,
+      );
+      await _writeReconciliationDiagnostic(
+        trackerRepo: trackerRepo,
+        sessionId: sessionId,
+        trigger: endpoint,
+        plan: plan,
+        result: result,
+        manual: true,
+      );
+      if (!mounted) return;
+      _appendLedgerRecord(
+        sessionId,
+        endpoint,
+        result,
+        startedAt,
+        reconciliation: true,
+      );
+      GlazeToast.show(
+        context,
+        result.status == 'ok'
+            ? 'Ledger reconciliation ok: ops=${result.opsApplied}'
+            : 'Ledger reconciliation failed: ${result.error ?? result.status}',
+        isError: result.status != 'ok',
+        duration: 4000,
+        position: ToastPosition.top,
+      );
+    } catch (e) {
+      if (mounted) {
+        GlazeToast.show(
+          context,
+          'Ledger reconciliation failed: $e',
+          isError: true,
+          duration: 4000,
+          position: ToastPosition.top,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _runningReconciliation = false);
+    }
+  }
+
   void _appendLedgerRecord(
     String sessionId,
     ChatMessage target,
     LedgerRunResult result,
-    int fallbackStartedAt,
-  ) {
+    int fallbackStartedAt, {
+    bool reconciliation = false,
+  }) {
     if (!mounted) return;
     final status = _ledgerStatusToOp(result.status);
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -327,8 +495,12 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
         .read(agentOperationsLogProvider)
         .append(
           AgentOperationRecord(
-            id: 'studio-ledger-manual-${target.id}-${DateTime.now().microsecondsSinceEpoch}',
-            kind: AgentOperationKind.studioLedger,
+            id:
+                'studio-ledger-${reconciliation ? 'reconciliation-' : ''}manual-'
+                '${target.id}-${DateTime.now().microsecondsSinceEpoch}',
+            kind: reconciliation
+                ? AgentOperationKind.studioLedgerReconciliation
+                : AgentOperationKind.studioLedger,
             status: status,
             sessionId: sessionId,
             messageId: target.id,
@@ -336,7 +508,8 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
             totalElapsedMs: result.elapsedMs,
             model: result.model,
             summary: status.isOk
-                ? 'manual rerun: ops=${result.opsApplied}'
+                ? '${reconciliation ? 'manual reconciliation' : 'manual rerun'}: '
+                      'ops=${result.opsApplied}'
                 : result.error ?? result.status,
             startedAtMs: result.attempts.isNotEmpty
                 ? result.attempts.first.startedAtMs
@@ -349,6 +522,40 @@ class _AgenticLastTurnTabState extends ConsumerState<AgenticLastTurnTab> {
           ),
         );
   }
+}
+
+Future<void> _writeReconciliationDiagnostic({
+  required TrackerRepo trackerRepo,
+  required String sessionId,
+  required ChatMessage trigger,
+  required LedgerReconciliationPlan plan,
+  required LedgerRunResult result,
+  required bool manual,
+}) {
+  final attempts = result.attempts.isEmpty
+      ? 'none'
+      : result.attempts
+            .map(
+              (attempt) =>
+                  '${attempt.attempt}:${attempt.status}'
+                  '/http=${attempt.statusCode}/ms=${attempt.elapsedMs}'
+                  '${attempt.error == null ? '' : '/error=${attempt.error}'}',
+            )
+            .join(',');
+  return trackerRepo.upsertValue(
+    sessionId,
+    '_ledger_diag:studio_ledger_reconciliation',
+    'trigger=${trigger.id} • range=${plan.startMessageId}..${plan.endMessage.id} '
+        '• status=${result.status} • ops=${result.opsApplied} '
+        '• elapsedMs=${result.elapsedMs} • model=${result.model ?? 'unknown'} '
+        '• attempts=$attempts${manual ? ' • manual=1' : ''}'
+        '${result.error == null ? '' : ' • error=${result.error}'}',
+    scope: 'ledger_diagnostic',
+    provenance:
+        'message=${trigger.id}|swipe=${trigger.swipeId}|'
+        'agentSwipe=${trigger.agentSwipeId}|range=${plan.startMessageId}..'
+        '${plan.endMessage.id}${manual ? '|manual=1' : ''}',
+  );
 }
 
 String _recentHistoryText(

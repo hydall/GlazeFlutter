@@ -174,12 +174,16 @@ class CleanerStage {
           }
         }
         if (ctx.ref.mounted && ctx.abortHandler.isCurrentGen(genId)) {
+          _cleanerCancelToken = CancelToken();
+          ctx.ref.read(cleanerCancelTokenProvider.notifier).state =
+              _cleanerCancelToken;
           await ledger.run(
             sessionId: sessionId,
-            messages: recentMessages,
+            messages: messages,
             genId: genId,
             finalAssistantText: lastAssistant.content,
             targetMessage: lastAssistant,
+            cancelToken: _cleanerCancelToken,
           );
         }
         return;
