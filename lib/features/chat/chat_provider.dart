@@ -543,69 +543,94 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     if (lastMsg.role != 'assistant') return;
 
     final genId = _abortHandler.nextGenId();
+    _abortHandler.clearStreaming();
     state = AsyncData(
       current.copyWith(isGenerating: true, generationStartTime: DateTime.now()),
     );
 
     final notifService = GenerationNotificationService.instance;
-    final charRepo = ref.read(characterRepoProvider);
-    final character = await charRepo.getById(arg);
-    if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
-    await notifService.onGenerationStarted(character?.name ?? 'Unknown');
-    if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
-
-    final service = ref.read(chatGenerationServiceProvider);
-    final result = await service.generate(
-      session: current.session!,
-      charId: arg,
-      genId: genId,
-      currentState: current,
-      onStateUpdate: (s) {
-        if (_abortHandler.isCurrentGen(genId)) state = AsyncData(s);
-      },
-      isAborted: () => !_abortHandler.isCurrentGen(genId),
-    );
-
-    if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
-
-    var completedResult = result;
-    final updatedMessages = mergeContinuationMessages(result.messages, lastMsg);
-    if (updatedMessages != null) {
-      final finalSession = result.session!.copyWith(
-        messages: updatedMessages,
-        updatedAt: currentTimestampSeconds(),
-      );
-      await ref.read(chatRepoProvider).put(finalSession);
+    var notificationStarted = false;
+    try {
+      final charRepo = ref.read(characterRepoProvider);
+      final character = await charRepo.getById(arg);
       if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
-      ChatSessionService.updateCache(finalSession);
-      _invalidateHistory();
-      completedResult = result.copyWith(
-        session: finalSession,
-        isGenerating: false,
-        isGeneratingImage: false,
-        isPostGenRunning: false,
+      notificationStarted = true;
+      await notifService.onGenerationStarted(character?.name ?? 'Unknown');
+      if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
+
+      final service = ref.read(chatGenerationServiceProvider);
+      final result = await service.generate(
+        session: current.session!,
+        charId: arg,
+        genId: genId,
+        currentState: current,
+        onStateUpdate: (s) {
+          if (_abortHandler.isCurrentGen(genId)) state = AsyncData(s);
+        },
+        isAborted: () => !_abortHandler.isCurrentGen(genId),
       );
-      state = AsyncData(completedResult);
-    } else {
-      state = AsyncData(result);
-    }
 
-    final preview = buildMessagePreview(completedResult.messages);
-    final finalSessionId = completedResult.session?.id;
-    await notifService.onGenerationCompleted(
-      character?.name ?? 'Unknown',
-      arg,
-      messagePreview: preview,
-      sessionId: finalSessionId,
-      msgId: completedResult.messages.isNotEmpty
-          ? completedResult.messages.last.id
-          : null,
-      avatarPath: character?.avatarPath,
-    );
+      if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
 
-    if (finalSessionId != null &&
-        !notifService.isActiveSession(arg, finalSessionId)) {
-      ref.read(unreadSessionsProvider.notifier).markUnread(finalSessionId);
+      var completedResult = result;
+      final updatedMessages = mergeContinuationMessages(
+        result.messages,
+        lastMsg,
+      );
+      if (updatedMessages != null) {
+        final finalSession = result.session!.copyWith(
+          messages: updatedMessages,
+          updatedAt: currentTimestampSeconds(),
+        );
+        await ref.read(chatRepoProvider).put(finalSession);
+        if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
+        ChatSessionService.updateCache(finalSession);
+        _invalidateHistory();
+        completedResult = result.copyWith(
+          session: finalSession,
+          isGenerating: false,
+          isGeneratingImage: false,
+          isPostGenRunning: false,
+        );
+        state = AsyncData(completedResult);
+      } else {
+        state = AsyncData(result);
+      }
+
+      final preview = buildMessagePreview(completedResult.messages);
+      final finalSessionId = completedResult.session?.id;
+      await notifService.onGenerationCompleted(
+        character?.name ?? 'Unknown',
+        arg,
+        messagePreview: preview,
+        sessionId: finalSessionId,
+        msgId: completedResult.messages.isNotEmpty
+            ? completedResult.messages.last.id
+            : null,
+        avatarPath: character?.avatarPath,
+      );
+
+      if (finalSessionId != null &&
+          !notifService.isActiveSession(arg, finalSessionId)) {
+        ref.read(unreadSessionsProvider.notifier).markUnread(finalSessionId);
+      }
+    } catch (e, st) {
+      debugPrint('[ChatNotifier] continuation failed: $e\n$st');
+      if (ref.mounted && _abortHandler.isCurrentGen(genId)) {
+        _abortHandler.clearStreaming();
+        final latest = state.value;
+        if (latest?.session?.id == current.session!.id) {
+          state = AsyncData(
+            latest!.copyWith(
+              isGenerating: false,
+              isGeneratingImage: false,
+              isPostGenRunning: false,
+              error: e.toString(),
+            ),
+          );
+        }
+      }
+      if (notificationStarted) await notifService.onGenerationAborted();
     }
   }
 
