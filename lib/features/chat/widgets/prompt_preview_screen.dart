@@ -26,6 +26,14 @@ import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
 import '../state/cached_token_breakdown.dart';
 
+@visibleForTesting
+List<Map<String, dynamic>> buildPreviewApiMessages(
+  List<PromptMessage> messages,
+) => messages
+    .where((message) => message.content.trim().isNotEmpty || message.hasImage)
+    .map((message) => message.toApiMap())
+    .toList();
+
 class PromptPreviewScreen extends ConsumerStatefulWidget {
   final String charId;
 
@@ -516,10 +524,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
     if (_result == null || _apiConfig == null) return null;
     try {
       final cfg = _apiConfig!;
-      final apiMessages = _result!.messages
-          .where((m) => m.content.trim().isNotEmpty)
-          .map((m) => m.toApiMap())
-          .toList();
+      final apiMessages = buildPreviewApiMessages(_result!.messages);
 
       final request = ChatTransportRequest(
         endpoint: cfg.endpoint,
@@ -813,7 +818,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                   ),
                 ],
               ),
-              if (!_expanded) ...[
+              if (!_expanded && msg.content.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
                   msg.content,
@@ -825,27 +830,39 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                   ),
                 ),
               ],
+              if (!_expanded && msg.hasImage) ...[
+                const SizedBox(height: 8),
+                PromptAttachmentPreview(imagePath: msg.imagePath!),
+              ],
               if (_expanded) ...[
                 const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(8),
+                if (msg.hasImage) ...[
+                  PromptAttachmentPreview(
+                    imagePath: msg.imagePath!,
+                    expanded: true,
                   ),
-                  constraints: const BoxConstraints(maxHeight: 300),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      msg.content,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: context.cs.onSurface,
-                        fontFamily: 'monospace',
+                  if (msg.content.isNotEmpty) const SizedBox(height: 8),
+                ],
+                if (msg.content.isNotEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    constraints: const BoxConstraints(maxHeight: 300),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        msg.content,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.cs.onSurface,
+                          fontFamily: 'monospace',
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ],
           ),
@@ -877,6 +894,100 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
       child: Text(
         role.toUpperCase(),
         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
+      ),
+    );
+  }
+}
+
+@visibleForTesting
+class PromptAttachmentPreview extends StatefulWidget {
+  final String imagePath;
+  final bool expanded;
+
+  const PromptAttachmentPreview({
+    super.key,
+    required this.imagePath,
+    this.expanded = false,
+  });
+
+  @override
+  State<PromptAttachmentPreview> createState() =>
+      _PromptAttachmentPreviewState();
+}
+
+class _PromptAttachmentPreviewState extends State<PromptAttachmentPreview> {
+  static const _maxEncodedLength = 8 * 1024 * 1024;
+  Uint8List? _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _decode();
+  }
+
+  @override
+  void didUpdateWidget(PromptAttachmentPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.imagePath != oldWidget.imagePath) _decode();
+  }
+
+  void _decode() {
+    final match = RegExp(
+      r'^data:image/(?:png|jpeg|jpg|gif|webp);base64,([A-Za-z0-9+/=]+)$',
+      caseSensitive: false,
+    ).firstMatch(widget.imagePath);
+    final encoded = match?.group(1);
+    if (encoded == null || encoded.length > _maxEncodedLength) {
+      _bytes = null;
+      return;
+    }
+    try {
+      _bytes = base64Decode(encoded);
+    } on FormatException {
+      _bytes = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _bytes;
+    if (bytes == null || bytes.isEmpty) {
+      return Container(
+        key: const ValueKey('prompt-attachment-unavailable'),
+        height: 56,
+        width: double.infinity,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          Icons.broken_image_outlined,
+          color: context.cs.onSurfaceVariant,
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.memory(
+        bytes,
+        key: const ValueKey('prompt-attachment-image'),
+        width: double.infinity,
+        height: widget.expanded ? 220 : 96,
+        cacheWidth: widget.expanded ? 1024 : 480,
+        cacheHeight: widget.expanded ? 640 : 288,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => Container(
+          key: const ValueKey('prompt-attachment-unavailable'),
+          height: 56,
+          alignment: Alignment.center,
+          color: Colors.white.withValues(alpha: 0.04),
+          child: Icon(
+            Icons.broken_image_outlined,
+            color: context.cs.onSurfaceVariant,
+          ),
+        ),
       ),
     );
   }
