@@ -146,7 +146,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                         backgroundColor: Colors.transparent,
                         barrierColor: Colors.black54,
                         isScrollControlled: true,
-                        builder: (_) => const SyncSheet(),
+                        builder: (sheetContext) => Padding(
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.viewPaddingOf(sheetContext).bottom,
+                          ),
+                          child: const SyncSheet(),
+                        ),
                       ),
                     ),
                     MenuItem(
