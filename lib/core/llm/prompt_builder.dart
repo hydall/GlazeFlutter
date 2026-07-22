@@ -914,5 +914,8 @@ void applyAppendToLastMessage(
     content: '${original.content}\n\n$joined',
     isHistory: true,
     blockName: '${original.blockName ?? 'Last user'} + $blockNames',
+    sourceMessageId: original.sourceMessageId,
+    reasoningContent: original.reasoningContent,
+    imagePath: original.imagePath,
   );
 }

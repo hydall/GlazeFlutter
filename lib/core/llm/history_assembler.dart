@@ -23,6 +23,7 @@ class HistoryAssembler {
           reasoningContent: msg.reasoning,
           isHistory: true,
           sourceMessageId: msg.id,
+          imagePath: msg.imagePath,
         ),
       );
     }
@@ -71,6 +72,7 @@ class PromptMessage {
   final String? blockName;
   final String? sourceMessageId;
   final String? reasoningContent;
+  final String? imagePath;
 
   const PromptMessage({
     required this.role,
@@ -84,9 +86,24 @@ class PromptMessage {
     this.blockName,
     this.sourceMessageId,
     this.reasoningContent,
+    this.imagePath,
   });
 
-  Map<String, String> toApiMap() => {'role': role, 'content': content};
+  bool get hasImage => imagePath?.isNotEmpty == true;
+
+  Map<String, dynamic> toApiMap() {
+    if (!hasImage) return {'role': role, 'content': content};
+    return {
+      'role': role,
+      'content': [
+        if (content.trim().isNotEmpty) {'type': 'text', 'text': content},
+        {
+          'type': 'image_url',
+          'image_url': {'url': imagePath},
+        },
+      ],
+    };
+  }
 
   Map<String, dynamic> toJson() => {
     'role': role,
@@ -100,6 +117,7 @@ class PromptMessage {
     'blockName': blockName,
     'sourceMessageId': sourceMessageId,
     'reasoningContent': reasoningContent,
+    'imagePath': imagePath,
   };
 
   factory PromptMessage.fromJson(Map<String, dynamic> json) => PromptMessage(
@@ -114,6 +132,7 @@ class PromptMessage {
     blockName: json['blockName'] as String?,
     sourceMessageId: json['sourceMessageId'] as String?,
     reasoningContent: json['reasoningContent'] as String?,
+    imagePath: json['imagePath'] as String?,
   );
 }
 

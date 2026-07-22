@@ -62,6 +62,7 @@ List<PromptMessage> applyPromptRegexes({
           depth: msg.depth,
           sourceMessageId: msg.sourceMessageId,
           reasoningContent: msg.reasoningContent,
+          imagePath: msg.imagePath,
         ),
       );
       historySeen++;
@@ -86,6 +87,7 @@ List<PromptMessage> applyPromptRegexes({
           depth: msg.depth,
           sourceMessageId: msg.sourceMessageId,
           reasoningContent: msg.reasoningContent,
+          imagePath: msg.imagePath,
         ),
       );
     }
