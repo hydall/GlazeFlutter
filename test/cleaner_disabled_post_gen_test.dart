@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/llm/aux_llm_client.dart' show AuxApiConfig;
+import 'package:glaze_flutter/core/llm/studio_ledger_reconciliation.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/core/state/db_provider.dart';
@@ -15,6 +16,7 @@ import 'package:glaze_flutter/features/chat/services/stages/cleaner_stage.dart';
 import 'package:glaze_flutter/features/chat/services/stages/ext_blocks_stage.dart';
 import 'package:glaze_flutter/features/chat/services/stages/ledger_stage.dart';
 import 'package:glaze_flutter/features/chat/services/stages/stage_context.dart';
+import 'package:glaze_flutter/features/chat/state/post_cleaner_state_provider.dart';
 
 class _RecordingExtBlocksStage extends ExtBlocksStage {
   _RecordingExtBlocksStage(super.ctx);
@@ -38,6 +40,9 @@ class _RecordingLedgerStage extends LedgerStage {
 
   int calls = 0;
   String? finalAssistantText;
+  List<ChatMessage>? messages;
+  ChatMessage? targetMessage;
+  CancelToken? cancelToken;
 
   @override
   Future<void> run({
@@ -52,6 +57,9 @@ class _RecordingLedgerStage extends LedgerStage {
   }) async {
     calls++;
     this.finalAssistantText = finalAssistantText;
+    this.messages = messages;
+    this.targetMessage = targetMessage;
+    this.cancelToken = cancelToken;
   }
 }
 
@@ -83,22 +91,35 @@ void main() {
           );
 
       const assistant = ChatMessage(
-        id: 'm1',
+        id: 'a7',
         role: 'assistant',
         content: 'Raw direct response',
         timestamp: 1,
       );
+      final messages = <ChatMessage>[
+        for (var turn = 1; turn <= 6; turn++) ...[
+          ChatMessage(id: 'u$turn', role: 'user', content: 'User turn $turn'),
+          ChatMessage(
+            id: 'a$turn',
+            role: 'assistant',
+            content: 'Assistant turn $turn',
+          ),
+        ],
+        const ChatMessage(id: 'u7', role: 'user', content: 'User turn 7'),
+        assistant,
+      ];
       const session = ChatSession(
         id: 's1',
         characterId: 'c1',
         sessionIndex: 0,
         sessionVars: {},
-        messages: [assistant],
+        messages: [],
       );
-      await container.read(chatRepoProvider).put(session);
+      final populatedSession = session.copyWith(messages: messages);
+      await container.read(chatRepoProvider).put(populatedSession);
 
-      late AsyncValue<ChatState> state = const AsyncData(
-        ChatState(session: session),
+      late AsyncValue<ChatState> state = AsyncData(
+        ChatState(session: populatedSession),
       );
       late _RecordingExtBlocksStage extBlocks;
       late _RecordingLedgerStage ledger;
@@ -127,7 +148,7 @@ void main() {
 
       await stage.run(
         sessionId: session.id,
-        messages: session.messages,
+        messages: populatedSession.messages,
         genId: genId,
         character: Character(id: 'c1', name: 'Alice'),
       );
@@ -136,6 +157,19 @@ void main() {
       expect(extBlocks.agentSwipeId, -1);
       expect(ledger.calls, 1);
       expect(ledger.finalAssistantText, assistant.content);
+      expect(ledger.messages, populatedSession.messages);
+      expect(ledger.cancelToken, isNotNull);
+      expect(
+        container.read(cleanerCancelTokenProvider),
+        isNull,
+        reason: 'the no-cleaner Ledger token must be cleared after completion',
+      );
+      final plan = const LedgerReconciliationPlanner().plan(
+        messages: ledger.messages!,
+        currentAssistantMessageId: ledger.targetMessage!.id,
+      );
+      expect(plan, isNotNull);
+      expect(plan!.endMessage.id, 'a6');
     },
   );
 }
