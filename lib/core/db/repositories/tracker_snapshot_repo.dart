@@ -224,6 +224,48 @@ class TrackerSnapshotRepo {
         .go();
   }
 
+  Future<void> deleteSwipe({
+    required String sessionId,
+    required String messageId,
+    required int swipeId,
+  }) {
+    return (db.delete(db.trackerSnapshots)
+          ..where((t) => t.sessionId.equals(sessionId))
+          ..where((t) => t.messageId.equals(messageId))
+          ..where((t) => t.swipeId.equals(swipeId)))
+        .go();
+  }
+
+  Future<void> shiftAgentSwipeIdsAfterRemoval({
+    required String sessionId,
+    required String messageId,
+    required int swipeId,
+    required int removedAgentSwipeId,
+  }) async {
+    final toShift =
+        await (db.select(db.trackerSnapshots)
+              ..where((t) => t.sessionId.equals(sessionId))
+              ..where((t) => t.messageId.equals(messageId))
+              ..where((t) => t.swipeId.equals(swipeId))
+              ..where(
+                (t) => t.agentSwipeId.isBiggerThanValue(removedAgentSwipeId),
+              ))
+            .get();
+    toShift.sort((a, b) => a.agentSwipeId.compareTo(b.agentSwipeId));
+    for (final row in toShift) {
+      await (db.update(db.trackerSnapshots)
+            ..where((t) => t.sessionId.equals(sessionId))
+            ..where((t) => t.messageId.equals(messageId))
+            ..where((t) => t.swipeId.equals(swipeId))
+            ..where((t) => t.agentSwipeId.equals(row.agentSwipeId)))
+          .write(
+            TrackerSnapshotsCompanion(
+              agentSwipeId: Value(row.agentSwipeId - 1),
+            ),
+          );
+    }
+  }
+
   /// Delete all snapshots for a session. Used by `deleteSession`,
   /// `clearChat`, and `deleteByCharacterId` cascades.
   Future<void> deleteBySessionId(String sessionId) {
@@ -247,6 +289,7 @@ class TrackerSnapshotRepo {
               ..where((t) => t.messageId.equals(messageId))
               ..where((t) => t.swipeId.isBiggerThanValue(removedSwipeId)))
             .get();
+    toShift.sort((a, b) => a.swipeId.compareTo(b.swipeId));
     for (final row in toShift) {
       await (db.update(db.trackerSnapshots)
             ..where((t) => t.sessionId.equals(sessionId))

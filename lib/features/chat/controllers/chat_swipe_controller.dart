@@ -47,6 +47,40 @@ class ChatSwipeController {
     _setState(AsyncData(current.copyWith(session: updated)));
   }
 
+  Future<void> deleteActiveSwipe(int messageIndex) async {
+    await _deleteVariation(messageIndex, deleteAgentSwipe: false);
+  }
+
+  Future<void> deleteActiveAgentSwipe(int messageIndex) async {
+    await _deleteVariation(messageIndex, deleteAgentSwipe: true);
+  }
+
+  Future<void> _deleteVariation(
+    int messageIndex, {
+    required bool deleteAgentSwipe,
+  }) async {
+    final current = _getState().value;
+    if (current == null ||
+        current.session == null ||
+        current.isGenerating ||
+        current.isGeneratingImage ||
+        current.isPostGenRunning ||
+        messageIndex < 0 ||
+        messageIndex >= current.messages.length ||
+        current.messages[messageIndex].role != 'assistant') {
+      return;
+    }
+    final updated = deleteAgentSwipe
+        ? await _messageSvc.deleteActiveAgentSwipe(
+            current.session!,
+            messageIndex,
+          )
+        : await _messageSvc.deleteActiveSwipe(current.session!, messageIndex);
+    if (identical(updated, current.session)) return;
+    _invalidateHistory();
+    _setState(AsyncData(current.copyWith(session: updated)));
+  }
+
   Future<void> changeSwipe(
     int messageIndex,
     int dir, {

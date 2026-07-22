@@ -174,6 +174,89 @@ class CharacterKnowledgeFactRepo {
     });
   }
 
+  Future<void> deleteSwipeAndShift({
+    required String sessionId,
+    required String messageId,
+    required int removedSwipeId,
+  }) async {
+    final rows =
+        await (db.select(db.characterKnowledgeFactRows)
+              ..where((row) => row.chatSessionId.equals(sessionId))
+              ..where((row) => row.sourceMessageId.equals(messageId))
+              ..where((row) => row.sourceSwipeId.equals(removedSwipeId)))
+            .get();
+    await (db.update(db.characterKnowledgeFactRows)
+          ..where((row) => row.chatSessionId.equals(sessionId))
+          ..where((row) => row.sourceMessageId.equals(messageId))
+          ..where((row) => row.sourceSwipeId.equals(removedSwipeId)))
+        .write(
+          CharacterKnowledgeFactRowsCompanion(
+            lifecycle: const Value('retracted'),
+            updatedAt: Value(currentTimestampSeconds()),
+          ),
+        );
+    await _reactivatePredecessors(rows.map(_fromRow));
+    await (db.delete(db.characterKnowledgeFactRows)
+          ..where((row) => row.chatSessionId.equals(sessionId))
+          ..where((row) => row.sourceMessageId.equals(messageId))
+          ..where((row) => row.sourceSwipeId.equals(removedSwipeId)))
+        .go();
+    await (db.update(db.characterKnowledgeFactRows)
+          ..where((row) => row.chatSessionId.equals(sessionId))
+          ..where((row) => row.sourceMessageId.equals(messageId))
+          ..where((row) => row.sourceSwipeId.isBiggerThanValue(removedSwipeId)))
+        .write(
+          CharacterKnowledgeFactRowsCompanion.custom(
+            sourceSwipeId:
+                db.characterKnowledgeFactRows.sourceSwipeId -
+                const Variable<int>(1),
+          ),
+        );
+  }
+
+  Future<void> deleteAgentSwipeAndShift({
+    required String sessionId,
+    required String messageId,
+    required int swipeId,
+    required int removedAgentSwipeId,
+  }) async {
+    final rows = await _anchorQuery(
+      sessionId: sessionId,
+      messageId: messageId,
+      swipeId: swipeId,
+      agentSwipeId: removedAgentSwipeId,
+    ).get();
+    await _setAnchorLifecycle(
+      sessionId: sessionId,
+      messageId: messageId,
+      swipeId: swipeId,
+      agentSwipeId: removedAgentSwipeId,
+      lifecycle: CharacterKnowledgeFactLifecycle.retracted,
+    );
+    await _reactivatePredecessors(rows.map(_fromRow));
+    await _deleteAnchor(
+      sessionId: sessionId,
+      messageId: messageId,
+      swipeId: swipeId,
+      agentSwipeId: removedAgentSwipeId,
+    );
+    await (db.update(db.characterKnowledgeFactRows)
+          ..where((row) => row.chatSessionId.equals(sessionId))
+          ..where((row) => row.sourceMessageId.equals(messageId))
+          ..where((row) => row.sourceSwipeId.equals(swipeId))
+          ..where(
+            (row) =>
+                row.sourceAgentSwipeId.isBiggerThanValue(removedAgentSwipeId),
+          ))
+        .write(
+          CharacterKnowledgeFactRowsCompanion.custom(
+            sourceAgentSwipeId:
+                db.characterKnowledgeFactRows.sourceAgentSwipeId -
+                const Variable<int>(1),
+          ),
+        );
+  }
+
   Future<void> supersede(
     String oldId,
     CharacterKnowledgeFact replacement,

@@ -1225,13 +1225,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         (appSettings?.hideTokenCount ?? false),
                     disableSwipeRegeneration:
                         appSettings?.disableSwipeRegeneration ?? false,
-                    studioEnabled: ref
-                        .watch(
-                          sessionStudioEnabledProvider(
-                            widget.state.session?.id ?? '',
-                          ),
-                        )
-                        .value ??
+                    studioEnabled:
+                        ref
+                            .watch(
+                              sessionStudioEnabledProvider(
+                                widget.state.session?.id ?? '',
+                              ),
+                            )
+                            .value ??
                         false,
                     messageActions: MessageActionsCallbacks(
                       onMessageContext:
@@ -1251,6 +1252,18 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                               isLast: index == widget.state.messages.length - 1,
                               isGenerating: widget.state.isGenerating,
                               isHidden: widget.state.messages[index].isHidden,
+                              canDeleteSwipe:
+                                  !isUser &&
+                                  widget.state.messages[index].swipes.length >
+                                      1,
+                              canDeleteAgentSwipe:
+                                  !isUser &&
+                                  widget
+                                          .state
+                                          .messages[index]
+                                          .agentSwipes
+                                          .length >
+                                      1,
                             );
                           },
                       onSwipe: (id, direction) {

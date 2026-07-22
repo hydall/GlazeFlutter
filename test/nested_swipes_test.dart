@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/models/chat_message.dart';
+import 'package:glaze_flutter/features/chat/chat_message_service.dart';
 import 'package:glaze_flutter/features/chat/services/saved_message_writer.dart';
 
 void main() {
@@ -194,49 +195,17 @@ void main() {
       expect(errMsg.swipesMeta[0]['isError'], isTrue);
     });
 
-    test(
-      'writeRegenError appends an error swipe whose meta marks isError only '
-      'on the error index',
-      () {
-        final existing = ChatMessage(
-          id: 'a1',
-          role: 'assistant',
-          content: 'good',
-          swipes: ['good'],
-          swipeId: 0,
-          swipesMeta: [
-            <String, dynamic>{'genTime': '1.0s'},
-          ],
-        );
-        final session = makeSessionWithMessage(existing);
-        final state = writer.writeRegenError(
-          errorText: 'boom',
-          saveSession: session,
-          regenTargetId: 'a1',
-        );
-        final updated = state.session!.messages.first;
-
-        // Error swipe is appended and becomes active.
-        expect(updated.swipes, ['good', 'boom']);
-        expect(updated.swipeId, 1);
-        expect(updated.isError, isTrue);
-
-        // Meta stays aligned 1:1 with swipes; only the error index is marked.
-        expect(updated.swipesMeta.length, 2);
-        expect(updated.swipesMeta[0]['isError'], isNot(true));
-        expect(updated.swipesMeta[0]['genTime'], '1.0s');
-        expect(updated.swipesMeta[1]['isError'], isTrue);
-      },
-    );
-
-    test('writeRegenError keeps meta aligned when the original had no meta', () {
+    test('writeRegenError appends an error swipe whose meta marks isError only '
+        'on the error index', () {
       final existing = ChatMessage(
         id: 'a1',
         role: 'assistant',
         content: 'good',
         swipes: ['good'],
         swipeId: 0,
-        genTime: '2.0s',
+        swipesMeta: [
+          <String, dynamic>{'genTime': '1.0s'},
+        ],
       );
       final session = makeSessionWithMessage(existing);
       final state = writer.writeRegenError(
@@ -245,13 +214,144 @@ void main() {
         regenTargetId: 'a1',
       );
       final updated = state.session!.messages.first;
-      expect(updated.swipes.length, 2);
+
+      // Error swipe is appended and becomes active.
+      expect(updated.swipes, ['good', 'boom']);
+      expect(updated.swipeId, 1);
+      expect(updated.isError, isTrue);
+
+      // Meta stays aligned 1:1 with swipes; only the error index is marked.
       expect(updated.swipesMeta.length, 2);
-      // Prior swipe keeps its badge meta and is NOT flagged as an error.
       expect(updated.swipesMeta[0]['isError'], isNot(true));
-      expect(updated.swipesMeta[0]['genTime'], '2.0s');
-      // Only the appended error swipe carries the marker.
+      expect(updated.swipesMeta[0]['genTime'], '1.0s');
       expect(updated.swipesMeta[1]['isError'], isTrue);
+    });
+
+    test(
+      'writeRegenError keeps meta aligned when the original had no meta',
+      () {
+        final existing = ChatMessage(
+          id: 'a1',
+          role: 'assistant',
+          content: 'good',
+          swipes: ['good'],
+          swipeId: 0,
+          genTime: '2.0s',
+        );
+        final session = makeSessionWithMessage(existing);
+        final state = writer.writeRegenError(
+          errorText: 'boom',
+          saveSession: session,
+          regenTargetId: 'a1',
+        );
+        final updated = state.session!.messages.first;
+        expect(updated.swipes.length, 2);
+        expect(updated.swipesMeta.length, 2);
+        // Prior swipe keeps its badge meta and is NOT flagged as an error.
+        expect(updated.swipesMeta[0]['isError'], isNot(true));
+        expect(updated.swipesMeta[0]['genTime'], '2.0s');
+        // Only the appended error swipe carries the marker.
+        expect(updated.swipesMeta[1]['isError'], isTrue);
+      },
+    );
+  });
+
+  group('swipe deletion', () {
+    test('green deletion restores the shifted variation and nested state', () {
+      final message = ChatMessage(
+        id: 'a1',
+        role: 'assistant',
+        content: 'middle cleaned',
+        swipes: const ['first', 'middle', 'last'],
+        swipeId: 1,
+        swipesMeta: [
+          <String, dynamic>{
+            'reasoning': 'first reasoning',
+            'agentSwipes': [
+              const AgentSwipe(
+                content: 'first cleaned',
+                kind: 'cleaned',
+              ).toJson(),
+            ],
+          },
+          <String, dynamic>{},
+          <String, dynamic>{
+            'isError': true,
+            'agentSwipeId': 1,
+            'agentSwipes': [
+              const AgentSwipe(content: 'last final').toJson(),
+              const AgentSwipe(
+                content: 'last cleaned',
+                kind: 'cleaned',
+                reasoning: 'last reasoning',
+                tokens: 17,
+              ).toJson(),
+            ],
+          },
+        ],
+        agentSwipes: const [
+          AgentSwipe(content: 'middle', kind: 'final'),
+          AgentSwipe(content: 'middle cleaned', kind: 'cleaned'),
+        ],
+        agentSwipeId: 1,
+      );
+
+      final result = ChatMessageService.removeActiveSwipe(message)!;
+
+      expect(result.swipes, ['first', 'last']);
+      expect(result.swipesMeta, hasLength(2));
+      expect(result.swipeId, 1);
+      expect(result.agentSwipes, hasLength(2));
+      expect(result.agentSwipeId, 1);
+      expect(result.content, 'last cleaned');
+      expect(result.reasoning, 'last reasoning');
+      expect(result.tokens, 17);
+      expect(result.isError, isTrue);
+    });
+
+    test('green deletion rejects the sole variation', () {
+      const message = ChatMessage(
+        id: 'a1',
+        role: 'assistant',
+        content: 'only',
+        swipes: ['only'],
+      );
+      expect(ChatMessageService.removeActiveSwipe(message), isNull);
+    });
+
+    test('blue deletion reindexes parents and replaces deleted final', () {
+      final message = ChatMessage(
+        id: 'a1',
+        role: 'assistant',
+        content: 'final 2',
+        swipes: const ['final 2'],
+        swipesMeta: const [<String, dynamic>{}],
+        agentSwipes: const [
+          AgentSwipe(content: 'final 1', kind: 'final'),
+          AgentSwipe(content: 'final 2', kind: 'final'),
+          AgentSwipe(content: 'cleaned', kind: 'cleaned', parentSwipeId: 1),
+        ],
+        agentSwipeId: 1,
+      );
+
+      final result = ChatMessageService.removeActiveAgentSwipe(message)!;
+
+      expect(result.agentSwipes, hasLength(2));
+      expect(result.agentSwipeId, 1);
+      expect(result.content, 'cleaned');
+      expect(result.swipes, ['final 1']);
+      expect(result.agentSwipes[1].parentSwipeId, 0);
+      expect(result.swipesMeta[0]['agentSwipeId'], 1);
+    });
+
+    test('blue deletion rejects the sole variation', () {
+      const message = ChatMessage(
+        id: 'a1',
+        role: 'assistant',
+        content: 'only',
+        agentSwipes: [AgentSwipe(content: 'only')],
+      );
+      expect(ChatMessageService.removeActiveAgentSwipe(message), isNull);
     });
   });
 }

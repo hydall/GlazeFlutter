@@ -258,6 +258,91 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  Future<void> deleteSwipeAndShift({
+    required String sessionId,
+    required String messageId,
+    required int removedSwipeId,
+  }) => _deleteVariationAndShift(
+    sessionId: sessionId,
+    messageId: messageId,
+    removedSwipeId: removedSwipeId,
+  );
+
+  Future<void> deleteAgentSwipeAndShift({
+    required String sessionId,
+    required String messageId,
+    required int swipeId,
+    required int removedAgentSwipeId,
+  }) => _deleteVariationAndShift(
+    sessionId: sessionId,
+    messageId: messageId,
+    removedSwipeId: swipeId,
+    removedAgentSwipeId: removedAgentSwipeId,
+  );
+
+  Future<void> _deleteVariationAndShift({
+    required String sessionId,
+    required String messageId,
+    required int removedSwipeId,
+    int? removedAgentSwipeId,
+  }) async {
+    final existing = await getBySessionId(sessionId);
+    if (existing == null) return;
+
+    bool belongsToMessage(List<String> ids) => ids.contains(messageId);
+    bool removeAnchor(int swipeId, int agentSwipeId) =>
+        swipeId == removedSwipeId &&
+        (removedAgentSwipeId == null || agentSwipeId == removedAgentSwipeId);
+    int shiftedSwipe(int value) =>
+        removedAgentSwipeId == null && value > removedSwipeId
+        ? value - 1
+        : value;
+    int shiftedAgent(int swipeId, int value) =>
+        removedAgentSwipeId != null &&
+            swipeId == removedSwipeId &&
+            value > removedAgentSwipeId
+        ? value - 1
+        : value;
+
+    final entries = existing.entries
+        .where(
+          (entry) =>
+              !belongsToMessage(entry.messageIds) ||
+              !removeAnchor(entry.sourceSwipeId, entry.sourceAgentSwipeId),
+        )
+        .map(
+          (entry) => !belongsToMessage(entry.messageIds)
+              ? entry
+              : entry.copyWith(
+                  sourceSwipeId: shiftedSwipe(entry.sourceSwipeId),
+                  sourceAgentSwipeId: shiftedAgent(
+                    entry.sourceSwipeId,
+                    entry.sourceAgentSwipeId,
+                  ),
+                ),
+        )
+        .toList();
+    final drafts = existing.pendingDrafts
+        .where(
+          (draft) =>
+              !belongsToMessage(draft.messageIds) ||
+              !removeAnchor(draft.sourceSwipeId, draft.sourceAgentSwipeId),
+        )
+        .map(
+          (draft) => !belongsToMessage(draft.messageIds)
+              ? draft
+              : draft.copyWith(
+                  sourceSwipeId: shiftedSwipe(draft.sourceSwipeId),
+                  sourceAgentSwipeId: shiftedAgent(
+                    draft.sourceSwipeId,
+                    draft.sourceAgentSwipeId,
+                  ),
+                ),
+        )
+        .toList();
+    await put(existing.copyWith(entries: entries, pendingDrafts: drafts));
+  }
+
   Future<void> copyForSessionBranch({
     required String fromSessionId,
     required String toSessionId,

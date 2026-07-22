@@ -19,6 +19,8 @@ void showMessageContextMenu({
   required bool isLast,
   required bool isGenerating,
   required bool isHidden,
+  required bool canDeleteSwipe,
+  required bool canDeleteAgentSwipe,
 }) {
   // Notifier is read fresh inside each onTap callback instead of captured
   // here. If the provider is invalidated while the menu is open (e.g. by a
@@ -96,6 +98,30 @@ void showMessageContextMenu({
               .toggleMessageHidden(messageIndex);
         },
       ),
+      if (canDeleteSwipe && !isGenerating)
+        BottomSheetItem(
+          icon: Icons.delete_sweep_outlined,
+          label: 'Delete Swipe',
+          isDestructive: true,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            ref
+                .read(chatProvider(charId).notifier)
+                .deleteActiveSwipe(messageIndex);
+          },
+        ),
+      if (canDeleteAgentSwipe && !isGenerating)
+        BottomSheetItem(
+          icon: Icons.delete_outline,
+          label: 'Delete Agent Swipe',
+          isDestructive: true,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            ref
+                .read(chatProvider(charId).notifier)
+                .deleteActiveAgentSwipe(messageIndex);
+          },
+        ),
       if (isLast && !isGenerating)
         BottomSheetItem(
           icon: Icons.delete,

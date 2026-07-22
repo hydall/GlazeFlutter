@@ -267,6 +267,12 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     bool fromSwipe = false,
   }) => _swipeCtrl.changeAgentSwipe(messageIndex, dir, fromSwipe: fromSwipe);
 
+  Future<void> deleteActiveSwipe(int messageIndex) =>
+      _swipeCtrl.deleteActiveSwipe(messageIndex);
+
+  Future<void> deleteActiveAgentSwipe(int messageIndex) =>
+      _swipeCtrl.deleteActiveAgentSwipe(messageIndex);
+
   Future<void> setGreeting(int messageIndex, int direction) =>
       _swipeCtrl.setGreeting(messageIndex, direction);
 
