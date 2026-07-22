@@ -28,11 +28,9 @@ import '../state/cached_token_breakdown.dart';
 
 @visibleForTesting
 List<Map<String, dynamic>> buildPreviewApiMessages(
-  List<PromptMessage> messages,
-) => messages
-    .where((message) => message.content.trim().isNotEmpty || message.hasImage)
-    .map((message) => message.toApiMap())
-    .toList();
+  List<PromptMessage> messages, {
+  bool includeLastReasoning = false,
+}) => buildApiMessages(messages, includeLastReasoning: includeLastReasoning);
 
 class PromptPreviewScreen extends ConsumerStatefulWidget {
   final String charId;
@@ -524,7 +522,10 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
     if (_result == null || _apiConfig == null) return null;
     try {
       final cfg = _apiConfig!;
-      final apiMessages = buildPreviewApiMessages(_result!.messages);
+      final apiMessages = buildPreviewApiMessages(
+        _result!.messages,
+        includeLastReasoning: cfg.includeLastReasoning,
+      );
 
       final request = ChatTransportRequest(
         endpoint: cfg.endpoint,

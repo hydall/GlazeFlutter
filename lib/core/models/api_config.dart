@@ -26,6 +26,7 @@ abstract class ApiConfig with _$ApiConfig {
     @Default(true) bool stream,
     @Default('medium') String reasoningEffort,
     @Default(false) bool requestReasoning,
+    @Default(false) bool includeLastReasoning,
     String? reasoningTagStart,
     String? reasoningTagEnd,
     @Default(false) bool omitTemperature,

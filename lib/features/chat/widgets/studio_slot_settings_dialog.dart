@@ -342,6 +342,10 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                     min: 0,
                     max: 2,
                     divisions: 200,
+                    editableValue: true,
+                    included: !_omitTemperature,
+                    onIncludedChanged: (v) =>
+                        setState(() => _omitTemperature = !v),
                     onChanged: (v) => setState(() => _temperature = v),
                   ),
                   MenuRangeItem(
@@ -350,6 +354,9 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                     min: 0,
                     max: 1,
                     divisions: 100,
+                    editableValue: true,
+                    included: !_omitTopP,
+                    onIncludedChanged: (v) => setState(() => _omitTopP = !v),
                     onChanged: (v) => setState(() => _topP = v),
                   ),
                   MenuRangeItem(
@@ -358,6 +365,8 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                     min: 0,
                     max: 200,
                     divisions: 200,
+                    editableValue: true,
+                    decimalPlaces: 0,
                     onChanged: (v) => setState(() => _topK = v.round()),
                   ),
                   MenuRangeItem(
@@ -366,6 +375,7 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                     min: -2,
                     max: 2,
                     divisions: 80,
+                    editableValue: true,
                     onChanged: (v) => setState(() => _frequencyPenalty = v),
                   ),
                   MenuRangeItem(
@@ -374,6 +384,7 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                     min: -2,
                     max: 2,
                     divisions: 80,
+                    editableValue: true,
                     onChanged: (v) => setState(() => _presencePenalty = v),
                   ),
                   MenuFieldItem(
@@ -409,44 +420,19 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                   MenuSwitchItem(
                     label: 'Запросить нативное мышление',
                     description: 'Показывает блок нативного мышления модели',
+                    included: !_omitReasoning,
+                    onIncludedChanged: (v) =>
+                        setState(() => _omitReasoning = !v),
                     value: _requestReasoning,
                     onChanged: (v) => setState(() => _requestReasoning = v),
                   ),
                   MenuSelectorItem(
                     label: 'Уровень мышления',
                     currentValue: _reasoningEffortLabel(_reasoningEffort),
+                    included: !_omitReasoningEffort,
+                    onIncludedChanged: (v) =>
+                        setState(() => _omitReasoningEffort = !v),
                     onTap: _openReasoningEffortSelector,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              MenuGroup(
-                compact: true,
-                header: 'Пропуск параметров',
-                items: [
-                  MenuSwitchItem(
-                    label: 'Пропустить Temperature',
-                    description: 'Не отправлять temperature в API',
-                    value: _omitTemperature,
-                    onChanged: (v) => setState(() => _omitTemperature = v),
-                  ),
-                  MenuSwitchItem(
-                    label: 'Пропустить Top P',
-                    description: 'Не отправлять top_p в API',
-                    value: _omitTopP,
-                    onChanged: (v) => setState(() => _omitTopP = v),
-                  ),
-                  MenuSwitchItem(
-                    label: 'Пропустить Reasoning',
-                    description: 'Не отправлять параметры reasoning в API',
-                    value: _omitReasoning,
-                    onChanged: (v) => setState(() => _omitReasoning = v),
-                  ),
-                  MenuSwitchItem(
-                    label: 'Пропустить Reasoning Effort',
-                    description: 'Не отправлять reasoning_effort в API',
-                    value: _omitReasoningEffort,
-                    onChanged: (v) => setState(() => _omitReasoningEffort = v),
                   ),
                   if (widget.slot == StudioSlot.finalGenerator)
                     MenuSwitchItem(

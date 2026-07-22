@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/history_assembler.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/studio/studio_stream_interceptor.dart';
@@ -167,10 +168,10 @@ class StreamGenerationService {
       final hasInlineTags =
           reasoningTagStart.isNotEmpty && reasoningTagEnd.isNotEmpty;
 
-      final apiMessages = promptResult.messages
-          .where((m) => m.content.trim().isNotEmpty || m.hasImage)
-          .map((m) => m.toApiMap())
-          .toList();
+      final apiMessages = buildApiMessages(
+        promptResult.messages,
+        includeLastReasoning: apiConfig.includeLastReasoning,
+      );
       final previousApiMessages = _lastRequestsBySession[session.id];
       _rememberRequest(session.id, apiMessages);
       _log(

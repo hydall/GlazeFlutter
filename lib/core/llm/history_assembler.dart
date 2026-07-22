@@ -136,6 +136,28 @@ class PromptMessage {
   );
 }
 
+List<Map<String, dynamic>> buildApiMessages(
+  List<PromptMessage> messages, {
+  bool includeLastReasoning = false,
+}) {
+  final included = messages
+      .where((message) => message.content.trim().isNotEmpty || message.hasImage)
+      .toList();
+  final result = included.map((message) => message.toApiMap()).toList();
+  if (!includeLastReasoning) return result;
+
+  for (var i = included.length - 1; i >= 0; i--) {
+    final message = included[i];
+    if (message.role != 'assistant') continue;
+    final reasoning = message.reasoningContent?.trim();
+    if (reasoning?.isNotEmpty == true) {
+      result[i]['reasoning_content'] = reasoning;
+    }
+    break;
+  }
+  return result;
+}
+
 String _normalizeUnderscoreEmphasis(String text) {
   var result = text;
   result = result.replaceAllMapped(

@@ -138,6 +138,8 @@
   "reasoning_effort_high": "Высокий",
   "reasoning_effort_max": "Максимальный",
   "label_reasoning": "Запросить нативное мышление",
+  "label_include_last_reasoning": "Передавать последний reasoning блок",
+  "desc_include_last_reasoning": "Добавлять последний reasoning_content из истории",
   "label_prompt_cache_ttl": "Кэш Anthropic",
   "desc_prompt_cache_ttl": "Пробрасывать cache_control: ephemeral для Anthropic или кастомных OpenAI-compatible бэкендов. 1 час — держит кэш между длинными паузами (стоит дороже write, дешевле read).",
   "prompt_cache_ttl_off": "Выключен",
