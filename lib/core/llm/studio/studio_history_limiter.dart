@@ -71,6 +71,7 @@ class StudioHistoryLimiter {
           role: m.role,
           content: cleaned,
           reasoningContent: m.reasoningContent,
+          imagePath: m.imagePath,
         ),
       );
       totalTokens += tokens;
@@ -94,15 +95,22 @@ class StudioHistoryLimiter {
     if (history.length <= normalized) {
       return history
           .map(
-            (m) =>
-                PromptMessage(role: m.role, content: stripHtmlTags(m.content)),
+            (m) => PromptMessage(
+              role: m.role,
+              content: stripHtmlTags(m.content),
+              imagePath: m.imagePath,
+            ),
           )
           .toList();
     }
     final trimmed = history.sublist(history.length - normalized);
     return trimmed
         .map(
-          (m) => PromptMessage(role: m.role, content: stripHtmlTags(m.content)),
+          (m) => PromptMessage(
+            role: m.role,
+            content: stripHtmlTags(m.content),
+            imagePath: m.imagePath,
+          ),
         )
         .toList();
   }

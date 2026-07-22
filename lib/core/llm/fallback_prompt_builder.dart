@@ -25,7 +25,13 @@ PromptResult buildFallbackPrompt(PromptPayload payload) {
 
   for (final msg in payload.history) {
     final macroResult = replaceMacros(msg.content, macroCtx);
-    messages.add(PromptMessage(role: msg.role, content: macroResult.text));
+    messages.add(
+      PromptMessage(
+        role: msg.role,
+        content: macroResult.text,
+        imagePath: msg.imagePath,
+      ),
+    );
   }
 
   return PromptResult(

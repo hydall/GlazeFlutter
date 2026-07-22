@@ -168,7 +168,7 @@ class StreamGenerationService {
           reasoningTagStart.isNotEmpty && reasoningTagEnd.isNotEmpty;
 
       final apiMessages = promptResult.messages
-          .where((m) => m.content.trim().isNotEmpty)
+          .where((m) => m.content.trim().isNotEmpty || m.hasImage)
           .map((m) => m.toApiMap())
           .toList();
       final previousApiMessages = _lastRequestsBySession[session.id];
