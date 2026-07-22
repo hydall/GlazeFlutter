@@ -90,6 +90,7 @@ class ChatSwipeController {
     if (current == null ||
         current.session == null ||
         current.isGenerating ||
+        current.isGeneratingImage ||
         current.isPostGenRunning) {
       return;
     }
@@ -125,6 +126,7 @@ class ChatSwipeController {
     if (current == null ||
         current.session == null ||
         current.isGenerating ||
+        current.isGeneratingImage ||
         current.isPostGenRunning) {
       return;
     }

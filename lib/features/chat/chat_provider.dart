@@ -297,7 +297,10 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     if (!ref.mounted) return;
     if (ref.read(editingMessageIdProvider(arg)) != null) return;
     final current = state.value;
-    if (current == null || current.isGenerating || current.isPostGenRunning) {
+    if (current == null ||
+        current.isGenerating ||
+        current.isGeneratingImage ||
+        current.isPostGenRunning) {
       return;
     }
     if (_isMemoryDraftActive(current)) return;
@@ -431,6 +434,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     if (current == null ||
         current.session == null ||
         current.isGenerating ||
+        current.isGeneratingImage ||
         current.isPostGenRunning) {
       return;
     }
@@ -538,6 +542,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     if (current == null ||
         current.session == null ||
         current.isGenerating ||
+        current.isGeneratingImage ||
         current.isPostGenRunning) {
       return;
     }

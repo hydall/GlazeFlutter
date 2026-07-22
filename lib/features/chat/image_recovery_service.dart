@@ -77,11 +77,60 @@ class ImageRecoveryService {
         }
       }
 
+      final alignedMsg = ImageGenProcessor.replaceActiveImageContent(
+        currentMsg,
+        currentMsg.content,
+      );
+      if (jsonEncode(alignedMsg.toJson()) != jsonEncode(currentMsg.toJson())) {
+        currentMsg = alignedMsg;
+        changed = true;
+      }
+
+      final cleanedAgentSwipes = currentMsg.agentSwipes
+          .map(
+            (swipe) =>
+                swipe.copyWith(content: cleanStuckImgGenTags(swipe.content)),
+          )
+          .toList();
+      final cleanedMeta = currentMsg.swipesMeta.map((entry) {
+        final meta = Map<String, dynamic>.from(entry);
+        final stored = meta['agentSwipes'];
+        if (stored is List) {
+          meta['agentSwipes'] = stored.map((value) {
+            if (value is! Map) return value;
+            final swipe = Map<String, dynamic>.from(value);
+            final content = swipe['content'];
+            if (content is String) {
+              swipe['content'] = cleanStuckImgGenTags(content);
+            }
+            return swipe;
+          }).toList();
+        }
+        return meta;
+      }).toList();
+      if (!_agentSwipeListsEqual(cleanedAgentSwipes, currentMsg.agentSwipes) ||
+          !_metaListsEqual(cleanedMeta, currentMsg.swipesMeta)) {
+        currentMsg = currentMsg.copyWith(
+          agentSwipes: cleanedAgentSwipes,
+          swipesMeta: cleanedMeta,
+        );
+        changed = true;
+      }
+
       messages[i] = currentMsg;
     }
     if (!changed) return session;
     return session.copyWith(messages: messages);
   }
+
+  static bool _agentSwipeListsEqual(List<AgentSwipe> a, List<AgentSwipe> b) =>
+      jsonEncode(a.map((swipe) => swipe.toJson()).toList()) ==
+      jsonEncode(b.map((swipe) => swipe.toJson()).toList());
+
+  static bool _metaListsEqual(
+    List<Map<String, dynamic>> a,
+    List<Map<String, dynamic>> b,
+  ) => jsonEncode(a) == jsonEncode(b);
 
   static String cleanStuckImgGenTags(String text) {
     if (!ImgGenPatterns.imgGenRegex.hasMatch(text) &&
@@ -197,23 +246,16 @@ class ImageRecoveryService {
         lastMsg.content.contains('[IMG:RESULT:');
     if (!hasRetryableContent) return;
 
-    final resetContent = ImageTagMarkup.resetErrorTags(lastMsg.content);
+    final resetContent = resetImgTagsToGen(lastMsg.content);
     if (resetContent == lastMsg.content &&
         !ImageTagMarkup.hasImageGenTags(resetContent)) {
       return;
     }
 
     final newMessages = List<ChatMessage>.from(session.messages);
-    final swipeIdx = lastMsg.swipeId;
-    final updatedSwipes =
-        lastMsg.swipes.isNotEmpty &&
-            swipeIdx >= 0 &&
-            swipeIdx < lastMsg.swipes.length
-        ? (List<String>.from(lastMsg.swipes)..[swipeIdx] = resetContent)
-        : lastMsg.swipes;
-    newMessages[lastIdx] = lastMsg.copyWith(
-      content: resetContent,
-      swipes: updatedSwipes,
+    newMessages[lastIdx] = ImageGenProcessor.appendImageRegenerationSwipe(
+      lastMsg,
+      resetContent,
     );
     final resetSession = session.copyWith(
       messages: newMessages,
@@ -250,6 +292,7 @@ class ImageRecoveryService {
           isGeneratingImage: true,
         ),
         charId: _charId,
+        targetMessageId: lastMsg.id,
         cancelToken: imgCancelToken,
         isCurrentOperation: ownsOperation,
         onStateUpdate: mergeUpdate,
@@ -283,16 +326,10 @@ class ImageRecoveryService {
     var resetContent = resetImgTagsToGen(msg.content);
     if (resetContent == msg.content) return;
 
-    final swipeIdx = msg.swipeId;
-    final updatedSwipes = List<String>.from(msg.swipes);
-    if (swipeIdx >= 0 && swipeIdx < updatedSwipes.length) {
-      updatedSwipes[swipeIdx] = resetContent;
-    }
-
     final newMessages = List<ChatMessage>.from(current.messages);
-    newMessages[messageIndex] = msg.copyWith(
-      content: resetContent,
-      swipes: updatedSwipes,
+    newMessages[messageIndex] = ImageGenProcessor.appendImageRegenerationSwipe(
+      msg,
+      resetContent,
     );
     final resetSession = current.session!.copyWith(
       messages: newMessages,
@@ -330,6 +367,7 @@ class ImageRecoveryService {
           isGeneratingImage: true,
         ),
         charId: _charId,
+        targetMessageId: msg.id,
         cancelToken: imgCancelToken,
         isCurrentOperation: ownsOperation,
         onStateUpdate: mergeUpdate,
@@ -368,12 +406,26 @@ class ImageRecoveryService {
     final msg = current.messages[msgIdx];
     final Set<String> claimedPaths = {};
     for (final m in current.messages) {
-      for (final match in ImgGenPatterns.imgResultRegex.allMatches(m.content)) {
-        claimedPaths.add(match.group(1) ?? '');
-      }
+      claimedPaths.addAll(ImageTagMarkup.extractImageResultPaths(m.content));
       for (final s in m.swipes) {
-        for (final match in ImgGenPatterns.imgResultRegex.allMatches(s)) {
-          claimedPaths.add(match.group(1) ?? '');
+        claimedPaths.addAll(ImageTagMarkup.extractImageResultPaths(s));
+      }
+      for (final swipe in m.agentSwipes) {
+        claimedPaths.addAll(
+          ImageTagMarkup.extractImageResultPaths(swipe.content),
+        );
+      }
+      for (final meta in m.swipesMeta) {
+        final stored = meta['agentSwipes'];
+        if (stored is! List) continue;
+        for (final value in stored) {
+          if (value is! Map) continue;
+          final content = value['content'];
+          if (content is String) {
+            claimedPaths.addAll(
+              ImageTagMarkup.extractImageResultPaths(content),
+            );
+          }
         }
       }
     }
@@ -411,16 +463,10 @@ class ImageRecoveryService {
 
     if (updatedContent == msg.content) return;
 
-    final updatedSwipes = List<String>.from(msg.swipes);
-    final swipeIdx = msg.swipeId;
-    if (swipeIdx >= 0 && swipeIdx < updatedSwipes.length) {
-      updatedSwipes[swipeIdx] = updatedContent;
-    }
-
     final newMessages = List<ChatMessage>.from(current.messages);
-    newMessages[msgIdx] = msg.copyWith(
-      content: updatedContent,
-      swipes: updatedSwipes,
+    newMessages[msgIdx] = ImageGenProcessor.replaceActiveImageContent(
+      msg,
+      updatedContent,
     );
     final updatedSession = current.session!.copyWith(
       messages: newMessages,

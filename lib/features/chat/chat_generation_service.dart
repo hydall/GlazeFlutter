@@ -55,6 +55,7 @@ class ChatGenerationService {
   Future<void> processImageTags({
     required ChatState currentState,
     required String charId,
+    String? targetMessageId,
     CancelToken? cancelToken,
     bool Function()? isCurrentOperation,
     required void Function(ChatState) onStateUpdate,
@@ -65,6 +66,6 @@ class ChatGenerationService {
       cancelToken: cancelToken,
       isCurrentOperation: isCurrentOperation,
       onStateUpdate: onStateUpdate,
-    ).process(currentState);
+    ).process(currentState, targetMessageId: targetMessageId);
   }
 }

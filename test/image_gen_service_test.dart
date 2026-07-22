@@ -86,7 +86,9 @@ void main() {
     });
 
     test('handles empty [IMG:GEN]', () {
-      final instructions = ImageTagMarkup.extractImageGenInstructions('[IMG:GEN:]');
+      final instructions = ImageTagMarkup.extractImageGenInstructions(
+        '[IMG:GEN:]',
+      );
       expect(instructions.length, 1);
       expect(instructions[0]['prompt'], '');
     });
@@ -137,7 +139,11 @@ void main() {
     test('replaces HTML data-iig-instruction tag', () {
       const html =
           """<img data-iig-instruction='{"style":"manga","prompt":"test"}' src="[IMG:GEN]">""";
-      final result = ImageTagMarkup.replaceTagWithResult(html, 0, '/saved/img.png');
+      final result = ImageTagMarkup.replaceTagWithResult(
+        html,
+        0,
+        '/saved/img.png',
+      );
       expect(result, contains('[IMG:RESULT:/saved/img.png|'));
       expect(result, isNot(contains('data-iig-instruction')));
     });
@@ -145,7 +151,11 @@ void main() {
     test('replaces whole HTML img tag with src IMG:GEN', () {
       const html =
           """<div><img src='[IMG:GEN:{"prompt":"test"}]' alt="scene"><i>caption</i></div>""";
-      final result = ImageTagMarkup.replaceTagWithResult(html, 0, '/saved/img.png');
+      final result = ImageTagMarkup.replaceTagWithResult(
+        html,
+        0,
+        '/saved/img.png',
+      );
       expect(result, contains('[IMG:RESULT:/saved/img.png|'));
       expect(result, isNot(contains('<img')));
       expect(result, contains('caption'));
@@ -206,7 +216,9 @@ void main() {
     });
 
     test('converts [IMG:RESULT:] without instruction to bare [IMG:GEN]', () {
-      final result = ImageTagMarkup.resetErrorTags('[IMG:RESULT:/path/to/img.png]');
+      final result = ImageTagMarkup.resetErrorTags(
+        '[IMG:RESULT:/path/to/img.png]',
+      );
       expect(result, contains('[IMG:GEN]'));
       expect(result, isNot(contains('[IMG:RESULT')));
     });
@@ -345,5 +357,23 @@ void main() {
         expect(result, contains('[IMG:ERROR:'));
       },
     );
+
+    test('multiple failed image tags all settle without leaving GEN', () async {
+      const text = '[IMG:GEN:{"prompt":"first"}] [IMG:GEN:{"prompt":"second"}]';
+      final result = await service.processMessageImages(
+        text: text,
+        settings: const ImageGenSettings(
+          enabled: true,
+          apiType: ImageGenApiType.routmy,
+          routmyApiKey: 'fake-key',
+        ),
+        llmEndpoint: '',
+        llmApiKey: '',
+        llmModel: '',
+      );
+
+      expect(ImageTagMarkup.hasImageGenTags(result), isFalse);
+      expect('[IMG:ERROR:'.allMatches(result), hasLength(2));
+    });
   });
 }

@@ -33,14 +33,56 @@ Map<String, dynamic> stripImagesFromSession(Map<String, dynamic> json) {
         return s;
       }).toList();
     }
+    List<dynamic>? cleanedAgentSwipes;
+    final agentSwipes = m['agentSwipes'];
+    if (agentSwipes is List && agentSwipes.isNotEmpty) {
+      cleanedAgentSwipes = _stripAgentSwipes(agentSwipes, () {
+        modified = true;
+      });
+    }
+    List<dynamic>? cleanedSwipesMeta;
+    final swipesMeta = m['swipesMeta'];
+    if (swipesMeta is List && swipesMeta.isNotEmpty) {
+      cleanedSwipesMeta = swipesMeta.map((value) {
+        if (value is! Map) return value;
+        final meta = Map<String, dynamic>.from(value);
+        final nested = meta['agentSwipes'];
+        if (nested is List && nested.isNotEmpty) {
+          meta['agentSwipes'] = _stripAgentSwipes(nested, () {
+            modified = true;
+          });
+        }
+        return meta;
+      }).toList();
+    }
 
     if (!modified) return m;
     final result = <String, dynamic>{...m};
     if (cleanedContent != null) result['content'] = cleanedContent;
     if (cleanedSwipes != null) result['swipes'] = cleanedSwipes;
+    if (cleanedAgentSwipes != null) {
+      result['agentSwipes'] = cleanedAgentSwipes;
+    }
+    if (cleanedSwipesMeta != null) result['swipesMeta'] = cleanedSwipesMeta;
     return result;
   }).toList();
   return {...json, 'messages': stripped};
+}
+
+List<dynamic> _stripAgentSwipes(List<dynamic> swipes, void Function() changed) {
+  return swipes.map((value) {
+    if (value is! Map) return value;
+    final swipe = Map<String, dynamic>.from(value);
+    final content = swipe['content'];
+    if (content is String && content.length >= 10) {
+      final cleaned = stripImageContent(content);
+      if (!identical(cleaned, content)) {
+        swipe['content'] = cleaned;
+        changed();
+      }
+    }
+    return swipe;
+  }).toList();
 }
 
 String stripImageContent(String text) {

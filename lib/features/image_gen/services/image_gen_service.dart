@@ -48,7 +48,16 @@ class ImageGenService {
       final instruction = instructions[i];
       final rawPrompt = instruction['prompt'] as String? ?? '';
 
-      if (rawPrompt.isEmpty) continue;
+      if (rawPrompt.isEmpty) {
+        currentText = ImageTagMarkup.replaceTagWithError(
+          currentText,
+          0,
+          'Image prompt is empty',
+        );
+        onUpdate?.call(currentText);
+        onError?.call('Image prompt is empty');
+        continue;
+      }
 
       final style = instruction['style'] as String? ?? '';
       var cleanPrompt = rawPrompt.replaceFirst(
@@ -74,12 +83,12 @@ class ImageGenService {
           cancelToken: cancelToken,
         );
 
-        final filename = 'imggen_${DateTime.now().millisecondsSinceEpoch}.png';
+        final filename = 'imggen_${DateTime.now().microsecondsSinceEpoch}.png';
         final savedPath = await _saveGeneratedImage(filename, imageBytes);
 
         currentText = ImageTagMarkup.replaceTagWithResult(
           currentText,
-          i,
+          0,
           savedPath,
         );
         onUpdate?.call(currentText);
@@ -88,7 +97,7 @@ class ImageGenService {
         final errorMsg = _formatError(e);
         currentText = ImageTagMarkup.replaceTagWithError(
           currentText,
-          i,
+          0,
           errorMsg,
         );
         onUpdate?.call(currentText);
@@ -97,7 +106,7 @@ class ImageGenService {
         final errorMsg = _formatErrorString(e.toString());
         currentText = ImageTagMarkup.replaceTagWithError(
           currentText,
-          i,
+          0,
           errorMsg,
         );
         onUpdate?.call(currentText);
