@@ -19,7 +19,7 @@ void main() {
       bool enterToSend = true,
       bool isEditingMessage = false,
       String initialDraft = '',
-      VoidCallback? onImpersonate,
+      void Function(String? guidance)? onImpersonate,
     }) {
       sentMessages = [];
       return ProviderScope(
@@ -98,7 +98,7 @@ void main() {
       await tester.pumpWidget(
         buildChatInputBar(
           isEditingMessage: true,
-          onImpersonate: () => impersonateCalls++,
+          onImpersonate: (_) => impersonateCalls++,
         ),
       );
 

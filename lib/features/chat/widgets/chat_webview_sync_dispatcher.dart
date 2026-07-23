@@ -54,6 +54,7 @@ class ChatWebViewSyncDispatcher {
     required Future<void> Function(ChatMessage) appendMessage,
     required ChatMessage Function() buildStreamingPlaceholder,
     bool ready = true,
+    bool isImpersonating = false,
   }) {
     if (!ready || bridge == null) {
       // Still need to keep `wasGenerating` rolling for the next frame
@@ -131,11 +132,14 @@ class ChatWebViewSyncDispatcher {
         !chatMessageListsIdentical(oldMessages, newMessages);
 
     // Fresh generation started (no regenTargetId) → inject typing placeholder.
+    // Impersonation reuses the generating flag but streams into the composer,
+    // not the chat, so it must never spawn an assistant typing bubble.
     final shouldInjectPlaceholder =
         !state.wasGenerating &&
         current.isGenerating &&
         current.regenTargetId == null &&
-        !state.streamingSent;
+        !state.streamingSent &&
+        !isImpersonating;
     state.wasGenerating = current.isGenerating;
 
     return ChatWebViewSyncResult(

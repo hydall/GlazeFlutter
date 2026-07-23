@@ -106,6 +106,8 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       TextEditingController(text: widget.preset?.reasoningStart ?? '');
   late final _reasoningEndCtrl =
       TextEditingController(text: widget.preset?.reasoningEnd ?? '');
+  late final _impersonationPromptCtrl =
+      TextEditingController(text: widget.preset?.impersonationPrompt ?? '');
   late bool _mergePrompts = widget.preset?.mergePrompts ?? false;
   bool _showAdvanced = false;
   int? _expandedBlockIndex;
@@ -128,6 +130,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     _nameCtrl.addListener(_scheduleSave);
     _reasoningStartCtrl.addListener(_scheduleSave);
     _reasoningEndCtrl.addListener(_scheduleSave);
+    _impersonationPromptCtrl.addListener(_scheduleSave);
   }
 
   @override
@@ -153,6 +156,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     _nameCtrl.dispose();
     _reasoningStartCtrl.dispose();
     _reasoningEndCtrl.dispose();
+    _impersonationPromptCtrl.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -177,6 +181,9 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       mergeRole: widget.preset?.mergeRole ?? 'system',
       guidedGenerationPrompt: widget.preset?.guidedGenerationPrompt,
       guidedImpersonationPrompt: widget.preset?.guidedImpersonationPrompt,
+      impersonationPrompt: _impersonationPromptCtrl.text.trim().isEmpty
+          ? null
+          : _impersonationPromptCtrl.text,
       summaryPrompt: widget.preset?.summaryPrompt,
       createdAt: _createdAt,
     );
@@ -522,6 +529,27 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                   _scheduleSave();
                 },
               ),
+              const SizedBox(height: 20),
+              const _SectionLabel('Impersonation'),
+              const SizedBox(height: 8),
+              Text(
+                'Prompt sent when you tap the impersonate button — the model '
+                'writes your next message into the input box.',
+                style: TextStyle(
+                  color: context.cs.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _impersonationPromptCtrl,
+                style: TextStyle(color: context.cs.onSurface),
+                minLines: 2,
+                maxLines: 5,
+                decoration: _inputDecoration(
+                  '[Write {{user}}\'s next message.]',
+                ),
+              ),
             ],
           ),
         ),
@@ -780,6 +808,9 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       mergeRole: widget.preset?.mergeRole ?? 'system',
       guidedGenerationPrompt: widget.preset?.guidedGenerationPrompt,
       guidedImpersonationPrompt: widget.preset?.guidedImpersonationPrompt,
+      impersonationPrompt: _impersonationPromptCtrl.text.trim().isEmpty
+          ? null
+          : _impersonationPromptCtrl.text,
       summaryPrompt: widget.preset?.summaryPrompt,
       createdAt: _createdAt,
     );

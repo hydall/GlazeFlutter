@@ -264,7 +264,7 @@ void main() {
       expect(block.content, equals(''), reason: 'Auto-added blocks should have empty content (except guided_generation)');
     }
     final guided = preset.blocks.firstWhere((b) => b.id == 'guided_generation');
-    expect(guided.content, equals('[System Note: {{guidance}}]'),
+    expect(guided.content, equals(kDefaultGuidedGenerationPrompt),
         reason: 'guided_generation has default content');
   });
 

@@ -13,6 +13,7 @@ import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/widgets/fullscreen_editor.dart';
 import '../../../shared/widgets/glass_surface.dart';
+import '../chat_provider.dart' show ImpersonationState, impersonationStateProvider;
 import 'chat_blur_region_tracker.dart';
 
 Border _uiBorder(BuildContext context, ThemePreset preset) {
@@ -45,7 +46,11 @@ class ChatInputBar extends ConsumerStatefulWidget {
   onSendWithImage;
   final VoidCallback? onFullScreen;
   final VoidCallback? onQuickReplies;
-  final VoidCallback? onImpersonate;
+
+  /// Triggered by the account-circle button when the composer is empty.
+  /// [guidance] carries the active guidance instruction when guidance mode is
+  /// open (guided impersonation), otherwise null.
+  final void Function(String? guidance)? onImpersonate;
   final bool virtualKeyboardSend;
   final bool enterToSend;
   final bool batterySaver;
@@ -78,6 +83,10 @@ class ChatInputBar extends ConsumerStatefulWidget {
   final VoidCallback? onDeleteSelected;
   final bool allSelectedHidden;
   final bool isEditingMessage;
+
+  /// Chat/character id used to observe impersonation streaming state. When null
+  /// the composer behaves as a plain input (e.g. theme preview, tests).
+  final String? charId;
 
   const ChatInputBar({
     super.key,
@@ -114,6 +123,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
     this.onDeleteSelected,
     this.allSelectedHidden = false,
     this.isEditingMessage = false,
+    this.charId,
   });
 
   @override
@@ -132,6 +142,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   String? _attachedImageDataUrl;
   double _verticalDragDistance = 0;
 
+  /// True while an impersonation stream is filling the composer. The input is
+  /// locked and draft persistence is paused so the streamed text is not saved
+  /// as the user's draft.
+  bool _isImpersonating = false;
+
   @override
   void initState() {
     super.initState();
@@ -143,7 +158,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   void _onTextChanged() {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      if (mounted) {
+      // Do not persist streamed impersonation text as the user's draft.
+      if (mounted && !_isImpersonating) {
         widget.onDraftChanged?.call(_controller.text);
       }
     });
@@ -244,6 +260,41 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     _resetVerticalDrag();
   }
 
+  /// Mirrors the streamed impersonation text into the composer and locks it
+  /// while a stream is in flight. Registered once per build via [ref.listen].
+  void _listenImpersonation() {
+    final charId = widget.charId;
+    if (charId == null) return;
+    ref.listen<ImpersonationState>(impersonationStateProvider(charId), (
+      prev,
+      next,
+    ) {
+      if (!mounted) return;
+      if (next.active) {
+        if (!_isImpersonating) {
+          setState(() => _isImpersonating = true);
+        }
+        if (_controller.text != next.text) {
+          _controller.value = TextEditingValue(
+            text: next.text,
+            selection: TextSelection.collapsed(offset: next.text.length),
+          );
+        }
+      } else {
+        // Stream finished (or aborted): leave the text for the user to edit.
+        if (_isImpersonating) {
+          if (_controller.text != next.text && next.text.isNotEmpty) {
+            _controller.value = TextEditingValue(
+              text: next.text,
+              selection: TextSelection.collapsed(offset: next.text.length),
+            );
+          }
+          setState(() => _isImpersonating = false);
+        }
+      }
+    });
+  }
+
   void _handleSend() {
     if (widget.isEditingMessage) return;
     final text = _controller.text;
@@ -307,6 +358,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final secondaryColor =
         preset.uiTextGrayParsed ?? context.cs.onSurfaceVariant;
     final uiBorder = _uiBorder(context, preset);
+
+    _listenImpersonation();
 
     if (widget.showSearchControls) {
       final searchContent = BlurRegionTracker(
@@ -556,7 +609,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     child: TextField(
                       controller: _controller,
                       focusNode: _effectiveFocusNode,
-                      readOnly: widget.isEditingMessage,
+                      readOnly: widget.isEditingMessage || _isImpersonating,
                       canRequestFocus: !widget.isEditingMessage,
                       enableInteractiveSelection: !widget.isEditingMessage,
                       showCursor: !widget.isEditingMessage,
@@ -663,7 +716,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     } else if (hasContent) {
                       _handleSend();
                     } else {
-                      widget.onImpersonate?.call();
+                      final guidance =
+                          _guidanceMode &&
+                              _guidanceController.text.trim().isNotEmpty
+                          ? _guidanceController.text.trim()
+                          : null;
+                      widget.onImpersonate?.call(guidance);
                     }
                   },
                 ),
