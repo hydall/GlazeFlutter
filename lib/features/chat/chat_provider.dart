@@ -27,6 +27,7 @@ import 'controllers/chat_session_controller.dart';
 import 'controllers/chat_draft_controller.dart';
 import 'services/continuation_message_merger.dart';
 import 'services/generation_pipeline.dart';
+import 'services/impersonation_service.dart';
 import 'utils/message_preview.dart';
 import '../extensions/services/extension_post_gen_service.dart';
 
@@ -37,6 +38,29 @@ final chatProvider =
 
 final streamingStateProvider = StateProvider.family<StreamingState, String>(
   (ref, _) => const StreamingState(),
+);
+
+/// Transient state for an in-flight (or just-finished) impersonation. The
+/// compose bar watches this: while [active] it mirrors [text] into the input
+/// and locks editing; when it flips to inactive the streamed text is left in
+/// the box for the user to edit and send. Mirrors Glaze's `isImpersonating` +
+/// `inputValue` streaming.
+class ImpersonationState {
+  final bool active;
+  final String text;
+  const ImpersonationState({this.active = false, this.text = ''});
+}
+
+final impersonationStateProvider =
+    StateProvider.family<ImpersonationState, String>(
+      (ref, _) => const ImpersonationState(),
+    );
+
+/// One-shot signal that impersonation could not start because the effective
+/// preset has no `impersonationPrompt`. The chat screen listens and surfaces a
+/// prompt to configure it, then clears the flag.
+final impersonationNeedsConfigProvider = StateProvider.family<bool, String>(
+  (ref, _) => false,
 );
 
 class ChatNotifier extends AsyncNotifier<ChatState> {
@@ -516,6 +540,84 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       previousTokens: prevAssistant.tokens,
       previousSwipesMeta: _previousSwipesMetaForRegen(prevAssistant),
     );
+  }
+
+  /// Impersonation: generate the user's next message from the preset's
+  /// `impersonationPrompt` and stream it into the compose box (never into the
+  /// chat). Optional [guidanceText] steers it via the guided-impersonation
+  /// wrapper. Mirrors hydall/Glaze `startImpersonation`.
+  Future<void> impersonate({String? guidanceText}) async {
+    if (!ref.mounted) return;
+    if (ref.read(editingMessageIdProvider(arg)) != null) return;
+    final current = state.value;
+    if (current == null ||
+        current.session == null ||
+        current.isGenerating ||
+        current.isGeneratingImage ||
+        current.isPostGenRunning) {
+      return;
+    }
+    if (_isMemoryDraftActive(current)) return;
+
+    final session = current.session!;
+    // Impersonation never restores a chat message on abort — clear any stale
+    // restoration target left by a prior regenerate so Stop only drops the
+    // streamed input text.
+    _abortHandler.restorationMessage = null;
+    final genId = _abortHandler.nextGenId();
+    final service = ImpersonationService(
+      ref: ref,
+      charId: arg,
+      genId: genId,
+      isAborted: () => !_abortHandler.isCurrentGen(genId),
+    );
+
+    final impersonationPrompt = service.resolveImpersonationPrompt(session.id);
+    if (impersonationPrompt == null) {
+      ref.read(impersonationNeedsConfigProvider(arg).notifier).state = true;
+      return;
+    }
+
+    ref.read(impersonationStateProvider(arg).notifier).state =
+        const ImpersonationState(active: true, text: '');
+    state = AsyncData(
+      current.copyWith(isGenerating: true, generationStartTime: DateTime.now()),
+    );
+
+    try {
+      await service.run(
+        session: session,
+        impersonationPrompt: impersonationPrompt,
+        guidanceText: guidanceText,
+        setCancelToken: (token) =>
+            _abortHandler.setCancelToken(token, genId: genId),
+        onDelta: (text) {
+          if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
+          ref.read(impersonationStateProvider(arg).notifier).state =
+              ImpersonationState(active: true, text: text);
+        },
+      );
+    } catch (e, st) {
+      debugPrint('[ChatNotifier] impersonation failed: $e\n$st');
+    } finally {
+      if (ref.mounted) {
+        // Settle the impersonation state (keep whatever text streamed so far so
+        // the user can edit/send it) regardless of who won the genId race.
+        final impersonation = ref.read(impersonationStateProvider(arg));
+        if (impersonation.active) {
+          ref.read(impersonationStateProvider(arg).notifier).state =
+              ImpersonationState(active: false, text: impersonation.text);
+        }
+        // Only clear the generating flag if this run still owns the slot; an
+        // abort/newer generation already reset it otherwise.
+        if (_abortHandler.isCurrentGen(genId)) {
+          final latest = state.value;
+          if (latest != null && latest.isGenerating) {
+            state = AsyncData(latest.copyWith(isGenerating: false));
+          }
+        }
+      }
+    }
   }
 
   List<Map<String, dynamic>>? _previousSwipesMetaForRegen(ChatMessage message) {

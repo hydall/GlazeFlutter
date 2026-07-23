@@ -65,6 +65,7 @@ abstract class Preset with _$Preset {
     String? reasoningEnd,
     String? guidedGenerationPrompt,
     String? guidedImpersonationPrompt,
+    String? impersonationPrompt,
     String? summaryPrompt,
     @Default(false) bool mergePrompts,
     @Default('system') String mergeRole,
@@ -102,6 +103,15 @@ Map<String, dynamic> _normalizeBlock(Map<String, dynamic> json) {
   n['isStashed'] = _coerceBool(n['isStashed'], false);
   n['appendToLastMessage'] = _coerceBool(n['appendToLastMessage'], false);
   n['depth'] = _coerceInt(n['depth']);
+  // Bring the guided-generation wrapper to parity with hydall/Glaze. Presets
+  // still carrying the legacy '[System Note: {{guidance}}]' default (i.e.
+  // never customized) are upgraded to the Glaze wording so guided
+  // generation/swipe reads identically. Customized content is left untouched.
+  if (id == 'guided_generation' &&
+      (n['content'] as String?) == '[System Note: {{guidance}}]') {
+    n['content'] =
+        '[Generate your next reply according to these instructions: {{guidance}}]';
+  }
   return n;
 }
 

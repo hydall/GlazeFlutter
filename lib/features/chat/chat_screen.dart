@@ -976,6 +976,21 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         }
       }
     });
+    ref.listen<bool>(impersonationNeedsConfigProvider(widget.charId), (
+      prev,
+      next,
+    ) {
+      if (next) {
+        ref.read(impersonationNeedsConfigProvider(widget.charId).notifier).state =
+            false;
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(content: Text('impersonation_prompt_missing'.tr())),
+          );
+      }
+    });
     final appSettings = ref.watch(appSettingsProvider).value;
     final batterySaverMode = appSettings?.batterySaver ?? false;
     final preset = batteryAware(
@@ -1838,13 +1853,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                             context,
                                             panel: DrawerPanel.quickReplies,
                                           ),
-                                      onImpersonate: () => ref
+                                      onImpersonate: (guidance) => ref
                                           .read(
                                             chatProvider(
                                               widget.charId,
                                             ).notifier,
                                           )
-                                          .regenerateLastAssistant(),
+                                          .impersonate(guidanceText: guidance),
+                                      charId: widget.charId,
                                     );
                                   },
                                 ),

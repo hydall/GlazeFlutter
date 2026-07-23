@@ -741,6 +741,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         isTyping: true,
       ),
       ready: _ready,
+      isImpersonating: ref
+          .read(impersonationStateProvider(widget.charId))
+          .active,
     );
     if (result.sessionSwitched) {
       // Raise the cover synchronously (build runs right after didUpdateWidget)

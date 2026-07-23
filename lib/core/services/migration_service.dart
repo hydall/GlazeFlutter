@@ -410,6 +410,9 @@ class MigrationService {
       reasoningEnd: json['reasoningEnd'] as String?,
       guidedGenerationPrompt: json['guidedGenerationPrompt'] as String?,
       guidedImpersonationPrompt: json['guidedImpersonationPrompt'] as String?,
+      impersonationPrompt:
+          json['impersonationPrompt'] as String? ??
+          json['impersonation_prompt'] as String?,
       summaryPrompt: json['summaryPrompt'] as String?,
       mergePrompts: json['mergePrompts'] as bool? ?? false,
       mergeRole: json['mergeRole'] as String? ?? 'system',
