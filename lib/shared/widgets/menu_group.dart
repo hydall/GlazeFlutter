@@ -763,6 +763,7 @@ class _MenuScriptItemState extends State<MenuScriptItem> {
 
 class MenuSelectorItem extends StatelessWidget {
   final String label;
+  final String? helpTerm;
   final String currentValue;
   final bool? included;
   final ValueChanged<bool>? onIncludedChanged;
@@ -771,6 +772,7 @@ class MenuSelectorItem extends StatelessWidget {
   const MenuSelectorItem({
     super.key,
     required this.label,
+    this.helpTerm,
     required this.currentValue,
     this.included,
     this.onIncludedChanged,
@@ -813,6 +815,7 @@ class MenuSelectorItem extends StatelessWidget {
                     fontSize: 13,
                   ),
                 ),
+                if (helpTerm != null) HelpTip(term: helpTerm!, size: 14),
               ],
             ),
             const SizedBox(height: 6),

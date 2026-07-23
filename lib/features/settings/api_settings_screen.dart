@@ -725,6 +725,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               if (_supportsReasoning)
                 MenuSwitchItem(
                   label: 'label_reasoning'.tr(),
+                  helpTerm: 'reasoning-native',
                   description: 'desc_reasoning'.tr(),
                   value: _showNativeReasoning,
                   onChanged: (v) {
@@ -735,6 +736,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               if (_supportsReasoning)
                 MenuSelectorItem(
                   label: 'label_reasoning_effort'.tr(),
+                  helpTerm: 'reasoning-effort',
                   currentValue: _reasoningEffortLabel(_reasoningEffort),
                   included: _requestReasoning,
                   onIncludedChanged: (v) {
