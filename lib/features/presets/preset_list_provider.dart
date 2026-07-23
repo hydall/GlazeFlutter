@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/preset.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/shared_prefs_provider.dart';
+import '../../core/utils/id_generator.dart';
 import '../../core/utils/sync_deletion_tracker.dart';
+import '../../core/utils/time_helpers.dart';
 
 final presetListProvider =
     AsyncNotifierProvider<PresetListNotifier, List<Preset>>(
@@ -31,6 +33,20 @@ class PresetListNotifier extends AsyncNotifier<List<Preset>> {
 
   Future<Preset?> getPresetById(String id) async {
     return ref.read(presetRepoProvider).getById(id);
+  }
+
+  /// Creates an independent copy of [preset] with a fresh id and a "(copy)"
+  /// suffixed name. Blocks and regexes are carried over unchanged (their ids
+  /// are scoped to the owning preset). Returns the new preset.
+  Future<Preset> clone(Preset preset) async {
+    final copy = preset.copyWith(
+      id: generateId(),
+      name: '${preset.name} (copy)',
+      createdAt: currentTimestampSeconds(),
+    );
+    await ref.read(presetRepoProvider).put(copy);
+    ref.invalidateSelf();
+    return copy;
   }
 
   Future<void> remove(String id) async {

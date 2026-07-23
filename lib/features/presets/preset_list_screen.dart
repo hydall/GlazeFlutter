@@ -139,16 +139,8 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
               },
               onConnections: () => showPresetConnections(context, preset.id),
               onEdit: () => _openEditor(preset),
-              onDuplicate: () => ref
-                  .read(presetListProvider.notifier)
-                  .add(
-                    preset.copyWith(
-                      id: DateTime.now().millisecondsSinceEpoch.toRadixString(
-                        36,
-                      ),
-                      name: '${preset.name} (copy)',
-                    ),
-                  ),
+              onDuplicate: () =>
+                  ref.read(presetListProvider.notifier).clone(preset),
               onDelete: () {
                 if (isActive) {
                   final nextPreset = list.cast<Preset?>().firstWhere(

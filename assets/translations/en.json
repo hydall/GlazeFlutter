@@ -244,6 +244,7 @@
   "action_open_in_catalog": "Open in Catalog",
   "action_convert_to_persona": "Convert to Persona",
   "action_convert_to_character": "Convert to Character",
+  "action_clone_persona": "Clone Persona",
   "convert_to_persona_done": "Persona created",
   "convert_to_character_done": "Character created",
   "action_branch": "Branching",
