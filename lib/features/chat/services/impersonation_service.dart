@@ -35,17 +35,14 @@ enum ImpersonationOutcome { ok, notConfigured, aborted, failed }
 class ImpersonationService {
   final Ref _ref;
   final String _charId;
-  final int _genId;
   final bool Function() _isAborted;
 
   ImpersonationService({
     required Ref ref,
     required String charId,
-    required int genId,
     required bool Function() isAborted,
   }) : _ref = ref,
        _charId = charId,
-       _genId = genId,
        _isAborted = isAborted;
 
   /// Resolves the effective impersonation prompt for [sessionId], or null when

@@ -568,7 +568,6 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     final service = ImpersonationService(
       ref: ref,
       charId: arg,
-      genId: genId,
       isAborted: () => !_abortHandler.isCurrentGen(genId),
     );
 
