@@ -230,13 +230,15 @@ class CatalogGrid extends ConsumerWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-                child: Text(
-                  '${state.total} result${state.total == 1 ? '' : 's'}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: context.cs.onSurfaceVariant,
-                  ),
-                ),
+                child: state.loading
+                    ? const SizedBox(height: 11)
+                    : Text(
+                        '${state.total} result${state.total == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.cs.onSurfaceVariant,
+                        ),
+                      ),
               ),
             )
           else
