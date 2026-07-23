@@ -215,8 +215,12 @@ void _editBlock(
   ExtensionPreset preset,
   BlockConfig block,
 ) {
-  showDialog<void>(
+  showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
+    useRootNavigator: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
     builder: (ctx) => BlockEditDialog(
       block: block,
       onSave: (updated) {

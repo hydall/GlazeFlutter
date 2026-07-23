@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/studio_config.dart';
 import '../../../core/models/studio_preset_block_groups.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../studio/widgets/studio_block_editor_dialog.dart';
 import '../../studio/widgets/studio_preset_group_tile.dart';
 
@@ -141,26 +142,33 @@ class _StudioPresetEditorSheetState
                           ),
                         ),
                         confirmDismiss: (_) async {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('Delete Block'),
-                              content: Text(
-                                'Delete "${block.title.isNotEmpty ? block.title : block.id}"?',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(false),
-                                  child: const Text('Cancel'),
-                                ),
-                                FilledButton(
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(true),
-                                  child: const Text('Delete'),
-                                ),
-                              ],
+                          final ok = await GlazeBottomSheet.show<bool>(
+                            context,
+                            title: 'Delete Block',
+                            bigInfo: BottomSheetBigInfo(
+                              icon: Icons.delete_outline,
+                              description:
+                                  'Delete "${block.title.isNotEmpty ? block.title : block.id}"?',
                             ),
+                            items: [
+                              BottomSheetItem(
+                                label: 'Delete',
+                                centered: true,
+                                isDestructive: true,
+                                onTap: () => Navigator.of(
+                                  context,
+                                  rootNavigator: true,
+                                ).pop(true),
+                              ),
+                              BottomSheetItem(
+                                label: 'Cancel',
+                                centered: true,
+                                onTap: () => Navigator.of(
+                                  context,
+                                  rootNavigator: true,
+                                ).pop(false),
+                              ),
+                            ],
                           );
                           return ok == true;
                         },
@@ -258,8 +266,12 @@ class _StudioPresetEditorSheetState
       section: _activeSection,
       order: _sectionBlocks.length,
     );
-    final result = await showDialog<StudioPresetBlock>(
+    final result = await showModalBottomSheet<StudioPresetBlock>(
       context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => StudioBlockEditorDialog(block: newBlock, isNew: true),
     );
     if (result == null || _preset == null) return;
@@ -268,8 +280,12 @@ class _StudioPresetEditorSheetState
   }
 
   Future<void> _editBlock(StudioPresetBlock block) async {
-    final result = await showDialog<StudioPresetBlock>(
+    final result = await showModalBottomSheet<StudioPresetBlock>(
       context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => StudioBlockEditorDialog(block: block),
     );
     if (result == null || _preset == null) return;
@@ -303,24 +319,27 @@ class _StudioPresetEditorSheetState
   }
 
   Future<void> _deleteBlock(StudioPresetBlock block) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete Block'),
-        content: Text(
-          'Delete "${block.title.isNotEmpty ? block.title : block.id}"?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Delete Block',
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.delete_outline,
+        description:
+            'Delete "${block.title.isNotEmpty ? block.title : block.id}"?',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Delete',
+          centered: true,
+          isDestructive: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
     );
     if (confirmed != true || _preset == null) return;
     final blocks = _preset!.blocks.where((b) => b.id != block.id).toList();

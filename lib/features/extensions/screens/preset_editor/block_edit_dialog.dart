@@ -2,6 +2,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../../shared/widgets/sheet_view.dart';
 import '../../models/block_config.dart';
 import 'widgets/api_config_selector.dart';
 import 'widgets/block_trigger_picker.dart';
@@ -131,85 +133,36 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
       return;
     }
 
-    final proceed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => Dialog(
-          insetPadding: EdgeInsets.zero,
-          child: Scaffold(
-            appBar: AppBar(
-              title: const Text('Not recommended with Studio Canon'),
-              leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(ctx).pop(false),
-              ),
-            ),
-            body: SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      size: 48,
-                      color: Theme.of(ctx).colorScheme.tertiary,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'User InfBlocks can conflict with Studio Canon State and may '
-                      'cause duplicated, stale, or lower-authority facts to enter '
-                      'the prompt. Studio Canon already tracks scene, entity, '
-                      'relationship, arc, and world state.',
-                      style: TextStyle(fontSize: 14, height: 1.5),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Recommended: keep user InfBlocks visible in panels only.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Allowed alternatives: image generation services, JS runner '
-                      'tools, and manual panel workflows.',
-                      style: TextStyle(fontSize: 14, height: 1.5),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'If you continue, user InfBlocks will be injected only as '
-                      'low-authority hints. They must never outrank Studio Canon '
-                      'State.',
-                      style: TextStyle(fontSize: 14, height: 1.5),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            bottomNavigationBar: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      child: Text('common_cancel'.tr()),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      child: const Text('Continue anyway'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+    final proceed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Not recommended with Studio Canon',
+      bigInfo: const BottomSheetBigInfo(
+        icon: Icons.warning_amber_rounded,
+        description:
+            'User InfBlocks can conflict with Studio Canon State and may '
+            'cause duplicated, stale, or lower-authority facts to enter the '
+            'prompt. Studio Canon already tracks scene, entity, relationship, '
+            'arc, and world state.\n\n'
+            'Recommended: keep user InfBlocks visible in panels only.\n\n'
+            'Allowed alternatives: image generation services, JS runner '
+            'tools, and manual panel workflows.\n\n'
+            'If you continue, user InfBlocks will be injected only as '
+            'low-authority hints. They must never outrank Studio Canon State.',
+      ),
+      items: [
+        BottomSheetItem(
+          label: 'Continue anyway',
+          centered: true,
+          isDestructive: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
-      );
+        BottomSheetItem(
+          label: 'common_cancel'.tr(),
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
+    );
     if (proceed != true) return;
 
     setState(() => _inject = true);
@@ -231,14 +184,20 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('block_edit_title'.tr()),
-      content: SizedBox(
-        width: 500,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    return SheetView(
+      title: 'block_edit_title'.tr(),
+      showHandle: true,
+      bodyPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      actions: [
+        SheetViewAction(
+          icon: const Icon(Icons.check, size: 22),
+          tooltip: 'btn_save'.tr(),
+          onPressed: _save,
+        ),
+      ],
+      body: ListView(
             children: [
+              const SizedBox(height: 8),
               TextField(
                 controller: _nameController,
                 decoration: InputDecoration(
@@ -349,17 +308,10 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
                       setState(() => _streamToPanel = v),
                 ),
               ],
+              const SizedBox(height: 16),
+              FilledButton(onPressed: _save, child: Text('btn_save'.tr())),
             ],
-          ),
-        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('btn_cancel'.tr()),
-        ),
-        FilledButton(onPressed: _save, child: Text('btn_save'.tr())),
-      ],
     );
   }
 

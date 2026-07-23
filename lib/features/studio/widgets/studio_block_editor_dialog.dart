@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/models/studio_config.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_text_field.dart';
+import '../../../shared/widgets/sheet_view.dart';
 
 /// Dialog for editing a single [StudioPresetBlock].
 ///
@@ -77,130 +80,89 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.isNew ? 'New Block' : 'Edit Block'),
-      content: SizedBox(
-        width: 600,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _titleCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _section,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Section',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _sections
-                          .map(
-                            (s) => DropdownMenuItem(value: s, child: Text(s)),
-                          )
-                          .toList(),
-                      onChanged: (v) =>
-                          setState(() => _section = v ?? _section),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _kind,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Kind',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _kinds
-                          .map(
-                            (k) => DropdownMenuItem(value: k, child: Text(k)),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => _kind = v ?? _kind),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _role,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Role',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _roles
-                          .map(
-                            (r) => DropdownMenuItem(value: r, child: Text(r)),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => _role = v ?? _role),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Switch(
-                        value: _enabled,
-                        onChanged: (v) => setState(() => _enabled = v),
-                      ),
-                      const Text('Enabled'),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _contentCtrl,
-                maxLines: 12,
-                decoration: const InputDecoration(
-                  labelText: 'Content (macro templates supported)',
-                  hintText:
-                      'Use {{description}}, {{persona}}, {{memory}}, etc.',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Studio final-agent briefs: either enable the '
-                  '"Previous Studio agents" block, or place these macros in '
-                  'custom final blocks: {{studio_agent_briefs}}, '
-                  '{{studio_continuity_brief}}, {{studio_agency_brief}}, '
-                  '{{studio_narrative_brief}}, {{studio_dialogue_brief}}, '
-                  '{{studio_guard_brief}}, {{studio_world_brief}}, '
-                  '{{studio_meta_brief}}, {{studio_beauty_brief}}. If any '
-                  'Studio brief macro is present, the Previous Studio agents '
-                  'block is skipped to avoid duplicates.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return SheetView(
+      title: widget.isNew ? 'New Block' : 'Edit Block',
+      showHandle: true,
+      bodyPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+        SheetViewAction(
+          icon: const Icon(Icons.check, size: 22),
+          tooltip: 'Save',
+          onPressed: _save,
         ),
-        FilledButton(onPressed: _save, child: const Text('Save')),
       ],
+      body: ListView(
+        children: [
+          const SizedBox(height: 8),
+          GlazeTextField(controller: _titleCtrl, label: 'Title'),
+          const SizedBox(height: 16),
+          _FieldLabel('Section'),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            initialValue: _section,
+            isExpanded: true,
+            items: _sections
+                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                .toList(),
+            onChanged: (v) => setState(() => _section = v ?? _section),
+          ),
+          const SizedBox(height: 16),
+          _FieldLabel('Kind'),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            initialValue: _kind,
+            isExpanded: true,
+            items: _kinds
+                .map((k) => DropdownMenuItem(value: k, child: Text(k)))
+                .toList(),
+            onChanged: (v) => setState(() => _kind = v ?? _kind),
+          ),
+          const SizedBox(height: 16),
+          _FieldLabel('Role'),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<String>(
+              segments: _roles
+                  .map((r) => ButtonSegment(value: r, label: Text(r)))
+                  .toList(),
+              selected: {_role},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) => setState(() => _role = s.first),
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            title: const Text('Enabled'),
+            value: _enabled,
+            onChanged: (v) => setState(() => _enabled = v),
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 8),
+          GlazeTextField(
+            controller: _contentCtrl,
+            maxLines: 12,
+            label: 'Content (macro templates supported)',
+            hint: 'Use {{description}}, {{persona}}, {{memory}}, etc.',
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Studio final-agent briefs: either enable the '
+            '"Previous Studio agents" block, or place these macros in '
+            'custom final blocks: {{studio_agent_briefs}}, '
+            '{{studio_continuity_brief}}, {{studio_agency_brief}}, '
+            '{{studio_narrative_brief}}, {{studio_dialogue_brief}}, '
+            '{{studio_guard_brief}}, {{studio_world_brief}}, '
+            '{{studio_meta_brief}}, {{studio_beauty_brief}}. If any '
+            'Studio brief macro is present, the Previous Studio agents '
+            'block is skipped to avoid duplicates.',
+            style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(onPressed: _save, child: const Text('Save')),
+        ],
+      ),
     );
   }
 
@@ -214,5 +176,22 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
       enabled: _enabled,
     );
     Navigator.of(context).pop(updated);
+  }
+}
+
+class _FieldLabel extends StatelessWidget {
+  final String text;
+  const _FieldLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: context.cs.onSurfaceVariant,
+      ),
+    );
   }
 }

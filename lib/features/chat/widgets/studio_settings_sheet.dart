@@ -984,8 +984,12 @@ class _StudioSettingsSheetState extends ConsumerState<StudioSettingsSheet> {
   }
 
   Future<void> _openSlotSettings({required StudioSlot slot}) async {
-    final updated = await showDialog<StudioSlotSettings>(
+    final updated = await showModalBottomSheet<StudioSlotSettings>(
       context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (c) => StudioSlotSettingsDialog(
         slot: slot,
         pipeline: ref.read(pipelineSettingsProvider),

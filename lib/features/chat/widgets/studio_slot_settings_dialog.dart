@@ -5,6 +5,7 @@ import '../../../core/models/pipeline_settings.dart';
 import '../../../core/models/extra_request_parameter.dart';
 import '../../../shared/widgets/menu_group.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/sheet_view.dart';
 import '../../../shared/widgets/extra_request_parameters_editor.dart';
 
 /// Which Studio model slot is being configured.
@@ -322,17 +323,48 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
     );
   }
 
+  void _save() {
+    final maxTokens = int.tryParse(_maxTokensCtrl.text.trim()) ?? 0;
+    final seconds = int.tryParse(_timeoutCtrl.text.trim()) ?? 0;
+    final timeoutMs = seconds > 0 ? seconds * 1000 : 0;
+    Navigator.of(context).pop(
+      StudioSlotSettings(
+        temperature: _temperature,
+        topP: _topP,
+        topK: _topK,
+        frequencyPenalty: _frequencyPenalty,
+        presencePenalty: _presencePenalty,
+        requestReasoning: _requestReasoning,
+        reasoningEffort: _reasoningEffort,
+        omitTemperature: _omitTemperature,
+        omitTopP: _omitTopP,
+        omitReasoning: _omitReasoning,
+        omitReasoningEffort: _omitReasoningEffort,
+        includeLastReasoning: _includeLastReasoning,
+        maxTokens: maxTokens,
+        timeoutMs: timeoutMs,
+        extraRequestParameters: _extraRequestParameters,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('$_slotTitle Settings'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              MenuGroup(
+    return SheetView(
+      title: '$_slotTitle Settings',
+      showHandle: true,
+      bodyPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      actions: [
+        SheetViewAction(
+          icon: const Icon(Icons.check, size: 22),
+          tooltip: 'Save',
+          onPressed: _save,
+        ),
+      ],
+      body: ListView(
+        children: [
+          const SizedBox(height: 8),
+          MenuGroup(
                 compact: true,
                 header: 'Параметры генерации',
                 items: [
@@ -445,43 +477,13 @@ class _StudioSlotSettingsDialogState extends State<StudioSlotSettingsDialog> {
                     ),
                 ],
               ),
-            ],
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _save,
+            child: const Text('Save'),
           ),
-        ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final maxTokens = int.tryParse(_maxTokensCtrl.text.trim()) ?? 0;
-            final seconds = int.tryParse(_timeoutCtrl.text.trim()) ?? 0;
-            final timeoutMs = seconds > 0 ? seconds * 1000 : 0;
-            Navigator.of(context).pop(
-              StudioSlotSettings(
-                temperature: _temperature,
-                topP: _topP,
-                topK: _topK,
-                frequencyPenalty: _frequencyPenalty,
-                presencePenalty: _presencePenalty,
-                requestReasoning: _requestReasoning,
-                reasoningEffort: _reasoningEffort,
-                omitTemperature: _omitTemperature,
-                omitTopP: _omitTopP,
-                omitReasoning: _omitReasoning,
-                omitReasoningEffort: _omitReasoningEffort,
-                includeLastReasoning: _includeLastReasoning,
-                maxTokens: maxTokens,
-                timeoutMs: timeoutMs,
-                extraRequestParameters: _extraRequestParameters,
-              ),
-            );
-          },
-          child: const Text('Save'),
-        ),
-      ],
     );
   }
 }
