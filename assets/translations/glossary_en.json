@@ -53,6 +53,23 @@
                     "desc": "The maximum amount of [[token]]s the AI can see at once — its working memory. Everything Glaze sends (system instructions, [[preset]] blocks, [[lorebook]] entries, chat history, and the new reply) must fit inside this window. When the conversation grows too long, older messages are trimmed to stay within the limit. Context Size is set in model settings and must not exceed the model's maximum."
                 },
                 {
+                    "id": "context-size",
+                    "name": "Context Size",
+                    "alt": "Context Limit",
+                    "desc": "A local Glaze setting — it is not sent to the provider. It caps how many [[token]]s the whole prompt may use. Glaze trims the chat, dropping the oldest messages, so the assembled prompt fits within this size before it is sent. Set it to match your model's [[context|context window]]; raising it above the model's real limit does not give the model more memory."
+                },
+                {
+                    "id": "max-tokens",
+                    "name": "Max Output Tokens",
+                    "alt": "Max Tokens, Response Limit",
+                    "desc": "A limit sent to the provider on how many [[token]]s the model may produce in a single reply. Generation stops the moment this limit is reached — even mid-sentence. The model does not see this value and does not plan its answer around it. It caps only the length of the reply; it does not reserve or affect the [[context|context window]]."
+                },
+                {
+                    "id": "first-chunk-timeout",
+                    "name": "First-chunk Timeout",
+                    "desc": "How long Glaze waits (in seconds) for the first piece of the reply to arrive after a request is sent. If nothing comes back within this time, the request is aborted instead of hanging on a stalled connection. Raise it for slow providers or very large prompts; lower it to fail faster."
+                },
+                {
                     "id": "api",
                     "name": "API",
                     "alt": "Proxy, Provider, Server",
@@ -214,6 +231,21 @@
                     "name": "Top-P",
                     "alt": "Nucleus Sampling",
                     "desc": "Limits the pool of words the AI can pick from at each step. At 1.0, everything is fair game. At 0.9, it only considers the most likely 90% of words, cutting out rare and unusual choices. Lower values = more focused and predictable replies."
+                },
+                {
+                    "id": "top-k",
+                    "name": "Top-K",
+                    "desc": "Limits the AI to the K most likely words at each step. For example, Top-K 40 keeps only the 40 highest-probability [[token]]s and discards the rest before sampling. 0 turns it off (no limit). Lower values make replies more focused; it works alongside [[temperature]] and [[top-p]]."
+                },
+                {
+                    "id": "frequency-penalty",
+                    "name": "Frequency Penalty",
+                    "desc": "Reduces repetition by penalizing words the more often they have already appeared. Positive values (up to 2.0) push the AI away from reusing the same words and phrasings; negative values encourage repetition. 0 is neutral. Only supported by some providers (OpenAI-style)."
+                },
+                {
+                    "id": "presence-penalty",
+                    "name": "Presence Penalty",
+                    "desc": "Discourages the AI from reusing any word that has already appeared at all, regardless of how many times. Positive values (up to 2.0) push toward new topics and fresh vocabulary; negative values keep it on the same subjects. 0 is neutral. Only supported by some providers (OpenAI-style)."
                 },
                 {
                     "id": "preset-role",

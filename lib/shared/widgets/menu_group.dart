@@ -15,6 +15,9 @@ enum MenuGroupHeaderVariant {
 class MenuGroup extends StatelessWidget {
   final String? header;
   final String? helpTerm;
+
+  /// Optional muted hint rendered under the [header].
+  final String? description;
   final List<Widget> items;
   final MenuGroupHeaderVariant headerVariant;
   final IconData? headerIcon;
@@ -27,6 +30,7 @@ class MenuGroup extends StatelessWidget {
     super.key,
     this.header,
     this.helpTerm,
+    this.description,
     required this.items,
     this.headerVariant = MenuGroupHeaderVariant.standard,
     this.headerIcon,
@@ -57,28 +61,49 @@ class MenuGroup extends StatelessWidget {
   Widget _buildHeader(BuildContext context) {
     final isAccentCaps = headerVariant == MenuGroupHeaderVariant.accentCaps;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 8, 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      padding: EdgeInsets.fromLTRB(16, 16, 8, description != null ? 2 : 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (headerIcon != null) ...[
-            Icon(
-              headerIcon,
-              size: isAccentCaps ? 16 : 18,
-              color: context.cs.primary,
-            ),
-            const SizedBox(width: 8),
-          ],
-          Text(
-            isAccentCaps ? header!.toUpperCase() : header!,
-            style: TextStyle(
-              color: isAccentCaps ? context.cs.primary : context.cs.onSurface,
-              fontWeight: FontWeight.w700,
-              fontSize: isAccentCaps ? 13 : 18,
-              letterSpacing: isAccentCaps ? 0.3 : null,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (headerIcon != null) ...[
+                Icon(
+                  headerIcon,
+                  size: isAccentCaps ? 16 : 18,
+                  color: context.cs.primary,
+                ),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                isAccentCaps ? header!.toUpperCase() : header!,
+                style: TextStyle(
+                  color: isAccentCaps
+                      ? context.cs.primary
+                      : context.cs.onSurface,
+                  fontWeight: FontWeight.w700,
+                  fontSize: isAccentCaps ? 13 : 18,
+                  letterSpacing: isAccentCaps ? 0.3 : null,
+                ),
+              ),
+              if (helpTerm != null) HelpTip(term: helpTerm!),
+            ],
           ),
-          if (helpTerm != null) HelpTip(term: helpTerm!),
+          if (description != null) ...[
+            const SizedBox(height: 2),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(
+                description!,
+                style: const TextStyle(
+                  color: Color(0xFF99A2AD),
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -400,6 +425,7 @@ class MenuFieldItem extends StatelessWidget {
 
 class MenuRangeItem extends StatefulWidget {
   final String label;
+  final String? helpTerm;
   final double value;
   final double min;
   final double max;
@@ -413,6 +439,7 @@ class MenuRangeItem extends StatefulWidget {
   const MenuRangeItem({
     super.key,
     required this.label,
+    this.helpTerm,
     required this.value,
     required this.min,
     required this.max,
@@ -494,8 +521,11 @@ class _MenuRangeItemState extends State<MenuRangeItem> {
 
   @override
   Widget build(BuildContext context) {
+    // When a parameter is toggled off it is not sent to the provider, so the
+    // slider and number are hidden entirely — only the label + toggle remain.
+    // The value itself is preserved by the parent and reappears when re-enabled.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: EdgeInsets.fromLTRB(16, 10, 16, _included ? 0 : 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -509,17 +539,25 @@ class _MenuRangeItemState extends State<MenuRangeItem> {
                 const SizedBox(width: 8),
               ],
               Expanded(
-                child: Text(
-                  widget.label,
-                  style: TextStyle(
-                    color: _included
-                        ? context.cs.onSurface
-                        : context.cs.onSurface.withValues(alpha: 0.4),
-                    fontSize: 15,
-                  ),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        widget.label,
+                        style: TextStyle(
+                          color: _included
+                              ? context.cs.onSurface
+                              : context.cs.onSurface.withValues(alpha: 0.4),
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    if (widget.helpTerm != null)
+                      HelpTip(term: widget.helpTerm!, size: 14),
+                  ],
                 ),
               ),
-              if (widget.editableValue)
+              if (_included && widget.editableValue)
                 SizedBox(
                   width: 72,
                   height: 36,
@@ -570,7 +608,7 @@ class _MenuRangeItemState extends State<MenuRangeItem> {
                     ),
                   ),
                 )
-              else
+              else if (_included)
                 Text(
                   _display,
                   style: TextStyle(
@@ -581,23 +619,24 @@ class _MenuRangeItemState extends State<MenuRangeItem> {
                 ),
             ],
           ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: context.cs.primary,
-              thumbColor: context.cs.primary,
-              inactiveTrackColor: context.cs.primary.withValues(alpha: 0.18),
-              overlayColor: context.cs.primary.withValues(alpha: 0.1),
-              trackHeight: 3,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+          if (_included)
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: context.cs.primary,
+                thumbColor: context.cs.primary,
+                inactiveTrackColor: context.cs.primary.withValues(alpha: 0.18),
+                overlayColor: context.cs.primary.withValues(alpha: 0.1),
+                trackHeight: 3,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              ),
+              child: Slider(
+                value: widget.value.clamp(widget.min, widget.max),
+                min: widget.min,
+                max: widget.max,
+                divisions: widget.divisions,
+                onChanged: _included ? _handleSliderChanged : null,
+              ),
             ),
-            child: Slider(
-              value: widget.value.clamp(widget.min, widget.max),
-              min: widget.min,
-              max: widget.max,
-              divisions: widget.divisions,
-              onChanged: _included ? _handleSliderChanged : null,
-            ),
-          ),
         ],
       ),
     );
