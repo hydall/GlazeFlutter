@@ -195,7 +195,9 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
           onPressed: _save,
         ),
       ],
-      body: ListView(
+      body: Material(
+        type: MaterialType.transparency,
+        child: ListView(
             children: [
               const SizedBox(height: 8),
               TextField(
@@ -311,6 +313,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
               const SizedBox(height: 16),
               FilledButton(onPressed: _save, child: Text('btn_save'.tr())),
             ],
+        ),
       ),
     );
   }

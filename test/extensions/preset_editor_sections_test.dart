@@ -68,14 +68,44 @@ void main() {
   testWidgets('BlockEditDialog renders the default infoblock editor', (
     tester,
   ) async {
-    await pumpSection(
-      tester,
-      BlockEditDialog(block: preset.blocks.first, onSave: (_) {}),
+    // BlockEditDialog is now a SheetView, presented as a modal bottom sheet.
+    // A tall surface keeps the whole lazily-built form on screen.
+    tester.view.physicalSize = const Size(800, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    SharedPreferences.setMockInitialValues({});
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appDbProvider.overrideWithValue(db)],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) =>
+                      BlockEditDialog(block: preset.blocks.first, onSave: (_) {}),
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
 
     expect(find.text('block_edit_title'), findsOneWidget);
     expect(find.text('block_edit_name_label'), findsOneWidget);
     expect(find.text('block_type_infoblock'), findsOneWidget);
-    expect(find.text('btn_save'), findsOneWidget);
+    expect(find.text('btn_save'), findsWidgets);
   });
 }

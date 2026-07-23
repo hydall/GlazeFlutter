@@ -1,11 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:glaze_flutter/core/models/studio_config.dart';
 import 'package:glaze_flutter/features/studio/widgets/studio_block_editor_dialog.dart';
 
 void main() {
   group('StudioBlockEditorDialog', () {
+    // The editor is now a SheetView (a Riverpod ConsumerWidget presented via
+    // showModalBottomSheet), so tests wrap it in a ProviderScope and open it as
+    // a modal bottom sheet. A tall surface keeps the whole form on screen so
+    // the lazily-built ListView materializes every field.
+    Future<StudioPresetBlock?> openEditor(
+      WidgetTester tester,
+      StudioPresetBlock block, {
+      bool isNew = false,
+    }) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      StudioPresetBlock? result;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () async {
+                    result = await showModalBottomSheet<StudioPresetBlock>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) =>
+                          StudioBlockEditorDialog(block: block, isNew: isNew),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      return result == null ? null : result;
+    }
+
     testWidgets('returns updated block on Save', (tester) async {
       final block = StudioPresetBlock(
         id: 'test_block',
@@ -19,19 +63,22 @@ void main() {
       );
 
       StudioPresetBlock? result;
-
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  result = await showDialog<StudioPresetBlock>(
-                    context: context,
-                    builder: (_) => StudioBlockEditorDialog(block: block),
-                  );
-                },
-                child: const Text('Open'),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () async {
+                    result = await showModalBottomSheet<StudioPresetBlock>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => StudioBlockEditorDialog(block: block),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
               ),
             ),
           ),
@@ -43,7 +90,8 @@ void main() {
 
       expect(find.text('Edit Block'), findsOneWidget);
 
-      await tester.tap(find.text('Save'));
+      // Save is the check action in the sheet header (always visible).
+      await tester.tap(find.byIcon(Icons.check));
       await tester.pumpAndSettle();
 
       expect(result, isNotNull);
@@ -52,27 +100,30 @@ void main() {
       expect(result!.section, 'pregen');
     });
 
-    testWidgets('returns null on Cancel', (tester) async {
+    testWidgets('returns null on dismiss', (tester) async {
       final block = StudioPresetBlock(
         id: 'test_block',
         title: 'Test',
         section: 'final',
       );
 
-      StudioPresetBlock? result;
-
+      StudioPresetBlock? result = block;
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  result = await showDialog<StudioPresetBlock>(
-                    context: context,
-                    builder: (_) => StudioBlockEditorDialog(block: block),
-                  );
-                },
-                child: const Text('Open'),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () async {
+                    result = await showModalBottomSheet<StudioPresetBlock>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => StudioBlockEditorDialog(block: block),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
               ),
             ),
           ),
@@ -82,7 +133,9 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Cancel'));
+      // No explicit Cancel button in the sheet UI — dismiss by tapping the
+      // modal barrier above the sheet.
+      await tester.tapAt(const Offset(400, 10));
       await tester.pumpAndSettle();
 
       expect(result, isNull);
@@ -95,30 +148,12 @@ void main() {
         section: 'pregen',
       );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  await showDialog<StudioPresetBlock>(
-                    context: context,
-                    builder: (_) => StudioBlockEditorDialog(block: block),
-                  );
-                },
-                child: const Text('Open'),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
+      await openEditor(tester, block);
 
       expect(find.text('Edit Block'), findsOneWidget);
       expect(find.text('pregen'), findsOneWidget);
       expect(find.text('custom_text'), findsOneWidget);
+      // Role is now a SegmentedButton; 'system' is one of its segments.
       expect(find.text('system'), findsOneWidget);
       expect(find.text('Enabled'), findsOneWidget);
     });
@@ -130,27 +165,7 @@ void main() {
         section: 'pregen',
       );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  await showDialog<StudioPresetBlock>(
-                    context: context,
-                    builder: (_) =>
-                        StudioBlockEditorDialog(block: block, isNew: true),
-                  );
-                },
-                child: const Text('Open'),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
+      await openEditor(tester, block, isNew: true);
 
       expect(find.text('New Block'), findsOneWidget);
     });

@@ -91,7 +91,9 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
           onPressed: _save,
         ),
       ],
-      body: ListView(
+      body: Material(
+        type: MaterialType.transparency,
+        child: ListView(
         children: [
           const SizedBox(height: 8),
           GlazeTextField(controller: _titleCtrl, label: 'Title'),
@@ -162,6 +164,7 @@ class _StudioBlockEditorDialogState extends State<StudioBlockEditorDialog> {
           const SizedBox(height: 16),
           FilledButton(onPressed: _save, child: const Text('Save')),
         ],
+        ),
       ),
     );
   }
