@@ -126,6 +126,52 @@ final _exampleBlock = RegExp(
   return (out: kept.join('\n'), removed: removed);
 }
 
+/// Builds a whitespace/punctuation-tolerant regex source from a verbatim string.
+///
+/// The public-entry content is injected into `generateAlpha` verbatim, but the
+/// server (and our own tidying) can change *whitespace* (collapse runs, swap
+/// newlines for spaces, trim) and *glyphs* (straight vs. curly quotes/
+/// apostrophes, hyphen vs. en/em dash). We match literally except that any
+/// whitespace run matches any other, and quote/apostrophe/dash variants match
+/// each other. Everything else (including regex metacharacters) is escaped.
+/// Port of separate.cjs `loosePattern`.
+String _loosePattern(String needle) => needle
+    .replaceAllMapped(RegExp(r'[.*+?^${}()|[\]\\]'), (m) => '\\${m[0]}')
+    .replaceAll(RegExp(r'\s+'), r'\s+')
+    .replaceAll(RegExp(r'''['‘’ʼ]'''), r"['‘’ʼ]")
+    .replaceAll(RegExp(r'["“”]'), r'["“”]')
+    .replaceAll(RegExp(r'[-–—]'), r'[-–—]');
+
+/// Removes PUBLIC-lorebook entry text from the isolated lorebook text.
+///
+/// A character's public and closed lorebooks are injected into the SAME
+/// `generateAlpha` system message, so the extracted text contains both. The
+/// public entries' `content` is injected **verbatim**, so we cut it back out
+/// (with the whitespace/glyph tolerance of [_loosePattern]) — entries that
+/// never triggered simply aren't found and are skipped. Port of separate.cjs
+/// `stripPublicEntries`.
+({String out, List<String> removed}) _stripPublicEntries(
+    String text, List<String> publicContents) {
+  if (publicContents.isEmpty) return (out: text, removed: const []);
+  var out = text;
+  final removed = <String>[];
+  for (final content in publicContents) {
+    final needle = content.trim();
+    if (needle.length < 12) continue;
+    RegExp re;
+    try {
+      re = RegExp(_loosePattern(needle), caseSensitive: false);
+    } catch (_) {
+      continue;
+    }
+    out = out.replaceAllMapped(re, (m) {
+      removed.add(m[0]!);
+      return '\n';
+    });
+  }
+  return (out: out, removed: removed);
+}
+
 String _tidy(String text) => text
     .replaceAll(RegExp(r'[ \t]+\n'), '\n')
     .replaceAll(RegExp(r'\n{3,}'), '\n\n')
@@ -196,15 +242,25 @@ String extractFirstMessage(Map<String, dynamic> payload) {
 
 /// Isolates the closed-lorebook text from [payload]. Pass the known card text
 /// (e.g. [extractCard]) as [knownCard] to scrub any card lines that leaked past
-/// wrapper stripping.
-SeparationResult separate(Map<String, dynamic> payload, [String knownCard = '']) {
+/// wrapper stripping, and the verbatim entry contents of the character's PUBLIC
+/// lorebooks as [publicContents] so they are always subtracted and never leak
+/// into the closed book (both lorebooks are injected into the same system
+/// message). Port of separate.cjs `separate(payload, knownCard, publicContents)`.
+SeparationResult separate(
+  Map<String, dynamic> payload, [
+  String knownCard = '',
+  List<String> publicContents = const [],
+]) {
   final systemContent = getSystemContent(payload);
   final a = _stripWrappers(systemContent);
   final b = _subtractKnownCard(a.out, knownCard);
-  final lorebookText = _tidy(b.out);
+  final c = _stripPublicEntries(b.out, publicContents);
+  final lorebookText = _tidy(c.out);
   final removed = [
     ...a.removed,
     if (b.removed.isNotEmpty) RemovedBlock('knownCard', b.removed.join('\n')),
+    if (c.removed.isNotEmpty)
+      RemovedBlock('publicLorebook', c.removed.join('\n\n')),
   ];
   return SeparationResult(
     systemContent: systemContent,

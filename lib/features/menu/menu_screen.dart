@@ -17,8 +17,10 @@ import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
 import '../catalog/janitor_account_provider.dart';
+import '../catalog/saucepan_account_provider.dart';
 import '../catalog/widgets/janitor_extract_sheet.dart';
 import '../catalog/widgets/janitor_login_sheet.dart';
+import '../catalog/widgets/saucepan_login_sheet.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
 import '../lorebooks/lorebook_connections_sheet.dart';
@@ -164,6 +166,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                             })
                           : 'janitor_login_menu_logged_out'.tr(),
                       onTap: () => openJanitorAccountSheet(context, ref),
+                    ),
+                    MenuItem(
+                      icon: Icons.ramen_dining_outlined,
+                      label: 'Saucepan account',
+                      subtitle: ref.watch(saucepanAccountProvider).isLoggedIn
+                          ? (ref.watch(saucepanAccountProvider).handle != null
+                              ? 'Logged in as ${ref.watch(saucepanAccountProvider).handle}'
+                              : 'Logged in')
+                          : 'Log in for local companion extraction',
+                      onTap: () => openSaucepanAccountSheet(context, ref),
                     ),
                   ],
                 ),

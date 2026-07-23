@@ -87,16 +87,23 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
   Timer? _timer;
   int _elapsed = 0;
 
-  List<JanitorScriptRef> get _scriptRefs =>
-      lorebookScriptRefs(widget.args.meta);
+  /// The character's **closed** lorebooks: attached books that couldn't be
+  /// downloaded whole (private, or an inaccessible advanced script). These are
+  /// recovered by capturing the assembled prompt and rebuilding it with the LLM.
+  /// Public JSON books and public "advanced" (JS) books are excluded — those are
+  /// downloadable and live under the Public section. Matches JAR's
+  /// `renderPublicBooks` private grouping (`!accessible && !isJs`).
+  List<PublicLorebook> get _closedBooks =>
+      _public.where((b) => !b.accessible && !b.isJs).toList();
 
-  /// There is hidden lore to recover only when the character actually lists a
-  /// non-public lorebook (or a fetched book turned out inaccessible). A closed
-  /// card *definition* alone is not a closed lorebook, so it must not surface
-  /// the closed-lorebook controls.
-  bool get _hasClosed =>
-      _scriptRefs.any((r) => !r.isPublic) ||
-      _public.any((b) => !b.accessible && !b.isJs);
+  /// Whether closed-lorebook extraction is currently possible: the user opted in
+  /// and is logged into Janitor.AI, and no capture is already running.
+  bool get _canRebuild {
+    final loggedIn = ref.watch(janitorAccountProvider).isLoggedIn;
+    final enabled =
+        ref.watch(appSettingsProvider).value?.extractJanitorLocally ?? false;
+    return loggedIn && enabled && !_extracting;
+  }
 
   /// The character lists at least one "advanced" (Nine API / JS) lorebook. Those
   /// inject their entries inline, so the content can't be separated mechanically
@@ -155,6 +162,30 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
           },
         ),
       ],
+    );
+  }
+
+  /// Download action for a public **advanced (JS)** lorebook. Unlike a JSON book
+  /// it can't be saved as-is, so tapping download first explains that the script
+  /// must be sent to the active LLM for a rebuild, then (on confirm) runs
+  /// [_buildJs]. Port of JAR's public JS "Build .json" affordance, reframed as a
+  /// download that opens a rebuild explanation.
+  void _downloadJs(PublicLorebook book) {
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'Scripted lorebook',
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.code_rounded,
+        description:
+            "This is an advanced (scripted) lorebook. Its entries are generated "
+            "by JavaScript, so it can't be downloaded as-is — it has to be sent "
+            "to your active LLM to be rebuilt into keyed World Info entries.",
+        buttonText: 'Rebuild with LLM',
+        onButtonTap: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          _buildJs(book);
+        },
+      ),
     );
   }
 
@@ -358,6 +389,7 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
+    final closed = _closedBooks;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       child: Column(
@@ -367,40 +399,63 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
             loading: _loadingPublic,
             books: _public,
             onDownload: _downloadPublic,
-            onBuildJs: _buildJs,
+            onDownloadJs: _downloadJs,
             buildingId: _jsBuildingId,
           ),
-          if (!_loadingPublic && _hasClosed) ...[
+          // Closed / private lorebooks live at the very end: each is shown with a
+          // Rebuild button and a "must be rebuilt from prompt" hint, and the
+          // rebuild captures the assembled prompt + runs the LLM build below.
+          if (!_loadingPublic && closed.isNotEmpty) ...[
             const SizedBox(height: 20),
-            _SectionTitle('Closed lorebook', cs: cs),
-            const SizedBox(height: 4),
-            Text(
-              'Recover the hidden lorebook by capturing the assembled prompt '
-              'through your Janitor.AI session, then rebuild it into keyed '
-              'entries with your active LLM.',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-            ),
-            if (_hasAdvanced) ...[
-              const SizedBox(height: 8),
-              _AdvancedNotice(cs: cs),
-            ],
-            const SizedBox(height: 12),
-            _buildExtractControls(cs),
-            if (_extraction != null) ...[
-              const SizedBox(height: 16),
-              _buildBuildBlock(cs),
-            ],
+            _buildClosedSection(cs, closed),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildExtractControls(ColorScheme cs) {
+  Widget _buildClosedSection(ColorScheme cs, List<PublicLorebook> closed) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionTitle('Closed lorebooks', cs: cs),
+        const SizedBox(height: 4),
+        Text(
+          'These lorebooks are private — they can only be recovered by capturing '
+          'the assembled prompt through your Janitor.AI session and rebuilding it '
+          'into keyed entries with your active LLM. Multiple closed lorebooks are '
+          'merged into one.',
+          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+        ),
+        if (_hasAdvanced) ...[
+          const SizedBox(height: 8),
+          _AdvancedNotice(cs: cs),
+        ],
+        const SizedBox(height: 10),
+        for (final b in closed) ...[
+          _ClosedRow(
+            book: b,
+            rebuilding: _extracting,
+            onRebuild: _canRebuild ? _extract : null,
+          ),
+          const SizedBox(height: 8),
+        ],
+        _buildExtractStatus(cs),
+        if (_extraction != null) ...[
+          const SizedBox(height: 16),
+          _buildBuildBlock(cs),
+        ],
+      ],
+    );
+  }
+
+  /// Why the Rebuild buttons are disabled (opt-in / login) plus the live capture
+  /// phase and any capture error. The Rebuild action itself lives on each closed
+  /// lorebook row above.
+  Widget _buildExtractStatus(ColorScheme cs) {
     final loggedIn = ref.watch(janitorAccountProvider).isLoggedIn;
     final enabled =
         ref.watch(appSettingsProvider).value?.extractJanitorLocally ?? false;
-    final canExtract = loggedIn && enabled && !_extracting;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,39 +463,28 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
         if (!enabled)
           _Hint(
             'Enable "Extract lorebooks and characters locally using Janitor.AI '
-            'account" in Settings to extract closed lorebooks.',
+            'account" in Settings to rebuild closed lorebooks.',
             cs: cs,
           )
         else if (!loggedIn)
-          _Hint('Log in to Janitor.AI (catalog menu) to extract.', cs: cs),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            ElevatedButton.icon(
-              onPressed: canExtract ? _extract : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: cs.primary,
-                foregroundColor: cs.onPrimary,
+          _Hint('Log in to Janitor.AI (catalog menu) to rebuild.', cs: cs),
+        if (_extracting && _extractPhase != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
               ),
-              icon: _extracting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.download_rounded, size: 18),
-              label: Text(_extraction == null ? 'Extract' : 'Re-extract'),
-            ),
-            const SizedBox(width: 12),
-            if (_extracting && _extractPhase != null)
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(_extractPhase!,
-                    style:
-                        TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
               ),
-          ],
-        ),
+            ],
+          ),
+        ],
         if (_extractError != null) ...[
           const SizedBox(height: 8),
           Text(_extractError!,
@@ -682,13 +726,13 @@ class _PublicSection extends StatelessWidget {
   final bool loading;
   final List<PublicLorebook> books;
   final void Function(PublicLorebook) onDownload;
-  final void Function(PublicLorebook) onBuildJs;
+  final void Function(PublicLorebook) onDownloadJs;
   final String? buildingId;
   const _PublicSection({
     required this.loading,
     required this.books,
     required this.onDownload,
-    required this.onBuildJs,
+    required this.onDownloadJs,
     required this.buildingId,
   });
 
@@ -709,61 +753,45 @@ class _PublicSection extends StatelessWidget {
         ],
       );
     }
-    if (books.isEmpty) {
+    // Everything downloadable goes under the single "Public lorebooks" headline:
+    //  - JSON books map 1:1 and download whole (no LLM);
+    //  - "advanced" / Nine API books are public but shipped as a script, so their
+    //    download opens a rebuild explanation and is converted with the LLM.
+    // Private/locked books are NOT shown here — they belong to the closed section.
+    final json = books.where((b) => b.accessible && !b.isJs).toList();
+    final js = books.where((b) => b.isJs).toList();
+    if (json.isEmpty && js.isEmpty) {
+      // No downloadable books. Stay silent when there are closed books (the
+      // closed section carries the messaging); otherwise say there are none.
+      final hasClosed = books.any((b) => !b.accessible && !b.isJs);
+      if (hasClosed) return const SizedBox.shrink();
       return Text('No public lorebooks attached.',
           style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant));
     }
-    // Three states:
-    //  - public JSON books map 1:1 and download whole (no LLM);
-    //  - public JS ("advanced" / Nine API) books are public but must be rebuilt
-    //    into entries with the LLM;
-    //  - the rest are private/locked and go through the closed-lorebook Extract
-    //    path below.
-    final public = books.where((b) => b.accessible && !b.isJs).toList();
-    final js = books.where((b) => b.isJs).toList();
-    final private = books.where((b) => !b.accessible && !b.isJs).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (public.isNotEmpty) ...[
-          _SectionTitle('Public lorebooks', cs: cs),
-          const SizedBox(height: 4),
-          Text('Downloaded whole from Janitor.AI — no LLM needed.',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 10),
-          for (final b in public) ...[
-            _PublicRow(book: b, onDownload: () => onDownload(b)),
-            const SizedBox(height: 8),
-          ],
+        _SectionTitle('Public lorebooks', cs: cs),
+        const SizedBox(height: 4),
+        Text(
+          js.isEmpty
+              ? 'Downloaded whole from Janitor.AI — no LLM needed.'
+              : 'Downloaded whole from Janitor.AI. Scripted (advanced) books are '
+                  'rebuilt into entries with your active LLM.',
+          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 10),
+        for (final b in json) ...[
+          _PublicRow(book: b, onDownload: () => onDownload(b)),
+          const SizedBox(height: 8),
         ],
-        if (js.isNotEmpty) ...[
-          if (public.isNotEmpty) const SizedBox(height: 16),
-          _SectionTitle('Advanced lorebooks (JS)', cs: cs),
-          const SizedBox(height: 4),
-          Text('Public, but shipped as a script — rebuilt into keyed entries '
-              'with your active LLM.',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 10),
-          for (final b in js) ...[
-            _PublicRow(
-              book: b,
-              onBuildJs: () => onBuildJs(b),
-              building: buildingId == b.id,
-            ),
-            const SizedBox(height: 8),
-          ],
-        ],
-        if (private.isNotEmpty) ...[
-          if (public.isNotEmpty || js.isNotEmpty) const SizedBox(height: 16),
-          _SectionTitle('Private lorebooks', cs: cs),
-          const SizedBox(height: 4),
-          Text("Can't be downloaded directly — use Extract below.",
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 10),
-          for (final b in private) ...[
-            _PublicRow(book: b),
-            const SizedBox(height: 8),
-          ],
+        for (final b in js) ...[
+          _PublicRow(
+            book: b,
+            onDownload: () => onDownloadJs(b),
+            building: buildingId == b.id,
+          ),
+          const SizedBox(height: 8),
         ],
       ],
     );
@@ -773,31 +801,21 @@ class _PublicSection extends StatelessWidget {
 class _PublicRow extends StatelessWidget {
   final PublicLorebook book;
   final VoidCallback? onDownload;
-  final VoidCallback? onBuildJs;
   final bool building;
   const _PublicRow({
     required this.book,
     this.onDownload,
-    this.onBuildJs,
     this.building = false,
   });
 
-  IconData get _icon {
-    if (book.isJs) return Icons.code_rounded;
-    return book.accessible ? Icons.menu_book_rounded : Icons.lock_outline;
-  }
+  IconData get _icon => book.isJs ? Icons.code_rounded : Icons.menu_book_rounded;
 
-  String get _subtitle {
-    if (book.isJs) return 'JavaScript script — build to convert';
-    return book.accessible
-        ? '${book.entryCount} entries'
-        : 'Private — use Extract below';
-  }
+  String get _subtitle =>
+      book.isJs ? 'Scripted (advanced) — rebuild with LLM' : '${book.entryCount} entries';
 
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
-    final accent = (book.accessible || book.isJs);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -806,8 +824,7 @@ class _PublicRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(_icon,
-              size: 18, color: accent ? cs.primary : cs.onSurfaceVariant),
+          Icon(_icon, size: 18, color: cs.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -839,29 +856,102 @@ class _PublicRow extends StatelessWidget {
               ],
             ),
           ),
-          if (book.isJs)
-            building
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: cs.primary),
-                    ),
-                  )
-                : TextButton.icon(
-                    onPressed: onBuildJs,
-                    icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
-                    label: const Text('Build'),
-                    style: TextButton.styleFrom(foregroundColor: cs.primary),
-                  )
-          else if (book.accessible)
+          if (building)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: cs.primary),
+              ),
+            )
+          else
             IconButton(
               onPressed: onDownload,
               icon: const Icon(Icons.download_rounded, size: 20),
               color: cs.primary,
               tooltip: 'Download',
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One **closed** (private) lorebook row: a lock icon, the title, the
+/// "must be rebuilt from prompt" hint, and a Rebuild button that starts the
+/// prompt capture + LLM rebuild. Disabled (button hidden) while a rebuild runs
+/// or when the user hasn't opted in / logged in.
+class _ClosedRow extends StatelessWidget {
+  final PublicLorebook book;
+  final bool rebuilding;
+  final VoidCallback? onRebuild;
+  const _ClosedRow({
+    required this.book,
+    required this.rebuilding,
+    required this.onRebuild,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.cs;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_outline, size: 18, color: cs.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  book.title.isEmpty ? 'Lorebook' : book.title,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface),
+                ),
+                Text(
+                  'Must be rebuilt from the prompt',
+                  style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                ),
+                if (book.description.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    book.description.trim(),
+                    maxLines: 6,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 11,
+                        height: 1.35,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.85)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (rebuilding)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: cs.primary),
+              ),
+            )
+          else
+            TextButton.icon(
+              onPressed: onRebuild,
+              icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
+              label: const Text('Rebuild'),
+              style: TextButton.styleFrom(foregroundColor: cs.primary),
             ),
         ],
       ),

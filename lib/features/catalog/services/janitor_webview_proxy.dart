@@ -304,35 +304,58 @@ class JanitorWebViewProxy {
 
   static final WebUri _origin = WebUri('https://janitorai.com');
 
-  static const String _profileUrl =
-      'https://janitorai.com/hampter/profiles/mine';
+  // JanitorAI migrated proxy presets out of the profile blob (`/profiles/mine`)
+  // into a dedicated REST resource under `/hampter/api-settings` (July 2026):
+  //   GET    /hampter/api-settings                  → { proxy_configs, settings }
+  //   POST   /hampter/api-settings/proxy-configs     → create a preset (we own
+  //                                                    `client_id`, server assigns `id`)
+  //   PATCH  /hampter/api-settings                   → partial settings merge
+  //   DELETE /hampter/api-settings/proxy-configs/{id} → remove a preset
+  static const String _apiSettingsUrl =
+      'https://janitorai.com/hampter/api-settings';
+  static const String _proxyConfigsUrl =
+      'https://janitorai.com/hampter/api-settings/proxy-configs';
 
-  /// A self-owned proxy preset injected for the duration of a capture. The URL
+  /// Builds the throwaway proxy preset (the POST `/proxy-configs` body). The URL
   /// is intentionally unreachable: we capture the `/generateAlpha` RESPONSE (the
   /// assembled prompt) BEFORE the client ever POSTs to the proxy, so the proxy
-  /// never needs to answer. Fixed id so a crashed run never leaves duplicates.
-  static const String _dummyPresetId = 'a1b2c3d4-0000-4000-8000-000000000001';
-
-  /// Builds the throwaway proxy preset with a **random name and port** (the port
-  /// always above 8000). The id stays fixed (see [_dummyPresetId]) so dedup /
-  /// crash-cleanup still works, but the name/port are randomised each run so the
-  /// injected preset isn't fingerprintable by a constant string or port.
+  /// never needs to answer.
+  ///
+  /// `client_id` is a fresh random UUID every run: JanitorAI permanently burns
+  /// each client_id, so reusing one (even after deleting its preset) returns 409
+  /// API_SETTINGS_PROXY_CONFIG_CONFLICT. The name/port/api_key are randomised so
+  /// the preset isn't fingerprintable by a constant string/port, and a non-blank
+  /// api_key is required (the frontend rejects presets with a blank key).
   static Map<String, dynamic> _buildDummyPreset() {
-    final rand = Random();
-    final port = 8001 + rand.nextInt(57000); // 8001..65000
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final name = List.generate(
-      12,
-      (_) => alphabet[rand.nextInt(alphabet.length)],
-    ).join();
+    final port = 8001 + Random().nextInt(57000); // 8001..65000
     return {
-      'apiKey': 'x',
-      'apiUrl': 'http://127.0.0.1:$port/v1/chat/completions',
-      'id': _dummyPresetId,
-      'jailbreakPrompt': '',
+      'api_key': 'sk-${_randomString(48)}',
+      'api_url': 'http://127.0.0.1:$port/v1/chat/completions',
       'model': 'gpt-4o',
-      'name': name,
+      'name': _randomString(12),
+      'prompt_id': null,
+      'client_id': _uuidV4(),
     };
+  }
+
+  /// Random lowercase-alphanumeric string of [len] chars.
+  static String _randomString(int len) {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final rand = Random();
+    return List.generate(len, (_) => alphabet[rand.nextInt(alphabet.length)])
+        .join();
+  }
+
+  /// RFC-4122 v4 UUID — the Dart equivalent of JAR's `crypto.randomUUID()`,
+  /// used for the proxy preset's `client_id`.
+  static String _uuidV4() {
+    final rand = Random.secure();
+    final b = List<int>.generate(16, (_) => rand.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40; // version 4
+    b[8] = (b[8] & 0x3f) | 0x80; // variant 10xx
+    final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-'
+        '${h.substring(16, 20)}-${h.substring(20)}';
   }
 
   HeadlessInAppWebView? _webView;
@@ -532,71 +555,126 @@ class JanitorWebViewProxy {
     }
   }
 
-  /// Reshapes the JanitorAI profile so a capture yields a clean, tag-wrapped
-  /// prompt, returning the ORIGINAL `config` snapshot to restore afterwards.
-  /// Port of JAR `profile.js`. Two things must hold:
+  /// Reshapes the JanitorAI API settings so a capture yields a clean, tag-wrapped
+  /// prompt, returning a snapshot to restore afterwards. Port of JAR `profile.js`
+  /// (the `/hampter/api-settings` rewrite). Two things must hold:
   ///  1. a custom OpenAI-compatible PROXY preset must be selected (not JLLM) —
   ///     only then does the client assemble the prompt for a proxy and fire
   ///     `/generateAlpha` with the `<…Persona>` / `<Scenario>` wrappers that
   ///     [separate] relies on;
   ///  2. `generation_settings.context_length` must be 0, or the server
   ///     compresses/reorders the prompt to fit and unwraps the persona block.
-  /// Returns null if the profile could not be read/patched (capture proceeds
-  /// against whatever the account has selected).
+  ///
+  /// We snapshot the current selection + generation settings, create + select a
+  /// throwaway proxy preset and force context_length 0, run the capture, then
+  /// restore the snapshot and delete the dummy (see [_restoreProfile]). Returns
+  /// null if the settings could not be read/patched (capture proceeds against
+  /// whatever the account has selected).
   Future<Map<String, dynamic>?> _enterExtractionMode() async {
+    String? dummyServerId;
     try {
-      final body = await _fetchLocked(_profileUrl);
-      final profile = jsonDecode(body);
-      final original = (profile is Map && profile['config'] is Map)
-          ? Map<String, dynamic>.from(profile['config'] as Map)
+      final before = jsonDecode(await _fetchLocked(_apiSettingsUrl));
+      final settings = (before is Map && before['settings'] is Map)
+          ? Map<String, dynamic>.from(before['settings'] as Map)
+          : <String, dynamic>{};
+      final originalSelectedId = settings['selected_proxy_config_id'];
+      final originalSource = settings['source'];
+      final originalGen = settings['generation_settings'] is Map
+          ? Map<String, dynamic>.from(settings['generation_settings'] as Map)
           : null;
-      if (original == null) {
-        _log('extraction mode skipped — profile has no config');
-        return null;
+
+      // Create the throwaway preset, then re-read to resolve the server-assigned
+      // id (the POST body only carries our client_id).
+      final dummy = _buildDummyPreset();
+      await _fetchLocked(_proxyConfigsUrl,
+          method: 'POST', body: jsonEncode(dummy));
+      final after = jsonDecode(await _fetchLocked(_apiSettingsUrl));
+      final configs = (after is Map && after['proxy_configs'] is List)
+          ? (after['proxy_configs'] as List)
+          : const <dynamic>[];
+      final created = configs.firstWhere(
+        (p) => p is Map && p['client_id'] == dummy['client_id'],
+        orElse: () => null,
+      );
+      dummyServerId = (created is Map ? created['id'] : null)?.toString();
+      if (dummyServerId == null || dummyServerId.isEmpty) {
+        throw Exception('dummy proxy preset not found after create');
       }
 
-      final next =
-          jsonDecode(jsonEncode(original)) as Map<String, dynamic>;
-      final dummyPreset = _buildDummyPreset();
-      final presets = (next['proxyConfigurations'] is List)
-          ? List<dynamic>.from(next['proxyConfigurations'] as List)
-          : <dynamic>[];
-      // Drop any stale copy from a crashed run, then add a freshly-randomised
-      // one (so the random name/port actually take effect each run).
-      presets.removeWhere((p) => p is Map && p['id'] == _dummyPresetId);
-      presets.add(dummyPreset);
-      next['proxyConfigurations'] = presets;
-      next['selectedProxyConfigId'] = _dummyPresetId;
-      next['api'] = 'openai';
-      next['open_ai_mode'] = 'proxy';
-      next['open_ai_reverse_proxy'] = dummyPreset['apiUrl'];
-      next['openAiModel'] = dummyPreset['model'];
-      next['generation_settings'] = {
-        ...(next['generation_settings'] is Map
-            ? Map<String, dynamic>.from(next['generation_settings'] as Map)
-            : <String, dynamic>{}),
-        'context_length': 0,
-      };
+      // Select it as the active proxy. This is the must-have.
+      await _patchApiSettings({'selected_proxy_config_id': dummyServerId});
 
-      await _fetchLocked(_profileUrl,
-          method: 'PATCH', body: jsonEncode({'config': next}));
-      _log('extraction mode on (dummy proxy selected, context_length 0)');
-      return original;
+      // Best-effort extras, isolated so a rejection can't undo the selection:
+      // ensure proxy mode, and force context_length 0.
+      try {
+        await _patchApiSettings({'source': 'proxy'});
+      } catch (e) {
+        _log('could not force source=proxy: $e');
+      }
+      try {
+        await _patchApiSettings({
+          'generation_settings': {...?originalGen, 'context_length': 0},
+        });
+      } catch (e) {
+        _log('could not force context_length 0: $e');
+      }
+
+      _log('extraction mode on (dummy proxy $dummyServerId selected, '
+          'context_length 0)');
+      return {
+        'selectedProxyConfigId': originalSelectedId,
+        'source': originalSource,
+        'generationSettings': originalGen,
+        'dummyServerId': dummyServerId,
+      };
     } catch (e) {
       _log('enterExtractionMode failed (capture proceeds anyway): $e');
+      // If we created the dummy before failing, remove it so it doesn't orphan.
+      if (dummyServerId != null && dummyServerId.isNotEmpty) {
+        try {
+          await _deleteProxyConfig(dummyServerId);
+        } catch (_) {}
+      }
       return null;
     }
   }
 
-  /// PATCHes the original `config` snapshot back (also drops the dummy preset).
-  Future<void> _restoreProfile(Map<String, dynamic> original) async {
-    try {
-      await _fetchLocked(_profileUrl,
-          method: 'PATCH', body: jsonEncode({'config': original}));
-      _log('restored original profile config');
-    } catch (e) {
-      _log('restoreProfile failed: $e');
+  /// Restores the original selection / source / generation settings and deletes
+  /// the injected dummy preset.
+  Future<void> _restoreProfile(Map<String, dynamic> snapshot) async {
+    final patch = <String, dynamic>{
+      'selected_proxy_config_id': snapshot['selectedProxyConfigId'],
+    };
+    if (snapshot['source'] != null) patch['source'] = snapshot['source'];
+    if (snapshot['generationSettings'] != null) {
+      patch['generation_settings'] = snapshot['generationSettings'];
     }
+    try {
+      await _patchApiSettings(patch);
+    } catch (e) {
+      _log('restore settings failed: $e');
+    }
+    final dummyServerId = snapshot['dummyServerId'];
+    if (dummyServerId is String && dummyServerId.isNotEmpty) {
+      try {
+        await _deleteProxyConfig(dummyServerId);
+      } catch (e) {
+        _log('dummy delete failed: $e');
+      }
+    }
+    _log('restored api-settings (selection + generation settings, dummy removed)');
+  }
+
+  /// Partial merge-PATCH of the top-level api-settings (selected proxy, source,
+  /// generation_settings…).
+  Future<void> _patchApiSettings(Map<String, dynamic> patch) async {
+    await _fetchLocked(_apiSettingsUrl,
+        method: 'PATCH', body: jsonEncode(patch));
+  }
+
+  /// DELETE a proxy preset by its server-assigned id.
+  Future<void> _deleteProxyConfig(String serverId) async {
+    await _fetchLocked('$_proxyConfigsUrl/$serverId', method: 'DELETE');
   }
 
   /// Clears the last captured payload so the next send's capture is unambiguous.

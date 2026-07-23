@@ -109,6 +109,13 @@ class JanitorExtractor {
       final catalog = _buildCatalogContext(meta);
       final firstMessageMeta = (meta?['first_message'] ?? '').toString();
 
+      // Fetch the character's public lorebooks once: their verbatim entry
+      // contents are subtracted from the closed-lorebook text (so public
+      // content never leaks into the closed book), and their titles/page
+      // descriptions feed the build LLM's key inference.
+      final publicBooks = await fetchPublicLorebooks(meta);
+      final publicContents = publicEntryContents(publicBooks);
+
       final payload = await proxy.captureGenerateAlpha(
         characterId: characterId,
         triggerText: firstMessageMeta,
@@ -117,7 +124,7 @@ class JanitorExtractor {
 
       onPhase?.call('separating');
       final card = extractCard(payload);
-      final sep = separate(payload, card);
+      final sep = separate(payload, card, publicContents);
       final advanced = hasAdvancedLorebook(meta);
       final fullPrompt =
           advanced ? stripLeadingJailbreak(getSystemContent(payload)) : '';
@@ -167,7 +174,7 @@ class JanitorExtractor {
         catalogContext: catalog,
         scenarioContext: scenario,
         greetingsContext: greetings,
-        lorebookDescsContext: await _lorebookDescs(meta),
+        lorebookDescsContext: buildLorebookDescsContext(publicBooks),
         hasAdvancedLorebook: advanced,
         fullPromptText: fullPrompt,
       );

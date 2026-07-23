@@ -8,7 +8,9 @@ import '../../../shared/widgets/glaze_toast.dart';
 import '../../settings/app_settings_provider.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
+import '../saucepan_account_provider.dart';
 import '../services/datacat_provider.dart';
+import '../services/saucepan_extractor.dart';
 import 'catalog_detail_launcher.dart';
 
 class ImportUrlDialog extends ConsumerStatefulWidget {
@@ -137,6 +139,15 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
       return;
     }
 
+    // Saucepan companion links extract LOCALLY (on-device fragment reassembly)
+    // when the user has configured a Saucepan token; otherwise they fall through
+    // to the remote DataCat path below.
+    if (_isSaucepanCompanionUrl(url) &&
+        ref.read(saucepanAccountProvider).isLoggedIn) {
+      await _extractSaucepanLocal(url);
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -186,6 +197,43 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
   bool _isJanitorUrl(String url) {
     final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
     return host == 'janitorai.com' || host.endsWith('.janitorai.com');
+  }
+
+  bool _isSaucepanCompanionUrl(String url) {
+    final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+    final isHost = host == 'saucepan.ai' || host.endsWith('.saucepan.ai');
+    return isHost && parseCompanionId(url) != null;
+  }
+
+  /// Extracts a Saucepan companion on-device (no browser) and imports it. Used
+  /// only when a Saucepan token is configured — otherwise the remote DataCat
+  /// path handles saucepan.ai links.
+  Future<void> _extractSaucepanLocal(String url) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _phase = 'extracting locally';
+    });
+    try {
+      final result =
+          await ref.read(saucepanExtractorProvider).extractCompanion(url);
+      if (!mounted) return;
+      await ref
+          .read(catalogProvider.notifier)
+          .importCharacter(result.character, sourceUrl: url);
+      if (mounted) {
+        Navigator.pop(context);
+        GlazeToast.show(
+            context, 'Imported ${result.character.charData.name}');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
+    }
   }
 
   static final _uuidRe = RegExp(

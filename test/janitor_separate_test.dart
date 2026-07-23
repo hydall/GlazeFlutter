@@ -77,5 +77,27 @@ void main() {
       expect(getSystemContent(<String, dynamic>{'messages': <dynamic>[]}), '');
       expect(getSystemContent(const <String, dynamic>{}), '');
     });
+
+    test('separate subtracts public-lorebook entry contents', () {
+      // The Northern Keep entry is a PUBLIC lorebook entry — passed verbatim, it
+      // must be cut from the closed lorebook so it never leaks in twice.
+      final sep = separate(payload, extractCard(payload), [
+        'The Northern Keep is an ancient fortress carved into the cliffs. '
+            'It has stood for a thousand winters.',
+      ]);
+      expect(sep.lorebookText, isNot(contains('Northern Keep')));
+      // The genuinely closed entry survives.
+      expect(sep.lorebookText, contains('Frostfang Blade'));
+      expect(sep.removed.map((r) => r.label), contains('publicLorebook'));
+    });
+
+    test('public-entry subtraction tolerates whitespace and glyph variants', () {
+      // Same entry with collapsed whitespace and a curly apostrophe / en dash.
+      final sep = separate(payload, extractCard(payload), [
+        'The   Northern Keep is an ancient fortress carved into the cliffs.\n'
+            'It has stood for a thousand winters.',
+      ]);
+      expect(sep.lorebookText, isNot(contains('Northern Keep')));
+    });
   });
 }
