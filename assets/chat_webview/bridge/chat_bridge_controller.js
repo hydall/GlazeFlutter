@@ -27,7 +27,10 @@ export class Bridge {
     this._genTimer = new GenTimer(renderer);
     this._imgGenTimer = new ImgGenTimer();
     this._updateBatcher = new MessageUpdateBatcher();
-    this._selectionManager = new SelectionManager((name, args) => this._sendToFlutter(name, args));
+    this._selectionManager = new SelectionManager(
+      (name, args) => this._sendToFlutter(name, args),
+      () => this._orderedMessageIds(),
+    );
     this._editController = new EditController((name, args) => this._sendToFlutter(name, args));
     this._interaction = new InteractionDispatch(this);
     this._charName = null;
@@ -1108,6 +1111,15 @@ export class Bridge {
   }
 
   setSelectionMode(enabled) { this._selectionManager.setSelectionMode(enabled); }
+
+  // Ordered list of real message ids (top → bottom), excluding date separators.
+  // Range selection needs the full order even for messages currently outside
+  // the virtual-scroll render window, so it reads from virtualList.messageOrder
+  // (the complete backing order) rather than the DOM.
+  _orderedMessageIds() {
+    const order = (this.virtualList && this.virtualList.messageOrder) || [];
+    return order.filter(id => typeof id === 'string' && !id.startsWith('__date_'));
+  }
 
   _setupImageClickForward() {
     this.virtualList.container.addEventListener('image-click', (e) => {

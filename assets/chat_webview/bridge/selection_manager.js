@@ -1,8 +1,11 @@
 ﻿/* Extracted from ../bridge.legacy.js. Keep public behavior stable. */
 
 export class SelectionManager {
-  constructor(sendToFlutter) {
+  constructor(sendToFlutter, getOrderedIds) {
     this._sendToFlutter = sendToFlutter;
+    // Returns all real message ids in display order (top → bottom). Injected so
+    // range selection can reach messages outside the virtual-scroll window.
+    this._getOrderedIds = typeof getOrderedIds === 'function' ? getOrderedIds : () => [];
     this._selectionMode = false;
     this._selectedIds = new Set();
     this._selectedText = '';
@@ -32,6 +35,36 @@ export class SelectionManager {
     }
   }
 
+  // Selects [messageId … last message]: the tapped message plus every message
+  // after it. Re-tapping always redefines the range from the newly tapped
+  // message, so tapping a lower message after an upper one collapses the
+  // selection down to that lower message and everything below it.
+  selectRangeFrom(messageId) {
+    const order = this._getOrderedIds();
+    const idx = order.indexOf(messageId);
+    const range = idx >= 0 ? order.slice(idx) : [messageId];
+    this._selectedIds = new Set(range);
+    this._applySelectionClasses();
+  }
+
+  // Topmost currently-selected id in display order (the range anchor), or null.
+  _anchorId() {
+    if (this._selectedIds.size === 0) return null;
+    const order = this._getOrderedIds();
+    for (const id of order) {
+      if (this._selectedIds.has(id)) return id;
+    }
+    return null;
+  }
+
+  // Sync the `selected` class for sections currently in the DOM. Sections that
+  // scroll into view later pick it up via applyClassesToSection().
+  _applySelectionClasses() {
+    document.querySelectorAll('.message-section').forEach(msgEl => {
+      msgEl.classList.toggle('selected', this._selectedIds.has(msgEl.dataset.messageId));
+    });
+  }
+
   exitIfEmpty() {
     if (this._selectedIds.size === 0) this.setSelectionMode(false);
   }
@@ -43,7 +76,14 @@ export class SelectionManager {
     e.preventDefault();
     e.stopPropagation();
     const id = section.dataset.messageId;
-    this.toggleMessageSelection(id);
+    // Re-tapping the range anchor clears the whole selection (and exits mode);
+    // any other tap redefines the range from the tapped message downward.
+    if (id === this._anchorId()) {
+      this._selectedIds.clear();
+      this._applySelectionClasses();
+    } else {
+      this.selectRangeFrom(id);
+    }
     this._sendToFlutter('onSelectionChange', [JSON.stringify(this.getSelectedIds())]);
     this.exitIfEmpty();
     return true;
@@ -65,13 +105,18 @@ export class SelectionManager {
     e.preventDefault();
 
     if (this._selectionMode) {
-      this.toggleMessageSelection(id);
+      if (id === this._anchorId()) {
+        this._selectedIds.clear();
+        this._applySelectionClasses();
+      } else {
+        this.selectRangeFrom(id);
+      }
       this._sendToFlutter('onSelectionChange', [JSON.stringify(this.getSelectedIds())]);
       this.exitIfEmpty();
     } else {
       if (document.querySelector('.message-section.editing')) return false;
       this.setSelectionMode(true);
-      this.toggleMessageSelection(id);
+      this.selectRangeFrom(id);
       this._sendToFlutter('onSelectionChange', [JSON.stringify(this.getSelectedIds())]);
     }
     return true;
