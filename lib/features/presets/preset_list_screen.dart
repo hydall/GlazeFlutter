@@ -19,7 +19,6 @@ import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'preset_connections_sheet.dart';
 import 'preset_editor_screen.dart';
-import 'preset_export.dart';
 import 'preset_list_provider.dart';
 
 class PresetListScreen extends ConsumerStatefulWidget {
@@ -139,26 +138,6 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
               },
               onConnections: () => showPresetConnections(context, preset.id),
               onEdit: () => _openEditor(preset),
-              onDuplicate: () => ref
-                  .read(presetListProvider.notifier)
-                  .add(
-                    preset.copyWith(
-                      id: DateTime.now().millisecondsSinceEpoch.toRadixString(
-                        36,
-                      ),
-                      name: '${preset.name} (copy)',
-                    ),
-                  ),
-              onDelete: () {
-                if (isActive) {
-                  final nextPreset = list.cast<Preset?>().firstWhere(
-                        (p) => p?.id != preset.id,
-                        orElse: () => null,
-                      );
-                  setActivePreset(ref, nextPreset?.id);
-                }
-                ref.read(presetListProvider.notifier).remove(preset.id);
-              },
             ),
           );
         },
@@ -277,8 +256,6 @@ class _PsCard extends ConsumerWidget {
   final VoidCallback onActivate;
   final VoidCallback onConnections;
   final VoidCallback onEdit;
-  final VoidCallback onDuplicate;
-  final VoidCallback onDelete;
 
   const _PsCard({
     required this.preset,
@@ -286,8 +263,6 @@ class _PsCard extends ConsumerWidget {
     required this.onActivate,
     required this.onConnections,
     required this.onEdit,
-    required this.onDuplicate,
-    required this.onDelete,
   });
 
   @override
@@ -389,7 +364,6 @@ class _PsCard extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(8),
                 child: InkWell(
                   onTap: onEdit,
-                  onLongPress: () => _showContextMenu(context),
                   borderRadius: BorderRadius.circular(8),
                    child: Icon(
                      Icons.edit_outlined,
@@ -402,49 +376,6 @@ class _PsCard extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
-
-  void _showContextMenu(BuildContext context) {
-    GlazeBottomSheet.show<void>(
-      context,
-      title: preset.name,
-      items: [
-        BottomSheetItem(
-          icon: Icons.edit_outlined,
-          label: 'Edit',
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            onEdit();
-          },
-        ),
-        BottomSheetItem(
-          icon: Icons.copy_outlined,
-          label: 'Duplicate',
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            onDuplicate();
-          },
-        ),
-        BottomSheetItem(
-          icon: Icons.upload_file_outlined,
-          label: 'Export',
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            exportPreset(context, preset);
-          },
-        ),
-        BottomSheetItem(
-          icon: Icons.delete_outlined,
-          iconColor: const Color(0xFFFF4444),
-          label: 'Delete',
-          isDestructive: true,
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            onDelete();
-          },
-        ),
-      ],
     );
   }
 }

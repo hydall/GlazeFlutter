@@ -245,6 +245,7 @@
   "action_open_in_catalog": "Открыть в каталоге",
   "action_convert_to_persona": "Конвертировать в персону",
   "action_convert_to_character": "Конвертировать в персонажа",
+  "action_clone_persona": "Клонировать персону",
   "convert_to_persona_done": "Персона создана",
   "convert_to_character_done": "Персонаж создан",
   "action_branch": "Разветвление",

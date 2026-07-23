@@ -202,6 +202,16 @@ class _PersonaTile extends ConsumerWidget {
                         },
                       ),
                       BottomSheetItem(
+                        label: 'action_clone_persona'.tr(),
+                        icon: Icons.copy_outlined,
+                        onTap: () async {
+                          Navigator.of(context, rootNavigator: true).pop();
+                          await ref
+                              .read(personaListProvider.notifier)
+                              .clone(persona);
+                        },
+                      ),
+                      BottomSheetItem(
                         label: 'action_convert_to_character'.tr(),
                         icon: Icons.person_outline,
                         onTap: () async {
