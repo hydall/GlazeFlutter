@@ -157,10 +157,19 @@ class StudioLedgerService {
           .loadEffectiveLedgerTrackers(sessionId);
       _throwIfReconciliationAborted(token, isStillCurrent);
       final reviewMessageIds = plan.messageIds.toSet();
-      final promptFacts =
-          (await _knowledgeFactRepo.getReviewableForSession(sessionId))
-              .where((fact) => reviewMessageIds.contains(fact.sourceMessageId))
-              .toList();
+      final reviewableFacts = await _knowledgeFactRepo.getReviewableForSession(
+        sessionId,
+      );
+      final promptFacts = reviewableFacts
+          .where((fact) => reviewMessageIds.contains(fact.sourceMessageId))
+          .toList();
+      final duplicateRetractions = exactDuplicateKnowledgeRetractions(
+        reviewableFacts,
+      );
+      final staleAnchorRetractions = staleKnowledgeAnchorRetractions(
+        reviewableFacts,
+        plan.messages,
+      );
       _throwIfReconciliationAborted(token, isStillCurrent);
       final promptBlock = ledgerBlocks
           .where(
@@ -254,11 +263,19 @@ class StudioLedgerService {
           model: config.model,
         );
       }
-      final cleanupOps = cleanupParser.parse(
-        output: outcome.text!,
-        offeredFacts: offeredFacts,
-        reviewText: reviewText,
-      );
+      final cleanupOps =
+          cleanupParser.parse(
+              output: outcome.text!,
+              offeredFacts: offeredFacts,
+              reviewText: reviewText,
+            )
+            ..addAll(duplicateRetractions)
+            ..addAll(staleAnchorRetractions);
+      final allowedCleanupFactIds = {
+        ...offeredFacts.map((fact) => fact.id),
+        ...duplicateRetractions.map((op) => op.factId),
+        ...staleAnchorRetractions.map((op) => op.factId),
+      };
 
       var opsApplied = 0;
       await _trackerRepo.db.transaction(() async {
@@ -280,7 +297,7 @@ class StudioLedgerService {
         opsApplied += await _knowledgeFactRepo.applyReconciliationCleanup(
           sessionId: sessionId,
           ops: cleanupOps,
-          allowedFactIds: offeredFacts.map((fact) => fact.id).toSet(),
+          allowedFactIds: allowedCleanupFactIds,
           endpointMessageId: plan.endMessage.id,
           messageIds: plan.messageIds,
         );

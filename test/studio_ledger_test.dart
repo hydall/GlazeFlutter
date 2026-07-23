@@ -346,9 +346,186 @@ void main() {
         final state = RegExp(
           r'<committed_state>([\s\S]*?)</committed_state>',
         ).firstMatch(prompt)!.group(1)!;
-        expect(state, isNot(contains('npc:Rebecca.location')));
+        expect(state, contains('npc:Rebecca.location'));
       },
     );
+
+    test('candidate keys include mentioned entity siblings and provenance', () {
+      final messages = [
+        const ChatMessage(id: 'u1', role: 'user', content: 'Where is Lucy?'),
+        const ChatMessage(id: 'a1', role: 'assistant', content: 'Lucy waits.'),
+      ];
+      final plan = const LedgerReconciliationPlanner().planForEndpoint(
+        messages: messages,
+        endAssistantMessageId: 'a1',
+      )!;
+      final trackers = [
+        ..._makeTrackers('s', {
+          'npc:Lucy.location': 'bar',
+          'npc:Lucy.current_goal': 'wait',
+          'npc:Rebecca.location': 'street',
+        }),
+        const Tracker(
+          sessionId: 's',
+          name: 'arc:old_debt.status',
+          value: 'active',
+          scope: 'ledger',
+          provenance: 'source=studio_ledger|message=a1|swipe=0|agentSwipe=0',
+        ),
+      ];
+
+      final candidates = const StudioLedgerReconciliationPrompt()
+          .candidateTrackers(
+            trackers: trackers,
+            plan: plan,
+            chat: 'Where is Lucy? Lucy waits.',
+          );
+
+      expect(
+        candidates.map((tracker) => tracker.name),
+        containsAll([
+          'npc:Lucy.location',
+          'npc:Lucy.current_goal',
+          'arc:old_debt.status',
+        ]),
+      );
+    });
+
+    test('candidate keys and values share a hard bounded set', () {
+      final messages = [
+        const ChatMessage(id: 'u1', role: 'user', content: 'Continue.'),
+        const ChatMessage(id: 'a1', role: 'assistant', content: 'Continued.'),
+      ];
+      final plan = const LedgerReconciliationPlanner().planForEndpoint(
+        messages: messages,
+        endAssistantMessageId: 'a1',
+      )!;
+      final trackers = [
+        for (var i = 0; i < 150; i++)
+          Tracker(
+            sessionId: 's',
+            name: 'npc:Person$i.location',
+            value: 'Location $i',
+            scope: 'ledger',
+          ),
+      ];
+
+      final prompt = const StudioLedgerReconciliationPrompt().build(
+        systemPrompt: 'PROMPT',
+        plan: plan,
+        trackers: trackers,
+      );
+      final state = RegExp(
+        r'<committed_state>([\s\S]*?)</committed_state>',
+      ).firstMatch(prompt)!.group(1)!;
+      final keys = RegExp(
+        r'<existing_keys>([\s\S]*?)</existing_keys>',
+      ).firstMatch(prompt)!.group(1)!;
+      final stateNames = state
+          .trim()
+          .split('\n')
+          .map((line) => line.substring(0, line.lastIndexOf(': ')))
+          .toSet();
+      final keyNames = keys.trim().split('\n').toSet();
+
+      expect(stateNames, hasLength(100));
+      expect(keyNames, stateNames);
+    });
+
+    test('exact duplicate cleanup preserves facts for different knowers', () {
+      const base = CharacterKnowledgeFact(
+        id: 'older',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:leon',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        scopeKey: 'event:silence',
+        predicate: 'observed',
+        object: 'Leon was silenced.',
+        epistemicState: CharacterKnowledgeEpistemicState.observed,
+        sourceMessageId: 'a1',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+        lifecycle: CharacterKnowledgeFactLifecycle.active,
+        updatedAt: 1,
+      );
+      final facts = [
+        base,
+        base.copyWith(id: 'newer', sourceMessageId: 'a2', updatedAt: 2),
+        base.copyWith(
+          id: 'other-witness',
+          knowerKey: 'entity:sylvie',
+          sourceMessageId: 'a2',
+          updatedAt: 2,
+        ),
+      ];
+
+      final ops = exactDuplicateKnowledgeRetractions(facts);
+
+      expect(ops.map((op) => op.factId), ['older']);
+    });
+
+    test('exact duplicate cleanup does not merge epistemic states', () {
+      const observed = CharacterKnowledgeFact(
+        id: 'observed',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:leon',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'location',
+        object: 'West gate',
+        epistemicState: CharacterKnowledgeEpistemicState.observed,
+        sourceMessageId: 'a1',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+        lifecycle: CharacterKnowledgeFactLifecycle.active,
+      );
+
+      expect(
+        exactDuplicateKnowledgeRetractions([
+          observed,
+          observed.copyWith(
+            id: 'heard',
+            epistemicState: CharacterKnowledgeEpistemicState.heardClaim,
+          ),
+        ]),
+        isEmpty,
+      );
+    });
+
+    test('stale knowledge cleanup retracts rejected swipe provenance', () {
+      const fact = CharacterKnowledgeFact(
+        id: 'stale',
+        chatSessionId: 's',
+        knowerKey: 'entity:helga',
+        subjectKey: 'entity:marta',
+        factClass: CharacterKnowledgeFactClass.knowledge,
+        predicate: 'identity',
+        object: 'Marta owns the tavern.',
+        epistemicState: CharacterKnowledgeEpistemicState.observed,
+        sourceMessageId: 'a1',
+        sourceSwipeId: 0,
+        sourceAgentSwipeId: 0,
+      );
+      const accepted = ChatMessage(
+        id: 'a1',
+        role: 'assistant',
+        content: 'Accepted reroll',
+        swipeId: 1,
+        agentSwipeId: 0,
+      );
+
+      final ops = staleKnowledgeAnchorRetractions(
+        [
+          fact,
+          fact.copyWith(id: 'current', sourceSwipeId: 1),
+          fact.copyWith(id: 'outside-range', sourceMessageId: 'a0'),
+        ],
+        const [accepted],
+      );
+
+      expect(ops.map((op) => op.factId), ['stale']);
+    });
 
     test(
       'checkpoint is invalidated by delete and copied only with full range',

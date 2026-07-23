@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import '../db/repositories/ledger_reconciliation_checkpoint_repo.dart';
 import '../models/character_knowledge_fact.dart';
 import '../models/chat_message.dart';
+import '../models/knowledge_cleanup.dart';
 import '../models/tracker.dart';
 
 const ledgerReconciliationPromptBlockId = 'ledger_reconciliation_prompt';
@@ -133,6 +134,9 @@ class LedgerReconciliationPlanner {
 }
 
 class StudioLedgerReconciliationPrompt {
+  static const maxCandidateTrackers = 100;
+  static const maxCandidateTrackerCharacters = 60000;
+
   const StudioLedgerReconciliationPrompt();
 
   String build({
@@ -148,13 +152,15 @@ class StudioLedgerReconciliationPrompt {
               '[${message.id}]: ${message.content}',
         )
         .join('\n\n');
-    final relevant = _relevantTrackers(trackers, chat);
-    final state = relevant.isEmpty
+    final candidates = candidateTrackers(
+      trackers: trackers,
+      plan: plan,
+      chat: chat,
+    );
+    final state = candidates.isEmpty
         ? '(no committed state)'
-        : relevant.map((row) => '${row.name}: ${row.value}').join('\n');
-    final keys =
-        trackers.where(_isLedgerTracker).map((row) => row.name).toSet().toList()
-          ..sort();
+        : candidates.map((row) => '${row.name}: ${row.value}').join('\n');
+    final keys = candidates.map((row) => row.name).toList()..sort();
     final facts = relevantKnowledgeFacts(knowledgeFacts, chat);
     final factLines = facts.isEmpty
         ? '(no reviewable knowledge facts)'
@@ -252,36 +258,83 @@ old or absent from the review range.''';
     'lifecycle': fact.lifecycle.wireName,
   });
 
-  List<Tracker> _relevantTrackers(List<Tracker> trackers, String chat) {
-    final terms = _terms(chat);
-    final candidates =
-        trackers
-            .where(_isLedgerTracker)
-            .map((tracker) {
-              var score = 0;
-              final lower = '${tracker.name} ${tracker.value}'.toLowerCase();
-              if (tracker.name.startsWith('scene.') ||
-                  tracker.name.startsWith('world:')) {
-                score += 100;
-              }
-              if (_isPlaceholder(lower)) score += 1000;
-              score += terms.where(lower.contains).length * 10;
-              return (tracker: tracker, score: score);
-            })
-            .where((item) => item.score > 0)
-            .toList()
-          ..sort((a, b) => b.score.compareTo(a.score));
+  List<Tracker> candidateTrackers({
+    required List<Tracker> trackers,
+    required LedgerReconciliationPlan plan,
+    required String chat,
+  }) {
+    final chatTerms = _terms(chat);
+    final messageIds = plan.messageIds.toSet();
+    final prioritized = <({Tracker tracker, int score})>[];
+    final rotationPool = <Tracker>[];
+    for (final tracker in trackers.where(_isLedgerTracker)) {
+      var score = 0;
+      if (tracker.name.startsWith('scene.') ||
+          tracker.name.startsWith('world:')) {
+        score = 400;
+      } else if (_isPlaceholder('${tracker.name} ${tracker.value}')) {
+        score = 300;
+      } else if (_hasReviewRangeProvenance(tracker, messageIds)) {
+        score = 200;
+      } else if (_trackerIdentityTerms(tracker.name).any(chatTerms.contains)) {
+        score = 100;
+      }
+      if (score > 0) {
+        prioritized.add((tracker: tracker, score: score));
+      } else {
+        rotationPool.add(tracker);
+      }
+    }
+    prioritized.sort((a, b) {
+      final score = b.score.compareTo(a.score);
+      return score != 0 ? score : a.tracker.name.compareTo(b.tracker.name);
+    });
+    rotationPool.sort((a, b) => a.name.compareTo(b.name));
 
-    const characterBudget = 60000;
+    final ordered = prioritized.map((item) => item.tracker).toList();
+    if (rotationPool.isNotEmpty && ordered.length < maxCandidateTrackers) {
+      final hashPrefix = plan.rangeHash.substring(
+        0,
+        plan.rangeHash.length.clamp(0, 8),
+      );
+      final offset = int.parse(hashPrefix, radix: 16) % rotationPool.length;
+      ordered.addAll([
+        ...rotationPool.skip(offset),
+        ...rotationPool.take(offset),
+      ]);
+    }
+
     var used = 0;
     final selected = <Tracker>[];
-    for (final item in candidates) {
-      final size = item.tracker.name.length + item.tracker.value.length + 2;
-      if (used + size > characterBudget) continue;
-      selected.add(item.tracker);
+    for (final tracker in ordered) {
+      if (selected.length >= maxCandidateTrackers) break;
+      final size = tracker.name.length + tracker.value.length + 2;
+      if (used + size > maxCandidateTrackerCharacters) continue;
+      selected.add(tracker);
       used += size;
     }
     return selected;
+  }
+
+  bool _hasReviewRangeProvenance(Tracker tracker, Set<String> messageIds) {
+    final match = RegExp(
+      r'(?:^|\|)message=([^|]+)',
+    ).firstMatch(tracker.provenance);
+    return match != null && messageIds.contains(match.group(1));
+  }
+
+  Set<String> _trackerIdentityTerms(String name) {
+    String identity;
+    if (name.startsWith('npc:')) {
+      identity = name.substring(4).split('.').first;
+    } else if (name.startsWith('relationship:')) {
+      identity = name.substring(13).split('.').first;
+    } else if (name.startsWith('arc:')) {
+      identity = name.substring(4).split('.').first;
+    } else {
+      return const {};
+    }
+    return _terms(identity.replaceAll(RegExp(r'[_:-]+'), ' '));
   }
 
   Set<String> _terms(String text) => text
@@ -303,6 +356,81 @@ old or absent from the review range.''';
           tracker.name.startsWith('world:') ||
           tracker.name.startsWith('scene.'));
 }
+
+/// Returns deterministic retractions for exact duplicate propositions while
+/// preserving separate epistemic records for different knowers.
+List<KnowledgeCleanupOp> exactDuplicateKnowledgeRetractions(
+  List<CharacterKnowledgeFact> facts,
+) {
+  final groups = <String, List<CharacterKnowledgeFact>>{};
+  for (final fact in facts) {
+    final key = [
+      _normalizedFactPart(fact.knowerKey),
+      _normalizedFactPart(fact.subjectKey),
+      fact.factClass.wireName,
+      _normalizedFactPart(fact.scopeKey),
+      _normalizedFactPart(fact.predicate),
+      _normalizedFactPart(fact.object),
+      fact.epistemicState.wireName,
+    ].join('\u0000');
+    groups.putIfAbsent(key, () => []).add(fact);
+  }
+
+  final retractions = <KnowledgeCleanupOp>[];
+  for (final duplicates in groups.values.where((items) => items.length > 1)) {
+    duplicates.sort(_compareDuplicateFacts);
+    retractions.addAll(
+      duplicates.skip(1).map((fact) => KnowledgeCleanupOp.retract(fact.id)),
+    );
+  }
+  return retractions;
+}
+
+/// Retracts facts whose provenance no longer matches the accepted swipe in the
+/// reviewed chat range.
+List<KnowledgeCleanupOp> staleKnowledgeAnchorRetractions(
+  List<CharacterKnowledgeFact> facts,
+  List<ChatMessage> messages,
+) {
+  final acceptedAnchors = {
+    for (final message in messages)
+      message.id: (
+        swipeId: message.swipeId,
+        agentSwipeId: message.agentSwipeId,
+      ),
+  };
+  return facts
+      .where((fact) {
+        final anchor = acceptedAnchors[fact.sourceMessageId];
+        return anchor != null &&
+            (anchor.swipeId != fact.sourceSwipeId ||
+                anchor.agentSwipeId != fact.sourceAgentSwipeId);
+      })
+      .map((fact) => KnowledgeCleanupOp.retract(fact.id))
+      .toList(growable: false);
+}
+
+int _compareDuplicateFacts(CharacterKnowledgeFact a, CharacterKnowledgeFact b) {
+  final lifecycle = _duplicateLifecycleRank(
+    b.lifecycle,
+  ).compareTo(_duplicateLifecycleRank(a.lifecycle));
+  if (lifecycle != 0) return lifecycle;
+  final importance = b.importance.compareTo(a.importance);
+  if (importance != 0) return importance;
+  final confidence = b.confidence.compareTo(a.confidence);
+  if (confidence != 0) return confidence;
+  final updated = b.updatedAt.compareTo(a.updatedAt);
+  if (updated != 0) return updated;
+  final created = b.createdAt.compareTo(a.createdAt);
+  if (created != 0) return created;
+  return a.id.compareTo(b.id);
+}
+
+int _duplicateLifecycleRank(CharacterKnowledgeFactLifecycle lifecycle) =>
+    lifecycle == CharacterKnowledgeFactLifecycle.active ? 1 : 0;
+
+String _normalizedFactPart(String value) =>
+    value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
 const fallbackLedgerReconciliationPrompt = '''You reconcile the committed
 Studio Ledger against a bounded range of accepted chat messages.
