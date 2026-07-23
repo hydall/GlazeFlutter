@@ -350,6 +350,88 @@ void main() {
       },
     );
 
+    test('candidate keys include mentioned entity siblings and provenance', () {
+      final messages = [
+        const ChatMessage(id: 'u1', role: 'user', content: 'Where is Lucy?'),
+        const ChatMessage(id: 'a1', role: 'assistant', content: 'Lucy waits.'),
+      ];
+      final plan = const LedgerReconciliationPlanner().planForEndpoint(
+        messages: messages,
+        endAssistantMessageId: 'a1',
+      )!;
+      final trackers = [
+        ..._makeTrackers('s', {
+          'npc:Lucy.location': 'bar',
+          'npc:Lucy.current_goal': 'wait',
+          'npc:Rebecca.location': 'street',
+        }),
+        const Tracker(
+          sessionId: 's',
+          name: 'arc:old_debt.status',
+          value: 'active',
+          scope: 'ledger',
+          provenance: 'source=studio_ledger|message=a1|swipe=0|agentSwipe=0',
+        ),
+      ];
+
+      final candidates = const StudioLedgerReconciliationPrompt()
+          .candidateTrackers(
+            trackers: trackers,
+            plan: plan,
+            chat: 'Where is Lucy? Lucy waits.',
+          );
+
+      expect(
+        candidates.map((tracker) => tracker.name),
+        containsAll([
+          'npc:Lucy.location',
+          'npc:Lucy.current_goal',
+          'arc:old_debt.status',
+        ]),
+      );
+    });
+
+    test('candidate keys and values share a hard bounded set', () {
+      final messages = [
+        const ChatMessage(id: 'u1', role: 'user', content: 'Continue.'),
+        const ChatMessage(id: 'a1', role: 'assistant', content: 'Continued.'),
+      ];
+      final plan = const LedgerReconciliationPlanner().planForEndpoint(
+        messages: messages,
+        endAssistantMessageId: 'a1',
+      )!;
+      final trackers = [
+        for (var i = 0; i < 150; i++)
+          Tracker(
+            sessionId: 's',
+            name: 'npc:Person$i.location',
+            value: 'Location $i',
+            scope: 'ledger',
+          ),
+      ];
+
+      final prompt = const StudioLedgerReconciliationPrompt().build(
+        systemPrompt: 'PROMPT',
+        plan: plan,
+        trackers: trackers,
+      );
+      final state = RegExp(
+        r'<committed_state>([\s\S]*?)</committed_state>',
+      ).firstMatch(prompt)!.group(1)!;
+      final keys = RegExp(
+        r'<existing_keys>([\s\S]*?)</existing_keys>',
+      ).firstMatch(prompt)!.group(1)!;
+      final stateNames = state
+          .trim()
+          .split('\n')
+          .map((line) => line.substring(0, line.lastIndexOf(': ')))
+          .toSet();
+      final keyNames = keys.trim().split('\n').toSet();
+
+      expect(stateNames, hasLength(100));
+      expect(keyNames, stateNames);
+    });
+
     test('exact duplicate cleanup preserves facts for different knowers', () {
       const base = CharacterKnowledgeFact(
         id: 'older',

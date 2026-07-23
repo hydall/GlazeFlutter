@@ -134,6 +134,9 @@ class LedgerReconciliationPlanner {
 }
 
 class StudioLedgerReconciliationPrompt {
+  static const maxCandidateTrackers = 100;
+  static const maxCandidateTrackerCharacters = 60000;
+
   const StudioLedgerReconciliationPrompt();
 
   String build({
@@ -149,13 +152,15 @@ class StudioLedgerReconciliationPrompt {
               '[${message.id}]: ${message.content}',
         )
         .join('\n\n');
-    final relevant = _relevantTrackers(trackers, chat);
-    final state = relevant.isEmpty
+    final candidates = candidateTrackers(
+      trackers: trackers,
+      plan: plan,
+      chat: chat,
+    );
+    final state = candidates.isEmpty
         ? '(no committed state)'
-        : relevant.map((row) => '${row.name}: ${row.value}').join('\n');
-    final keys =
-        trackers.where(_isLedgerTracker).map((row) => row.name).toSet().toList()
-          ..sort();
+        : candidates.map((row) => '${row.name}: ${row.value}').join('\n');
+    final keys = candidates.map((row) => row.name).toList()..sort();
     final facts = relevantKnowledgeFacts(knowledgeFacts, chat);
     final factLines = facts.isEmpty
         ? '(no reviewable knowledge facts)'
@@ -253,32 +258,83 @@ old or absent from the review range.''';
     'lifecycle': fact.lifecycle.wireName,
   });
 
-  List<Tracker> _relevantTrackers(List<Tracker> trackers, String chat) {
-    final candidates =
-        trackers.where(_isLedgerTracker).map((tracker) {
-          var score = 0;
-          if (tracker.name.startsWith('scene.') ||
-              tracker.name.startsWith('world:')) {
-            score += 100;
-          }
-          final lower = '${tracker.name} ${tracker.value}'.toLowerCase();
-          if (_isPlaceholder(lower)) score += 1000;
-          return (tracker: tracker, score: score);
-        }).toList()..sort((a, b) {
-          final score = b.score.compareTo(a.score);
-          return score != 0 ? score : a.tracker.name.compareTo(b.tracker.name);
-        });
+  List<Tracker> candidateTrackers({
+    required List<Tracker> trackers,
+    required LedgerReconciliationPlan plan,
+    required String chat,
+  }) {
+    final chatTerms = _terms(chat);
+    final messageIds = plan.messageIds.toSet();
+    final prioritized = <({Tracker tracker, int score})>[];
+    final rotationPool = <Tracker>[];
+    for (final tracker in trackers.where(_isLedgerTracker)) {
+      var score = 0;
+      if (tracker.name.startsWith('scene.') ||
+          tracker.name.startsWith('world:')) {
+        score = 400;
+      } else if (_isPlaceholder('${tracker.name} ${tracker.value}')) {
+        score = 300;
+      } else if (_hasReviewRangeProvenance(tracker, messageIds)) {
+        score = 200;
+      } else if (_trackerIdentityTerms(tracker.name).any(chatTerms.contains)) {
+        score = 100;
+      }
+      if (score > 0) {
+        prioritized.add((tracker: tracker, score: score));
+      } else {
+        rotationPool.add(tracker);
+      }
+    }
+    prioritized.sort((a, b) {
+      final score = b.score.compareTo(a.score);
+      return score != 0 ? score : a.tracker.name.compareTo(b.tracker.name);
+    });
+    rotationPool.sort((a, b) => a.name.compareTo(b.name));
 
-    const characterBudget = 60000;
+    final ordered = prioritized.map((item) => item.tracker).toList();
+    if (rotationPool.isNotEmpty && ordered.length < maxCandidateTrackers) {
+      final hashPrefix = plan.rangeHash.substring(
+        0,
+        plan.rangeHash.length.clamp(0, 8),
+      );
+      final offset = int.parse(hashPrefix, radix: 16) % rotationPool.length;
+      ordered.addAll([
+        ...rotationPool.skip(offset),
+        ...rotationPool.take(offset),
+      ]);
+    }
+
     var used = 0;
     final selected = <Tracker>[];
-    for (final item in candidates) {
-      final size = item.tracker.name.length + item.tracker.value.length + 2;
-      if (used + size > characterBudget) continue;
-      selected.add(item.tracker);
+    for (final tracker in ordered) {
+      if (selected.length >= maxCandidateTrackers) break;
+      final size = tracker.name.length + tracker.value.length + 2;
+      if (used + size > maxCandidateTrackerCharacters) continue;
+      selected.add(tracker);
       used += size;
     }
     return selected;
+  }
+
+  bool _hasReviewRangeProvenance(Tracker tracker, Set<String> messageIds) {
+    final match = RegExp(
+      r'(?:^|\|)message=([^|]+)',
+    ).firstMatch(tracker.provenance);
+    return match != null && messageIds.contains(match.group(1));
+  }
+
+  Set<String> _trackerIdentityTerms(String name) {
+    String identity;
+    if (name.startsWith('npc:')) {
+      identity = name.substring(4).split('.').first;
+    } else if (name.startsWith('relationship:')) {
+      identity = name.substring(13).split('.').first;
+    } else if (name.startsWith('arc:')) {
+      identity = name.substring(4).split('.').first;
+    } else {
+      return const {};
+    }
+    return _terms(identity.replaceAll(RegExp(r'[_:-]+'), ' '));
   }
 
   Set<String> _terms(String text) => text
