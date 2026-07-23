@@ -12,6 +12,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/generic_editor.dart';
 import '../../shared/widgets/help_tip.dart';
 import 'preset_list_provider.dart';
@@ -761,6 +762,29 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     );
   }
 
+  /// Builds a [Preset] from the live editor state (used for Export and Clone).
+  Preset _currentSnapshot() {
+    final name = _nameCtrl.text.trim().isEmpty
+        ? 'New Preset'
+        : _nameCtrl.text.trim();
+    return Preset(
+      id: _currentId,
+      name: name,
+      author: _author.trim().isEmpty ? null : _author.trim(),
+      blocks: _blocks,
+      regexes: _regexes,
+      reasoningEnabled: _parseInlineReasoning,
+      reasoningStart: _parseInlineReasoning ? _reasoningStartCtrl.text : null,
+      reasoningEnd: _parseInlineReasoning ? _reasoningEndCtrl.text : null,
+      mergePrompts: _mergePrompts,
+      mergeRole: widget.preset?.mergeRole ?? 'system',
+      guidedGenerationPrompt: widget.preset?.guidedGenerationPrompt,
+      guidedImpersonationPrompt: widget.preset?.guidedImpersonationPrompt,
+      summaryPrompt: widget.preset?.summaryPrompt,
+      createdAt: _createdAt,
+    );
+  }
+
   void _showOptionsMenu() {
     GlazeBottomSheet.show<void>(
       context,
@@ -783,34 +807,25 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
           },
         ),
         BottomSheetItem(
+          icon: Icons.copy_outlined,
+          label: 'Clone',
+          onTap: () async {
+            Navigator.of(context, rootNavigator: true).pop();
+            // Clone the live editor state (including unsaved edits) rather than
+            // the persisted preset. `clone` assigns a fresh id and a "(copy)"
+            // suffixed name.
+            await ref
+                .read(presetListProvider.notifier)
+                .clone(_currentSnapshot());
+            if (mounted) GlazeToast.show(context, 'Preset cloned');
+          },
+        ),
+        BottomSheetItem(
           icon: Icons.upload_file_outlined,
           label: 'Export',
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            final name = _nameCtrl.text.trim().isEmpty
-                ? 'New Preset'
-                : _nameCtrl.text.trim();
-            final snapshot = Preset(
-              id: _currentId,
-              name: name,
-              author: _author.trim().isEmpty ? null : _author.trim(),
-              blocks: _blocks,
-              regexes: _regexes,
-              reasoningEnabled: _parseInlineReasoning,
-              reasoningStart:
-                  _parseInlineReasoning ? _reasoningStartCtrl.text : null,
-              reasoningEnd:
-                  _parseInlineReasoning ? _reasoningEndCtrl.text : null,
-              mergePrompts: _mergePrompts,
-              mergeRole: widget.preset?.mergeRole ?? 'system',
-              guidedGenerationPrompt:
-                  widget.preset?.guidedGenerationPrompt,
-              guidedImpersonationPrompt:
-                  widget.preset?.guidedImpersonationPrompt,
-              summaryPrompt: widget.preset?.summaryPrompt,
-              createdAt: _createdAt,
-            );
-            exportPreset(context, snapshot);
+            exportPreset(context, _currentSnapshot());
           },
         ),
         if (widget.preset != null)
