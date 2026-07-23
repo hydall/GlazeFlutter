@@ -188,6 +188,9 @@ class SaucepanExtractor {
   /// Fetches a Saucepan companion by URL and builds a [DownloadedCharacter].
   /// Requires a stored token (definition + scenarios are auth-gated).
   Future<SaucepanExtraction> extractCompanion(String url) async {
+    // The extractor may be used before its async token-load finished (fresh app
+    // start); pull the persisted token in before deciding we're logged out.
+    if (_token.isEmpty) await loadToken();
     if (!isLoggedIn) {
       throw SaucepanException('No Saucepan token configured — log in first.',
           status: 401);
