@@ -470,7 +470,7 @@ class _SessionTile extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   generating
-                      ? _GeneratingPreview(color: context.cs.primary)
+                      ? const _GeneratingPreview()
                       : MessagePreviewText(
                           raw: info.lastMessage,
                           style: TextStyle(
@@ -544,7 +544,7 @@ class _SessionTile extends ConsumerWidget {
             ),
             const SizedBox(height: 4),
             generating
-                ? _GeneratingPreview(color: context.cs.primary)
+                ? const _GeneratingPreview()
                 : MessagePreviewText(
                     raw: info.lastMessage,
                     style: TextStyle(
@@ -824,7 +824,7 @@ class _GroupHeader extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   generating
-                      ? _GeneratingPreview(color: context.cs.primary)
+                      ? const _GeneratingPreview()
                       : MessagePreviewText(
                           raw: latest.lastMessage,
                           style: TextStyle(
@@ -951,20 +951,21 @@ class _UnreadDot extends StatelessWidget {
   }
 }
 
-/// The last-message line replaced by animated typing dots + a "typing…" label
-/// while the session is generating.
+/// The last-message line replaced by a "writing" pencil + a "Generating…" label
+/// while the session is generating. Mirrors the chat webview's typing indicator
+/// (`.typing-container` / `pencil-write`) one-to-one.
 class _GeneratingPreview extends StatelessWidget {
-  final Color color;
-  const _GeneratingPreview({required this.color});
+  const _GeneratingPreview();
 
   @override
   Widget build(BuildContext context) {
+    final color = context.cs.onSurfaceVariant;
     return Row(
       children: [
-        TypingDots(color: color),
-        const SizedBox(width: 8),
+        _WritingPencil(color: color),
+        const SizedBox(width: 6),
         Text(
-          'chat_status_typing'.tr(),
+          'model_typing'.tr(),
           style: TextStyle(
             fontSize: 13,
             height: 16 / 13,
@@ -973,6 +974,66 @@ class _GeneratingPreview extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A pencil glyph that slides right as it "writes", then snaps back — a
+/// one-to-one port of the chat webview's `pencil-write` keyframes
+/// (`assets/chat_webview/styles.css`): 1.5s, ease-in-out, translateX steps
+/// 0→5px across the first 75% of the cycle, then 5px→0.
+class _WritingPencil extends StatefulWidget {
+  final Color color;
+  final double size;
+
+  const _WritingPencil({required this.color, this.size = 14});
+
+  @override
+  State<_WritingPencil> createState() => _WritingPencilState();
+}
+
+class _WritingPencilState extends State<_WritingPencil>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1500),
+  )..repeat();
+
+  late final Animation<double> _dx = TweenSequence<double>([
+    // 0% → 75%: slide right 0 → 5px in 1px steps, each 15% of the cycle.
+    for (int i = 0; i < 5; i++)
+      TweenSequenceItem(
+        tween: Tween<double>(begin: i.toDouble(), end: (i + 1).toDouble())
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 15,
+      ),
+    // 75% → 100%: snap back 5px → 0.
+    TweenSequenceItem(
+      tween: Tween<double>(begin: 5, end: 0)
+          .chain(CurveTween(curve: Curves.easeInOut)),
+      weight: 25,
+    ),
+  ]).animate(_controller);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _dx,
+      builder: (context, child) => Transform.translate(
+        offset: Offset(_dx.value, 0),
+        child: child,
+      ),
+      child: Icon(
+        Icons.edit,
+        size: widget.size,
+        color: widget.color.withValues(alpha: 0.7),
+      ),
     );
   }
 }
