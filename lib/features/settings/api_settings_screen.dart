@@ -595,6 +595,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               if (_supportsTemperature && !_hideSamplingWhileReasoningAnthropic)
                 MenuRangeItem(
                   label: 'label_temperature'.tr(),
+                  helpTerm: 'temperature',
                   value: _temperature,
                   min: 0,
                   max: 2,
@@ -617,6 +618,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               if (_supportsTopP && !_hideSamplingWhileReasoningAnthropic)
                 MenuRangeItem(
                   label: 'label_top_p'.tr(),
+                  helpTerm: 'top-p',
                   value: _topP,
                   min: 0,
                   max: 1,
@@ -637,6 +639,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               if (_supportsTopK && !_hideSamplingWhileReasoningAnthropic)
                 MenuRangeItem(
                   label: 'label_top_k_sampling'.tr(),
+                  helpTerm: 'top-k',
                   value: _topK.toDouble(),
                   min: 0,
                   max: 200,
@@ -656,6 +659,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               if (_supportsFrequencyPenalty)
                 MenuRangeItem(
                   label: 'label_frequency_penalty'.tr(),
+                  helpTerm: 'frequency-penalty',
                   value: _frequencyPenalty,
                   min: -2,
                   max: 2,
@@ -674,6 +678,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               if (_supportsPresencePenalty)
                 MenuRangeItem(
                   label: 'label_presence_penalty'.tr(),
+                  helpTerm: 'presence-penalty',
                   value: _presencePenalty,
                   min: -2,
                   max: 2,
@@ -691,18 +696,21 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 ),
               MenuFieldItem(
                 label: 'label_max_tokens'.tr(),
+                helpTerm: 'max-tokens',
                 controller: _maxTokensCtrl,
                 placeholder: '8000',
                 keyboardType: TextInputType.number,
               ),
               MenuFieldItem(
                 label: 'label_context_size'.tr(),
+                helpTerm: 'context-size',
                 controller: _contextSizeCtrl,
                 placeholder: '32000',
                 keyboardType: TextInputType.number,
               ),
               MenuFieldItem(
                 label: 'label_first_chunk_timeout'.tr(),
+                helpTerm: 'first-chunk-timeout',
                 controller: _firstChunkTimeoutCtrl,
                 placeholder: '60',
                 keyboardType: TextInputType.number,
@@ -717,6 +725,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               if (_supportsReasoning)
                 MenuSwitchItem(
                   label: 'label_reasoning'.tr(),
+                  helpTerm: 'reasoning-native',
                   description: 'desc_reasoning'.tr(),
                   value: _showNativeReasoning,
                   onChanged: (v) {
@@ -727,6 +736,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               if (_supportsReasoning)
                 MenuSelectorItem(
                   label: 'label_reasoning_effort'.tr(),
+                  helpTerm: 'reasoning-effort',
                   currentValue: _reasoningEffortLabel(_reasoningEffort),
                   included: _requestReasoning,
                   onIncludedChanged: (v) {

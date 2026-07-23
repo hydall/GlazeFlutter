@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/models/extra_request_parameter.dart';
+import '../theme/app_colors.dart';
+import 'menu_group.dart';
 
 class ExtraRequestParametersEditor extends StatefulWidget {
   final List<ExtraRequestParameter> parameters;
@@ -68,38 +70,43 @@ class _ExtraRequestParametersEditorState
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: Card(
-        margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-        clipBehavior: Clip.antiAlias,
-        child: ExpansionTile(
-          title: Text(widget.title),
-          subtitle: Text(widget.description),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          children: [
-            for (var index = 0; index < _parameters.length; index++) ...[
-              _buildParameter(context, colors, index),
-              if (index != _parameters.length - 1) const Divider(height: 16),
-            ],
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _add,
-                icon: const Icon(Icons.add_rounded),
-                label: Text(widget.addLabel),
-              ),
+    // Always expanded (no collapse): the header carries a muted hint and the
+    // parameter rows are rendered directly inside a MenuGroup.
+    return MenuGroup(
+      compact: true,
+      header: widget.title,
+      description: widget.description,
+      items: [
+        const SizedBox(height: 2),
+        for (var index = 0; index < _parameters.length; index++) ...[
+          _buildParameter(context, colors, index),
+          if (index != _parameters.length - 1)
+            Divider(
+              height: 16,
+              indent: 16,
+              endIndent: 16,
+              color: context.cs.outlineVariant,
             ),
-          ],
+        ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _add,
+              icon: const Icon(Icons.add_rounded),
+              label: Text(widget.addLabel),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildParameter(BuildContext context, ColorScheme colors, int index) {
     final parameter = _parameters[index];
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
