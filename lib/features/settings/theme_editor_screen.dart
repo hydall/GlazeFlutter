@@ -17,6 +17,7 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/swipe_tab_switcher.dart';
+import '../../shared/widgets/tab_slide_switcher.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/menu_group.dart';
@@ -153,22 +154,25 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
                     index: _activeTab,
                     length: 2,
                     onChanged: (i) => setState(() => _activeTab = i),
-                    child: IndexedStack(
+                    child: TabSlideSwitcher(
                       index: _activeTab,
-                      children: [
-                        _GeneralTab(
-                          preset: preset,
-                          onUpdate: _update,
-                          topPadding: totalTopPadding,
-                          bottomPadding: bottomPad,
-                        ),
-                        _ChatTab(
-                          preset: preset,
-                          onUpdate: _update,
-                          topPadding: totalTopPadding,
-                          bottomPadding: bottomPad,
-                        ),
-                      ],
+                      child: IndexedStack(
+                        index: _activeTab,
+                        children: [
+                          _GeneralTab(
+                            preset: preset,
+                            onUpdate: _update,
+                            topPadding: totalTopPadding,
+                            bottomPadding: bottomPad,
+                          ),
+                          _ChatTab(
+                            preset: preset,
+                            onUpdate: _update,
+                            topPadding: totalTopPadding,
+                            bottomPadding: bottomPad,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -610,15 +614,18 @@ class _ChatTabState extends State<_ChatTab> {
                   index: _activeSubTab,
                   length: 2,
                   onChanged: (i) => setState(() => _activeSubTab = i),
-                  child: _activeSubTab == 0
-                      ? _ChatFontTab(
-                          preset: widget.preset,
-                          onUpdate: widget.onUpdate,
-                        )
-                      : _ChatColorsTab(
-                          preset: widget.preset,
-                          onUpdate: widget.onUpdate,
-                        ),
+                  child: TabSlideSwitcher(
+                    index: _activeSubTab,
+                    child: _activeSubTab == 0
+                        ? _ChatFontTab(
+                            preset: widget.preset,
+                            onUpdate: widget.onUpdate,
+                          )
+                        : _ChatColorsTab(
+                            preset: widget.preset,
+                            onUpdate: widget.onUpdate,
+                          ),
+                  ),
                 ),
               ],
             ),

@@ -15,6 +15,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/swipe_tab_switcher.dart';
+import '../../shared/widgets/tab_slide_switcher.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/sheet_view.dart';
@@ -386,9 +387,12 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 index: _tab,
                 length: 2,
                 onChanged: (i) => setState(() => _tab = i),
-                child: _tab == 0
-                    ? _buildLlmTab(list, activeName)
-                    : _buildEmbeddingsTab(list, activeName),
+                child: TabSlideSwitcher(
+                  index: _tab,
+                  child: _tab == 0
+                      ? _buildLlmTab(list, activeName)
+                      : _buildEmbeddingsTab(list, activeName),
+                ),
               ),
       ),
     );
