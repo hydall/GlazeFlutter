@@ -45,10 +45,7 @@ Future<void> showRandomizingCardOverlay(
     pageBuilder: (_, _, _) => RandomizingCardOverlay(pool: pool),
     transitionBuilder: (ctx, anim, _, child) {
       final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-      return FadeTransition(
-        opacity: curved,
-        child: child,
-      );
+      return FadeTransition(opacity: curved, child: child);
     },
   );
 }
@@ -191,13 +188,14 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
       duration: const Duration(milliseconds: 230),
     )..addListener(_onSwipeTick);
 
-    _shimmerCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3600),
-    )
-      // Doubles as the per-frame clock that eases the tilt toward its target.
-      ..addListener(_onTiltFrame)
-      ..repeat();
+    _shimmerCtrl =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 3600),
+          )
+          // Doubles as the per-frame clock that eases the tilt toward its target.
+          ..addListener(_onTiltFrame)
+          ..repeat();
 
     _entryCtrl = AnimationController(
       vsync: this,
@@ -326,8 +324,8 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     final dir = _drag.dx > _threshold
         ? 1
         : _drag.dx < -_threshold
-            ? -1
-            : 0;
+        ? -1
+        : 0;
     if (dir != _armedDir) {
       _armedDir = dir;
       if (dir != 0) HapticFeedback.selectionClick();
@@ -352,9 +350,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
 
   void _springBack() {
     _armedDir = 0;
-    _swipeTween = Tween<Offset>(begin: _drag, end: Offset.zero).animate(
-      CurvedAnimation(parent: _swipeCtrl, curve: Curves.easeOutBack),
-    );
+    _swipeTween = Tween<Offset>(
+      begin: _drag,
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _swipeCtrl, curve: Curves.easeOutBack));
     _swipeCtrl
       ..reset()
       ..forward();
@@ -382,9 +381,10 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
       dir * (_screenW + 240),
       _drag.dy + (_drag.dy.abs() < 20 ? -40 : _drag.dy * 0.6),
     );
-    _swipeTween = Tween<Offset>(begin: _drag, end: target).animate(
-      CurvedAnimation(parent: _swipeCtrl, curve: Curves.easeOutCubic),
-    );
+    _swipeTween = Tween<Offset>(
+      begin: _drag,
+      end: target,
+    ).animate(CurvedAnimation(parent: _swipeCtrl, curve: Curves.easeOutCubic));
     _swipeCtrl
       ..reset()
       ..forward().whenCompleteOrCancel(() {
@@ -452,103 +452,101 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
     return Material(
       type: MaterialType.transparency,
       child: Stack(
-      children: [
-        // Dimmed, blurred backdrop over the character list. Isolated in its own
-        // AnimatedBuilder so it only repaints during the entry fade — not on
-        // every idle-shimmer frame (a per-frame blur recompute would be janky).
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: _close,
-            child: AnimatedBuilder(
-              animation: _entryCtrl,
-              builder: (context, _) {
-                final t = Curves.easeOut.transform(_entryCtrl.value);
-                return BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 14 * t, sigmaY: 14 * t),
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.72 * t),
-                  ),
-                );
-              },
+        children: [
+          // Dimmed, blurred backdrop over the character list. Isolated in its own
+          // AnimatedBuilder so it only repaints during the entry fade — not on
+          // every idle-shimmer frame (a per-frame blur recompute would be janky).
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _close,
+              child: AnimatedBuilder(
+                animation: _entryCtrl,
+                builder: (context, _) {
+                  final t = Curves.easeOut.transform(_entryCtrl.value);
+                  return BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 14 * t, sigmaY: 14 * t),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.72 * t),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-        ),
-        // Directional tint: as the card is dragged toward an action, half the
-        // screen washes into that button's colour (green-ish primary for chat,
-        // red for skip).
-        Positioned.fill(
-          child: IgnorePointer(
-            child: _EdgeTint(
-              progress: highlightProgress,
-              chatColor: context.cs.primary,
+          // Directional tint: as the card is dragged toward an action, half the
+          // screen washes into that button's colour (green-ish primary for chat,
+          // red for skip).
+          Positioned.fill(
+            child: IgnorePointer(
+              child: _EdgeTint(
+                progress: highlightProgress,
+                chatColor: context.cs.primary,
+              ),
             ),
           ),
-        ),
-        SafeArea(
-          child: Column(
-            children: [
-              _TopBar(onClose: _close),
-              Expanded(
-                child: Center(
-                  child: SizedBox(
-                    width: cardW,
-                    height: cardH,
-                    // Only the deck rebuilds per shimmer/swipe/flip frame.
-                    child: AnimatedBuilder(
-                      animation:
-                          Listenable.merge([_shimmerCtrl, _swipeCtrl, _flipCtrl]),
-                      builder: (context, _) => _buildDeck(
-                        cardW,
-                        cardH,
-                        (_drag.dx / _threshold).clamp(-1.0, 1.0).toDouble(),
-                        Curves.easeOut.transform(_entryCtrl.value),
+          SafeArea(
+            child: Column(
+              children: [
+                _TopBar(onClose: _close),
+                Expanded(
+                  child: Center(
+                    child: SizedBox(
+                      width: cardW,
+                      height: cardH,
+                      // Only the deck rebuilds per shimmer/swipe/flip frame.
+                      child: AnimatedBuilder(
+                        animation: Listenable.merge([
+                          _shimmerCtrl,
+                          _swipeCtrl,
+                          _flipCtrl,
+                        ]),
+                        builder: (context, _) => _buildDeck(
+                          cardW,
+                          cardH,
+                          (_drag.dx / _threshold).clamp(-1.0, 1.0).toDouble(),
+                          Curves.easeOut.transform(_entryCtrl.value),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              _ActionBar(
-                progress: highlightProgress,
-                onSkip: () {
-                  if (_current != null && !_swipeCtrl.isAnimating) {
-                    _drag = const Offset(-30, 0);
-                    _flyOff(-1);
-                  }
-                },
-                onChat: () {
-                  if (_current != null && !_swipeCtrl.isAnimating) {
-                    _drag = const Offset(30, 0);
-                    _flyOff(1);
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  'randomizing_hint'.tr(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.5),
+                _ActionBar(
+                  progress: highlightProgress,
+                  onSkip: () {
+                    if (_current != null && !_swipeCtrl.isAnimating) {
+                      _drag = const Offset(-30, 0);
+                      _flyOff(-1);
+                    }
+                  },
+                  onChat: () {
+                    if (_current != null && !_swipeCtrl.isAnimating) {
+                      _drag = const Offset(30, 0);
+                      _flyOff(1);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    'randomizing_hint'.tr(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-            ],
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
       ),
     );
   }
 
-  Widget _buildDeck(
-    double cardW,
-    double cardH,
-    double progress,
-    double entry,
-  ) {
+  Widget _buildDeck(double cardW, double cardH, double progress, double entry) {
     final current = _current;
     if (current == null) {
       return _EmptyDeck(onClose: _close);
@@ -568,8 +566,9 @@ class _RandomizingCardOverlayState extends State<RandomizingCardOverlay>
       // top card's fly-off (driven by the swipe controller) — instead of
       // popping it away. `_swipeCtrl` runs 0→1 over the fling, so the peek
       // dissolves as the card leaves.
-      final openingFade =
-          _openingChat ? (1.0 - _swipeCtrl.value).clamp(0.0, 1.0) : 1.0;
+      final openingFade = _openingChat
+          ? (1.0 - _swipeCtrl.value).clamp(0.0, 1.0)
+          : 1.0;
       children.add(
         Center(
           child: Opacity(
@@ -752,10 +751,13 @@ class _ActionBar extends StatelessWidget {
                 iconSize: 38,
                 background: const Color(0xFF1C1C22),
                 iconColor: skipColor,
-                border:
-                    Border.all(color: skipColor.withValues(alpha: 0.6), width: 2),
-                glow: skipColor
-                    .withValues(alpha: (0.3 + (skipScale - 1.0)).clamp(0.0, 1.0)),
+                border: Border.all(
+                  color: skipColor.withValues(alpha: 0.6),
+                  width: 2,
+                ),
+                glow: skipColor.withValues(
+                  alpha: (0.3 + (skipScale - 1.0)).clamp(0.0, 1.0),
+                ),
                 onTap: onSkip,
               ),
             ),
@@ -768,10 +770,13 @@ class _ActionBar extends StatelessWidget {
                 iconSize: 34,
                 background: const Color(0xFF1C1C22),
                 iconColor: chatColor,
-                border:
-                    Border.all(color: chatColor.withValues(alpha: 0.6), width: 2),
+                border: Border.all(
+                  color: chatColor.withValues(alpha: 0.6),
+                  width: 2,
+                ),
                 glow: chatColor.withValues(
-                    alpha: (0.35 + (chatScale - 1.0)).clamp(0.0, 1.0)),
+                  alpha: (0.35 + (chatScale - 1.0)).clamp(0.0, 1.0),
+                ),
                 onTap: onChat,
               ),
             ),
@@ -847,10 +852,7 @@ class _EmptyDeck extends StatelessWidget {
             style: const TextStyle(color: Colors.white70, fontSize: 15),
           ),
           const SizedBox(height: 20),
-          TextButton(
-            onPressed: onClose,
-            child: Text('btn_close'.tr()),
-          ),
+          TextButton(onPressed: onClose, child: Text('btn_close'.tr())),
         ],
       ),
     );
@@ -965,8 +967,10 @@ class HoloCard extends StatelessWidget {
             blendMode: BlendMode.colorDodge,
             child: ShaderMask(
               blendMode: BlendMode.dstIn,
-              shaderCallback: (rect) =>
-                  _bandGradient(pos, const Color(0xFFFFFFFF)).createShader(rect),
+              shaderCallback: (rect) => _bandGradient(
+                pos,
+                const Color(0xFFFFFFFF),
+              ).createShader(rect),
               child: const _RainbowFoil(),
             ),
           ),
@@ -1343,7 +1347,8 @@ class _TopBadgeState extends State<_TopBadge> {
         ResizeImage(FileImage(File(path)), width: 96, height: 144),
         maximumColorCount: 12,
       );
-      final color = palette.vibrantColor?.color ??
+      final color =
+          palette.vibrantColor?.color ??
           palette.lightVibrantColor?.color ??
           palette.dominantColor?.color;
       if (mounted && color != null) setState(() => _accent = color);
@@ -1363,9 +1368,16 @@ class _TopBadgeState extends State<_TopBadge> {
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.4),
+          width: 2,
+        ),
         boxShadow: const [
-          BoxShadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 4)),
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
         ],
       ),
       child: Padding(
@@ -1598,8 +1610,9 @@ class _CardBackState extends State<_CardBack> {
               const SizedBox(height: 10),
               Expanded(
                 child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(context)
-                      .copyWith(scrollbars: false),
+                  behavior: ScrollConfiguration.of(
+                    context,
+                  ).copyWith(scrollbars: false),
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 2, 16, 18),
                     child: AnimatedSwitcher(
@@ -1805,6 +1818,7 @@ class _DescriptionMarkdown extends StatelessWidget {
         ColoredUnderscoreBoldMd(),
         ColoredItalicMd(),
         ColoredUnderscoreItalicMd(),
+        LinkedImageMd(),
         LinkMd(),
         ImageMd(),
       ],
@@ -1918,4 +1932,3 @@ class _PromptAccordion extends StatelessWidget {
     );
   }
 }
-

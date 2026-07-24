@@ -726,7 +726,7 @@
   "label_lorebooks": "Лорбуки",
   "label_global_enabled": "Включить для всех чатов",
   "label_global": "Глобально",
-  "lorebook_scope_label": "Область",
+  "lorebook_scope_label": "Активен в",
   "lbc_add_character": "Добавить персонажа",
   "lbc_add_chat": "Добавить чат",
   "lbc_section_characters": "Включить для персонажей",

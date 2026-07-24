@@ -47,6 +47,37 @@ void main() {
     }
   });
 
+  testWidgets('formatted message content renders markdown images', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: PromptMarkdownPreview(
+            content: 'Before ![portrait](https://example.com/a.png) after',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('prompt-markdown-image')), findsOne);
+  });
+
+  testWidgets('formatted message rejects unsafe image schemes', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: PromptMarkdownPreview(content: '![x](file:///private/a.png)'),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('prompt-markdown-image-unavailable')),
+      findsOne,
+    );
+  });
+
   test('preview request retains image-only messages and exact data URI', () {
     final messages = buildPreviewApiMessages(const [
       PromptMessage(role: 'user', content: '', imagePath: png),

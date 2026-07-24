@@ -37,7 +37,13 @@ class ChatMessageOpsController {
   }) async {
     if (!_ref.mounted) return;
     final current = _getState().value;
-    if (current == null || current.session == null) return;
+    if (current == null ||
+        current.session == null ||
+        current.isGenerating ||
+        current.isGeneratingImage ||
+        current.isPostGenRunning) {
+      return;
+    }
     var updated = _messageSvc.editMessage(
       current.session!,
       index,

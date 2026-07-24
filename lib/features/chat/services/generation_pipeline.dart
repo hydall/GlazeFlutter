@@ -149,6 +149,21 @@ class GenerationPipeline {
       ChatSessionService.updateCache(result.session!);
       ctx.ref.invalidate(chatHistoryProvider);
 
+      final generationErrored =
+          regenTargetId == null &&
+          result.session!.messages.lastOrNull?.isError == true;
+      if (generationErrored) {
+        ctx.abortHandler.clearStreaming();
+        ctx.abortHandler.restorationMessage = null;
+        final settled = result.copyWith(
+          isGenerating: false,
+          isPostGenRunning: false,
+        );
+        ctx.setState(AsyncData(settled));
+        await notifService.onGenerationAborted();
+        return GenerationOutcome(state: settled, clearRestorationMessage: null);
+      }
+
       // Regen vs normal-result dispatch.
       final regenMsg = regenTargetId != null && result.session != null
           ? result.session!.messages

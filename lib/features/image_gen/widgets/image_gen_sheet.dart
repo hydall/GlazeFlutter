@@ -29,6 +29,7 @@ class ImageGenSheet extends ConsumerStatefulWidget {
 class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
   late ImageGenSettings _settings;
   bool _isFetchingModels = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -41,6 +42,12 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
     _settings = s;
     ref.read(imageGenSettingsProvider.notifier).save(s);
     if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _showOptions<T>({
@@ -141,11 +148,9 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
           ),
         ],
       ),
-      headerBottom: Align(
-        alignment: Alignment.centerLeft,
-        child: _buildPresetSelector(s.apiType),
-      ),
       fitContent: false,
+      scrollController: _scrollController,
+      enableHeaderBlur: false,
       body: s.enabled ? _buildBody(context, s) : const SizedBox.shrink(),
     );
   }
@@ -153,12 +158,20 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
   Widget _buildBody(BuildContext context, ImageGenSettings s) {
     return Builder(
       builder: (context) => SingleChildScrollView(
+        controller: _scrollController,
         padding: EdgeInsets.only(
           top: MediaQuery.paddingOf(context).top + 16,
           bottom: MediaQuery.paddingOf(context).bottom + 24,
         ),
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _buildPresetSelector(s.apiType),
+              ),
+            ),
             rows.ImageGenMenuGroup(
               title: 'Connection',
               children: _buildConnectionFields(s),

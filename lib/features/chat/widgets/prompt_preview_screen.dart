@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 
 import 'dart:convert';
 
@@ -858,14 +859,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                     ),
                     constraints: const BoxConstraints(maxHeight: 300),
                     child: SingleChildScrollView(
-                      child: SelectableText(
-                        msg.content,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.cs.onSurface,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
+                      child: PromptMarkdownPreview(content: msg.content),
                     ),
                   ),
               ],
@@ -900,6 +894,38 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
         role.toUpperCase(),
         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
       ),
+    );
+  }
+}
+
+@visibleForTesting
+class PromptMarkdownPreview extends StatelessWidget {
+  final String content;
+
+  const PromptMarkdownPreview({super.key, required this.content});
+
+  @override
+  Widget build(BuildContext context) {
+    return GptMarkdown(
+      content,
+      style: TextStyle(fontSize: 12, color: context.cs.onSurface),
+      imageBuilder: (context, url, width, height) {
+        final uri = Uri.tryParse(url);
+        if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+          return const Icon(
+            Icons.broken_image_outlined,
+            key: ValueKey('prompt-markdown-image-unavailable'),
+          );
+        }
+        return Image.network(
+          url,
+          key: const ValueKey('prompt-markdown-image'),
+          width: width,
+          height: height,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
+        );
+      },
     );
   }
 }

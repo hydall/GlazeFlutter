@@ -120,7 +120,12 @@ class ChatWebViewBuildListeners {
           // regenerate keeps working — `lastUserMessageId` only returns
           // a non-null id when a user message is genuinely last.
           final lastId = lastUserMessageId(messages) ?? messages.lastOrNull?.id;
-          if (lastId != null) {
+          final state = ref.read(chatProvider(charId)).value;
+          final isBusy =
+              state?.isGenerating == true ||
+              state?.isGeneratingImage == true ||
+              state?.isPostGenRunning == true;
+          if (lastId != null && !isBusy) {
             await b.setLastMessage(lastId);
           }
         }());
@@ -165,10 +170,7 @@ class ChatWebViewBuildListeners {
         final idx = messages.indexWhere((m) => m.id == targetId);
         if (idx >= 0) {
           final original = messages[idx];
-          final updated = original.copyWith(
-            content: next.text,
-            isTyping: true,
-          );
+          final updated = original.copyWith(content: next.text, isTyping: true);
           b.updateMessage(updated);
         }
         return;

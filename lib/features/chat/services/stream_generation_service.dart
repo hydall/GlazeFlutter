@@ -64,6 +64,7 @@ class StreamGenerationService {
   }) async {
     final vsi = currentState.visibleStartIndex;
     final cancelToken = CancelToken();
+    var studioWasActive = false;
     _ref
         .read(chatProvider(_charId).notifier)
         .setCancelToken(cancelToken, genId: _genId);
@@ -77,6 +78,7 @@ class StreamGenerationService {
     try {
       final studioService = _ref.read(memoryStudioServiceProvider);
       final studioConfig = await studioService.getEnabledConfig(session.id);
+      studioWasActive = studioConfig != null;
       if (_isAborted()) {
         return ChatState(
           session: saveSession ?? session,
@@ -312,7 +314,7 @@ class StreamGenerationService {
             finalModel: apiConfig.model,
           );
           _ref.read(studioCycleStateProvider.notifier).state =
-              const StudioCycleState.error(sessionId: '');
+              StudioCycleState.error(sessionId: session.id);
           if (regenTargetId != null && saveSession != null) {
             return _writer.writeRegenError(
               errorText: message,
@@ -663,14 +665,16 @@ class StreamGenerationService {
       // propagates through runTrackerCycle without resetting the Studio
       // cycle state — which was set to writingFinal by onFinalStart. Without
       // this reset the StudioStatusCard stays visible forever with a spinner.
-      _ref.read(studioCycleStateProvider.notifier).state =
-          const StudioCycleState.error(sessionId: '');
       if (_isAborted()) {
         return ChatState(
           session: session,
           isGenerating: false,
           visibleStartIndex: vsi,
         );
+      }
+      if (studioWasActive) {
+        _ref.read(studioCycleStateProvider.notifier).state =
+            StudioCycleState.error(sessionId: session.id);
       }
       if (regenTargetId != null && saveSession != null) {
         return _writer.writeRegenError(

@@ -18,6 +18,7 @@ class MessageBridgeCommands {
     int visibleStartIndex = 0,
     bool preserveScroll = false,
   }) async {
+    _host.clearCachedTriggeredRegexes();
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
       final map = ChatMessageMapper.toMap(
@@ -30,6 +31,7 @@ class MessageBridgeCommands {
         persona: _host.regexPersona,
       );
       _resolveMappedFileUrls(map);
+      _host.cacheMappedTriggeredRegexes(map);
       mapped.add(map);
     }
     final resolved = await Future.wait(
@@ -69,6 +71,7 @@ class MessageBridgeCommands {
       persona: _host.regexPersona,
     );
     _resolveMappedFileUrls(map);
+    _host.cacheMappedTriggeredRegexes(map);
     map['text'] = await _host.resolveImgResults(map['text'] as String);
     final json = jsonEncode(map);
     return _host.callJs('appendMessage', json);
@@ -90,6 +93,7 @@ class MessageBridgeCommands {
         persona: _host.regexPersona,
       );
       _resolveMappedFileUrls(map);
+      _host.cacheMappedTriggeredRegexes(map);
       mapped.add(map);
     }
     final resolved = await Future.wait(
@@ -117,6 +121,7 @@ class MessageBridgeCommands {
         persona: _host.regexPersona,
       );
       _resolveMappedFileUrls(map);
+      _host.cacheMappedTriggeredRegexes(map);
       mapped.add(map);
     }
     final resolved = await Future.wait(
@@ -144,6 +149,7 @@ class MessageBridgeCommands {
       persona: _host.regexPersona,
     );
     _resolveMappedFileUrls(map);
+    _host.cacheMappedTriggeredRegexes(map);
     map['text'] = await _host.resolveImgResults(map['text'] as String);
     final json = jsonEncode(map);
     return _host.callJs('updateMessage', json);
@@ -155,11 +161,16 @@ class MessageBridgeCommands {
     bool isUser,
   ) async {
     final resolved = await _host.resolveImgResults(text);
-    final json = jsonEncode({'id': messageId, 'text': resolved, 'isUser': isUser});
+    final json = jsonEncode({
+      'id': messageId,
+      'text': resolved,
+      'isUser': isUser,
+    });
     return _host.callJs('updateMessage', json);
   }
 
   Future<void> removeMessage(String messageId) {
+    _host.removeCachedTriggeredRegexes(messageId);
     return _host.callJs('removeMessage', messageId);
   }
 
@@ -181,6 +192,7 @@ class MessageBridgeCommands {
   }
 
   Future<void> clearAll() {
+    _host.clearCachedTriggeredRegexes();
     return _host.evalJs('window.bridge?.clearAll()');
   }
 

@@ -53,6 +53,7 @@ class ChatBridgeController {
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
   final Map<String, String> _blockStatusByMessageId = {};
+  final Map<String, List<TriggeredEntry>> _triggeredRegexesByMessageId = {};
 
   List<PresetRegex> _displayRegexes = [];
   Character? _regexCharacter;
@@ -88,6 +89,31 @@ class ChatBridgeController {
   Character? get regexCharacter => _regexCharacter;
   Persona? get regexPersona => _regexPersona;
 
+  List<TriggeredEntry> triggeredRegexesFor(String messageId) =>
+      _triggeredRegexesByMessageId[messageId] ?? const [];
+
+  void cacheMappedTriggeredRegexes(Map<String, dynamic> message) {
+    final messageId = message['id'] as String?;
+    if (messageId == null) return;
+    final raw = message['triggeredRegexes'];
+    if (raw is! List) {
+      _triggeredRegexesByMessageId.remove(messageId);
+      return;
+    }
+    _triggeredRegexesByMessageId[messageId] = raw
+        .whereType<Map<String, dynamic>>()
+        .map(TriggeredEntry.fromJson)
+        .toList(growable: false);
+  }
+
+  void removeCachedTriggeredRegexes(String messageId) {
+    _triggeredRegexesByMessageId.remove(messageId);
+  }
+
+  void clearCachedTriggeredRegexes() {
+    _triggeredRegexesByMessageId.clear();
+  }
+
   ChatMessageMapperContext get mapperContext => ChatMessageMapperContext(
     currentCharName: currentCharName,
     currentCharColor: currentCharColor,
@@ -113,8 +139,9 @@ class ChatBridgeController {
     if (event == null) return null;
     return {
       '__separator': true,
-      'separatorKind':
-          event.kind == ChatOriginKind.branched ? 'branched' : 'created',
+      'separatorKind': event.kind == ChatOriginKind.branched
+          ? 'branched'
+          : 'created',
       'timestamp': event.timestampMs,
     };
   }

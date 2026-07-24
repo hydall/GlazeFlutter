@@ -719,7 +719,7 @@
   "label_lorebooks": "Lorebooks",
   "label_global_enabled": "Enable for all chats",
   "label_global": "Global",
-  "lorebook_scope_label": "Scope",
+  "lorebook_scope_label": "Active in",
   "lbc_add_character": "Add Character",
   "lbc_add_chat": "Add Chat",
   "lbc_section_characters": "Enable for characters",

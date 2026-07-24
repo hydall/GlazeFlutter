@@ -19,7 +19,6 @@ import '../../core/utils/platform_paths.dart';
 import 'editing_message_provider.dart';
 
 import '../../core/state/character_provider.dart';
-import '../../core/llm/regex_service.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/memory_settings_provider.dart';
 import '../../core/state/shared_prefs_provider.dart';
@@ -709,34 +708,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     }
   }
 
-  /// Recomputes which display regex scripts fire on [msg]'s raw content,
-  /// mirroring the tracking done by [ChatMessageMapper] when rendering. Used
-  /// so the triggered-items sheet can show the firing regexes alongside the
-  /// lorebook / memory entries (parity with Glaze/Vue).
-  List<TriggeredEntry> _computeTriggeredRegexes(ChatMessage msg) {
-    final scripts = ref.read(displayRegexesProvider).value ?? const [];
-    if (scripts.isEmpty) return const [];
-    final character = ref.read(characterByIdProvider(widget.charId));
-    final persona = ref.read(
-      effectivePersonaForChatProvider((
-        charId: widget.charId,
-        sessionId: widget.state.session?.id,
-      )),
-    );
-    final isUser = msg.role == 'user';
-    final triggered = <TriggeredEntry>[];
-    applyRegexes(
-      msg.content,
-      isUser ? 1 : 2,
-      1,
-      scripts,
-      RegexApplyContext(char: character, persona: persona),
-      isMarkdown: true,
-      triggered: triggered,
-    );
-    return triggered;
-  }
-
   void _showTriggeredItemsSheet(
     BuildContext context, {
     List<TriggeredEntry> lorebooks = const [],
@@ -981,7 +952,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       next,
     ) {
       if (next) {
-        ref.read(impersonationNeedsConfigProvider(widget.charId).notifier).state =
+        ref
+                .read(impersonationNeedsConfigProvider(widget.charId).notifier)
+                .state =
             false;
         if (!context.mounted) return;
         ScaffoldMessenger.of(context)
@@ -1370,7 +1343,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                           context,
                           lorebooks: msg.triggeredLorebooks,
                           memories: msg.triggeredMemories,
-                          regexes: _computeTriggeredRegexes(msg),
+                          regexes:
+                              _webViewStateKey.currentState
+                                  ?.triggeredRegexesFor(id) ??
+                              const [],
                         );
                       },
                     ),
