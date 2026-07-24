@@ -743,10 +743,35 @@ void main() {
       final idx = bridgeControllerJs.indexOf(marker);
       expect(idx, isNot(-1));
       final body = _extractBlockBody(bridgeControllerJs, idx);
-      expect(body, contains('st < headerLastTop - 3'));
+      expect(body, contains('st < this._headerLastTop - 3'));
       expect(body, contains('this._headerHidden = false'));
       expect(body, contains("this._sendToFlutter('onHeaderScroll', [false])"));
       expect(body, isNot(contains('[true]')));
+    });
+
+    test('showHeader re-shows the header and re-baselines the tracker', () {
+      final marker = 'showHeader() {';
+      final idx = bridgeControllerJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeControllerJs, idx);
+      // The WebView is kept alive across chats, so opening one has to clear
+      // both halves of the carried-over state: the hidden flag and the scroll
+      // baseline the next scroll event is compared against.
+      expect(body, contains('this._headerHidden = false'));
+      expect(body, contains('this._headerLastTop'));
+      expect(body, contains('this._headerRebaselineUntil'));
+      // Emitted unconditionally so Flutter's own header state is realigned.
+      expect(body, contains("this._sendToFlutter('onHeaderScroll', [false])"));
+    });
+
+    test('header tracker only re-baselines inside the rebaseline window', () {
+      final marker = 'const updateHeader = () => {';
+      final idx = bridgeControllerJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeControllerJs, idx);
+      // The programmatic jump to the bottom right after a chat opens must not
+      // be read as the user scrolling down.
+      expect(body, contains('Date.now() < this._headerRebaselineUntil'));
     });
 
     test('post-gen activity keeps the generation timer active separately', () {

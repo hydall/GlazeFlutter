@@ -342,6 +342,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     final initSessionId = widget.sessionId;
     try {
       await _waitForJsBridgeReady();
+      // The WebView is kept alive across chats, so the JS header tracker still
+      // holds the previous chat's hidden state and scroll baseline. Clear both
+      // before the initial render, or the load's jump to the bottom reads as a
+      // downward scroll and this chat opens with its header already gone.
+      await _showChatHeader(bridge);
       await ChatWebViewInitializer(
         ref: ref,
         bridge: bridge,
@@ -399,6 +404,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (!mounted) return;
+    // Init can take longer than the rebaseline window opened above, and the
+    // list settles for a few more frames after it. Re-arm once everything is in
+    // place so the chat is guaranteed to open with the header showing.
+    await _showChatHeader(bridge);
     // Init captures widget fields before async setup completes. On cold start,
     // the active persona can resolve during that window, so push the latest
     // identity once the bridge is ready instead of leaving rendered user
@@ -430,6 +439,19 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     GlazeErrorDialog.show(context, e, prefix: 'Chat view failed to load');
   }
 
+  /// Re-shows the chat header and re-baselines the JS hide-on-scroll tracker.
+  /// Awaited (not fire-and-forget) so the rebaseline window is armed before the
+  /// list is filled and jumped to the bottom, but never routed through
+  /// [_bridgeOp]: this is cosmetic, and a failure must not surface as a "chat
+  /// failed to load" dialog.
+  Future<void> _showChatHeader(ChatBridgeController bridge) async {
+    try {
+      await bridge.showHeader().timeout(_kBridgeOpTimeout);
+    } catch (e) {
+      debugPrint('[ChatWebView] showHeader failed: $e');
+    }
+  }
+
   Future<void> _bridgeOp(Future<void> op, {required String label}) async {
     try {
       await op.timeout(_kBridgeOpTimeout);
@@ -447,6 +469,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     if (bridge == null || !_ready) return;
     try {
       if (mounted) setState(() => _sessionSwitching = true);
+      // Same reasoning as on open: the replace below jumps the list, which the
+      // header tracker would otherwise read as the user scrolling down.
+      await _showChatHeader(bridge);
       await _bridgeOp(bridge.clearAll(), label: 'clearAll');
       await _bridgeOp(
         bridge.setMessages(
@@ -592,6 +617,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     unawaited(bridge.evalJs('window.bridge?.clearAll();'));
     try {
       if (mounted) setState(() => _sessionSwitching = true);
+      // Same reasoning as on open: the replace below jumps the list, which the
+      // header tracker would otherwise read as the user scrolling down.
+      await _showChatHeader(bridge);
       if (widget.charId != old.charId) {
         await _bridgeOp(
           bridge.setIdentity(

@@ -595,6 +595,7 @@ class ChatBridgeController {
       messages.requestScrollToBottomOnAppend();
   Future<void> scrollToMessage(String id, {bool highlight = false}) =>
       messages.scrollToMessage(id, highlight: highlight);
+  Future<void> showHeader() => messages.showHeader();
 
   // Theme
   Future<void> setBackgroundNoise(double opacity, double intensity) =>
