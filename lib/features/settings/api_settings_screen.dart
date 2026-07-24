@@ -82,7 +82,12 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   List<ExtraRequestParameter> _extraRequestParameters = const [];
 
   String? _loadedPresetId;
-  final _scrollController = ScrollController();
+  // Each tab owns its own scroll controller. During a slide transition both
+  // tab bodies are briefly alive at once, so they must never share a single
+  // controller (a controller attached to two scroll views throws). The sheet
+  // is pointed at whichever controller belongs to the active tab.
+  final _llmScrollController = ScrollController();
+  final _embScrollController = ScrollController();
   Timer? _saveTimer;
   bool _loading = false;
 
@@ -132,7 +137,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   @override
   void dispose() {
     _flushSave();
-    _scrollController.dispose();
+    _llmScrollController.dispose();
+    _embScrollController.dispose();
     for (final c in _ctrls) {
       c.dispose();
     }
@@ -377,7 +383,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       title: 'menu_app_settings'.tr(),
       showBack: true,
       onBack: _goBack,
-      scrollController: _scrollController,
+      scrollController: _tab == 0 ? _llmScrollController : _embScrollController,
+      // The LLM/Embeddings switcher stays fixed in the header so it never
+      // slides with the tab bodies — a single segmented control that keeps its
+      // own pill animation while the content swipes beneath it.
+      headerBottom: list.isEmpty ? null : _buildTabBar(),
       body: asyncList.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
@@ -407,34 +417,32 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     return 'unnamed_entry'.tr();
   }
 
-  Widget _buildTopControls(List<ApiConfig> list, String activeName) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GlazeTabBar(
-          tabs: [
-            GlazeTabItem(label: 'LLM', icon: Icons.chat_bubble_outline_rounded),
-            GlazeTabItem(
-              label: 'tab_embeddings'.tr(),
-              icon: Icons.layers_outlined,
-            ),
-          ],
-          activeIndex: _tab,
-          onChanged: (i) => setState(() => _tab = i),
+  // The fixed LLM/Embeddings segmented control. Lives in the sheet header so it
+  // stays put (and keeps its own pill animation) while the tab bodies slide.
+  Widget _buildTabBar() {
+    return GlazeTabBar(
+      tabs: [
+        GlazeTabItem(label: 'LLM', icon: Icons.chat_bubble_outline_rounded),
+        GlazeTabItem(
+          label: 'tab_embeddings'.tr(),
+          icon: Icons.layers_outlined,
         ),
-        const SizedBox(height: 8),
-        // Preset selector pill
-        _tab == 0
-            ? ConnectionStatus(
-                status: _llmStatus,
-                errorMessage: _llmError,
-                onRetry: _testLlmConnection,
-                child: _buildPresetPill(context, list, activeName),
-              )
-            : _buildPresetPill(context, list, activeName),
       ],
+      activeIndex: _tab,
+      onChanged: (i) => setState(() => _tab = i),
     );
+  }
+
+  Widget _buildTopControls(List<ApiConfig> list, String activeName) {
+    // Preset selector pill (tab-specific — slides with the body content).
+    return _tab == 0
+        ? ConnectionStatus(
+            status: _llmStatus,
+            errorMessage: _llmError,
+            onRetry: _testLlmConnection,
+            child: _buildPresetPill(context, list, activeName),
+          )
+        : _buildPresetPill(context, list, activeName);
   }
 
   Widget _buildPresetPill(
@@ -506,7 +514,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   Widget _buildLlmTab(List<ApiConfig> list, String activeName) {
     return Builder(
       builder: (context) => ListView(
-        controller: _scrollController,
+        controller: _llmScrollController,
         padding: EdgeInsets.only(
           top: MediaQuery.paddingOf(context).top + 12,
           bottom: MediaQuery.paddingOf(context).bottom + 16,
@@ -805,7 +813,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   Widget _buildEmbeddingsTab(List<ApiConfig> list, String activeName) {
     return Builder(
       builder: (context) => ListView(
-        controller: _scrollController,
+        controller: _embScrollController,
         padding: EdgeInsets.only(
           top: MediaQuery.paddingOf(context).top + 12,
           bottom: MediaQuery.paddingOf(context).bottom + 16,
