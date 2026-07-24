@@ -59,21 +59,11 @@ class AbortHandler {
   void abortImageGeneration() {
     if (!_ref.mounted) return;
     _imgGenCancelToken?.cancel();
-    _imgGenCancelToken = null;
-    final current = _getState().value;
-    if (current != null && current.isGeneratingImage) {
-      _setState(AsyncData(current.copyWith(isGeneratingImage: false)));
-    }
   }
 
   void cancelImageGeneration() {
     if (!_ref.mounted) return;
     _imgGenCancelToken?.cancel();
-    _imgGenCancelToken = null;
-    final current = _getState().value;
-    if (current != null && current.isGeneratingImage) {
-      _setState(AsyncData(current.copyWith(isGeneratingImage: false)));
-    }
   }
 
   void clearStreaming() {

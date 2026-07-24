@@ -104,6 +104,24 @@ void main() {
       expect(selectionManagerJs, contains('onSelectionAction'));
     });
 
+    test('range selection reads the active virtual list item order', () {
+      final idx = bridgeJs.indexOf('  _orderedMessageIds() {');
+      final body = _extractBlockBody(bridgeJs, idx);
+      expect(body, contains('list?.items'));
+      expect(body, contains('items.map(item => item.id)'));
+      expect(body, contains("!id.startsWith('__date_')"));
+    });
+
+    test('selected text is serialized from rendered ranges', () {
+      expect(selectionManagerJs, contains('_renderedSelectionText(selection)'));
+      expect(selectionManagerJs, contains('cloneContents()'));
+      expect(selectionManagerJs, contains('content.innerText.trim()'));
+      expect(
+        selectionManagerJs,
+        isNot(contains('selText = sel.toString().trim()')),
+      );
+    });
+
     test(
       'click in selection mode delegated to SelectionManager.handleClick',
       () {

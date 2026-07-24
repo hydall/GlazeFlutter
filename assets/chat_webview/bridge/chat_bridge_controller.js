@@ -292,7 +292,7 @@ export class Bridge {
     const host = section.querySelector('.msg-body .message-content');
     if (host && host.shadowRoot) {
       const root = host.shadowRoot.querySelector('.glaze-message');
-      if (root) return root.textContent || '';
+      if (root) return root.innerText || '';
     }
     return section.dataset.rawText || '';
   }
@@ -1114,10 +1114,13 @@ export class Bridge {
 
   // Ordered list of real message ids (top → bottom), excluding date separators.
   // Range selection needs the full order even for messages currently outside
-  // the virtual-scroll render window, so it reads from virtualList.messageOrder
-  // (the complete backing order) rather than the DOM.
+  // the virtual-scroll render window, so it reads from the complete backing
+  // item order rather than the DOM.
   _orderedMessageIds() {
-    const order = (this.virtualList && this.virtualList.messageOrder) || [];
+    const list = this.virtualList;
+    const order = Array.isArray(list?.items)
+      ? list.items.map(item => item.id)
+      : (list?.messageOrder || []);
     return order.filter(id => typeof id === 'string' && !id.startsWith('__date_'));
   }
 

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/lorebook.dart';
-import '../../../core/state/db_provider.dart';
+import '../../../core/state/lorebook_provider.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
 import 'janitor_lorebook_rebuilder.dart';
@@ -62,8 +62,7 @@ class ExtractionResult {
   /// Whether there is anything to rebuild: either mechanically-separated closed
   /// lorebook text, or a full prompt to mine for inline advanced-lorebook entries.
   bool get hasExtractable =>
-      hasLorebook ||
-      (hasAdvancedLorebook && fullPromptText.trim().isNotEmpty);
+      hasLorebook || (hasAdvancedLorebook && fullPromptText.trim().isNotEmpty);
 }
 
 /// Summary returned after persisting an [ExtractionResult] to the DB.
@@ -88,8 +87,9 @@ class JanitorExtractor {
   final Ref _ref;
 
   static final _uuid = RegExp(
-      r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
-      caseSensitive: false);
+    r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+    caseSensitive: false,
+  );
 
   /// Phase 1: capture the assembled prompt for [url] and separate it into the
   /// recovered card + isolated lorebook text. Marks the catalog active so the
@@ -126,8 +126,9 @@ class JanitorExtractor {
       final card = extractCard(payload);
       final sep = separate(payload, card, publicContents);
       final advanced = hasAdvancedLorebook(meta);
-      final fullPrompt =
-          advanced ? stripLeadingJailbreak(getSystemContent(payload)) : '';
+      final fullPrompt = advanced
+          ? stripLeadingJailbreak(getSystemContent(payload))
+          : '';
 
       final name = extractCharName(payload).isNotEmpty
           ? extractCharName(payload)
@@ -223,7 +224,7 @@ class JanitorExtractor {
         characterId: glazeId,
       );
       onPhase?.call('saving lorebook');
-      await _ref.read(lorebookRepoProvider).put(lorebook);
+      await _ref.read(lorebooksProvider.notifier).put(lorebook);
       return CommitResult(
         glazeCharacterId: glazeId,
         characterName: result.character.charData.name,
@@ -255,20 +256,19 @@ class JanitorExtractor {
     String extra = '',
     bool fromFullPrompt = false,
     String? characterId,
-  }) =>
-      rebuildLorebookWithActiveLlm(
-        _ref,
-        lorebookText: lorebookText,
-        name: name,
-        card: card,
-        catalog: catalog,
-        scenario: scenario,
-        greetings: greetings,
-        lorebookDescs: lorebookDescs,
-        extra: extra,
-        fromFullPrompt: fromFullPrompt,
-        characterId: characterId,
-      );
+  }) => rebuildLorebookWithActiveLlm(
+    _ref,
+    lorebookText: lorebookText,
+    name: name,
+    card: card,
+    catalog: catalog,
+    scenario: scenario,
+    greetings: greetings,
+    lorebookDescs: lorebookDescs,
+    extra: extra,
+    fromFullPrompt: fromFullPrompt,
+    characterId: characterId,
+  );
 
   /// Rebuilds a public **JavaScript** lorebook (a JanitorAI "advanced" / Nine
   /// API script) into a structured [Lorebook] with the active LLM. Unlike a JSON
@@ -281,17 +281,16 @@ class JanitorExtractor {
     required String name,
     Map<String, dynamic>? meta,
     String? characterId,
-  }) async =>
-      rebuildLorebookWithActiveLlm(
-        _ref,
-        lorebookText: jsSource,
-        name: name,
-        catalog: _buildCatalogContext(meta),
-        scenario: _htmlToText((meta?['scenario'] ?? '').toString()),
-        lorebookDescs: await _lorebookDescs(meta),
-        fromJs: true,
-        characterId: characterId,
-      );
+  }) async => rebuildLorebookWithActiveLlm(
+    _ref,
+    lorebookText: jsSource,
+    name: name,
+    catalog: _buildCatalogContext(meta),
+    scenario: _htmlToText((meta?['scenario'] ?? '').toString()),
+    lorebookDescs: await _lorebookDescs(meta),
+    fromJs: true,
+    characterId: characterId,
+  );
 
   String _parseCharacterId(String input) {
     final m = _uuid.firstMatch(input.trim());
@@ -303,8 +302,9 @@ class JanitorExtractor {
 
   Future<Map<String, dynamic>?> _fetchMeta(String characterId) async {
     try {
-      final body = await JanitorWebViewProxy.instance
-          .fetch('https://janitorai.com/hampter/characters/$characterId');
+      final body = await JanitorWebViewProxy.instance.fetch(
+        'https://janitorai.com/hampter/characters/$characterId',
+      );
       final json = jsonDecode(body);
       return json is Map<String, dynamic> ? json : null;
     } catch (e) {
@@ -332,12 +332,15 @@ class JanitorExtractor {
       final books = scripts
           .whereType<Map<String, dynamic>>()
           .where((s) => s['type'] == 'lorebook' || s['type'] == 'advanced')
-          .map((s) =>
-              '- ${s['title'] ?? ''}${s['description'] != null ? ': ${s['description']}' : ''}')
+          .map(
+            (s) =>
+                '- ${s['title'] ?? ''}${s['description'] != null ? ': ${s['description']}' : ''}',
+          )
           .toList();
       if (books.isNotEmpty) {
         parts.add(
-            'Attached lorebooks (titles only — contents are hidden):\n${books.join('\n')}');
+          'Attached lorebooks (titles only — contents are hidden):\n${books.join('\n')}',
+        );
       }
     }
     return parts.join('\n\n');

@@ -309,15 +309,31 @@ class ImageRecoveryService {
     }
   }
 
-  Future<void> retryImageGenerationForMessage(int messageIndex) async {
-    final current = _getState().value;
+  Future<void> retryImageGenerationForMessage(String messageId) async {
+    var current = _getState().value;
+    if (current == null || current.session == null || current.isGenerating) {
+      return;
+    }
+
+    // The error card appears before the originating post-gen operation has
+    // fully unwound. Queue an immediate tap instead of silently dropping it.
+    final originalSessionId = current.session!.id;
+    while (current != null &&
+        current.session?.id == originalSessionId &&
+        (current.isGeneratingImage || current.isPostGenRunning)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      current = _getState().value;
+      if (current?.isGenerating == true) return;
+    }
     if (current == null ||
         current.session == null ||
+        current.session!.id != originalSessionId ||
         current.isGenerating ||
         current.isPostGenRunning ||
         current.isGeneratingImage) {
       return;
     }
+    final messageIndex = current.messages.indexWhere((m) => m.id == messageId);
     if (messageIndex < 0 || messageIndex >= current.messages.length) return;
 
     final msg = current.messages[messageIndex];
