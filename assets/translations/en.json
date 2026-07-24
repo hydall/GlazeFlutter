@@ -1134,6 +1134,8 @@
   "menu_third_party_providers": "Third-Party providers",
   "menu_third_party_providers_hint": "Enable, disable and sign in to catalog sources",
   "third_party_providers_title": "Third-Party providers",
+  "third_party_catalog_title": "Catalog",
+  "third_party_catalog_desc": "Show the Discover tab. Turn off to browse only your own characters.",
   "third_party_janitor_desc": "Browse and import characters from JanitorAI.",
   "third_party_janny_desc": "Browse and import characters from Janny.",
   "third_party_datacat_desc": "Browse and import characters from Datacat.",

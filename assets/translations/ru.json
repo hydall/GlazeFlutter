@@ -1141,6 +1141,8 @@
   "menu_third_party_providers": "Сторонние провайдеры",
   "menu_third_party_providers_hint": "Включение, отключение и вход в источники каталога",
   "third_party_providers_title": "Сторонние провайдеры",
+  "third_party_catalog_title": "Каталог",
+  "third_party_catalog_desc": "Показывать вкладку «Обзор». Выключите, чтобы просматривать только своих персонажей.",
   "third_party_janitor_desc": "Просмотр и импорт персонажей из JanitorAI.",
   "third_party_janny_desc": "Просмотр и импорт персонажей из Janny.",
   "third_party_datacat_desc": "Просмотр и импорт персонажей из Datacat.",

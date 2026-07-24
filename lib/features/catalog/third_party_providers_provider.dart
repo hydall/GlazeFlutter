@@ -69,9 +69,38 @@ final thirdPartyProvidersProvider =
       ThirdPartyProvidersNotifier.new,
     );
 
-/// The catalog browse providers currently enabled, in enum order. Never empty:
-/// if the user somehow disabled all four, janitor is force-kept as a fallback
-/// so the catalog always has a feed to show.
+/// Master on/off switch for the whole catalog (the Discover tab). Independent
+/// of the per-provider toggles: turning this off hides the catalog even while
+/// individual providers stay enabled. Persisted; defaults to on.
+class CatalogEnabledNotifier extends Notifier<bool> {
+  static const _key = 'gz_catalog_enabled';
+
+  @override
+  bool build() {
+    _load();
+    return true;
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getBool(_key);
+    if (v != null && v != state) state = v;
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    if (enabled == state) return;
+    state = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_key, enabled);
+  }
+}
+
+final catalogMasterEnabledProvider =
+    NotifierProvider<CatalogEnabledNotifier, bool>(CatalogEnabledNotifier.new);
+
+/// The catalog browse providers currently enabled, in enum order. May be empty
+/// when the user disabled all four — callers must handle that (the catalog is
+/// hidden entirely in that case, see [catalogVisibleProvider]).
 final enabledCatalogProvidersProvider = Provider<List<CatalogProvider>>((ref) {
   final disabled = ref.watch(thirdPartyProvidersProvider);
   final enabled = <CatalogProvider>[];
@@ -79,5 +108,14 @@ final enabledCatalogProvidersProvider = Provider<List<CatalogProvider>>((ref) {
     final cp = tp.catalogProvider;
     if (cp != null && !disabled.contains(tp)) enabled.add(cp);
   }
-  return enabled.isEmpty ? const [CatalogProvider.janitor] : enabled;
+  return enabled;
+});
+
+/// Whether the Discover/catalog tab should be shown at all: the master toggle
+/// is on AND at least one catalog browse provider is enabled. When false the
+/// character screen drops the My/Discover segmented control and shows only
+/// "My Characters".
+final catalogVisibleProvider = Provider<bool>((ref) {
+  if (!ref.watch(catalogMasterEnabledProvider)) return false;
+  return ref.watch(enabledCatalogProvidersProvider).isNotEmpty;
 });

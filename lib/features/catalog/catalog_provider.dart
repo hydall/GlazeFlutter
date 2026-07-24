@@ -95,7 +95,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       _,
       enabled,
     ) {
-      if (!enabled.contains(state.activeProvider)) {
+      // Empty means every provider is disabled — the catalog is hidden, so
+      // leave the active provider as-is (it'll be corrected when one is
+      // re-enabled).
+      if (enabled.isNotEmpty && !enabled.contains(state.activeProvider)) {
         setProvider(enabled.first);
       }
     });

@@ -31,6 +31,7 @@ class ThirdPartyProvidersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final disabled = ref.watch(thirdPartyProvidersProvider);
+    final catalogEnabled = ref.watch(catalogMasterEnabledProvider);
     final topPad = MediaQuery.of(context).padding.top + 74.0;
     final bottomPad = MediaQuery.of(context).padding.bottom + 20.0;
 
@@ -42,6 +43,19 @@ class ThirdPartyProvidersScreen extends ConsumerWidget {
       body: ListView(
         padding: EdgeInsets.fromLTRB(0, topPad + 8, 0, bottomPad),
         children: [
+          // Master switch: turning the catalog off hides the Discover tab
+          // entirely, leaving only "My Characters".
+          MenuGroup(
+            header: 'third_party_catalog_title'.tr(),
+            headerIcon: Icons.public_rounded,
+            description: 'third_party_catalog_desc'.tr(),
+            headerTrailing: _GroupSwitch(
+              value: catalogEnabled,
+              onChanged: (v) =>
+                  ref.read(catalogMasterEnabledProvider.notifier).setEnabled(v),
+            ),
+            items: const [],
+          ),
           for (final p in ThirdPartyProvider.values)
             _providerGroup(context, ref, p, enabled: !disabled.contains(p)),
         ],

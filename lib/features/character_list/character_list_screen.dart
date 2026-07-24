@@ -31,6 +31,7 @@ import '../../shared/widgets/tab_slide_switcher.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../catalog/catalog_provider.dart';
+import '../catalog/third_party_providers_provider.dart';
 import '../catalog/widgets/widgets.dart';
 import '../character_gallery/gallery_provider.dart';
 import '../picks/widgets/picks_grid.dart';
@@ -155,6 +156,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
 
   @override
   ShellHeaderConfig buildShellHeader() {
+    final catalogVisible = ref.read(catalogVisibleProvider);
     final inFolder = _tabIndex == 0 && _currentFolderId != null;
     final inPicks = inFolder && _currentFolderId == kPicksFolderId;
     final inSearch = _searchExpanded && !inPicks;
@@ -187,8 +189,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
               ),
             ],
       // The tabs ride inside the header (only at the top level) so they hide and
-      // reveal as a single unit with it — one animation, not two.
-      below: inFolder ? null : _buildTabBar(),
+      // reveal as a single unit with it — one animation, not two. Dropped
+      // entirely when the catalog is disabled (only "My Characters" remains).
+      below: (catalogVisible && !inFolder) ? _buildTabBar() : null,
     );
   }
 
@@ -357,18 +360,34 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   Widget build(BuildContext context) {
     final navHeight = ref.watch(navHeightProvider);
     final selection = ref.watch(characterSelectionProvider);
+    final catalogVisible = ref.watch(catalogVisibleProvider);
 
     // Re-tap on the active Characters navbar tab → scroll to top / Discover→My.
     ref.listen(navReTapProvider, (_, next) {
       if (next.branchIndex == kCharactersBranchIndex) _onCharactersTabReTap();
     });
 
+    // If the catalog gets disabled while the Discover tab is active, fall back
+    // to My Characters. Either way refresh the shell header so the tab bar
+    // appears/disappears in step with the setting.
+    ref.listen(catalogVisibleProvider, (_, visible) {
+      if (!visible && _tabIndex != 0) {
+        ref.read(characterSelectionProvider.notifier).clear();
+        setState(() => _tabIndex = 0);
+      }
+      refreshShellHeader();
+    });
+
+    // With the catalog hidden the Discover tab can't be reached, so the body
+    // always resolves to My Characters even if _tabIndex is briefly stale.
+    final effectiveTab = catalogVisible ? _tabIndex : 0;
+
     final topPad = MediaQuery.of(context).padding.top + 74.0;
     // The tabs ride inside the shell header (its `below` slot) only at the top
     // level; inside a folder the header shows a back button instead. Reserve the
     // extra room for the tabs row when it's present so content clears it.
-    final inFolder = _tabIndex == 0 && _currentFolderId != null;
-    final showTabBar = !inFolder;
+    final inFolder = effectiveTab == 0 && _currentFolderId != null;
+    final showTabBar = catalogVisible && !inFolder;
     final contentTopPad = showTabBar ? topPad + _kTabBarBlock : topPad;
 
     // While inside a folder, intercept the system/gesture back so it pops out to
@@ -395,12 +414,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                   // folder the strip is hidden and horizontal drags belong to
                   // the folder content.
                   enabled: showTabBar,
-                  index: _tabIndex,
+                  index: effectiveTab,
                   length: 2,
                   onChanged: _onTabSwipe,
                   child: TabSlideSwitcher(
-                  index: _tabIndex,
-                  child: _tabIndex == 1
+                  index: effectiveTab,
+                  child: effectiveTab == 1
                       ? CatalogGrid(
                           key: const ValueKey('catalog_grid'),
                           topPadding: contentTopPad,
@@ -422,7 +441,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           // The selection bar and the add button share the same bottom slot and
           // cross-fade/slide between each other so the panel glides in and out
           // instead of popping.
-          if (_tabIndex == 0 && _currentFolderId != kPicksFolderId)
+          if (effectiveTab == 0 && _currentFolderId != kPicksFolderId)
             Positioned(
               left: 16,
               right: 16,
