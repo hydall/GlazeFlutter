@@ -322,6 +322,11 @@ Future<Lorebook> rebuildLorebookWithActiveLlm(
       temperature: 0.2,
       topP: 1.0,
       stream: false,
+      // Disable the transport's default HTTP receive timeout (0 → no cap). This
+      // is a single non-streaming request that reconstructs a whole lorebook
+      // from a large prompt, so on a slow model it can legitimately take longer
+      // than the default 2 min and must not be aborted with a receive timeout.
+      receiveTimeoutMs: 0,
     ),
     cancelToken: CancelToken(),
     onComplete: (text, reasoning, {rawResponseJson}) {
