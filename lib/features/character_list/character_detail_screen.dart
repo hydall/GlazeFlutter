@@ -32,6 +32,7 @@ import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/swipe_tab_switcher.dart';
+import '../../shared/widgets/tab_slide_switcher.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/image_viewer.dart';
@@ -706,10 +707,8 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
               index: _activeTabIndex,
               length: 2,
               onChanged: _onTabChanged,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                switchInCurve: Curves.easeOut,
-                switchOutCurve: Curves.easeIn,
+              child: TabSlideSwitcher(
+                index: _activeTabIndex,
                 child: _buildTabContent(char),
               ),
             ),

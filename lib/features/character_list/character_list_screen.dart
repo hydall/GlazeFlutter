@@ -27,6 +27,7 @@ import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/swipe_tab_switcher.dart';
+import '../../shared/widgets/tab_slide_switcher.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../catalog/catalog_provider.dart';
@@ -397,27 +398,8 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                   index: _tabIndex,
                   length: 2,
                   onChanged: _onTabSwipe,
-                  child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 350),
-                  reverseDuration: const Duration(milliseconds: 300),
-                  switchInCurve: Curves.easeOutQuart,
-                  switchOutCurve: Curves.easeInQuart,
-                  transitionBuilder: (child, animation) {
-                    final slide =
-                        Tween<Offset>(
-                          begin: const Offset(0.0, 0.06),
-                          end: Offset.zero,
-                        ).animate(
-                          CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeOutBack,
-                          ),
-                        );
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(position: slide, child: child),
-                    );
-                  },
+                  child: TabSlideSwitcher(
+                  index: _tabIndex,
                   child: _tabIndex == 1
                       ? CatalogGrid(
                           key: const ValueKey('catalog_grid'),

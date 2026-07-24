@@ -20,6 +20,7 @@ import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/glaze_tab_bar.dart';
 import '../../../shared/widgets/swipe_tab_switcher.dart';
+import '../../../shared/widgets/tab_slide_switcher.dart';
 import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import 'theme_editor_screen.dart';
@@ -78,12 +79,15 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
                   index: _activeTab,
                   length: 2,
                   onChanged: (i) => setState(() => _activeTab = i),
-                  child: IndexedStack(
+                  child: TabSlideSwitcher(
                     index: _activeTab,
-                    children: [
-                      _buildMyThemesList(context, theme, bottomPad),
-                      _buildBuiltInList(context, theme.activePreset, bottomPad),
-                    ],
+                    child: IndexedStack(
+                      index: _activeTab,
+                      children: [
+                        _buildMyThemesList(context, theme, bottomPad),
+                        _buildBuiltInList(context, theme.activePreset, bottomPad),
+                      ],
+                    ),
                   ),
                 ),
               ),
