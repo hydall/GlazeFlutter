@@ -39,7 +39,10 @@ class ThirdPartyProvidersScreen extends ConsumerWidget {
       title: 'third_party_providers_title'.tr(),
       showBackground: true,
       extendBodyBehindHeader: true,
-      onBack: () => Navigator.of(context).maybePop(),
+      // Pushed as a raw MaterialPageRoute, so pop this route directly. Using
+      // maybePop() here would be blocked by GlazeScaffold's PopScope
+      // (canPop == false on non-iOS) and recurse back into onBack → crash.
+      onBack: () => Navigator.of(context).pop(),
       body: ListView(
         padding: EdgeInsets.fromLTRB(0, topPad + 8, 0, bottomPad),
         children: [
