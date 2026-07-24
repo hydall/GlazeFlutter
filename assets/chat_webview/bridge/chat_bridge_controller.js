@@ -46,7 +46,12 @@ export class Bridge {
       () => this.isGenerating,
       () => this.disableSwipeRegeneration,
     );
+    // Whether the scroll view is currently parked at the bottom. Kept live by
+    // the scroll listener so the viewport-resize handler (keyboard open/close)
+    // knows whether to re-pin to the newest message.
+    this._atBottom = true;
     this._setupScrollListener();
+    this._setupViewportResizeListener();
     this._setupInteractionListener();
     this._setupGlazeRequestRelay();
     this._setupImageClickForward();
@@ -218,6 +223,8 @@ export class Bridge {
     const emitScrollToBottomVisibility = () => {
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
+      // Track parked-at-bottom for the viewport-resize re-pin (keyboard toggle).
+      this._atBottom = distanceFromBottom < 5;
       // Mirror Vue ChatView.onScroll(): button appears past 100px from bottom.
       const show = distanceFromBottom > 100;
       if (lastShowScrollToBottom === show) return;
@@ -277,6 +284,54 @@ export class Bridge {
     }, { passive: true });
 
     requestAnimationFrame(emitScrollToBottomVisibility);
+  }
+
+  /* ---------- Viewport resize (soft keyboard) ---------- */
+  // The soft keyboard resizes the WebView's viewport, not the Flutter content
+  // padding: `#chat-container` is `height: 100vh`, and on Android (adjustResize)
+  // 100vh shrinks when the keyboard opens; iOS WKWebView resizes the visual
+  // viewport the same way. That resize does NOT run through setBottomPadding, so
+  // without this handler nothing re-pins the list — the newest message slides
+  // behind the keyboard on open (and leaves a gap on close). Re-pin to the
+  // bottom whenever the user was parked there, mirroring the at-bottom branch of
+  // setBottomPadding. The drawer / quick-replies panel is a Flutter overlay that
+  // does NOT resize the viewport, so it is handled by setBottomPadding instead
+  // and never reaches this path.
+  _setupViewportResizeListener() {
+    const container = this.virtualList.container;
+    const vv = window.visualViewport;
+    // Read the keyboard-sensitive viewport height. `visualViewport.height`
+    // shrinks on both Android and iOS when the keyboard opens; `100vh`
+    // (container.clientHeight) only tracks it on Android (adjustResize), so
+    // prefer visualViewport as the resize signal when it exists.
+    const measure = () => (vv ? vv.height : container.clientHeight);
+    let lastHeight = measure();
+    let pending = false;
+    const onViewportChange = () => {
+      if (pending) return;
+      pending = true;
+      // Sample at-bottom on the FIRST resize of the burst, before the collapsed
+      // viewport can fire a scroll event that flips the live flag mid-animation.
+      const wasAtBottom = this._atBottom;
+      requestAnimationFrame(() => {
+        pending = false;
+        const h = measure();
+        if (Math.abs(h - lastHeight) < 0.5) return;
+        lastHeight = h;
+        if (!wasAtBottom) return;
+        const vl = this.virtualList;
+        vl.isProgrammaticScrolling = true;
+        clearTimeout(this._viewportRepinUnlock);
+        this._viewportRepinUnlock = setTimeout(() => {
+          vl.isProgrammaticScrolling = false;
+        }, 120);
+        container.scrollTop = container.scrollHeight - container.clientHeight;
+      });
+    };
+    if (vv) {
+      vv.addEventListener('resize', onViewportChange);
+    }
+    window.addEventListener('resize', onViewportChange);
   }
 
   /* ---------- Interaction dispatch ---------- */

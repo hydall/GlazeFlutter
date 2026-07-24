@@ -79,6 +79,14 @@ InAppWebViewSettings chatWebViewInAppSettings({bool isInspectable = true}) {
     transparentBackground: chatWebViewTransparentBackground(),
     isInspectable: isInspectable,
     useHybridComposition: true,
+    // Kill the edge over-scroll effect: on Android 12+ the whole WebView surface
+    // (background included) stretches/squishes at the scroll boundary, exposing
+    // its edges over the Flutter background; on iOS WKWebView it rubber-band
+    // bounces. The chat overlays a Flutter background, so any native overscroll
+    // visibly detaches the two. `NEVER` removes the Android stretch glow;
+    // `disallowOverScroll` disables the iOS bounce.
+    overScrollMode: OverScrollMode.NEVER,
+    disallowOverScroll: true,
     cacheEnabled: true,
     useWideViewPort: true,
     loadWithOverviewMode: true,
