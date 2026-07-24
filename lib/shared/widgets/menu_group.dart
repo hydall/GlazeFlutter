@@ -519,12 +519,19 @@ class _MenuRangeItemState extends State<MenuRangeItem> {
     widget.onChanged(value);
   }
 
+  // Show/hide animation timing for the slider + value field when the parameter
+  // is toggled on/off.
+  static const Duration _toggleDuration = Duration(milliseconds: 220);
+
   @override
   Widget build(BuildContext context) {
     // When a parameter is toggled off it is not sent to the provider, so the
     // slider and number are hidden entirely — only the label + toggle remain.
     // The value itself is preserved by the parent and reappears when re-enabled.
-    return Padding(
+    // The reveal/collapse is animated (size + fade) so the panel doesn't jump.
+    return AnimatedPadding(
+      duration: _toggleDuration,
+      curve: Curves.easeInOut,
       padding: EdgeInsets.fromLTRB(16, 10, 16, _included ? 0 : 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,87 +564,114 @@ class _MenuRangeItemState extends State<MenuRangeItem> {
                   ],
                 ),
               ),
-              if (_included && widget.editableValue)
-                SizedBox(
-                  width: 72,
-                  height: 36,
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    enabled: _included,
-                    keyboardType: TextInputType.numberWithOptions(
-                      decimal: widget.decimalPlaces > 0,
-                      signed: widget.min < 0,
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(widget.min < 0 ? r'[-0-9.,]' : r'[0-9.,]'),
-                      ),
-                    ],
-                    textAlign: TextAlign.center,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _commitInput(),
-                    style: TextStyle(
-                      color: context.cs.onSurface,
-                      fontSize: 14,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: const Color(0xFF252525),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: context.cs.outlineVariant,
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: context.cs.outlineVariant,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: context.cs.primary.withValues(alpha: 0.5),
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              else if (_included)
-                Text(
-                  _display,
-                  style: TextStyle(
-                    color: context.cs.onSurfaceVariant,
-                    fontSize: 14,
-                    fontVariations: const [FontVariation('wght', 500)],
-                  ),
-                ),
+              AnimatedCrossFade(
+                duration: _toggleDuration,
+                sizeCurve: Curves.easeInOut,
+                firstCurve: Curves.easeOut,
+                secondCurve: Curves.easeIn,
+                alignment: Alignment.centerRight,
+                crossFadeState: _included
+                    ? CrossFadeState.showFirst
+                    : CrossFadeState.showSecond,
+                firstChild: _buildValueControl(context),
+                secondChild: const SizedBox.shrink(),
+              ),
             ],
           ),
-          if (_included)
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                activeTrackColor: context.cs.primary,
-                thumbColor: context.cs.primary,
-                inactiveTrackColor: context.cs.primary.withValues(alpha: 0.18),
-                overlayColor: context.cs.primary.withValues(alpha: 0.1),
-                trackHeight: 3,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-              ),
-              child: Slider(
-                value: widget.value.clamp(widget.min, widget.max),
-                min: widget.min,
-                max: widget.max,
-                divisions: widget.divisions,
-                onChanged: _included ? _handleSliderChanged : null,
+          AnimatedCrossFade(
+            duration: _toggleDuration,
+            sizeCurve: Curves.easeInOut,
+            firstCurve: Curves.easeOut,
+            secondCurve: Curves.easeIn,
+            alignment: Alignment.topCenter,
+            crossFadeState: _included
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            firstChild: _buildSlider(context),
+            secondChild: const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The trailing editable number field (or a read-only value label).
+  Widget _buildValueControl(BuildContext context) {
+    if (widget.editableValue) {
+      return SizedBox(
+        width: 72,
+        height: 36,
+        child: TextField(
+          controller: _controller,
+          focusNode: _focusNode,
+          enabled: _included,
+          keyboardType: TextInputType.numberWithOptions(
+            decimal: widget.decimalPlaces > 0,
+            signed: widget.min < 0,
+          ),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(
+              RegExp(widget.min < 0 ? r'[-0-9.,]' : r'[0-9.,]'),
+            ),
+          ],
+          textAlign: TextAlign.center,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _commitInput(),
+          style: TextStyle(
+            color: context.cs.onSurface,
+            fontSize: 14,
+            fontVariations: const [FontVariation('wght', 500)],
+          ),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: const Color(0xFF252525),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: context.cs.outlineVariant),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: context.cs.outlineVariant),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: context.cs.primary.withValues(alpha: 0.5),
+                width: 1.5,
               ),
             ),
-        ],
+          ),
+        ),
+      );
+    }
+    return Text(
+      _display,
+      style: TextStyle(
+        color: context.cs.onSurfaceVariant,
+        fontSize: 14,
+        fontVariations: const [FontVariation('wght', 500)],
+      ),
+    );
+  }
+
+  /// The parameter slider itself.
+  Widget _buildSlider(BuildContext context) {
+    return SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        activeTrackColor: context.cs.primary,
+        thumbColor: context.cs.primary,
+        inactiveTrackColor: context.cs.primary.withValues(alpha: 0.18),
+        overlayColor: context.cs.primary.withValues(alpha: 0.1),
+        trackHeight: 3,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+      ),
+      child: Slider(
+        value: widget.value.clamp(widget.min, widget.max),
+        min: widget.min,
+        max: widget.max,
+        divisions: widget.divisions,
+        onChanged: _included ? _handleSliderChanged : null,
       ),
     );
   }
