@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 
 import '../../../shared/theme/app_colors.dart';
@@ -6,10 +7,12 @@ import '../../../shared/widgets/glass_surface.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
+import '../third_party_providers_provider.dart';
 import 'catalog_filter_sheet.dart';
+import 'third_party_providers_screen.dart';
 import 'package:easy_localization/easy_localization.dart';
 
-class CatalogControls extends StatelessWidget {
+class CatalogControls extends ConsumerWidget {
   final CatalogState state;
   final CatalogNotifier notifier;
 
@@ -63,7 +66,10 @@ class CatalogControls extends StatelessWidget {
     final f = state.filters;
     int count = 0;
     if (f.nsfw) count++;
-    if (f.nsfl) count++;
+    // NSFL is a chub-only filter (its toggle is only shown for chub in the
+    // filter sheet), so only count it for the current provider — otherwise a
+    // leftover NSFL flag from chub would inflate the badge on janitor et al.
+    if (state.activeProvider == CatalogProvider.chub && f.nsfl) count++;
     if (f.tagIds.isNotEmpty) count += f.tagIds.length;
     if (f.tagNames.isNotEmpty) count += f.tagNames.length;
     if (f.minTokens != 29) count++;
@@ -77,7 +83,8 @@ class CatalogControls extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabledProviders = ref.watch(enabledCatalogProvidersProvider);
     return Row(
       children: [
         _LabeledChip(
@@ -85,7 +92,7 @@ class CatalogControls extends StatelessWidget {
           onTap: () => _showPickerSheet(
             context,
             title: 'blacklist_glossary_chip'.tr(),
-            items: CatalogProvider.values
+            items: enabledProviders
                 .map(
                   (p) => _PickerItem(
                     label: providerLabel(p),
@@ -95,6 +102,12 @@ class CatalogControls extends StatelessWidget {
                 )
                 .toList(),
             onSelect: (v) => notifier.setProvider(v as CatalogProvider),
+            headerAction: _SettingsGearButton(
+              onTap: () {
+                Navigator.of(context, rootNavigator: true).pop();
+                openThirdPartyProvidersScreen(context);
+              },
+            ),
           ),
         ),
         const Spacer(),
@@ -141,10 +154,12 @@ class CatalogControls extends StatelessWidget {
     required String title,
     required List<_PickerItem> items,
     required ValueChanged<dynamic> onSelect,
+    Widget? headerAction,
   }) {
     GlazeBottomSheet.show<void>(
       context,
       title: title,
+      headerAction: headerAction,
       items: items
           .map(
             (item) => BottomSheetItem(
@@ -171,6 +186,24 @@ class _PickerItem {
     required this.isActive,
     required this.value,
   });
+}
+
+/// Gear button pinned to the provider-picker sheet header; opens the
+/// Third-Party providers screen where sources can be enabled/disabled.
+class _SettingsGearButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _SettingsGearButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onTap,
+      icon: Icon(Icons.settings_outlined, size: 22, color: context.cs.primary),
+      tooltip: 'third_party_providers_title'.tr(),
+      visualDensity: VisualDensity.compact,
+    );
+  }
 }
 
 class _LabeledChip extends StatelessWidget {

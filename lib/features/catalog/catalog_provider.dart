@@ -17,11 +17,17 @@ import 'services/janitor_provider.dart';
 import 'services/janitor_public_lorebook.dart';
 import 'services/janny_provider.dart';
 import 'services/chub_provider.dart';
+import 'third_party_providers_provider.dart';
 
 const _pageSize = 24;
 const _providerKey = 'gz_catalog_provider';
+// Legacy global filters key. Filters are now stored per provider under
+// '${_filtersKey}_<provider>'; this bare key is only read as a one-time
+// fallback so a user's existing selection survives the migration.
 const _filtersKey = 'gz_catalog_filters';
 const _sortKey = 'gz_catalog_sort';
+
+String _filtersKeyFor(CatalogProvider p) => '${_filtersKey}_${p.name}';
 
 const providerSortDefaults = <CatalogProvider, String>{
   CatalogProvider.janitor: 'trending',
@@ -83,6 +89,19 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   CatalogNotifier(this._ref) : super(const CatalogState()) {
     _loadSavedState();
+    // If the active provider gets disabled on the Third-Party providers screen,
+    // fall back to an enabled one so the catalog never shows a hidden source.
+    _ref.listen<List<CatalogProvider>>(enabledCatalogProvidersProvider, (
+      _,
+      enabled,
+    ) {
+      // Empty means every provider is disabled — the catalog is hidden, so
+      // leave the active provider as-is (it'll be corrected when one is
+      // re-enabled).
+      if (enabled.isNotEmpty && !enabled.contains(state.activeProvider)) {
+        setProvider(enabled.first);
+      }
+    });
   }
 
   Future<void> _loadSavedState() async {
@@ -95,7 +114,11 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     final savedSort =
         prefs.getString('${_sortKey}_${provider.name}') ??
         providerSortDefaults[provider]!;
-    final savedFilters = _loadFilters(prefs);
+    final savedFilters = _loadFilters(
+      prefs,
+      provider,
+      allowLegacyFallback: true,
+    );
 
     state = state.copyWith(
       activeProvider: provider,
@@ -104,9 +127,21 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     await search(reset: true);
   }
 
-  CatalogFilters _loadFilters(SharedPreferences prefs) {
+  /// Loads the saved filters for [provider]. Each provider keeps its own tags,
+  /// NSFL flag and token range, since the available tags/filters differ per
+  /// provider. When [allowLegacyFallback] is set and no per-provider entry
+  /// exists, the pre-migration global filters are used once (only for the
+  /// provider that was active when they were saved).
+  CatalogFilters _loadFilters(
+    SharedPreferences prefs,
+    CatalogProvider provider, {
+    bool allowLegacyFallback = false,
+  }) {
     try {
-      final saved = prefs.getString(_filtersKey);
+      var saved = prefs.getString(_filtersKeyFor(provider));
+      if (saved == null && allowLegacyFallback) {
+        saved = prefs.getString(_filtersKey);
+      }
       if (saved != null) {
         final json = jsonDecode(saved) as Map<String, dynamic>;
         return CatalogFilters(
@@ -130,7 +165,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       state.filters.sort,
     );
     await prefs.setString(
-      _filtersKey,
+      _filtersKeyFor(state.activeProvider),
       jsonEncode({
         'nsfw': state.filters.nsfw,
         'nsfl': state.filters.nsfl,
@@ -142,15 +177,20 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     );
   }
 
-  void setProvider(CatalogProvider provider) {
-    final defaultSort = providerSortDefaults[provider] ?? 'trending';
+  Future<void> setProvider(CatalogProvider provider) async {
+    if (provider == state.activeProvider) return;
+    final prefs = await _ref.read(sharedPreferencesProvider.future);
+    // Each provider carries its own filters (tags, NSFL, token range), so
+    // restore this provider's saved selection instead of leaking the previous
+    // provider's filters. Sort likewise falls back to the provider default.
+    final savedSort =
+        prefs.getString('${_sortKey}_${provider.name}') ??
+        providerSortDefaults[provider] ??
+        'trending';
+    final savedFilters = _loadFilters(prefs, provider);
     state = state.copyWith(
       activeProvider: provider,
-      filters: state.filters.copyWith(
-        sort: defaultSort,
-        tagIds: [],
-        tagNames: [],
-      ),
+      filters: savedFilters.copyWith(sort: savedSort),
     );
     _saveState();
     search(reset: true);

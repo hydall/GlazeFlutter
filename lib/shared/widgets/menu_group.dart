@@ -18,6 +18,10 @@ class MenuGroup extends StatelessWidget {
 
   /// Optional muted hint rendered under the [header].
   final String? description;
+
+  /// Optional widget pinned to the right edge of the header row (e.g. an
+  /// enable/disable switch for the whole group).
+  final Widget? headerTrailing;
   final List<Widget> items;
   final MenuGroupHeaderVariant headerVariant;
   final IconData? headerIcon;
@@ -31,6 +35,7 @@ class MenuGroup extends StatelessWidget {
     this.header,
     this.helpTerm,
     this.description,
+    this.headerTrailing,
     required this.items,
     this.headerVariant = MenuGroupHeaderVariant.standard,
     this.headerIcon,
@@ -66,28 +71,37 @@ class MenuGroup extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              if (headerIcon != null) ...[
-                Icon(
-                  headerIcon,
-                  size: isAccentCaps ? 16 : 18,
-                  color: context.cs.primary,
-                ),
-                const SizedBox(width: 8),
-              ],
-              Text(
-                isAccentCaps ? header!.toUpperCase() : header!,
-                style: TextStyle(
-                  color: isAccentCaps
-                      ? context.cs.primary
-                      : context.cs.onSurface,
-                  fontWeight: FontWeight.w700,
-                  fontSize: isAccentCaps ? 13 : 18,
-                  letterSpacing: isAccentCaps ? 0.3 : null,
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (headerIcon != null) ...[
+                      Icon(
+                        headerIcon,
+                        size: isAccentCaps ? 16 : 18,
+                        color: context.cs.primary,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Flexible(
+                      child: Text(
+                        isAccentCaps ? header!.toUpperCase() : header!,
+                        style: TextStyle(
+                          color: isAccentCaps
+                              ? context.cs.primary
+                              : context.cs.onSurface,
+                          fontWeight: FontWeight.w700,
+                          fontSize: isAccentCaps ? 13 : 18,
+                          letterSpacing: isAccentCaps ? 0.3 : null,
+                        ),
+                      ),
+                    ),
+                    if (helpTerm != null) HelpTip(term: helpTerm!),
+                  ],
                 ),
               ),
-              if (helpTerm != null) HelpTip(term: helpTerm!),
+              if (headerTrailing != null) headerTrailing!,
             ],
           ),
           if (description != null) ...[
