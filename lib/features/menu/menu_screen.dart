@@ -16,11 +16,8 @@ import '../../shared/shell/nav_retap_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
-import '../catalog/janitor_account_provider.dart';
-import '../catalog/saucepan_account_provider.dart';
 import '../catalog/widgets/janitor_extract_sheet.dart';
-import '../catalog/widgets/janitor_login_sheet.dart';
-import '../catalog/widgets/saucepan_login_sheet.dart';
+import '../catalog/widgets/third_party_providers_screen.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
 import '../lorebooks/lorebook_connections_sheet.dart';
@@ -157,25 +154,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                       ),
                     ),
                     MenuItem(
-                      icon: Icons.person_outline_rounded,
-                      label: 'janitor_login_menu'.tr(),
-                      subtitle: ref.watch(janitorAccountProvider).isLoggedIn
-                          ? 'janitor_login_menu_logged_in'.tr(namedArgs: {
-                              'name':
-                                  ref.watch(janitorAccountProvider).userName!,
-                            })
-                          : 'janitor_login_menu_logged_out'.tr(),
-                      onTap: () => openJanitorAccountSheet(context, ref),
-                    ),
-                    MenuItem(
-                      icon: Icons.ramen_dining_outlined,
-                      label: 'Saucepan account',
-                      subtitle: ref.watch(saucepanAccountProvider).isLoggedIn
-                          ? (ref.watch(saucepanAccountProvider).handle != null
-                              ? 'Logged in as ${ref.watch(saucepanAccountProvider).handle}'
-                              : 'Logged in')
-                          : 'Log in for local companion extraction',
-                      onTap: () => openSaucepanAccountSheet(context, ref),
+                      icon: Icons.extension_outlined,
+                      label: 'menu_third_party_providers'.tr(),
+                      subtitle: 'menu_third_party_providers_hint'.tr(),
+                      onTap: () => openThirdPartyProvidersScreen(context),
                     ),
                   ],
                 ),

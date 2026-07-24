@@ -17,6 +17,7 @@ import 'services/janitor_provider.dart';
 import 'services/janitor_public_lorebook.dart';
 import 'services/janny_provider.dart';
 import 'services/chub_provider.dart';
+import 'third_party_providers_provider.dart';
 
 const _pageSize = 24;
 const _providerKey = 'gz_catalog_provider';
@@ -88,6 +89,16 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   CatalogNotifier(this._ref) : super(const CatalogState()) {
     _loadSavedState();
+    // If the active provider gets disabled on the Third-Party providers screen,
+    // fall back to an enabled one so the catalog never shows a hidden source.
+    _ref.listen<List<CatalogProvider>>(enabledCatalogProvidersProvider, (
+      _,
+      enabled,
+    ) {
+      if (!enabled.contains(state.activeProvider)) {
+        setProvider(enabled.first);
+      }
+    });
   }
 
   Future<void> _loadSavedState() async {
