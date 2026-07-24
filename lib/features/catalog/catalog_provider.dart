@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/character_book_converter.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/lorebook_provider.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import 'catalog_models.dart';
 import 'services/datacat_provider.dart';
@@ -260,7 +261,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }) async {
     final charRepo = _ref.read(characterRepoProvider);
     final imageStorage = await _ref.read(imageStorageProvider.future);
-    final lorebookRepo = _ref.read(lorebookRepoProvider);
+    final lorebooks = _ref.read(lorebooksProvider.notifier);
 
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     final charData = downloaded.charData;
@@ -300,7 +301,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         'name=${lorebook.name} entries=${lorebook.entries.length} '
         'character=$id',
       );
-      await lorebookRepo.put(lorebook);
+      await lorebooks.put(lorebook);
     } else {
       debugPrint(
         '[character_import] catalog no_lorebook character=$id '
@@ -324,7 +325,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
             'id=${lorebook.id} name=${lorebook.name} '
             'entries=${lorebook.entries.length} character=$id',
           );
-          await lorebookRepo.put(lorebook);
+          await lorebooks.put(lorebook);
         }
       } catch (e) {
         debugPrint(

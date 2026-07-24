@@ -71,6 +71,7 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
 
   // Closed-lorebook extraction.
   bool _extracting = false;
+  String? _extractingBookId;
   String? _extractPhase;
   String? _extractError;
   ExtractionResult? _extraction;
@@ -157,8 +158,10 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
           label: 'Export .json (SillyTavern)',
           onTap: () async {
             Navigator.of(context, rootNavigator: true).pop();
-            await _exportJson(book.toTavernJson(),
-                book.title.isNotEmpty ? book.title : 'lorebook');
+            await _exportJson(
+              book.toTavernJson(),
+              book.title.isNotEmpty ? book.title : 'lorebook',
+            );
           },
         ),
       ],
@@ -194,7 +197,9 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
   Future<void> _buildJs(PublicLorebook book) async {
     setState(() => _jsBuildingId = book.id);
     try {
-      final lb = await ref.read(janitorExtractorProvider).buildLorebookFromJs(
+      final lb = await ref
+          .read(janitorExtractorProvider)
+          .buildLorebookFromJs(
             jsSource: book.jsSource,
             name: book.title.isNotEmpty ? book.title : 'Janitor Lorebook',
             meta: widget.args.meta,
@@ -239,7 +244,9 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
       await ref.read(lorebooksProvider.notifier).addLorebook(book);
       if (mounted) {
         GlazeToast.show(
-            context, 'Saved "${book.name}" (${book.entries.length} entries)');
+          context,
+          'Saved "${book.name}" (${book.entries.length} entries)',
+        );
       }
     } catch (e) {
       if (mounted) GlazeToast.show(context, 'Save failed: $e');
@@ -262,9 +269,11 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
 
   // ─── Closed-lorebook extraction + build ─────────────────────────────────────
 
-  Future<void> _extract() async {
+  Future<void> _extract(PublicLorebook book) async {
+    if (_extracting) return;
     setState(() {
       _extracting = true;
+      _extractingBookId = book.id;
       _extractError = null;
       _extractPhase = null;
       _extraction = null;
@@ -274,7 +283,9 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
       _buildDebug = null;
     });
     try {
-      final result = await ref.read(janitorExtractorProvider).extract(
+      final result = await ref
+          .read(janitorExtractorProvider)
+          .extract(
             widget.args.sourceUrl,
             onPhase: (p) {
               if (mounted) setState(() => _extractPhase = p);
@@ -291,7 +302,12 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
     } catch (e) {
       if (mounted) setState(() => _extractError = e.toString());
     } finally {
-      if (mounted) setState(() => _extracting = false);
+      if (mounted) {
+        setState(() {
+          _extracting = false;
+          _extractingBookId = null;
+        });
+      }
     }
   }
 
@@ -311,7 +327,9 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
     });
     final fromFull = ex.hasAdvancedLorebook;
     try {
-      final book = await ref.read(janitorExtractorProvider).buildLorebook(
+      final book = await ref
+          .read(janitorExtractorProvider)
+          .buildLorebook(
             lorebookText: fromFull ? ex.fullPromptText : ex.lorebookText,
             name: _nameController.text.trim().isEmpty
                 ? '${ex.character.charData.name} — Closed Lorebook'
@@ -320,7 +338,9 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
             catalog: _sources.catalog ? ex.catalogContext : '',
             scenario: _sources.scenario ? ex.scenarioContext : '',
             greetings: _sources.greetings ? ex.greetingsContext : '',
-            lorebookDescs: _sources.lorebookDescs ? ex.lorebookDescsContext : '',
+            lorebookDescs: _sources.lorebookDescs
+                ? ex.lorebookDescsContext
+                : '',
             extra: _sources.extra ? _extraController.text.trim() : '',
             fromFullPrompt: fromFull,
           );
@@ -435,8 +455,8 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
         for (final b in closed) ...[
           _ClosedRow(
             book: b,
-            rebuilding: _extracting,
-            onRebuild: _canRebuild ? _extract : null,
+            rebuilding: _extractingBookId == b.id,
+            onRebuild: _canRebuild ? () => _extract(b) : null,
           ),
           const SizedBox(height: 8),
         ],
@@ -475,20 +495,27 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
               SizedBox(
                 width: 14,
                 height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: cs.primary,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(_extractPhase!,
-                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                child: Text(
+                  _extractPhase!,
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                ),
               ),
             ],
           ),
         ],
         if (_extractError != null) ...[
           const SizedBox(height: 8),
-          Text(_extractError!,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+          Text(
+            _extractError!,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+          ),
         ],
       ],
     );
@@ -508,15 +535,16 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
           Text(
             ex.hasAdvancedLorebook
                 ? 'Advanced (JS) lorebook — its entries are injected inline, so '
-                    'the full prompt (${estimateTokens(ex.fullPromptText)} '
-                    'tokens) is mined with the LLM.'
+                      'the full prompt (${estimateTokens(ex.fullPromptText)} '
+                      'tokens) is mined with the LLM.'
                 : ex.hasLorebook
-                    ? 'Extracted content · ${estimateTokens(ex.lorebookText)} tokens'
-                    : 'No closed lorebook text was found.',
+                ? 'Extracted content · ${estimateTokens(ex.lorebookText)} tokens'
+                : 'No closed lorebook text was found.',
             style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: cs.onSurface),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            ),
           ),
           if (ex.hasExtractable) ...[
             // For an advanced lorebook the heuristic "extracted content" is
@@ -557,16 +585,21 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
                     foregroundColor: cs.onPrimary,
                   ),
                   child: _building
-                      ? Row(mainAxisSize: MainAxisSize.min, children: [
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          ),
-                          const SizedBox(width: 8),
-                          Text('Building… ${_elapsed}s'),
-                        ])
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text('Building… ${_elapsed}s'),
+                          ],
+                        )
                       : const Text('Build lorebook'),
                 ),
                 const SizedBox(width: 12),
@@ -578,9 +611,10 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
             ),
             if (_buildError != null) ...[
               const SizedBox(height: 8),
-              Text(_buildError!,
-                  style:
-                      const TextStyle(color: Colors.redAccent, fontSize: 12)),
+              Text(
+                _buildError!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
             ],
             if (_buildDebug != null) ...[
               const SizedBox(height: 8),
@@ -611,11 +645,14 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Built ${book.entries.length} entries',
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface)),
+          Text(
+            'Built ${book.entries.length} entries',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+            ),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -640,8 +677,9 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
           ),
           const SizedBox(height: 10),
           _JsonView(
-            json: const JsonEncoder.withIndent('  ')
-                .convert(glazeLorebookToTavernJson(book)),
+            json: const JsonEncoder.withIndent(
+              '  ',
+            ).convert(glazeLorebookToTavernJson(book)),
             cs: cs,
           ),
         ],
@@ -711,8 +749,10 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
         hintStyle: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
         filled: true,
         fillColor: cs.surface,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
@@ -748,8 +788,10 @@ class _PublicSection extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
           ),
           const SizedBox(width: 12),
-          Text('Loading lorebooks…',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+          Text(
+            'Loading lorebooks…',
+            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+          ),
         ],
       );
     }
@@ -765,8 +807,10 @@ class _PublicSection extends StatelessWidget {
       // closed section carries the messaging); otherwise say there are none.
       final hasClosed = books.any((b) => !b.accessible && !b.isJs);
       if (hasClosed) return const SizedBox.shrink();
-      return Text('No public lorebooks attached.',
-          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant));
+      return Text(
+        'No public lorebooks attached.',
+        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -777,7 +821,7 @@ class _PublicSection extends StatelessWidget {
           js.isEmpty
               ? 'Downloaded whole from Janitor.AI — no LLM needed.'
               : 'Downloaded whole from Janitor.AI. Scripted (advanced) books are '
-                  'rebuilt into entries with your active LLM.',
+                    'rebuilt into entries with your active LLM.',
           style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
@@ -808,10 +852,12 @@ class _PublicRow extends StatelessWidget {
     this.building = false,
   });
 
-  IconData get _icon => book.isJs ? Icons.code_rounded : Icons.menu_book_rounded;
+  IconData get _icon =>
+      book.isJs ? Icons.code_rounded : Icons.menu_book_rounded;
 
-  String get _subtitle =>
-      book.isJs ? 'Scripted (advanced) — rebuild with LLM' : '${book.entryCount} entries';
+  String get _subtitle => book.isJs
+      ? 'Scripted (advanced) — rebuild with LLM'
+      : '${book.entryCount} entries';
 
   @override
   Widget build(BuildContext context) {
@@ -833,9 +879,10 @@ class _PublicRow extends StatelessWidget {
                 Text(
                   book.title.isEmpty ? 'Lorebook' : book.title,
                   style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
                 ),
                 Text(
                   _subtitle,
@@ -848,9 +895,10 @@ class _PublicRow extends StatelessWidget {
                     maxLines: 6,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontSize: 11,
-                        height: 1.35,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.85)),
+                      fontSize: 11,
+                      height: 1.35,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.85),
+                    ),
                   ),
                 ],
               ],
@@ -863,7 +911,9 @@ class _PublicRow extends StatelessWidget {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: cs.primary),
+                  strokeWidth: 2,
+                  color: cs.primary,
+                ),
               ),
             )
           else
@@ -913,9 +963,10 @@ class _ClosedRow extends StatelessWidget {
                 Text(
                   book.title.isEmpty ? 'Lorebook' : book.title,
                   style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
                 ),
                 Text(
                   'Must be rebuilt from the prompt',
@@ -928,9 +979,10 @@ class _ClosedRow extends StatelessWidget {
                     maxLines: 6,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontSize: 11,
-                        height: 1.35,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.85)),
+                      fontSize: 11,
+                      height: 1.35,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.85),
+                    ),
                   ),
                 ],
               ],
@@ -943,7 +995,9 @@ class _ClosedRow extends StatelessWidget {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: cs.primary),
+                  strokeWidth: 2,
+                  color: cs.primary,
+                ),
               ),
             )
           else
@@ -1005,13 +1059,18 @@ class _ContextBlock extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(label,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.6))),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                  ),
+                ),
               ),
-              Text('Content is empty',
-                  style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+              Text(
+                'Content is empty',
+                style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+              ),
             ],
           ),
         ),
@@ -1040,10 +1099,14 @@ class _ContextBlock extends StatelessWidget {
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
-          title: Text(label,
-              style: TextStyle(fontSize: 13, color: cs.onSurface)),
-          subtitle: Text('${estimateTokens(text)} tokens',
-              style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+          title: Text(
+            label,
+            style: TextStyle(fontSize: 13, color: cs.onSurface),
+          ),
+          subtitle: Text(
+            '${estimateTokens(text)} tokens',
+            style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+          ),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
           children: [
             Container(
@@ -1058,9 +1121,10 @@ class _ContextBlock extends StatelessWidget {
                 child: SelectableText(
                   text,
                   style: TextStyle(
-                      fontSize: 11,
-                      height: 1.4,
-                      color: cs.onSurfaceVariant),
+                    fontSize: 11,
+                    height: 1.4,
+                    color: cs.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
@@ -1111,8 +1175,10 @@ class _CustomContextBlock extends StatelessWidget {
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
-          title: Text('Custom text',
-              style: TextStyle(fontSize: 13, color: cs.onSurface)),
+          title: Text(
+            'Custom text',
+            style: TextStyle(fontSize: 13, color: cs.onSurface),
+          ),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
           children: [
             TextField(
@@ -1142,8 +1208,10 @@ class _PromptPreview extends StatelessWidget {
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
-        title: Text('Prompt sent to the build LLM',
-            style: TextStyle(fontSize: 12, color: cs.onSurface)),
+        title: Text(
+          'Prompt sent to the build LLM',
+          style: TextStyle(fontSize: 12, color: cs.onSurface),
+        ),
         childrenPadding: const EdgeInsets.only(bottom: 8),
         children: [
           Container(
@@ -1158,10 +1226,11 @@ class _PromptPreview extends StatelessWidget {
               child: SelectableText(
                 text,
                 style: TextStyle(
-                    fontSize: 11,
-                    height: 1.4,
-                    color: cs.onSurfaceVariant,
-                    fontFamily: 'monospace'),
+                  fontSize: 11,
+                  height: 1.4,
+                  color: cs.onSurfaceVariant,
+                  fontFamily: 'monospace',
+                ),
               ),
             ),
           ),
@@ -1197,19 +1266,24 @@ class _LlmDebugPanel extends StatelessWidget {
         tilePadding: EdgeInsets.zero,
         initiallyExpanded: true,
         leading: Icon(Icons.bug_report_outlined, size: 18, color: cs.primary),
-        title: Text('LLM response (debug)',
-            style: TextStyle(fontSize: 12, color: cs.onSurface)),
+        title: Text(
+          'LLM response (debug)',
+          style: TextStyle(fontSize: 12, color: cs.onSurface),
+        ),
         childrenPadding: const EdgeInsets.only(bottom: 8),
         children: [
           for (final (label, body) in sections) ...[
             Row(
               children: [
                 Expanded(
-                  child: Text('$label · ${estimateTokens(body)} tokens',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurfaceVariant)),
+                  child: Text(
+                    '$label · ${estimateTokens(body)} tokens',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
@@ -1238,10 +1312,11 @@ class _LlmDebugPanel extends StatelessWidget {
                 child: SelectableText(
                   body,
                   style: TextStyle(
-                      fontSize: 11,
-                      height: 1.4,
-                      color: cs.onSurfaceVariant,
-                      fontFamily: 'monospace'),
+                    fontSize: 11,
+                    height: 1.4,
+                    color: cs.onSurfaceVariant,
+                    fontFamily: 'monospace',
+                  ),
                 ),
               ),
             ),
@@ -1259,10 +1334,13 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text,
-        style: TextStyle(
-            fontSize: 14, fontWeight: FontWeight.w700, color: cs.onSurface),
-      );
+    text,
+    style: TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w700,
+      color: cs.onSurface,
+    ),
+  );
 }
 
 class _Hint extends StatelessWidget {
@@ -1272,15 +1350,17 @@ class _Hint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(text,
-            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+    ),
+  );
 }
 
 /// Prominent banner shown when the character has an "advanced" (JS) lorebook:
@@ -1292,31 +1372,28 @@ class _AdvancedNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: cs.primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-          border: Border(
-            left: BorderSide(color: cs.primary, width: 2),
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: cs.primary.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(8),
+      border: Border(left: BorderSide(color: cs.primary, width: 2)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.code_rounded, size: 16, color: cs.primary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'This character uses JS (advanced) lorebooks. The lorebook '
+            'content must be collected with an LLM.',
+            style: TextStyle(fontSize: 12, height: 1.35, color: cs.onSurface),
           ),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.code_rounded, size: 16, color: cs.primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'This character uses JS (advanced) lorebooks. The lorebook '
-                'content must be collected with an LLM.',
-                style: TextStyle(
-                    fontSize: 12, height: 1.35, color: cs.onSurface),
-              ),
-            ),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 }
 
 /// Collapsible pretty-printed JSON of a built lorebook (SillyTavern World Info
@@ -1328,50 +1405,53 @@ class _JsonView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          title: Text('Lorebook JSON',
-              style: TextStyle(fontSize: 12, color: cs.onSurface)),
-          childrenPadding: const EdgeInsets.only(bottom: 8),
+    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+    child: ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: Text(
+        'Lorebook JSON',
+        style: TextStyle(fontSize: 12, color: cs.onSurface),
+      ),
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                const Spacer(),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Copy',
-                  icon: const Icon(Icons.copy_rounded, size: 14),
-                  color: cs.onSurfaceVariant,
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: json));
-                    if (context.mounted) GlazeToast.show(context, 'Copied JSON');
-                  },
-                ),
-              ],
-            ),
-            Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(maxHeight: 240),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: cs.surface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: SingleChildScrollView(
-                child: SelectableText(
-                  json,
-                  style: TextStyle(
-                      fontSize: 11,
-                      height: 1.4,
-                      color: cs.onSurfaceVariant,
-                      fontFamily: 'monospace'),
-                ),
-              ),
+            const Spacer(),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Copy',
+              icon: const Icon(Icons.copy_rounded, size: 14),
+              color: cs.onSurfaceVariant,
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: json));
+                if (context.mounted) GlazeToast.show(context, 'Copied JSON');
+              },
             ),
           ],
         ),
-      );
+        Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(maxHeight: 240),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              json,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.4,
+                color: cs.onSurfaceVariant,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _OrDivider extends StatelessWidget {
@@ -1390,12 +1470,15 @@ class _OrDivider extends StatelessWidget {
           line,
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text('OR',
-                style: TextStyle(
-                    fontSize: 11,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurfaceVariant)),
+            child: Text(
+              'OR',
+              style: TextStyle(
+                fontSize: 11,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
           ),
           line,
         ],

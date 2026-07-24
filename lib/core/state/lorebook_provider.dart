@@ -101,7 +101,7 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
   Future<void> addLorebook(Lorebook lorebook) async {
     final repo = ref.read(lorebookRepoProvider);
     await repo.put(lorebook);
-    _syncActivationToPrefs(lorebook);
+    await _syncActivationToPrefs(lorebook);
     ref.invalidateSelf();
   }
 
@@ -113,18 +113,18 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
       'entries=${lorebook.entries.length} scope=${lorebook.activationScope} '
       'target=${lorebook.activationTargetId}',
     );
-    _syncActivationToPrefs(lorebook);
+    await _syncActivationToPrefs(lorebook);
     ref.invalidateSelf();
   }
 
   Future<void> updateLorebook(Lorebook lorebook) async {
     final repo = ref.read(lorebookRepoProvider);
     await repo.put(lorebook);
-    _syncActivationToPrefs(lorebook);
+    await _syncActivationToPrefs(lorebook);
     ref.invalidateSelf();
   }
 
-  void _syncActivationToPrefs(Lorebook lorebook) async {
+  Future<void> _syncActivationToPrefs(Lorebook lorebook) async {
     if (lorebook.activationTargetId == null) return;
     if (lorebook.activationScope != 'character' &&
         lorebook.activationScope != 'chat') {

@@ -82,9 +82,11 @@ class ImageGenService {
           instructionImageSize: instructionImageSize,
           cancelToken: cancelToken,
         );
+        if (cancelToken?.isCancelled == true) break;
 
         final filename = 'imggen_${DateTime.now().microsecondsSinceEpoch}.png';
         final savedPath = await _saveGeneratedImage(filename, imageBytes);
+        if (cancelToken?.isCancelled == true) break;
 
         currentText = ImageTagMarkup.replaceTagWithResult(
           currentText,

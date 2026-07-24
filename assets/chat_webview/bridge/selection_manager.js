@@ -129,7 +129,7 @@ export class SelectionManager {
     let selText = '';
     const sel = window.getSelection();
     if (sel && sel.toString().trim().length > 0) {
-      selText = sel.toString().trim();
+      selText = this._renderedSelectionText(sel);
     }
     if (!selText) {
       const hosts = document.querySelectorAll('.message-content');
@@ -137,7 +137,7 @@ export class SelectionManager {
         if (el.shadowRoot) {
           const shadowSel = el.shadowRoot.getSelection ? el.shadowRoot.getSelection() : null;
           if (shadowSel && shadowSel.toString().trim().length > 0) {
-            selText = shadowSel.toString().trim();
+            selText = this._renderedSelectionText(shadowSel);
             break;
           }
         }
@@ -145,6 +145,22 @@ export class SelectionManager {
     }
     if (selText) this._showSelectionBar(selText);
     else this._hideSelectionBar();
+  }
+
+  _renderedSelectionText(selection) {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:1000px;opacity:0;pointer-events:none;';
+    const shadow = host.attachShadow({ mode: 'closed' });
+    const content = document.createElement('div');
+    for (let i = 0; i < selection.rangeCount; i++) {
+      if (i > 0) content.appendChild(document.createElement('br'));
+      content.appendChild(selection.getRangeAt(i).cloneContents());
+    }
+    shadow.appendChild(content);
+    document.body.appendChild(host);
+    const text = content.innerText.trim();
+    host.remove();
+    return text;
   }
 
   _showSelectionBar(text) {

@@ -781,7 +781,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                   Navigator.pop(sheetCtx);
                   ref
                       .read(chatProvider(widget.charId).notifier)
-                      .retryImageGenerationForMessage(idx);
+                      .retryImageGenerationForMessage(messageId);
                 },
               ),
             const SizedBox(height: 8),
@@ -1402,15 +1402,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                     ),
                     imageGenActions: ImageGenCallbacks(
                       onImgRetry: (instruction, messageId) {
-                        final allMsgs = widget.state.messages;
-                        final idx = allMsgs.indexWhere(
-                          (m) => m.id == messageId,
-                        );
-                        if (idx >= 0) {
-                          ref
-                              .read(chatProvider(widget.charId).notifier)
-                              .retryImageGenerationForMessage(idx);
-                        }
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .retryImageGenerationForMessage(messageId);
                       },
                       onImgFind: (instruction, messageId) {
                         ref
@@ -1418,15 +1412,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                             .findImageOnDisk(messageId, instruction);
                       },
                       onImgRegen: (instruction, messageId) {
-                        final allMsgs = widget.state.messages;
-                        final idx = allMsgs.indexWhere(
-                          (m) => m.id == messageId,
-                        );
-                        if (idx >= 0) {
-                          ref
-                              .read(chatProvider(widget.charId).notifier)
-                              .retryImageGenerationForMessage(idx);
-                        }
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .retryImageGenerationForMessage(messageId);
                       },
                       onImgCancel: () {
                         ref
@@ -1456,9 +1444,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                           chatProvider(widget.charId).notifier,
                         );
                         if (widget.state.isGeneratingImage &&
-                            !widget.state.isGenerating &&
-                            !widget.state.isPostGenRunning) {
-                          notifier.abortImageGeneration();
+                            !widget.state.isGenerating) {
+                          notifier.cancelImageGeneration();
                         } else {
                           notifier.abortGeneration();
                         }
@@ -1812,11 +1799,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                                               if (widget
                                                       .state
                                                       .isGeneratingImage &&
-                                                  !widget.state.isGenerating &&
-                                                  !widget
-                                                      .state
-                                                      .isPostGenRunning) {
-                                                notifier.abortImageGeneration();
+                                                  !widget.state.isGenerating) {
+                                                notifier
+                                                    .cancelImageGeneration();
                                               } else {
                                                 notifier.abortGeneration();
                                               }

@@ -66,6 +66,23 @@ void main() {
     stylessCss = _asset('styles.css').replaceAll('\r\n', '\n');
   });
 
+  group('rendered text copy', () {
+    test('message copy preserves rendered line boundaries', () {
+      final idx = bridgeControllerJs.indexOf('_extractText(section)');
+      final body = bridgeControllerJs.substring(idx, idx + 500);
+      expect(body, contains('root.innerText'));
+      expect(body, isNot(contains('root.textContent')));
+    });
+
+    test('selection copy serializes cloned rendered ranges', () {
+      expect(
+        selectionManagerJs,
+        contains('selection.getRangeAt(i).cloneContents()'),
+      );
+      expect(selectionManagerJs, contains('content.innerText.trim()'));
+    });
+  });
+
   group('window.glaze SDK', () {
     test('index.html loads glaze_sdk before bridge/index.js', () {
       final sdkIdx = indexHtml.indexOf('glaze_sdk.js');
@@ -504,7 +521,10 @@ void main() {
     test('touch-drag on textarea keeps gliding with inertia after release', () {
       // The manual scrollTop drive has no native momentum, so releasing the
       // finger would stop the chat dead. touchend must launch a decaying glide.
-      expect(editControllerJs, contains("textarea.addEventListener('touchend'"));
+      expect(
+        editControllerJs,
+        contains("textarea.addEventListener('touchend'"),
+      );
       expect(editControllerJs, contains('requestAnimationFrame(step)'));
       // Velocity is tracked during the drag and decays each frame.
       expect(editControllerJs, contains('touchVelocity'));
@@ -560,18 +580,22 @@ void main() {
       );
     });
 
-    test('gesture axis is only committed after a deliberate travel threshold',
-        () {
-      // Until the finger moves past the slop, the handler stays hands-off so
-      // the WebView's native vertical scroll can engage — grabbing a message
-      // with swipe variations must not trap a vertical scroll.
-      expect(swipeHandlerJs, contains('AXIS_LOCK_SLOP'));
-      expect(swipeHandlerJs, contains('axisLocked'));
-      expect(
-        swipeHandlerJs,
-        contains('if (absX < AXIS_LOCK_SLOP && absY < AXIS_LOCK_SLOP) return;'),
-      );
-    });
+    test(
+      'gesture axis is only committed after a deliberate travel threshold',
+      () {
+        // Until the finger moves past the slop, the handler stays hands-off so
+        // the WebView's native vertical scroll can engage — grabbing a message
+        // with swipe variations must not trap a vertical scroll.
+        expect(swipeHandlerJs, contains('AXIS_LOCK_SLOP'));
+        expect(swipeHandlerJs, contains('axisLocked'));
+        expect(
+          swipeHandlerJs,
+          contains(
+            'if (absX < AXIS_LOCK_SLOP && absY < AXIS_LOCK_SLOP) return;',
+          ),
+        );
+      },
+    );
 
     test('a tie or vertical-dominant drag becomes a native scroll', () {
       // absY >= absX (not strict) biases equal drags toward scrolling.
