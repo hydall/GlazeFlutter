@@ -148,9 +148,40 @@ Future<void> initChatWebViewEnvironment() async {
     }
     _janitorWebViewUserAgent = _deriveJanitorWebViewUA(availableVersion);
 
-    _chatWebViewEnvironment = await WebViewEnvironment.create();
+    _chatWebViewEnvironment = await WebViewEnvironment.create(
+      settings: WebViewEnvironmentSettings(
+        userDataFolder: _webView2UserDataFolder(),
+      ),
+    );
     await _startChatWebViewAssetServer();
   } catch (_) {}
+}
+
+/// Stable WebView2 user-data folder, anchored to the Glaze data root.
+///
+/// With no explicit folder, WebView2 defaults its store to a
+/// `<exe-name>.exe.WebView2` directory *next to the running executable*. Glaze
+/// updates install into a version-specific directory, so after an update the
+/// executable sits in a new folder — and that default store, which holds the
+/// janitorai.com cookies + `localStorage` (i.e. the whole Supabase session),
+/// is stranded in the previous build's directory. The new build then boots with
+/// an empty cookie jar, so catalog requests go out anonymous and come back with
+/// a partial catalog. The persisted account name (kept separately in
+/// SharedPreferences, under `%APPDATA%`) still shows "logged in" in the menu —
+/// exactly the "looks logged in, catalog incomplete" split users hit on update.
+///
+/// Anchoring the store to `%APPDATA%\Glaze\webview2` — the same stable root the
+/// rest of the app persists to — keeps the session alive across updates. (The
+/// first launch after this change is a one-time re-login: WebView2 moves from
+/// the old exe-relative store to this one.)
+String _webView2UserDataFolder() {
+  final dir = Directory(
+    '${_glazeDataDirectory().path}${Platform.pathSeparator}webview2',
+  );
+  try {
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+  } catch (_) {}
+  return dir.path;
 }
 
 WebUri? _localFileServingBaseUrl() =>
