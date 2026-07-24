@@ -63,7 +63,10 @@ class CatalogControls extends StatelessWidget {
     final f = state.filters;
     int count = 0;
     if (f.nsfw) count++;
-    if (f.nsfl) count++;
+    // NSFL is a chub-only filter (its toggle is only shown for chub in the
+    // filter sheet), so only count it for the current provider — otherwise a
+    // leftover NSFL flag from chub would inflate the badge on janitor et al.
+    if (state.activeProvider == CatalogProvider.chub && f.nsfl) count++;
     if (f.tagIds.isNotEmpty) count += f.tagIds.length;
     if (f.tagNames.isNotEmpty) count += f.tagNames.length;
     if (f.minTokens != 29) count++;
