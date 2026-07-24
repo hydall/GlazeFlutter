@@ -90,6 +90,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   void initState() {
     super.initState();
     _scheduleThumbnailBackfill();
+    // The hidden flag lives in a branch-scoped provider that outlives this
+    // screen, so a list left scrolled down would re-open with its header still
+    // slid away. Opening the screen always starts from a visible header.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showHeader();
+    });
   }
 
   /// Kicks off the one-time background thumbnail regeneration triggered by the
@@ -131,8 +137,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   }
 
   /// Forces the shell header + tabs row back into view (e.g. after navigating
-  /// between views, where staying hidden would be jarring).
+  /// between views, where staying hidden would be jarring). Resets the hider
+  /// too, otherwise it would keep believing the header is hidden and swallow
+  /// the next hide, and the incoming view's scroll offset would read as one
+  /// large downward scroll.
   void _showHeader() {
+    _headerScrollHider.reset();
     final notifier = ref.read(
       shellHeaderHiddenProvider(headerBranchIndex).notifier,
     );
@@ -367,6 +377,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       if (next.branchIndex == kCharactersBranchIndex) _onCharactersTabReTap();
     });
 
+    // The shell reveals the header when this branch is re-entered (see
+    // [ShellScreen]). Re-baseline the hider so it agrees, instead of holding a
+    // stale `hidden` that would swallow the next hide.
+    ref.listen(shellHeaderHiddenProvider(headerBranchIndex), (_, hidden) {
+      if (!hidden && _headerScrollHider.hidden) _headerScrollHider.reset();
+    });
+
     // If the catalog gets disabled while the Discover tab is active, fall back
     // to My Characters. Either way refresh the shell header so the tab bar
     // appears/disappears in step with the setting.
@@ -598,16 +615,19 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
             headerSliver: SliverToBoxAdapter(
               child: CharacterFoldersSection(
                 onOpenFolder: (id) {
+                  _showHeader();
                   setState(() => _currentFolderId = id);
                   refreshShellHeader();
                 },
                 showFavorites: showFavorites,
                 onOpenFavorites: () {
+                  _showHeader();
                   setState(() => _currentFolderId = kFavoritesFolderId);
                   refreshShellHeader();
                 },
                 showOurPicks: showOurPicks,
                 onOpenPicks: () {
+                  _showHeader();
                   setState(() => _currentFolderId = kPicksFolderId);
                   refreshShellHeader();
                 },

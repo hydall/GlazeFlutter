@@ -218,6 +218,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _onScrollDirection(ScrollDirection direction) {
+    // Driven by a JS callback (see `onHeaderScroll`), which can land after the
+    // chat was left — including the visibility push the bridge sends on open.
+    if (!mounted) return;
     if (direction == ScrollDirection.reverse && !_isHeaderHidden) {
       setState(() => _isHeaderHidden = true);
     } else if (direction == ScrollDirection.forward && _isHeaderHidden) {

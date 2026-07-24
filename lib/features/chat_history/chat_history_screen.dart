@@ -41,6 +41,9 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _registry?.publish(this, 0, _shellHeader());
+        // The hidden flag is branch-scoped and outlives this screen, so a list
+        // left scrolled down would re-open with its header still slid away.
+        _showHeader();
       });
     }
   }
@@ -59,7 +62,10 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
     return false;
   }
 
+  /// Forces the shell header back into view. Resets the hider too, otherwise it
+  /// would keep believing the header is hidden and swallow the next hide.
   void _showHeader() {
+    _headerScrollHider.reset();
     final notifier = ref.read(shellHeaderHiddenProvider(0).notifier);
     if (notifier.state) notifier.state = false;
   }
@@ -161,6 +167,13 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
         _showHeader();
         _scrollToTop();
       }
+    });
+
+    // The shell reveals the header when this branch is re-entered (see
+    // [ShellScreen]). Re-baseline the hider so it agrees, instead of holding a
+    // stale `hidden` that would swallow the next hide.
+    ref.listen(shellHeaderHiddenProvider(0), (_, hidden) {
+      if (!hidden && _headerScrollHider.hidden) _headerScrollHider.reset();
     });
 
     final list = ChatHistoryList(

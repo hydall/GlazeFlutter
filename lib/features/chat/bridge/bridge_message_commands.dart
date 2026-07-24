@@ -210,4 +210,12 @@ class MessageBridgeCommands {
       'window.bridge?.scrollToMessage("${_host.escape(messageId)}", $highlight)',
     );
   }
+
+  /// Re-shows the chat header and re-baselines the JS hide-on-scroll tracker.
+  /// Call on every chat open / session switch: the WebView is kept alive across
+  /// chats, so without this the tracker carries the previous chat's hidden
+  /// state and scroll baseline into the new one. JS answers with an
+  /// `onHeaderScroll(false)` callback, which is what actually moves the Flutter
+  /// header — JS stays the single source of truth for that state.
+  Future<void> showHeader() => _host.evalJs('window.bridge?.showHeader()');
 }

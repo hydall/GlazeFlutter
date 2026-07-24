@@ -13,20 +13,41 @@ import 'animated_header_below.dart';
 import 'shell_header_provider.dart';
 import 'desktop/desktop_layout_provider.dart';
 
-class ShellScreen extends StatefulWidget {
+class ShellScreen extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
   const ShellScreen({super.key, required this.navigationShell});
 
   @override
-  State<ShellScreen> createState() => _ShellScreenState();
+  ConsumerState<ShellScreen> createState() => _ShellScreenState();
 }
 
-class _ShellScreenState extends State<ShellScreen> {
+class _ShellScreenState extends ConsumerState<ShellScreen> {
   int _lastBackPress = 0;
+  int? _lastBranchIndex;
+
+  /// Reveals the header of a branch the moment it becomes active. Branch state
+  /// (including each list's scroll offset) is preserved by the shell, and the
+  /// hidden flag is branch-scoped, so a tab left scrolled down would otherwise
+  /// come back with its header still slid off-screen and no way to recover it
+  /// but scrolling up. Screens keep their own hide-on-scroll tracker in sync by
+  /// watching [shellHeaderHiddenProvider].
+  void _revealHeaderOnBranchChange(int currentIndex) {
+    if (_lastBranchIndex == currentIndex) return;
+    _lastBranchIndex = currentIndex;
+    // Deferred: this runs during build, where mutating a provider is forbidden.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final notifier = ref.read(
+        shellHeaderHiddenProvider(currentIndex).notifier,
+      );
+      if (notifier.state) notifier.state = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final currentIndex = widget.navigationShell.currentIndex;
+    _revealHeaderOnBranchChange(currentIndex);
     final location = GoRouterState.of(context).uri.toString();
     final isDesktop = isDesktopLayout(context);
 
