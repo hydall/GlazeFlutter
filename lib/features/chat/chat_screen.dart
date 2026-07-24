@@ -36,6 +36,7 @@ import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../character_list/character_detail_screen.dart';
 import '../personas/persona_list_screen.dart';
+import '../presets/preset_editor_screen.dart';
 import '../settings/api_list_provider.dart';
 import '../settings/api_settings_screen.dart';
 import '../settings/app_settings_provider.dart';
@@ -957,11 +958,31 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                 .state =
             false;
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context)
-          ..clearSnackBars()
-          ..showSnackBar(
-            SnackBar(content: Text('impersonation_prompt_missing'.tr())),
-          );
+        GlazeBottomSheet.show<void>(
+          context,
+          bigInfo: BottomSheetBigInfo(
+            icon: Icons.record_voice_over_outlined,
+            description: 'impersonation_prompt_missing'.tr(),
+            buttonText: 'btn_configure'.tr(),
+            onButtonTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              final preset = ref.read(
+                effectivePresetForChatProvider((
+                  charId: widget.charId,
+                  sessionId: widget.state.session?.id,
+                )),
+              );
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => PresetEditorScreen(
+                    preset: preset,
+                    charId: widget.charId,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
       }
     });
     final appSettings = ref.watch(appSettingsProvider).value;
