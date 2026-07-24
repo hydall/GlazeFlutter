@@ -71,7 +71,6 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
 
   // Closed-lorebook extraction.
   bool _extracting = false;
-  String? _extractingBookId;
   String? _extractPhase;
   String? _extractError;
   ExtractionResult? _extraction;
@@ -269,11 +268,14 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
 
   // ─── Closed-lorebook extraction + build ─────────────────────────────────────
 
-  Future<void> _extract(PublicLorebook book) async {
+  /// Rebuild **all** the character's closed lorebooks in one pass. The capture
+  /// step assembles the character's full prompt through the Janitor.AI session
+  /// (not a single book), so every closed book is recovered together and merged
+  /// into one — a single action covers them all, no per-row button.
+  Future<void> _extractAll() async {
     if (_extracting) return;
     setState(() {
       _extracting = true;
-      _extractingBookId = book.id;
       _extractError = null;
       _extractPhase = null;
       _extraction = null;
@@ -305,7 +307,6 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
       if (mounted) {
         setState(() {
           _extracting = false;
-          _extractingBookId = null;
         });
       }
     }
@@ -453,13 +454,20 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
         ],
         const SizedBox(height: 10),
         for (final b in closed) ...[
-          _ClosedRow(
-            book: b,
-            rebuilding: _extractingBookId == b.id,
-            onRebuild: _canRebuild ? () => _extract(b) : null,
-          ),
+          _ClosedRow(book: b),
           const SizedBox(height: 8),
         ],
+        const SizedBox(height: 4),
+        // A single action for every closed book: the capture assembles the whole
+        // prompt at once, so all closed lorebooks are rebuilt together (not one
+        // per row).
+        _RebuildAllButton(
+          count: closed.length,
+          rebuilding: _extracting,
+          onRebuild: _canRebuild ? _extractAll : null,
+          cs: cs,
+        ),
+        const SizedBox(height: 8),
         _buildExtractStatus(cs),
         if (_extraction != null) ...[
           const SizedBox(height: 16),
@@ -469,9 +477,9 @@ class _JanitorLorebooksTabState extends ConsumerState<JanitorLorebooksTab> {
     );
   }
 
-  /// Why the Rebuild buttons are disabled (opt-in / login) plus the live capture
-  /// phase and any capture error. The Rebuild action itself lives on each closed
-  /// lorebook row above.
+  /// Why the Rebuild button is disabled (opt-in / login) plus the live capture
+  /// phase and any capture error. The single Rebuild action for all closed
+  /// lorebooks lives just above.
   Widget _buildExtractStatus(ColorScheme cs) {
     final loggedIn = ref.watch(janitorAccountProvider).isLoggedIn;
     final enabled =
@@ -929,19 +937,13 @@ class _PublicRow extends StatelessWidget {
   }
 }
 
-/// One **closed** (private) lorebook row: a lock icon, the title, the
-/// "must be rebuilt from prompt" hint, and a Rebuild button that starts the
-/// prompt capture + LLM rebuild. Disabled (button hidden) while a rebuild runs
-/// or when the user hasn't opted in / logged in.
+/// One **closed** (private) lorebook row: a lock icon, the title and the
+/// "must be rebuilt from prompt" hint. Info-only — the rebuild action is a
+/// single shared button below the list (see [_RebuildAllButton]), because the
+/// capture recovers every closed book at once and merges them into one.
 class _ClosedRow extends StatelessWidget {
   final PublicLorebook book;
-  final bool rebuilding;
-  final VoidCallback? onRebuild;
-  const _ClosedRow({
-    required this.book,
-    required this.rebuilding,
-    required this.onRebuild,
-  });
+  const _ClosedRow({required this.book});
 
   @override
   Widget build(BuildContext context) {
@@ -988,26 +990,56 @@ class _ClosedRow extends StatelessWidget {
               ],
             ),
           ),
-          if (rebuilding)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: SizedBox(
-                width: 18,
-                height: 18,
+        ],
+      ),
+    );
+  }
+}
+
+/// The single "rebuild all closed lorebooks" action. One capture recovers every
+/// closed book at once, so there is exactly one button for the whole section
+/// (not one per row). Shows a spinner while the capture + LLM rebuild runs and
+/// is disabled when the user hasn't opted in / logged in.
+class _RebuildAllButton extends StatelessWidget {
+  final int count;
+  final bool rebuilding;
+  final VoidCallback? onRebuild;
+  final ColorScheme cs;
+  const _RebuildAllButton({
+    required this.count,
+    required this.rebuilding,
+    required this.onRebuild,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: rebuilding ? null : onRebuild,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: cs.primary,
+          foregroundColor: cs.onPrimary,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        icon: rebuilding
+            ? const SizedBox(
+                width: 16,
+                height: 16,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: cs.primary,
+                  color: Colors.white,
                 ),
-              ),
-            )
-          else
-            TextButton.icon(
-              onPressed: onRebuild,
-              icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
-              label: const Text('Rebuild'),
-              style: TextButton.styleFrom(foregroundColor: cs.primary),
-            ),
-        ],
+              )
+            : const Icon(Icons.auto_fix_high_rounded, size: 18),
+        label: Text(
+          rebuilding
+              ? 'Rebuilding…'
+              : count > 1
+              ? 'Rebuild all closed lorebooks ($count)'
+              : 'Rebuild closed lorebook',
+        ),
       ),
     );
   }
