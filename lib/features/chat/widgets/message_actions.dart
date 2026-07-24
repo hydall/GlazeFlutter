@@ -50,12 +50,19 @@ void showMessageContextMenu({
             Navigator.of(context, rootNavigator: true).pop();
           },
         ),
-      if (!isError && !isActivelyGenerating)
+      if (!isError && !isGenerating)
         BottomSheetItem(
           icon: Icons.edit,
           label: 'Edit',
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
+            final state = ref.read(chatProvider(charId)).value;
+            if (state == null ||
+                state.isGenerating ||
+                state.isGeneratingImage ||
+                state.isPostGenRunning) {
+              return;
+            }
             ref.read(editingMessageIdProvider(charId).notifier).state =
                 messageId;
           },

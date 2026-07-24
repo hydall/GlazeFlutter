@@ -61,6 +61,7 @@ class SheetView extends ConsumerStatefulWidget {
   final bool fitContent;
   final bool showRouteBackground;
   final int? shellBranchIndex;
+  final bool enableHeaderBlur;
 
   const SheetView({
     super.key,
@@ -84,6 +85,7 @@ class SheetView extends ConsumerStatefulWidget {
     this.fitContent = false,
     this.showRouteBackground = true,
     this.shellBranchIndex,
+    this.enableHeaderBlur = true,
   });
 
   @override
@@ -669,7 +671,7 @@ class _SheetViewState extends ConsumerState<SheetView>
     // FocusNode) survives interaction/battery-saver transitions without
     // GlobalKey tricks.
     return TopEdgeBlur(
-      enabled: _hasHeader && !batterySaver,
+      enabled: widget.enableHeaderBlur && _hasHeader && !batterySaver,
       height: _headerH + 8,
       sigma: 24,
       tintColor: context.cs.surface.withValues(alpha: 0.88),

@@ -896,6 +896,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   /// notification tap) should gate on this.
   bool get isReady => _ready;
 
+  List<TriggeredEntry> triggeredRegexesFor(String messageId) =>
+      _bridge?.triggeredRegexesFor(messageId) ?? const [];
+
   Future<void> scrollToBottom({bool smooth = false}) {
     final b = _bridge;
     if (b == null) return Future.value();
