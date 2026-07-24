@@ -242,7 +242,57 @@ const String _captureUserScript = r'''
       }
       return null;
     };
+    // JanitorAI occasionally throws a modal over the chat (persona picker,
+    // content disclaimer, "what's new" popup…). Its backdrop (`_modalOverlay_…`)
+    // sits above the composer and swallows the interaction, so the send never
+    // lands. Best-effort dismiss: click an explicit close control inside the
+    // dialog, else press Escape, and wait for the overlay to detach. No-op when
+    // nothing is open. Port of JAR's dismissModals().
+    const findOverlay = () => {
+      const els = document.querySelectorAll(
+        '[class*="modalOverlay" i], [class*="ModalOverlay"]');
+      for (let i = els.length - 1; i >= 0; i--) {
+        if (els[i] && els[i].offsetParent !== null) return els[i];
+      }
+      return null;
+    };
+    const pressEscape = () => {
+      for (const type of ['keydown', 'keypress', 'keyup']) {
+        const ev = new KeyboardEvent(type, {
+          key: 'Escape', code: 'Escape', bubbles: true, cancelable: true,
+        });
+        // The KeyboardEvent constructor leaves keyCode/which at 0; legacy
+        // "close on Escape" handlers gate on e.keyCode === 27, so force it.
+        try {
+          Object.defineProperty(ev, 'keyCode', { get: () => 27 });
+          Object.defineProperty(ev, 'which', { get: () => 27 });
+        } catch (e) {}
+        (document.activeElement || document.body).dispatchEvent(ev);
+        document.dispatchEvent(ev);
+      }
+    };
+    const dismissModals = async (timeout) => {
+      const deadline = Date.now() + (timeout || 4000);
+      while (Date.now() < deadline) {
+        const overlay = findOverlay();
+        if (!overlay) return;
+        // Prefer an explicit close button inside the dialog over dismissing blindly.
+        const close = document.querySelector(
+          '[class*="modal" i] button[aria-label*="close" i], ' +
+          '[role="dialog"] button[aria-label*="close" i]');
+        if (close && close.offsetParent !== null) {
+          close.click();
+        } else {
+          pressEscape();
+        }
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    };
     window.__glazeSend = async (text) => {
+      // 0) A modal overlay (persona picker, disclaimer, promo popup…) can sit
+      //    over the composer and swallow the interaction; clear it before we
+      //    touch the input. Mirrors JAR's dismissModals() call in sendMessage.
+      await dismissModals();
       const el = findInput();
       if (!el) return { ok: false, reason: 'no-input' };
       // 1) Abort any leftover generation from a previous send — it may still be
@@ -261,7 +311,10 @@ const String _captureUserScript = r'''
       el.focus();
       setReactValue(el, text);
       // 3) Poll for the enabled send button (it enables a few frames after React
-      //    ingests the value) and click it.
+      //    ingests the value) and click it. A new overlay may have slipped in
+      //    between the dismiss above and now (JanitorAI pops the persona picker
+      //    on the first send of a fresh chat), so clear it once more first.
+      await dismissModals();
       let btn = null;
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline) {

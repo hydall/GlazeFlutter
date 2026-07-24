@@ -20,9 +20,12 @@ class _ChatWebViewPreloaderState extends State<ChatWebViewPreloader> {
   @override
   Widget build(BuildContext context) {
     // Skip webview preloading on Windows (no InAppWebView implementation) and
-    // in widget tests (FLUTTER_TEST=true). In tests the InAppWebView platform
-    // channel isn't mocked and would block forever.
-    const isTest = bool.fromEnvironment('FLUTTER_TEST');
+    // in widget tests. In tests the InAppWebView platform channel isn't
+    // registered, so building it throws (`InAppWebViewPlatform.instance !=
+    // null`). The test runner exposes FLUTTER_TEST as a *runtime* env var, so we
+    // must read Platform.environment — `bool.fromEnvironment` is compile-time
+    // (--dart-define) and stays false under `flutter test`.
+    final isTest = Platform.environment.containsKey('FLUTTER_TEST');
     final shouldPreload = !isTest && !Platform.isWindows;
     return Stack(
       children: [
