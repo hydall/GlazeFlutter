@@ -1112,16 +1112,33 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       widget.drawerCtrl.lastKeyboardHeight,
                     )
                   : 0.0);
-        final targetPanelHeight = math.max(
+        // The soft keyboard and the magic-drawer / quick-replies panel affect
+        // the WebView content padding DIFFERENTLY, so they must not be merged
+        // into a single `max()` panel height here:
+        //   • Keyboard — the native WebView's *visual viewport* shrinks when the
+        //     keyboard opens (Android `adjustResize`; iOS WKWebView both resize
+        //     the viewport — see the ext-block-image note in
+        //     chat_bridge_controller.js). The message area therefore ALREADY
+        //     excludes the keyboard band. Adding the keyboard height to the
+        //     content padding on top of that double-counts it and pushes the
+        //     last message a full keyboard-height above the input bar (the
+        //     "scroll way past the input" gap).
+        //   • Drawer — a Flutter overlay drawn ON TOP of the still-full-screen
+        //     WebView. The viewport does NOT shrink for it, so its height must
+        //     be reserved as real bottom padding.
+        // => Only the drawer contributes padding. The keyboard merely decides
+        //    whether the home-indicator safe area is still visible (it isn't
+        //    once either panel covers the bottom).
+        final safeAreaPanelInset = math.max(
           drawerTargetInset,
           keyboardTargetInset,
         );
         final targetFactor = math.min(
           1.0,
-          targetPanelHeight / math.max(1.0, safeBottom),
+          safeAreaPanelInset / math.max(1.0, safeBottom),
         );
         // While inline-editing a message, reserve extra scroll room at the
-        // bottom. The normal inset only matches the input bar + keyboard, so a
+        // bottom. The normal inset only matches the input bar (+ drawer), so a
         // message edited at the very end of the chat can scroll its body up to
         // that boundary but no further — and in bubble mode the Save/Cancel
         // footer wraps onto its own row *below* the bubble, landing behind the
@@ -1131,7 +1148,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         const editFooterScrollRoom = 96.0;
         final webViewBottomInset =
             _inputBarHeight +
-            targetPanelHeight +
+            drawerTargetInset +
             (safeBottom * (1 - targetFactor)) +
             (isEditingMessage ? editFooterScrollRoom : 0.0);
         _lastMessageListBottom = webViewBottomInset;
