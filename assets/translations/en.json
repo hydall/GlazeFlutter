@@ -48,6 +48,7 @@
   "api_required_desc": "Select or configure an API connection before sending a message.",
   "api_required_select": "Open API settings",
   "section_settings": "Settings",
+  "section_data": "Data",
   "menu_theme": "Dark Theme",
   "theme_title": "Theme",
   "theme_system": "System",

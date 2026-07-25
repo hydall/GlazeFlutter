@@ -48,6 +48,7 @@
   "api_required_desc": "Выберите или настройте подключение к API перед отправкой сообщения.",
   "api_required_select": "Открыть настройки API",
   "section_settings": "Настройки",
+  "section_data": "Данные",
   "menu_theme": "Тёмная тема",
   "theme_title": "Тема",
   "theme_system": "Системная",

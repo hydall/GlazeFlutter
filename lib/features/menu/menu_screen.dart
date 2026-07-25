@@ -121,6 +121,17 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                       onTap: () => context.push('/menu/settings'),
                     ),
                     MenuItem(
+                      icon: Icons.extension_outlined,
+                      label: 'menu_third_party_providers'.tr(),
+                      subtitle: 'menu_third_party_providers_hint'.tr(),
+                      onTap: () => openThirdPartyProvidersScreen(context),
+                    ),
+                  ],
+                ),
+                MenuGroup(
+                  header: 'section_data'.tr(),
+                  items: [
+                    MenuItem(
                       icon: Icons.backup_outlined,
                       label: 'menu_backups'.tr(),
                       subtitle: 'menu_backups_hint'.tr(),
@@ -152,12 +163,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                           child: const SyncSheet(),
                         ),
                       ),
-                    ),
-                    MenuItem(
-                      icon: Icons.extension_outlined,
-                      label: 'menu_third_party_providers'.tr(),
-                      subtitle: 'menu_third_party_providers_hint'.tr(),
-                      onTap: () => openThirdPartyProvidersScreen(context),
                     ),
                   ],
                 ),
