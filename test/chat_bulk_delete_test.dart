@@ -73,6 +73,55 @@ void main() {
   );
 
   test(
+    'deleteMessages accumulates the persisted deleted-message counter',
+    () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final container = ProviderContainer(
+        overrides: [appDbProvider.overrideWithValue(db)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await db.close();
+      });
+
+      final messages = [
+        for (var i = 0; i < 6; i++)
+          ChatMessage(
+            id: 'm$i',
+            role: i.isEven ? 'user' : 'assistant',
+            content: 'message $i',
+          ),
+      ];
+      final session = ChatSession(
+        id: 's1',
+        characterId: 'c1',
+        sessionIndex: 0,
+        messages: messages,
+      );
+      await container.read(chatRepoProvider).put(session);
+      expect(session.deletedMessageCount, 0);
+
+      final service = container.read(_messageServiceProvider);
+
+      // Deleting two messages bumps the counter by two.
+      final afterFirst = await service.deleteMessages(session, {0, 3});
+      expect(afterFirst.deletedMessageCount, 2);
+
+      // A second delete accumulates on top of the first.
+      final afterSecond = await service.deleteMessages(afterFirst, {0});
+      expect(afterSecond.deletedMessageCount, 3);
+
+      // Out-of-range indices delete nothing and leave the counter untouched.
+      final afterNoop = await service.deleteMessages(afterSecond, {999});
+      expect(afterNoop.deletedMessageCount, 3);
+
+      // The counter is persisted so it survives the messages being gone.
+      final persisted = await container.read(chatRepoProvider).getById('s1');
+      expect(persisted?.deletedMessageCount, 3);
+    },
+  );
+
+  test(
     'middle deletion invalidates causal suffix and rolls reconciliation back',
     () async {
       final db = AppDatabase.forTesting(NativeDatabase.memory());

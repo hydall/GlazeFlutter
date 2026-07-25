@@ -243,6 +243,19 @@ class ChatOriginEvent {
 }
 
 extension ChatSessionX on ChatSession {
+  /// Reserved [sessionVars] key holding the cumulative number of messages
+  /// deleted from this session through any per-message delete path (single
+  /// delete, bulk delete). Persisted here so the count survives the messages
+  /// themselves being removed. It is intentionally *not* bumped when the whole
+  /// chat/session is deleted — that removes the session (and this counter)
+  /// along with it, so chat-deletion is excluded from the "Deleted" statistic.
+  static const deletedMessagesVarKey = '__deletedMessages';
+
+  /// Cumulative count of messages deleted from this session. See
+  /// [deletedMessagesVarKey].
+  int get deletedMessageCount =>
+      int.tryParse(sessionVars[deletedMessagesVarKey] ?? '') ?? 0;
+
   String get historyText => messages
       .where((m) => (m.role == 'user' || m.role == 'assistant') && !m.isHidden)
       .map((m) => m.content)

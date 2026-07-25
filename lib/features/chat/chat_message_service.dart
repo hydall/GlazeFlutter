@@ -123,8 +123,17 @@ class ChatMessageService {
       ledgerReconciliationCheckpointRepoProvider,
     );
     final chatRepo = _ref.read(chatRepoProvider);
+    // Track the running count of deleted messages so the chat statistics can
+    // report it after the messages themselves are gone. Every per-message
+    // delete path (single + bulk, native menu, selection mode) funnels through
+    // here, so this is the single choke point. Chat deletion drops the whole
+    // session and this counter with it, which is the one excluded case.
+    final updatedVars = Map<String, String>.from(session.sessionVars)
+      ..[ChatSessionX.deletedMessagesVarKey] =
+          (session.deletedMessageCount + validIndices.length).toString();
     final updated = session.copyWith(
       messages: newMessages,
+      sessionVars: updatedVars,
       updatedAt: currentTimestampSeconds(),
     );
 

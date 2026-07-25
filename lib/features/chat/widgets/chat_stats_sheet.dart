@@ -10,6 +10,7 @@ import '../../../core/state/chat_session_ops_provider.dart';
 import '../../../core/services/model_usage_service.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../../../core/models/character.dart';
+import '../../../core/models/chat_message.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/utils/time_formatter.dart';
 import '../../../shared/widgets/rolling_number.dart';
@@ -102,6 +103,10 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
 
   Future<void> _initData() async {
     _allCharacters = ref.read(charactersProvider).value ?? [];
+    // The session list is cached and is not invalidated on message deletion, so
+    // force a fresh read from the DB. Otherwise counts (deleted messages in
+    // particular) can lag behind recent edits.
+    ref.invalidate(chatSessionOpsProvider);
     await _loadTopModels();
     await _calculateStats();
     if (mounted) {
@@ -145,7 +150,8 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
   }
 
   Future<void> _calculateStats() async {
-    final allSessions = ref.read(chatSessionOpsProvider).value ?? [];
+    final allSessions = await ref.read(chatSessionOpsProvider.future);
+    if (!mounted) return;
     final currentSession =
         ref.read(chatProvider(widget.initialCharId)).value?.session;
     final currentSessionId = currentSession?.id;
@@ -160,11 +166,18 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
       final isCurrentChar = session.characterId == _selectedCharId;
       final isCurrentChat = isCurrentChar && session.id == currentSessionId;
 
+      // Deleted messages are removed from the session, so they can't be counted
+      // from the live message list. Read the persisted per-session counter that
+      // `ChatMessageService.deleteMessages` maintains instead.
+      final sessionDeleted = session.deletedMessageCount;
+      genDel += sessionDeleted;
+      if (isCurrentChar) charDel += sessionDeleted;
+      if (isCurrentChat) chatDel += sessionDeleted;
+
       for (final msg in session.messages) {
         final int tokens = (msg.tokens?.toInt()) ?? (msg.content.length ~/ 4);
         final int chars = msg.content.length.toInt();
         final int regens = msg.swipes.length > 1 ? (msg.swipes.length - 1).toInt() : 0;
-        final isDeleted = msg.isHidden;
         final ts = msg.timestamp;
 
         // General
@@ -172,7 +185,6 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
         genTok += tokens;
         genChar += chars;
         genRegen += regens;
-        if (isDeleted) genDel++;
         if (ts != null && (genFirstMsg == null || ts < genFirstMsg)) {
           genFirstMsg = ts;
         }
@@ -183,7 +195,6 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
           charTok += tokens;
           charChar += chars;
           charRegen += regens;
-          if (isDeleted) charDel++;
           if (ts != null && (charFirstMsg == null || ts < charFirstMsg)) {
             charFirstMsg = ts;
           }
@@ -195,7 +206,6 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
           chatTok += tokens;
           chatChar += chars;
           chatRegen += regens;
-          if (isDeleted) chatDel++;
           if (ts != null && (chatFirstMsg == null || ts < chatFirstMsg)) {
             chatFirstMsg = ts;
           }

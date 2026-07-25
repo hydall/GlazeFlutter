@@ -345,8 +345,15 @@ class ChatSessionService {
     // Drop the branch stamp so a cleared session reads as freshly created
     // ("Created on …" from the new greeting) rather than keeping a stale
     // "Branched on …" marker.
+    //
+    // Clearing removes every existing message, so fold them into the persisted
+    // deleted-messages counter for the statistics sheet. This is a message
+    // deletion, not a chat deletion (the session survives, reset to a fresh
+    // greeting), so it is included in the "Deleted" count.
     final clearedVars = Map<String, String>.from(session.sessionVars)
-      ..remove('branchedAt');
+      ..remove('branchedAt')
+      ..[ChatSessionX.deletedMessagesVarKey] =
+          (session.deletedMessageCount + session.messages.length).toString();
     final clearedSession = session.copyWith(
       messages: initialMessages,
       sessionVars: clearedVars,
