@@ -68,6 +68,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       children: [
         MenuGroup(
           header: 'tab_general'.tr(),
+          headerIcon: Icons.tune_rounded,
           items: [
             MenuItem(
               icon: Icons.palette_outlined,
