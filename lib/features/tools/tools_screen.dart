@@ -185,87 +185,97 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                 onTap: () => context.push('/tools/presets'),
               ),
               const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _GridTile(
-                      iconPath: _kIconApi,
-                      title: 'tab_api'.tr(),
-                      subtitle: 'tools_api_subtitle'.tr(),
-                      showStatusDot: true,
-                      onTap: () => context.push('/tools/api'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _GridTile(
-                      iconPath: _kIconLorebook,
-                      title: 'menu_lorebooks'.tr(),
-                      subtitle: 'tools_lorebooks_subtitle'.tr(),
-                      onTap: () => context.push('/tools/lorebooks'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _GridTile(
-                      iconPath: _kIconRegex,
-                      title: 'menu_regex'.tr(),
-                      subtitle: 'tools_regex_subtitle'.tr(),
-                      onTap: () => context.push('/tools/regex'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _GridTile(
-                      iconPath: _kIconStats,
-                      title: 'stats_title'.tr(),
-                      subtitle: 'stats_subtitle'.tr(),
-                      onTap: () => showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        useRootNavigator: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => const ChatStatsSheet(initialCharId: ''),
+              // IntrinsicHeight + stretch so both tiles in a row share the
+              // taller one's height and fill the whole allocated cell.
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _GridTile(
+                        iconPath: _kIconApi,
+                        title: 'tab_api'.tr(),
+                        subtitle: 'tools_api_subtitle'.tr(),
+                        showStatusDot: true,
+                        onTap: () => context.push('/tools/api'),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _GridTile(
-                      iconPath: _kIconImageGen,
-                      title: 'imggen_title'.tr(),
-                      subtitle: 'imggen_subtitle'.tr(),
-                      onTap: () => showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        useRootNavigator: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => const ImageGenSheet(),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _GridTile(
+                        iconPath: _kIconLorebook,
+                        title: 'menu_lorebooks'.tr(),
+                        subtitle: 'tools_lorebooks_subtitle'.tr(),
+                        onTap: () => context.push('/tools/lorebooks'),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Studio only appears once its experimental master switch is on.
-                  Expanded(
-                    child: studioEnabled
-                        ? _GridTile(
-                            icon: Icons.movie_filter_outlined,
-                            title: 'menu_studio'.tr(),
-                            subtitle: 'tools_studio_subtitle'.tr(),
-                            onTap: _openStudio,
-                          )
-                        : const SizedBox(),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _GridTile(
+                        iconPath: _kIconRegex,
+                        title: 'menu_regex'.tr(),
+                        subtitle: 'tools_regex_subtitle'.tr(),
+                        onTap: () => context.push('/tools/regex'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _GridTile(
+                        iconPath: _kIconStats,
+                        title: 'stats_title'.tr(),
+                        subtitle: 'stats_subtitle'.tr(),
+                        onTap: () => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          useRootNavigator: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (_) => const ChatStatsSheet(initialCharId: ''),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _GridTile(
+                        iconPath: _kIconImageGen,
+                        title: 'imggen_title'.tr(),
+                        subtitle: 'imggen_subtitle'.tr(),
+                        onTap: () => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          useRootNavigator: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (_) => const ImageGenSheet(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Studio only appears once its experimental master switch is on.
+                    Expanded(
+                      child: studioEnabled
+                          ? _GridTile(
+                              icon: Icons.movie_filter_outlined,
+                              title: 'menu_studio'.tr(),
+                              subtitle: 'tools_studio_subtitle'.tr(),
+                              onTap: _openStudio,
+                            )
+                          : const SizedBox(),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
