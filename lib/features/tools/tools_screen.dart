@@ -7,6 +7,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/state/active_selection_provider.dart';
+import '../../core/state/active_studio_preset_provider.dart';
+import '../../core/state/studio_feature_provider.dart';
 import '../../core/utils/platform_paths.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
@@ -18,6 +20,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glass_surface.dart';
 import '../chat/widgets/chat_stats_sheet.dart';
 import '../image_gen/widgets/image_gen_sheet.dart';
+import '../studio/screens/studio_preset_editor_screen.dart';
 
 class PersonaInfo {
   final String name;
@@ -111,6 +114,18 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
     super.dispose();
   }
 
+  /// Opens the Studio preset editor for the globally active Studio preset.
+  /// Studio presets are app-wide, so this needs no active chat session.
+  Future<void> _openStudio() async {
+    final presetId = await ref.read(activeStudioPresetProvider.future);
+    if (!mounted) return;
+    await Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StudioPresetEditorScreen(presetId: presetId),
+      ),
+    );
+  }
+
   /// Animates the list back to the top (guarded against a detached / multiply
   /// attached controller).
   void _scrollToTop() {
@@ -129,6 +144,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
     final personaInfo = ref.watch(_activePersonaInfoProvider);
     final resolvedAvatar = ref.watch(_resolvedPersonaAvatarPathProvider).value;
     final presetName = ref.watch(_activePresetNameProvider).value ?? 'label_default'.tr();
+    final studioEnabled = ref.watch(studioFeatureEnabledProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0;
 
     // Re-tap on the active Tools navbar tab → scroll to top (sub-routes are
@@ -230,7 +246,17 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(child: SizedBox()),
+                  // Studio only appears once its experimental master switch is on.
+                  Expanded(
+                    child: studioEnabled
+                        ? _GridTile(
+                            icon: Icons.movie_filter_outlined,
+                            title: 'menu_studio'.tr(),
+                            subtitle: 'tools_studio_subtitle'.tr(),
+                            onTap: _openStudio,
+                          )
+                        : const SizedBox(),
+                  ),
                 ],
               ),
             ],
@@ -398,6 +424,7 @@ class _AvatarGradientPlaceholder extends StatelessWidget {
 
 class _GridTile extends StatelessWidget {
   final String? iconPath;
+  final IconData? icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -405,11 +432,13 @@ class _GridTile extends StatelessWidget {
 
   const _GridTile({
     this.iconPath,
+    this.icon,
     required this.title,
     required this.subtitle,
     required this.onTap,
     this.showStatusDot = false,
-  });
+  }) : assert(iconPath != null || icon != null,
+            'Provide either an SVG iconPath or an IconData icon');
 
   @override
   Widget build(BuildContext context) {
@@ -434,11 +463,17 @@ class _GridTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                    child: _svgPath(
-                      iconPath!,
-                      fill: context.cs.onSurfaceVariant,
-                      size: 22,
-                    ),
+                    child: iconPath != null
+                        ? _svgPath(
+                            iconPath!,
+                            fill: context.cs.onSurfaceVariant,
+                            size: 22,
+                          )
+                        : Icon(
+                            icon,
+                            color: context.cs.onSurfaceVariant,
+                            size: 22,
+                          ),
                   ),
                 ),
                 if (showStatusDot)

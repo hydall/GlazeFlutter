@@ -1701,6 +1701,7 @@
   "tools_api_subtitle": "Эндпоинты и модели",
   "tools_lorebooks_subtitle": "Лорбуки",
   "tools_regex_subtitle": "Скрипты поиска и замены",
+  "tools_studio_subtitle": "Агентные блоки пресета",
   "ext_block_delete_confirm": "Блок будет удалён из базы данных. Это нельзя отменить.",
   "preset_not_found": "Пресет не найден",
   "common_close": "Закрыть",
