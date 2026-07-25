@@ -289,12 +289,14 @@ class MenuSwitchItem extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        label,
-                        style: TextStyle(
-                          color: context.cs.onSurfaceVariant,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
+                      Flexible(
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            color: context.cs.onSurfaceVariant,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                          ),
                         ),
                       ),
                       if (helpTerm != null) HelpTip(term: helpTerm!),
