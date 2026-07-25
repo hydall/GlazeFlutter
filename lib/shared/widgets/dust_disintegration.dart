@@ -120,9 +120,11 @@ class DustPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (data.particles.isEmpty) return;
     final paint = Paint()..style = PaintingStyle.fill;
-    // Slightly overlap cells so the card looks solid before it breaks up.
-    final double baseW = size.width / data.columns * 1.3;
-    final double baseH = size.height / data.rows * 1.3;
+    // Overlap cells so the round fragments still read as a solid card before
+    // it breaks up (circles cover less of a cell than the equivalent rect,
+    // so they need a bit more overlap to hide the gaps between them).
+    final double baseW = size.width / data.columns * 1.55;
+    final double baseH = size.height / data.rows * 1.55;
     final double travel = size.height * 0.55;
     final double window = 1 - _sweep;
 
@@ -141,12 +143,9 @@ class DustPainter extends CustomPainter {
       final double fade = 1 - lt;
       final double scale = 1 - lt * 0.55;
       paint.color = p.color.withValues(alpha: p.color.a * fade);
-      canvas.drawRect(
-        Rect.fromCenter(
-          center: Offset(cx, cy),
-          width: baseW * scale,
-          height: baseH * scale,
-        ),
+      canvas.drawCircle(
+        Offset(cx, cy),
+        math.max(baseW, baseH) / 2 * scale,
         paint,
       );
     }

@@ -108,6 +108,7 @@ class _ChatHistoryListState extends ConsumerState<ChatHistoryList> {
             return _SessionTile(
               info: filtered[i - 1],
               collapsed: widget.collapsed,
+              index: i - 1,
             );
           },
         );
@@ -313,6 +314,7 @@ class _ChatHistoryGroupSectionState extends State<_ChatHistoryGroupSection>
                           _SessionTile(
                             info: widget.sessions[i],
                             isGrouped: true,
+                            index: i,
                           ),
                         ],
                       ],
@@ -328,16 +330,63 @@ class _ChatHistoryGroupSectionState extends State<_ChatHistoryGroupSection>
   }
 }
 
-class _SessionTile extends ConsumerWidget {
+class _SessionTile extends ConsumerStatefulWidget {
   final ChatSessionInfo info;
   final bool isGrouped;
   final bool collapsed;
+
+  /// Row position within its list — staggers the fade-in so rows cascade in
+  /// on load instead of popping in all at once. Capped below so long lists
+  /// don't take forever to finish appearing.
+  final int index;
 
   const _SessionTile({
     required this.info,
     this.isGrouped = false,
     this.collapsed = false,
+    this.index = 0,
   });
+
+  @override
+  ConsumerState<_SessionTile> createState() => _SessionTileState();
+}
+
+class _SessionTileState extends ConsumerState<_SessionTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _entryCtrl;
+  late final Animation<double> _fadeAnim;
+  late final Animation<Offset> _slideAnim;
+
+  ChatSessionInfo get info => widget.info;
+
+  @override
+  void initState() {
+    super.initState();
+    _entryCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    final curve = CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut);
+    _fadeAnim = curve;
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(curve);
+    final delay = Duration(milliseconds: (widget.index * 30).clamp(0, 240));
+    if (delay > Duration.zero) {
+      Future.delayed(delay, () {
+        if (mounted) _entryCtrl.forward();
+      });
+    } else {
+      _entryCtrl.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entryCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -350,9 +399,16 @@ class _SessionTile extends ConsumerWidget {
         ref.watch(
           unreadSessionsProvider.select((s) => s.contains(info.sessionId)),
         );
-    if (collapsed) return _buildCollapsedTile(context, ref, generating, unread);
-    if (isGrouped) return _buildGroupedTile(context, ref, generating, unread);
-    return _buildFullTile(context, ref, generating, unread);
+    final Widget tile = widget.collapsed
+        ? _buildCollapsedTile(context, ref, generating, unread)
+        : widget.isGrouped
+            ? _buildGroupedTile(context, ref, generating, unread)
+            : _buildFullTile(context, ref, generating, unread);
+
+    return FadeTransition(
+      opacity: _fadeAnim,
+      child: SlideTransition(position: _slideAnim, child: tile),
+    );
   }
 
   Widget _buildCollapsedTile(
