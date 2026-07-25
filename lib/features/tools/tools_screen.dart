@@ -176,7 +176,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                 isAvatar: true,
                 onTap: () => context.push('/tools/personas'),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               _HeroCard(
                 iconPath: _kIconPresets,
                 title: 'tab_presets'.tr(),
@@ -184,7 +184,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                 backgroundAsset: presetImage,
                 onTap: () => context.push('/tools/presets'),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -197,7 +197,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                       onTap: () => context.push('/tools/api'),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: _GridTile(
                       iconPath: _kIconLorebook,
@@ -208,7 +208,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
@@ -219,7 +219,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                       onTap: () => context.push('/tools/regex'),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: _GridTile(
                       iconPath: _kIconStats,
@@ -236,7 +236,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
@@ -253,7 +253,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   // Studio only appears once its experimental master switch is on.
                   Expanded(
                     child: studioEnabled

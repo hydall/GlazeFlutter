@@ -6,7 +6,25 @@
       "description": "Hydall's curated picks",
       "imageUrl": "https://raw.githubusercontent.com/danvitv/GlazeFlutter/master/picks/hydall/ipuxiv.jpg",
       "subfolders": [],
-      "characters": []
+      "characters": [
+        {
+          "id": "walter-simmons-private-investigator",
+          "name": "Walter",
+          "fileName": "Walter_Simmons_Private_Investigator.png",
+          "hash": "2ee001a8da14b3f140aa2fd10925a43645238ad24e9e8cb00d663996ec2da83e",
+          "description": "A hard-boiled private investigator.",
+          "tags": [
+            "Male",
+            "OC",
+            "Detective",
+            "AnyPOV",
+            "Dead Dove",
+            "Switch",
+            "#2025"
+          ],
+          "creator": "https://janitorai.com/profiles/4036183c-8154-4dce-9255-3dc61768f82e"
+        }
+      ]
     },
     {
       "id": "danvi",
