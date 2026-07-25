@@ -1,10 +1,19 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 
+import '../../../core/services/character_book_converter.dart';
+import '../../../core/state/character_provider.dart';
+import '../../../core/state/db_provider.dart';
+import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_toast.dart';
+import '../../character_gallery/gallery_provider.dart';
 import '../../settings/app_settings_provider.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
@@ -116,7 +125,9 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
                 foregroundColor: context.cs.onPrimary,
               ),
               child: Text(
-                _loading ? 'catalog_importing'.tr() : 'action_import'.tr(),
+                _loading
+                    ? 'catalog_importing'.tr()
+                    : 'action_import_by_link'.tr(),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ),
@@ -145,6 +156,14 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
     if (_isSaucepanCompanionUrl(url) &&
         ref.read(saucepanAccountProvider).isLoggedIn) {
       await _extractSaucepanLocal(url);
+      return;
+    }
+
+    // Direct links to a raw card file (…/foo.json or …/foo.png) are downloaded
+    // and parsed on-device with the same importer used for local file picks —
+    // no remote extraction service involved.
+    if (_isDirectCardFileUrl(url)) {
+      await _importDirectFile(url);
       return;
     }
 
@@ -227,6 +246,74 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
             context, 'Imported ${result.character.charData.name}');
       }
     } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  /// True when the URL points straight at a raw card file (`.json` or `.png`),
+  /// e.g. a GitHub `raw.githubusercontent.com/…/card.png` or a direct CDN link.
+  bool _isDirectCardFileUrl(String url) {
+    final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
+    return path.endsWith('.json') || path.endsWith('.png');
+  }
+
+  /// Downloads a direct `.json`/`.png` card link and imports it locally through
+  /// [CharacterImporter], persisting the character, its lorebook, and any
+  /// embedded gallery images — mirroring the local file-pick import flow.
+  Future<void> _importDirectFile(String url) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _phase = 'downloading';
+    });
+    try {
+      final res = await Dio().get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = Uint8List.fromList(res.data ?? const []);
+      if (bytes.isEmpty) {
+        throw const FormatException('Empty response from that link.');
+      }
+
+      final fileName = p.basename(Uri.parse(url).path);
+      final importer = await ref.read(characterImporterProvider.future);
+      final result = await importer.importFromBytes(bytes, fileName);
+      if (!mounted) return;
+
+      await ref.read(charactersProvider.notifier).add(result.character);
+
+      if (result.characterBookData != null) {
+        final lorebook = convertCharacterBook(
+          result.characterBookData!,
+          result.character.id,
+        );
+        await ref.read(lorebooksProvider.notifier).put(lorebook);
+      }
+
+      if (result.galleryImages != null) {
+        final galleryService = await ref.read(galleryServiceProvider.future);
+        for (final img in result.galleryImages!) {
+          await galleryService.addImageBytes(
+            result.character.id,
+            img.bytes,
+            img.ext,
+            label: img.label,
+          );
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        GlazeToast.show(context, 'Imported ${result.character.name}');
+      }
+    } catch (e) {
+      debugPrint('[import_url_dialog] direct file import failed: $e');
       if (mounted) {
         setState(() {
           _loading = false;
