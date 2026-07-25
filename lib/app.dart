@@ -74,6 +74,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
     loadLorebookActivations(ref);
     loadLorebookSettings(ref);
     seedDefaultPresets(ref);
+    seedFeaturedPresets(ref);
     if (!widget.skipStartup) {
       _warmInitialListProviders();
     }

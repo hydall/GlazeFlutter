@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/services/featured_presets.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/active_studio_preset_provider.dart';
 import '../../core/state/studio_feature_provider.dart';
@@ -61,6 +62,11 @@ final _activePresetNameProvider = FutureProvider<String>((ref) async {
       .read(presetListProvider.notifier)
       .getPresetById(activeId);
   return preset?.name ?? 'label_default'.tr();
+});
+
+/// Cover image asset for the active preset, when it's a bundled featured preset.
+final _activePresetImageProvider = Provider<String?>((ref) {
+  return featuredPresetImageAsset(ref.watch(activePresetIdProvider));
 });
 
 // SVG paths matching ToolsView.vue
@@ -144,6 +150,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
     final personaInfo = ref.watch(_activePersonaInfoProvider);
     final resolvedAvatar = ref.watch(_resolvedPersonaAvatarPathProvider).value;
     final presetName = ref.watch(_activePresetNameProvider).value ?? 'label_default'.tr();
+    final presetImage = ref.watch(_activePresetImageProvider);
     final studioEnabled = ref.watch(studioFeatureEnabledProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0;
 
@@ -174,6 +181,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                 iconPath: _kIconPresets,
                 title: 'tab_presets'.tr(),
                 subtitle: presetName,
+                backgroundAsset: presetImage,
                 onTap: () => context.push('/tools/presets'),
               ),
               const SizedBox(height: 16),
@@ -273,6 +281,10 @@ class _HeroCard extends StatelessWidget {
   final String subtitle;
   final bool isAvatar;
   final String? avatarPath;
+
+  /// Bundled asset shown as the card background (e.g. a featured preset's cover).
+  /// Applies only to the non-avatar layout and does not change the card size.
+  final String? backgroundAsset;
   final VoidCallback onTap;
 
   const _HeroCard({
@@ -281,6 +293,7 @@ class _HeroCard extends StatelessWidget {
     required this.subtitle,
     this.isAvatar = false,
     this.avatarPath,
+    this.backgroundAsset,
     required this.onTap,
   });
 
@@ -321,6 +334,29 @@ class _HeroCard extends StatelessWidget {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.black.withValues(alpha: 0.3),
+                        Colors.black.withValues(alpha: 0.8),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ] else if (backgroundAsset != null) ...[
+              Positioned.fill(
+                child: Image.asset(
+                  backgroundAsset!,
+                  key: ValueKey(backgroundAsset),
+                  fit: BoxFit.cover,
+                ),
+              ),
+              // Dark scrim so the white label/subtitle stay legible over art.
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.35),
                         Colors.black.withValues(alpha: 0.8),
                       ],
                     ),

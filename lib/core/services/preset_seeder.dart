@@ -4,9 +4,11 @@ import '../models/preset.dart';
 import '../state/db_provider.dart';
 import '../state/shared_prefs_provider.dart';
 import '../utils/time_helpers.dart';
+import 'featured_presets.dart';
 import 'preset_defaults.dart';
 
 const _seededKey = 'defaultPresetsSeeded';
+const _featuredSeededKey = 'featuredPresetsSeeded_v1';
 
 Future<void> seedDefaultPresets(WidgetRef ref) async {
   final prefs = await ref.read(sharedPreferencesProvider.future);
@@ -54,4 +56,21 @@ Future<void> seedDefaultPresets(WidgetRef ref) async {
   ));
 
   await prefs.setBool(_seededKey, true);
+}
+
+/// Seeds the standard "featured" presets from hydall/Glaze (Shino, Fawnie,
+/// MicroCot, Renri) with their cover images. Runs once (own storage key) so
+/// existing installs pick them up too, and never clobbers a copy the user may
+/// already have under the same id.
+Future<void> seedFeaturedPresets(WidgetRef ref) async {
+  final prefs = await ref.read(sharedPreferencesProvider.future);
+  if (prefs.getBool(_featuredSeededKey) == true) return;
+
+  final repo = ref.read(presetRepoProvider);
+  for (final f in featuredPresets) {
+    if (await repo.getById(f.id) != null) continue;
+    await repo.put(await loadFeaturedPreset(f));
+  }
+
+  await prefs.setBool(_featuredSeededKey, true);
 }
