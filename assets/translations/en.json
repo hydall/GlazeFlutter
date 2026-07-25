@@ -1373,7 +1373,7 @@
   "memory_selector_query_max_chars_help": "After collecting the recent turns, Glaze trims the search query to this many characters before keyword/vector lookup. Smaller values focus on the newest text; larger values include more surrounding context but may dilute the search.",
   "our_picks_hidden_toast": "Our Picks has been hidden. You can restore it in settings.",
   "our_picks_restore_hint": "can be restored in app settings",
-  "about_join_community": "Join the community",
+  "about_join_community": "Suggest features, get help and integrate with the community",
   "about_source_code": "Source code & issues",
   "about_support_project": "Support the project",
   "menu_virtual_keyboard_send": "Virtual Keyboard Send",
