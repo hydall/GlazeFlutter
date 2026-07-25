@@ -113,9 +113,15 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
     _allSessions = await ref.read(chatRepoProvider).getAllSessions();
     if (!mounted) return;
 
+    // Order by most-recent interaction (message timestamps, branch/creation and
+    // updatedAt all considered — same signal that sorts the session list) so the
+    // pickers default to, and list, the last chat/character the user engaged
+    // with rather than whatever the DB happened to return first.
+    _allSessions.sort((a, b) => b.lastActivityMs.compareTo(a.lastActivityMs));
+
     // Global entry point (opened from Tools with no character/chat context):
-    // seed sensible defaults so every tab shows data immediately instead of
-    // waiting for the user to pick a character/chat.
+    // seed defaults from the last-interacted chat so every tab shows data
+    // immediately instead of waiting for the user to pick a character/chat.
     if (_selectedCharId == null || _selectedCharId!.isEmpty) {
       _selectedCharId = _allSessions.isNotEmpty
           ? _allSessions.first.characterId
