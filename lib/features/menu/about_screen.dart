@@ -19,8 +19,6 @@ import '../settings/app_settings_provider.dart';
 class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});
 
-  static final _tagline = 'about_description'.tr();
-
   Future<void> _openLink(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
@@ -44,14 +42,10 @@ class AboutScreen extends ConsumerWidget {
         padding: EdgeInsets.fromLTRB(0, topPad + 8, 0, 40),
         children: [
           const _HeroCard(),
-          const SizedBox(height: 12),
           const _UpdatesSection(),
-          const SizedBox(height: 12),
           _CommunitySection(lang: lang, onLink: _openLink),
-          const SizedBox(height: 12),
           const _AuthorsSection(),
-          const SizedBox(height: 12),
-          const _LicenseSection(),
+          _LicenseSection(onLink: _openLink),
         ],
       ),
     );
@@ -125,7 +119,7 @@ class _HeroCard extends StatelessWidget {
                   ],
                   const SizedBox(height: 16),
                   Text(
-                    AboutScreen._tagline,
+                    'about_description'.tr(),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
@@ -165,6 +159,22 @@ class _CommunitySection extends StatelessWidget {
           brandColor: context.cs.onSurface,
           onTap: () => onLink('https://github.com/hydall/GlazeFlutter'),
         ),
+        if (lang == 'en')
+          _LinkTile(
+            svgAsset: 'assets/logos/discord.svg',
+            label: 'about_discord'.tr(),
+            subtitle: 'about_join_community'.tr(),
+            brandColor: const Color(0xFF5865F2),
+            onTap: () => onLink('https://discord.gg/jnGhd7p6Ht'),
+          )
+        else
+          _LinkTile(
+            svgAsset: 'assets/logos/telegram.svg',
+            label: 'about_telegram'.tr(),
+            subtitle: 'about_join_community'.tr(),
+            brandColor: const Color(0xFF2AABEE),
+            onTap: () => onLink('https://t.me/glazeapp'),
+          ),
         if (lang == 'ru')
           _LinkTile(
             svgAsset: 'assets/logos/boosty.svg',
@@ -375,7 +385,9 @@ class _VersionBadgeState extends ConsumerState<_VersionBadge> {
 }
 
 class _LicenseSection extends StatelessWidget {
-  const _LicenseSection();
+  final Future<void> Function(String url) onLink;
+
+  const _LicenseSection({required this.onLink});
 
   @override
   Widget build(BuildContext context) {
@@ -389,19 +401,35 @@ class _LicenseSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: cs.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'AGPL-3.0',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: cs.primary,
-                    letterSpacing: 0.3,
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onLink('https://www.gnu.org/licenses/agpl-3.0.html'),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'AGPL-3.0',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: cs.primary,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.open_in_new_rounded,
+                        size: 13,
+                        color: cs.primary,
+                      ),
+                    ],
                   ),
                 ),
               ),

@@ -125,127 +125,42 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     double topPad,
     double bottomPad,
   ) {
+    final notifier = ref.read(appSettingsProvider.notifier);
     return ListView(
       key: const ValueKey('interface'),
       padding: EdgeInsets.fromLTRB(0, topPad + 8, 0, bottomPad),
       children: [
+        // ── Desktop ──────────────────────────────────────────────────────
+        // Settings that only take effect on wide / physical-keyboard setups.
         MenuGroup(
+          header: 'settings_group_desktop'.tr(),
+          headerIcon: Icons.desktop_windows_outlined,
           items: [
-            MenuSwitchItem(
-              label: 'menu_battery_saver_ui'.tr(),
-              description: 'desc_battery_saver_ui'.tr(),
-              value: s.batterySaver,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(batterySaver: v)),
-            ),
             MenuSwitchItem(
               label: 'menu_enter_to_send'.tr(),
               description: 'desc_enter_to_send'.tr(),
               value: s.enterToSend,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(enterToSend: v)),
-            ),
-            MenuSwitchItem(
-              label: 'menu_virtual_keyboard_send'.tr(),
-              description: 'desc_virtual_keyboard_send'.tr(),
-              value: s.virtualKeyboardSend,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(virtualKeyboardSend: v)),
-            ),
-            if (Haptics.isConfigurable)
-              MenuSwitchItem(
-                label: 'menu_haptic_feedback'.tr(),
-                description: 'desc_haptic_feedback'.tr(),
-                value: s.hapticFeedback,
-                onChanged: (v) => ref
-                    .read(appSettingsProvider.notifier)
-                    .save(s.copyWith(hapticFeedback: v)),
-              ),
-            if (Haptics.isMessageVibrationConfigurable)
-              MenuSwitchItem(
-                label: 'menu_message_vibration'.tr(),
-                description: 'desc_message_vibration'.tr(),
-                value: s.messageVibration,
-                onChanged: (v) => ref
-                    .read(appSettingsProvider.notifier)
-                    .save(s.copyWith(messageVibration: v)),
-              ),
-          ],
-        ),
-        MenuGroup(
-          header: 'menu_interface_settings'.tr(),
-          items: [
-            MenuSwitchItem(
-              label: 'menu_dialog_grouping'.tr(),
-              description: 'desc_dialog_grouping'.tr(),
-              value: s.groupDialogs,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(groupDialogs: v)),
-            ),
-            MenuSwitchItem(
-              label: 'menu_hide_help_tips'.tr(),
-              description: 'desc_hide_help_tips'.tr(),
-              value: s.hideTooltips,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(hideTooltips: v)),
-            ),
-            MenuSwitchItem(
-              label: 'menu_show_our_picks'.tr(),
-              description: 'desc_show_our_picks'.tr(),
-              value: s.showOurPicks,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(showOurPicks: v)),
+              onChanged: (v) => notifier.save(s.copyWith(enterToSend: v)),
             ),
             MenuSwitchItem(
               label: 'menu_force_mobile_layout'.tr(),
               description: 'desc_force_mobile_layout'.tr(),
               value: s.forceMobileLayout,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(forceMobileLayout: v)),
-            ),
-            MenuSwitchItem(
-              label: 'menu_open_card_after_import'.tr(),
-              description: 'desc_open_card_after_import'.tr(),
-              value: s.openCardAfterImport,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(openCardAfterImport: v)),
-            ),
-            MenuSwitchItem(
-              label: 'menu_use_standard_randomizer'.tr(),
-              description: 'desc_use_standard_randomizer'.tr(),
-              value: s.useStandardRandomizer,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(useStandardRandomizer: v)),
-            ),
-            MenuSwitchItem(
-              label: 'menu_extract_janitor_locally'.tr(),
-              description: 'desc_extract_janitor_locally'.tr(),
-              value: s.extractJanitorLocally,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(extractJanitorLocally: v)),
+              onChanged: (v) => notifier.save(s.copyWith(forceMobileLayout: v)),
             ),
           ],
         ),
+        // ── Chat ─────────────────────────────────────────────────────────
+        // Everything scoped to the chat screen and message rendering.
         MenuGroup(
-          header: 'menu_message_settings'.tr(),
+          header: 'settings_group_chat'.tr(),
+          headerIcon: Icons.chat_bubble_outline_rounded,
           items: [
             MenuSwitchItem(
-              label: 'menu_disable_swipe_regeneration'.tr(),
-              description: 'desc_disable_swipe_regeneration'.tr(),
-              value: s.disableSwipeRegeneration,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(disableSwipeRegeneration: v)),
+              label: 'menu_dialog_grouping'.tr(),
+              description: 'desc_dialog_grouping'.tr(),
+              value: s.groupDialogs,
+              onChanged: (v) => notifier.save(s.copyWith(groupDialogs: v)),
             ),
             MenuItem(
               label: 'menu_chat_layout'.tr(),
@@ -255,36 +170,105 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               onTap: () => _showLayoutPicker(context, ref),
             ),
             MenuSwitchItem(
+              label: 'menu_disable_swipe_regeneration'.tr(),
+              description: 'desc_disable_swipe_regeneration'.tr(),
+              value: s.disableSwipeRegeneration,
+              onChanged: (v) =>
+                  notifier.save(s.copyWith(disableSwipeRegeneration: v)),
+            ),
+            MenuSwitchItem(
+              label: 'menu_virtual_keyboard_send'.tr(),
+              description: 'desc_virtual_keyboard_send'.tr(),
+              value: s.virtualKeyboardSend,
+              onChanged: (v) =>
+                  notifier.save(s.copyWith(virtualKeyboardSend: v)),
+            ),
+            if (Haptics.isMessageVibrationConfigurable)
+              MenuSwitchItem(
+                label: 'menu_message_vibration'.tr(),
+                description: 'desc_message_vibration'.tr(),
+                value: s.messageVibration,
+                onChanged: (v) =>
+                    notifier.save(s.copyWith(messageVibration: v)),
+              ),
+            MenuSwitchItem(
               label: 'menu_hide_msg_id'.tr(),
               description: 'desc_hide_msg_id'.tr(),
               value: s.hideMessageId,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(hideMessageId: v)),
+              onChanged: (v) => notifier.save(s.copyWith(hideMessageId: v)),
             ),
             MenuSwitchItem(
               label: 'menu_hide_gen_time'.tr(),
               description: 'desc_hide_gen_time'.tr(),
               value: s.hideGenerationTime,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(hideGenerationTime: v)),
+              onChanged: (v) =>
+                  notifier.save(s.copyWith(hideGenerationTime: v)),
             ),
             MenuSwitchItem(
               label: 'menu_hide_token_count'.tr(),
               description: 'desc_hide_token_count'.tr(),
               value: s.hideTokenCount,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(hideTokenCount: v)),
+              onChanged: (v) => notifier.save(s.copyWith(hideTokenCount: v)),
             ),
             MenuSwitchItem(
               label: 'menu_add_block_at_top'.tr(),
               description: 'desc_add_block_at_top'.tr(),
               value: s.addBlockAtTop,
-              onChanged: (v) => ref
-                  .read(appSettingsProvider.notifier)
-                  .save(s.copyWith(addBlockAtTop: v)),
+              onChanged: (v) => notifier.save(s.copyWith(addBlockAtTop: v)),
+            ),
+          ],
+        ),
+        // ── General interface ────────────────────────────────────────────
+        // App-wide UI behaviour that isn't tied to desktop or the chat view.
+        MenuGroup(
+          header: 'settings_group_general_ui'.tr(),
+          headerIcon: Icons.tune_rounded,
+          items: [
+            MenuSwitchItem(
+              label: 'menu_battery_saver_ui'.tr(),
+              description: 'desc_battery_saver_ui'.tr(),
+              value: s.batterySaver,
+              onChanged: (v) => notifier.save(s.copyWith(batterySaver: v)),
+            ),
+            if (Haptics.isConfigurable)
+              MenuSwitchItem(
+                label: 'menu_haptic_feedback'.tr(),
+                description: 'desc_haptic_feedback'.tr(),
+                value: s.hapticFeedback,
+                onChanged: (v) => notifier.save(s.copyWith(hapticFeedback: v)),
+              ),
+            MenuSwitchItem(
+              label: 'menu_hide_help_tips'.tr(),
+              description: 'desc_hide_help_tips'.tr(),
+              value: s.hideTooltips,
+              onChanged: (v) => notifier.save(s.copyWith(hideTooltips: v)),
+            ),
+            MenuSwitchItem(
+              label: 'menu_show_our_picks'.tr(),
+              description: 'desc_show_our_picks'.tr(),
+              value: s.showOurPicks,
+              onChanged: (v) => notifier.save(s.copyWith(showOurPicks: v)),
+            ),
+            MenuSwitchItem(
+              label: 'menu_open_card_after_import'.tr(),
+              description: 'desc_open_card_after_import'.tr(),
+              value: s.openCardAfterImport,
+              onChanged: (v) =>
+                  notifier.save(s.copyWith(openCardAfterImport: v)),
+            ),
+            MenuSwitchItem(
+              label: 'menu_use_standard_randomizer'.tr(),
+              description: 'desc_use_standard_randomizer'.tr(),
+              value: s.useStandardRandomizer,
+              onChanged: (v) =>
+                  notifier.save(s.copyWith(useStandardRandomizer: v)),
+            ),
+            MenuSwitchItem(
+              label: 'menu_extract_janitor_locally'.tr(),
+              description: 'desc_extract_janitor_locally'.tr(),
+              value: s.extractJanitorLocally,
+              onChanged: (v) =>
+                  notifier.save(s.copyWith(extractJanitorLocally: v)),
             ),
           ],
         ),
