@@ -6,6 +6,7 @@ import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/menu_group.dart';
 import '../../../core/platform/haptics.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../settings/app_settings_provider.dart';
 import '../janitor_account_provider.dart';
 import '../saucepan_account_provider.dart';
 import '../third_party_providers_provider.dart';
@@ -96,6 +97,7 @@ class ThirdPartyProvidersScreen extends ConsumerWidget {
     switch (p) {
       case ThirdPartyProvider.janitor:
         final account = ref.watch(janitorAccountProvider);
+        final settings = ref.watch(appSettingsProvider).value;
         return [
           MenuItem(
             icon: Icons.person_outline_rounded,
@@ -107,6 +109,15 @@ class ThirdPartyProvidersScreen extends ConsumerWidget {
                 : 'janitor_login_menu_logged_out'.tr(),
             onTap: () => openJanitorAccountSheet(context, ref),
           ),
+          if (settings != null)
+            MenuSwitchItem(
+              label: 'menu_extract_janitor_locally'.tr(),
+              description: 'desc_extract_janitor_locally'.tr(),
+              value: settings.extractJanitorLocally,
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .save(settings.copyWith(extractJanitorLocally: v)),
+            ),
         ];
       case ThirdPartyProvider.saucepan:
         final account = ref.watch(saucepanAccountProvider);

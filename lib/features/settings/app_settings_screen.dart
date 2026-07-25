@@ -130,23 +130,58 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       key: const ValueKey('interface'),
       padding: EdgeInsets.fromLTRB(0, topPad + 8, 0, bottomPad),
       children: [
-        // ── Desktop ──────────────────────────────────────────────────────
-        // Settings that only take effect on wide / physical-keyboard setups.
+        // ── General interface ────────────────────────────────────────────
+        // App-wide UI behaviour that isn't tied to a specific area.
         MenuGroup(
-          header: 'settings_group_desktop'.tr(),
-          headerIcon: Icons.desktop_windows_outlined,
+          header: 'settings_group_general_ui'.tr(),
+          headerIcon: Icons.tune_rounded,
           items: [
             MenuSwitchItem(
-              label: 'menu_enter_to_send'.tr(),
-              description: 'desc_enter_to_send'.tr(),
-              value: s.enterToSend,
-              onChanged: (v) => notifier.save(s.copyWith(enterToSend: v)),
+              label: 'menu_battery_saver_ui'.tr(),
+              description: 'desc_battery_saver_ui'.tr(),
+              value: s.batterySaver,
+              onChanged: (v) => notifier.save(s.copyWith(batterySaver: v)),
+            ),
+            if (Haptics.isConfigurable)
+              MenuSwitchItem(
+                label: 'menu_haptic_feedback'.tr(),
+                description: 'desc_haptic_feedback'.tr(),
+                value: s.hapticFeedback,
+                onChanged: (v) => notifier.save(s.copyWith(hapticFeedback: v)),
+              ),
+            MenuSwitchItem(
+              label: 'menu_hide_help_tips'.tr(),
+              description: 'desc_hide_help_tips'.tr(),
+              value: s.hideTooltips,
+              onChanged: (v) => notifier.save(s.copyWith(hideTooltips: v)),
+            ),
+          ],
+        ),
+        // ── Characters ───────────────────────────────────────────────────
+        // Behaviour around browsing, importing and picking characters.
+        MenuGroup(
+          header: 'settings_group_characters'.tr(),
+          headerIcon: Icons.people_alt_outlined,
+          items: [
+            MenuSwitchItem(
+              label: 'menu_show_our_picks'.tr(),
+              description: 'desc_show_our_picks'.tr(),
+              value: s.showOurPicks,
+              onChanged: (v) => notifier.save(s.copyWith(showOurPicks: v)),
             ),
             MenuSwitchItem(
-              label: 'menu_force_mobile_layout'.tr(),
-              description: 'desc_force_mobile_layout'.tr(),
-              value: s.forceMobileLayout,
-              onChanged: (v) => notifier.save(s.copyWith(forceMobileLayout: v)),
+              label: 'menu_open_card_after_import'.tr(),
+              description: 'desc_open_card_after_import'.tr(),
+              value: s.openCardAfterImport,
+              onChanged: (v) =>
+                  notifier.save(s.copyWith(openCardAfterImport: v)),
+            ),
+            MenuSwitchItem(
+              label: 'menu_use_standard_randomizer'.tr(),
+              description: 'desc_use_standard_randomizer'.tr(),
+              value: s.useStandardRandomizer,
+              onChanged: (v) =>
+                  notifier.save(s.copyWith(useStandardRandomizer: v)),
             ),
           ],
         ),
@@ -218,57 +253,23 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             ),
           ],
         ),
-        // ── General interface ────────────────────────────────────────────
-        // App-wide UI behaviour that isn't tied to desktop or the chat view.
+        // ── Desktop ──────────────────────────────────────────────────────
+        // Settings that only take effect on wide / physical-keyboard setups.
         MenuGroup(
-          header: 'settings_group_general_ui'.tr(),
-          headerIcon: Icons.tune_rounded,
+          header: 'settings_group_desktop'.tr(),
+          headerIcon: Icons.desktop_windows_outlined,
           items: [
             MenuSwitchItem(
-              label: 'menu_battery_saver_ui'.tr(),
-              description: 'desc_battery_saver_ui'.tr(),
-              value: s.batterySaver,
-              onChanged: (v) => notifier.save(s.copyWith(batterySaver: v)),
-            ),
-            if (Haptics.isConfigurable)
-              MenuSwitchItem(
-                label: 'menu_haptic_feedback'.tr(),
-                description: 'desc_haptic_feedback'.tr(),
-                value: s.hapticFeedback,
-                onChanged: (v) => notifier.save(s.copyWith(hapticFeedback: v)),
-              ),
-            MenuSwitchItem(
-              label: 'menu_hide_help_tips'.tr(),
-              description: 'desc_hide_help_tips'.tr(),
-              value: s.hideTooltips,
-              onChanged: (v) => notifier.save(s.copyWith(hideTooltips: v)),
+              label: 'menu_enter_to_send'.tr(),
+              description: 'desc_enter_to_send'.tr(),
+              value: s.enterToSend,
+              onChanged: (v) => notifier.save(s.copyWith(enterToSend: v)),
             ),
             MenuSwitchItem(
-              label: 'menu_show_our_picks'.tr(),
-              description: 'desc_show_our_picks'.tr(),
-              value: s.showOurPicks,
-              onChanged: (v) => notifier.save(s.copyWith(showOurPicks: v)),
-            ),
-            MenuSwitchItem(
-              label: 'menu_open_card_after_import'.tr(),
-              description: 'desc_open_card_after_import'.tr(),
-              value: s.openCardAfterImport,
-              onChanged: (v) =>
-                  notifier.save(s.copyWith(openCardAfterImport: v)),
-            ),
-            MenuSwitchItem(
-              label: 'menu_use_standard_randomizer'.tr(),
-              description: 'desc_use_standard_randomizer'.tr(),
-              value: s.useStandardRandomizer,
-              onChanged: (v) =>
-                  notifier.save(s.copyWith(useStandardRandomizer: v)),
-            ),
-            MenuSwitchItem(
-              label: 'menu_extract_janitor_locally'.tr(),
-              description: 'desc_extract_janitor_locally'.tr(),
-              value: s.extractJanitorLocally,
-              onChanged: (v) =>
-                  notifier.save(s.copyWith(extractJanitorLocally: v)),
+              label: 'menu_force_mobile_layout'.tr(),
+              description: 'desc_force_mobile_layout'.tr(),
+              value: s.forceMobileLayout,
+              onChanged: (v) => notifier.save(s.copyWith(forceMobileLayout: v)),
             ),
           ],
         ),

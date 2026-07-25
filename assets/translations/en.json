@@ -828,6 +828,7 @@
   "menu_interface_settings": "Interface Settings",
   "settings_group_desktop": "Desktop",
   "settings_group_chat": "Chat",
+  "settings_group_characters": "Characters",
   "settings_group_general_ui": "General Interface",
   "menu_haptic_feedback": "Haptic Feedback",
   "desc_haptic_feedback": "Vibration when tapping buttons and controls",
