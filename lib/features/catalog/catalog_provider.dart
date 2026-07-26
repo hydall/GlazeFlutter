@@ -84,10 +84,38 @@ class CatalogState {
   }
 }
 
+/// Fetches one page for [provider]. Injected in tests so the search/epoch
+/// logic can be exercised without hitting the real catalog endpoints.
+typedef CatalogFetcher =
+    Future<CatalogSearchResult> Function(CatalogProvider provider);
+
 class CatalogNotifier extends StateNotifier<CatalogState> {
   final Ref _ref;
+  final CatalogFetcher? _fetchOverride;
 
-  CatalogNotifier(this._ref) : super(const CatalogState()) {
+  /// Epoch of the newest search request. Every reset-search (provider switch,
+  /// sort/filter change, new query) bumps it, so a fetch that belonged to a
+  /// previous provider/filter set is discarded when it resolves instead of
+  /// overwriting the current results. See `docs/rules/race-conditions.md`
+  /// Rule 1/4.
+  int _searchEpoch = 0;
+
+  /// Provider the user picked most recently, tracked separately from
+  /// [CatalogState.activeProvider] because [setProvider] awaits prefs before it
+  /// applies. Null until the first explicit pick.
+  CatalogProvider? _requestedProvider;
+
+  /// True once the persisted provider/filters have been applied (or skipped
+  /// because the user already picked). Until then the enabled-providers
+  /// fallback below stays quiet: `state.activeProvider` is still the
+  /// constructor default, so a fallback computed from it would fight the
+  /// restore — [_loadSavedState] validates the restored provider itself.
+  bool _savedStateApplied = false;
+
+  /// [fetchOverride] replaces the real per-provider fetch; tests only.
+  CatalogNotifier(this._ref, {CatalogFetcher? fetchOverride})
+    : _fetchOverride = fetchOverride,
+      super(const CatalogState()) {
     _loadSavedState();
     // If the active provider gets disabled on the Third-Party providers screen,
     // fall back to an enabled one so the catalog never shows a hidden source.
@@ -95,6 +123,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       _,
       enabled,
     ) {
+      if (!_savedStateApplied) return;
       // Empty means every provider is disabled — the catalog is hidden, so
       // leave the active provider as-is (it'll be corrected when one is
       // re-enabled).
@@ -106,11 +135,25 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   Future<void> _loadSavedState() async {
     final prefs = await _ref.read(sharedPreferencesProvider.future);
+    if (!mounted) return;
+    // The user already picked a provider while prefs were loading — their pick
+    // owns the state now, don't restore the saved one over it.
+    if (_requestedProvider != null) {
+      _savedStateApplied = true;
+      return;
+    }
     final savedProvider = prefs.getString(_providerKey) ?? 'janitor';
-    final provider = CatalogProvider.values.firstWhere(
+    var provider = CatalogProvider.values.firstWhere(
       (p) => p.name == savedProvider,
       orElse: () => CatalogProvider.janitor,
     );
+    // The saved provider may have been disabled on the Third-Party providers
+    // screen since it was saved — never restore a hidden source. (An empty list
+    // means all are disabled and the catalog is hidden entirely.)
+    final enabled = _ref.read(enabledCatalogProvidersProvider);
+    if (enabled.isNotEmpty && !enabled.contains(provider)) {
+      provider = enabled.first;
+    }
     final savedSort =
         prefs.getString('${_sortKey}_${provider.name}') ??
         providerSortDefaults[provider]!;
@@ -120,6 +163,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       allowLegacyFallback: true,
     );
 
+    _savedStateApplied = true;
     state = state.copyWith(
       activeProvider: provider,
       filters: savedFilters.copyWith(sort: savedSort),
@@ -178,8 +222,14 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   Future<void> setProvider(CatalogProvider provider) async {
-    if (provider == state.activeProvider) return;
+    // Compare against the last *requested* provider, not the applied one: the
+    // prefs read below is async, so on two quick picks (A → B → A) the second
+    // one would otherwise bail out as "already active" and B would win.
+    if (provider == (_requestedProvider ?? state.activeProvider)) return;
+    _requestedProvider = provider;
     final prefs = await _ref.read(sharedPreferencesProvider.future);
+    // A newer pick superseded this one while prefs loaded.
+    if (!mounted || _requestedProvider != provider) return;
     // Each provider carries its own filters (tags, NSFL, token range), so
     // restore this provider's saved selection instead of leaking the previous
     // provider's filters. Sort likewise falls back to the provider default.
@@ -213,7 +263,13 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   Future<void> search({bool reset = false}) async {
-    if (state.loading) return;
+    // Pagination must not stack on top of an in-flight page, but a reset search
+    // (provider switch, new sort/filters/query) has to win over whatever is
+    // loading — otherwise switching provider while the previous one loads is a
+    // no-op and the old provider's results land under the new provider's label.
+    if (state.loading && !reset) return;
+
+    final epoch = ++_searchEpoch;
 
     if (reset) {
       state = state.copyWith(page: 1, results: [], hasMore: true, error: null);
@@ -230,7 +286,11 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         unawaited(fetchJanitorTags().catchError((_) => <CatalogTag>[]));
       }
 
-      final result = await _fetchFromProvider(provider);
+      final result = await (_fetchOverride ?? _fetchFromProvider)(provider);
+
+      // A newer search superseded this one (or the notifier is gone): drop the
+      // result. The newer request owns `loading` and will clear it itself.
+      if (!mounted || epoch != _searchEpoch) return;
 
       final items = result.characters;
       state = state.copyWith(
@@ -244,6 +304,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         loading: false,
       );
     } catch (e) {
+      if (!mounted || epoch != _searchEpoch) return;
       state = state.copyWith(loading: false, error: e.toString());
     }
   }
