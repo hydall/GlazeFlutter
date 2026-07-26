@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -158,13 +159,12 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
       return;
     }
 
-    // Direct links to a raw card file (…/foo.json or …/foo.png) are downloaded
-    // and parsed on-device with the same importer used for local file picks —
-    // no remote extraction service involved.
-    if (_isDirectCardFileUrl(url)) {
-      await _importDirectFile(url);
-      return;
-    }
+    // Probe the link before the remote extractor: if it directly serves a card
+    // file — a PNG with embedded data or a character JSON — import it on-device.
+    // We decide by what the URL actually returns, not by its path shape, so
+    // extensionless download endpoints (e.g. `…/download/png/69682`) work too.
+    // Anything else falls through to DataCat below.
+    if (await _tryImportDirectFile(url)) return;
 
     setState(() {
       _loading = true;
@@ -254,17 +254,6 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
     }
   }
 
-  /// True when the URL points at a raw card file. Matches both a trailing
-  /// extension (`…/card.png`, `…/card.json`) and a `png`/`json` path segment for
-  /// download endpoints that omit the extension (e.g. botbooru's
-  /// `…/download/png/69682`).
-  bool _isDirectCardFileUrl(String url) {
-    final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
-    if (path.endsWith('.json') || path.endsWith('.png')) return true;
-    final segments = path.split('/');
-    return segments.contains('png') || segments.contains('json');
-  }
-
   /// PNG file signature — first 8 bytes of every PNG.
   static const _pngMagic = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
@@ -276,32 +265,72 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
     return true;
   }
 
-  /// Downloads a direct `.json`/`.png` card link and imports it locally through
-  /// [CharacterImporter], persisting the character, its lorebook, and any
-  /// embedded gallery images — mirroring the local file-pick import flow.
-  Future<void> _importDirectFile(String url) async {
+  /// True when [bytes] decode to a character-card JSON object (has `name`,
+  /// nested `data`, or a `chara_card_v*` spec). Guards against importing random
+  /// JSON API responses that happen to sit behind a link.
+  bool _looksLikeCardJson(Uint8List bytes) {
+    try {
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is! Map) return false;
+      final spec = decoded['spec'];
+      return decoded.containsKey('name') ||
+          decoded.containsKey('data') ||
+          spec == 'chara_card_v2' ||
+          spec == 'chara_card_v3';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Downloads [url] and, if it directly serves a card file (a PNG with embedded
+  /// data or a character JSON), imports it locally through [CharacterImporter] —
+  /// persisting the character, its lorebook, and any embedded gallery images,
+  /// mirroring the local file-pick flow.
+  ///
+  /// Returns `true` when the link was handled here; `false` when it isn't a
+  /// direct card file (unreachable, empty, or unrecognized content) so the
+  /// caller can fall back to the remote extractor.
+  Future<bool> _tryImportDirectFile(String url) async {
     setState(() {
       _loading = true;
       _error = null;
-      _phase = 'downloading';
+      _phase = 'checking link';
     });
-    try {
-      final res = await Dio().get<List<int>>(
-        url,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      final bytes = Uint8List.fromList(res.data ?? const []);
-      if (bytes.isEmpty) {
-        throw const FormatException('Empty response from that link.');
-      }
 
-      // The URL may not carry a usable extension (e.g. `…/download/png/69682`),
-      // so pick the importer branch from the actual bytes: a PNG signature means
-      // an embedded-card PNG, otherwise treat it as raw JSON.
-      final fileName = _looksLikePng(bytes) ? 'card.png' : 'card.json';
+    Uint8List bytes;
+    try {
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 20),
+      ));
+      final res = await dio.get<List<int>>(
+        url,
+        options: Options(
+          responseType: ResponseType.bytes,
+          validateStatus: (s) => s != null && s >= 200 && s < 300,
+        ),
+      );
+      bytes = Uint8List.fromList(res.data ?? const []);
+    } catch (_) {
+      // Not fetchable as a raw file — let the remote extractor try instead.
+      return false;
+    }
+
+    if (bytes.isEmpty) return false;
+
+    // Decide by content, not by the URL: a PNG signature means an embedded-card
+    // PNG; otherwise the only other on-device format we import directly is a
+    // character JSON. Anything else falls back to the extractor.
+    final isPng = _looksLikePng(bytes);
+    if (!isPng && !_looksLikeCardJson(bytes)) return false;
+
+    try {
       final importer = await ref.read(characterImporterProvider.future);
-      final result = await importer.importFromBytes(bytes, fileName);
-      if (!mounted) return;
+      final result = await importer.importFromBytes(
+        bytes,
+        isPng ? 'card.png' : 'card.json',
+      );
+      if (!mounted) return true;
 
       await ref.read(charactersProvider.notifier).add(result.character);
 
@@ -329,14 +358,13 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
         Navigator.pop(context);
         GlazeToast.show(context, 'Imported ${result.character.name}');
       }
+      return true;
     } catch (e) {
-      debugPrint('[import_url_dialog] direct file import failed: $e');
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = e.toString();
-        });
-      }
+      // Looked like a card but couldn't be parsed as one (e.g. a plain image or
+      // unrelated JSON) — fall back to the remote extractor rather than
+      // surfacing a low-level parse error.
+      debugPrint('[import_url_dialog] direct import failed, falling back: $e');
+      return false;
     }
   }
 
