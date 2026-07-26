@@ -5,7 +5,6 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../core/services/character_book_converter.dart';
 import '../../../core/state/character_provider.dart';
@@ -255,11 +254,26 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
     }
   }
 
-  /// True when the URL points straight at a raw card file (`.json` or `.png`),
-  /// e.g. a GitHub `raw.githubusercontent.com/…/card.png` or a direct CDN link.
+  /// True when the URL points at a raw card file. Matches both a trailing
+  /// extension (`…/card.png`, `…/card.json`) and a `png`/`json` path segment for
+  /// download endpoints that omit the extension (e.g. botbooru's
+  /// `…/download/png/69682`).
   bool _isDirectCardFileUrl(String url) {
     final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
-    return path.endsWith('.json') || path.endsWith('.png');
+    if (path.endsWith('.json') || path.endsWith('.png')) return true;
+    final segments = path.split('/');
+    return segments.contains('png') || segments.contains('json');
+  }
+
+  /// PNG file signature — first 8 bytes of every PNG.
+  static const _pngMagic = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+  bool _looksLikePng(Uint8List bytes) {
+    if (bytes.length < _pngMagic.length) return false;
+    for (var i = 0; i < _pngMagic.length; i++) {
+      if (bytes[i] != _pngMagic[i]) return false;
+    }
+    return true;
   }
 
   /// Downloads a direct `.json`/`.png` card link and imports it locally through
@@ -281,7 +295,10 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
         throw const FormatException('Empty response from that link.');
       }
 
-      final fileName = p.basename(Uri.parse(url).path);
+      // The URL may not carry a usable extension (e.g. `…/download/png/69682`),
+      // so pick the importer branch from the actual bytes: a PNG signature means
+      // an embedded-card PNG, otherwise treat it as raw JSON.
+      final fileName = _looksLikePng(bytes) ? 'card.png' : 'card.json';
       final importer = await ref.read(characterImporterProvider.future);
       final result = await importer.importFromBytes(bytes, fileName);
       if (!mounted) return;
