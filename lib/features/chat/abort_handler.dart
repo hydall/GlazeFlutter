@@ -14,6 +14,7 @@ import 'state/post_cleaner_state_provider.dart'
 import 'state/studio_cycle_state_provider.dart';
 import 'chat_session_service.dart';
 import 'chat_state.dart';
+import 'services/continuation_message_merger.dart';
 
 class AbortHandler {
   final Ref _ref;
@@ -141,6 +142,64 @@ class AbortHandler {
     GenerationNotificationService.instance.onGenerationAborted();
   }
 
+  /// Stop pressed while `continueMessage()` was streaming. The partial text
+  /// belongs to the message being continued — merge it in place (exactly what
+  /// the completed run would have done) instead of appending a separate
+  /// assistant bubble, which would contradict what the WebView already shows.
+  void _finalizeContinuationAbort(
+    ChatState current,
+    StreamingState partialStreaming,
+    String continuationId,
+  ) {
+    final messages = current.session?.messages ?? const <ChatMessage>[];
+    final idx = messages.indexWhere((m) => m.id == continuationId);
+    final partialText = partialStreaming.text.trim();
+    if (idx < 0 || partialText.isEmpty) {
+      _setState(
+        AsyncData(
+          current.copyWith(
+            isGenerating: false,
+            isGeneratingImage: false,
+            isPostGenRunning: false,
+            continuationTargetId: null,
+          ),
+        ),
+      );
+      return;
+    }
+
+    final merged = mergeContinuationMessage(
+      messages[idx],
+      ChatMessage(
+        id: continuationId,
+        role: 'assistant',
+        content: partialText,
+        reasoning: partialStreaming.reasoning,
+      ),
+    );
+    final updatedMessages = [...messages];
+    updatedMessages[idx] = merged;
+    final updatedSession = current.session?.copyWith(
+      messages: updatedMessages,
+      updatedAt: currentTimestampSeconds(),
+    );
+    if (updatedSession != null) {
+      _persistSession(updatedSession);
+      ChatSessionService.updateCache(updatedSession);
+    }
+    _setState(
+      AsyncData(
+        current.copyWith(
+          session: updatedSession ?? current.session,
+          isGenerating: false,
+          isGeneratingImage: false,
+          isPostGenRunning: false,
+          continuationTargetId: null,
+        ),
+      ),
+    );
+  }
+
   void _finalizeAbortWithPartial(
     ChatState current,
     StreamingState partialStreaming,
@@ -149,6 +208,12 @@ class AbortHandler {
     if (!_ref.mounted) return;
     if (!current.isGenerating) {
       // Current is the pre-abort snapshot; continue restoration logic below.
+    }
+
+    final continuationId = current.continuationTargetId;
+    if (continuationId != null) {
+      _finalizeContinuationAbort(current, partialStreaming, continuationId);
+      return;
     }
 
     final regenId = current.regenTargetId;

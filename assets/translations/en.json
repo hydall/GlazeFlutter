@@ -335,6 +335,7 @@
   "sheet_title_msg_actions": "Message Actions",
   "sheet_title_magic_drawer": "Quick Access",
   "sheet_title_quick_replies": "Quick Replies",
+  "quick_reply_continue_hint": "Continue last message",
   "stat_messages": "Messages",
   "stat_gen_time": "Generation Time",
   "notification_generating": "Generating response...",

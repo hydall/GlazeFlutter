@@ -189,7 +189,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
   }
 
   String _previewText(QuickReply reply) {
-    if (reply.isContinueAction) return 'magic_regenerate'.tr();
+    if (reply.isContinueAction) return 'quick_reply_continue_hint'.tr();
     final t = reply.text.replaceAll('\n', ' ').trim();
     return t.isEmpty ? '—' : t;
   }

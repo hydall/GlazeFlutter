@@ -196,8 +196,12 @@ pre-generation `sessionVars`. See INV-C5.
 `ChatNotifier.continueMessage()`:
 
 1. Calls `ChatGenerationService.generate()` (SSE + prompt build) directly.
-2. Appends streamed content to the **existing** last assistant message.
-3. Does **not** run `GenerationPipeline` post-steps (image tags, extensions, sync).
+2. Appends streamed content to the **existing** last assistant message. That
+   message's id sits in `ChatState.continuationTargetId` for the whole run, so
+   the WebView streams into its bubble instead of a typing placeholder.
+3. Delegates to `regenerateLastAssistant()` when a **user** message trails
+   (nothing to extend — generate a reply instead).
+4. Does **not** run `GenerationPipeline` post-steps (image tags, extensions, sync).
 
 See INV-CM1, INV-CM2 before changing this path.
 

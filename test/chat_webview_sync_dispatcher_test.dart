@@ -143,6 +143,38 @@ void main() {
       },
     );
 
+    test('continuation flags its target instead of adding a placeholder', () {
+      // A continuation extends an existing bubble; a typing placeholder would
+      // show the reply as its own block that collapses into the original once
+      // the merged message arrives.
+      final bridge = _FakeBridge();
+      final message = _assistant('a1');
+      final syncState = ChatWebViewSyncState();
+      final dispatcher = ChatWebViewSyncDispatcher(state: syncState);
+
+      final result = dispatcher.dispatch(
+        bridge: bridge,
+        old: _fields(isGenerating: false, messages: [message]),
+        current: _fields(
+          isGenerating: true,
+          messages: [message],
+          continuationTargetId: 'a1',
+        ),
+        oldMessages: [message],
+        newMessages: [message],
+        streamingId: '__streaming__',
+        onSyncExtBlockPanels: () async {},
+        appendMessage: (_) async {},
+        buildStreamingPlaceholder: () => _assistant('__streaming__'),
+      );
+
+      expect(result.appendPlaceholder, isFalse);
+      expect(bridge.updatedMessages.last.id, 'a1');
+      expect(bridge.updatedMessages.last.isTyping, isTrue);
+      // Nothing virtual was appended, so the falling edge must not remove it.
+      expect(syncState.regenStreamingSent, isTrue);
+    });
+
     test('syncs overlay blur regions only when they change', () {
       final dispatcher = ChatWebViewSyncDispatcher(
         state: ChatWebViewSyncState(),
@@ -207,8 +239,10 @@ ChatWebViewWidgetFields _fields({
   required bool isGenerating,
   required List<ChatMessage> messages,
   bool isPostGenRunning = false,
+  String? continuationTargetId,
   List<ChatOverlayBlurRegion> blurRegions = const [],
 }) => ChatWebViewWidgetFields(
+  continuationTargetId: continuationTargetId,
   blurRegions: blurRegions,
   charId: 'c1',
   charName: 'Character',

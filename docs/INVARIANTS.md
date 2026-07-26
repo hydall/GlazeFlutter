@@ -682,6 +682,27 @@ assistant message while preserving its id, and persists via `chatRepo.put`. It
 does not create a new swipe or keep the temporary generated message. The active
 green and nested swipes are updated to the same merged content.
 
+While the continuation streams, `ChatState.continuationTargetId` holds the id of
+that assistant message. The WebView layer keys off it: the sync dispatcher skips
+the virtual typing placeholder and flags the target bubble as typing instead,
+and the streaming listener grows that bubble with
+`joinContinuation(original, streamedText)`. The bubble therefore shows exactly
+the text the merge will persist, instead of a separate block that collapses into
+the original when the merge lands. The field is cleared whenever the run
+settles (success, error, or abort).
+
+Stop during a continuation merges the partial text into the target message
+(`AbortHandler._finalizeContinuationAbort`) rather than appending it as a new
+assistant message. `continueMessage()` clears `abortHandler.restorationMessage`
+before starting, so a snapshot left by an earlier regenerate cannot be
+re-appended by that abort (the pipeline's own clearing does not apply here — see
+INV-CM2).
+
+When the last message is **not** an assistant message there is nothing to
+extend: a trailing user message is delegated to `regenerateLastAssistant()`,
+which generates a normal reply through `GenerationPipeline`; any other trailing
+role is a no-op.
+
 Mutex: `continueMessage()` rejects when `_isMemoryDraftActive` (same as
 `sendMessage` / `regenerateLastAssistant`) — see INV-M4.
 

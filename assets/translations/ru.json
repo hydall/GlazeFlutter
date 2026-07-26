@@ -238,6 +238,7 @@
   "sheet_title_chat_actions": "Чат",
   "sheet_title_magic_drawer": "Быстрый доступ",
   "sheet_title_quick_replies": "Быстрые ответы",
+  "quick_reply_continue_hint": "Продолжить последнее сообщение",
   "action_new_session": "Новая сессия",
   "action_rename": "Переименовать",
   "lorebook_rename": "Переименовать лорбук",

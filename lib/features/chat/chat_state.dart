@@ -20,6 +20,14 @@ class ChatState {
 
   final String? regenTargetId;
 
+  /// Id of the assistant message a `continueMessage()` run is extending.
+  /// Set while the continuation streams so the WebView appends the incoming
+  /// text to that bubble instead of spawning a separate typing placeholder
+  /// that would visibly collapse into it once the merge lands (INV-CM1).
+  ///
+  /// Null on every other generation path.
+  final String? continuationTargetId;
+
   /// Transient snapshot of the prompt payload used for the last generation.
   /// Not persisted, not part of UI state — carried through the pipeline so the
   /// POST-cleaner's auditor can inspect the exact context the final agent saw
@@ -40,6 +48,7 @@ class ChatState {
     this.visibleStartIndex = 0,
     this.isLoadingOlder = false,
     this.regenTargetId,
+    this.continuationTargetId,
     this.promptPayload,
   });
 
@@ -66,6 +75,7 @@ class ChatState {
     int? visibleStartIndex,
     bool? isLoadingOlder,
     Object? regenTargetId = _unset,
+    Object? continuationTargetId = _unset,
     PromptPayload? promptPayload,
   }) {
     return ChatState(
@@ -81,6 +91,9 @@ class ChatState {
       regenTargetId: regenTargetId == _unset
           ? this.regenTargetId
           : regenTargetId as String?,
+      continuationTargetId: continuationTargetId == _unset
+          ? this.continuationTargetId
+          : continuationTargetId as String?,
       promptPayload: promptPayload ?? this.promptPayload,
     );
   }

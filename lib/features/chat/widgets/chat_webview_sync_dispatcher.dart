@@ -131,13 +131,28 @@ class ChatWebViewSyncDispatcher {
         !identical(oldMessages, newMessages) &&
         !chatMessageListsIdentical(oldMessages, newMessages);
 
-    // Fresh generation started (no regenTargetId) → inject typing placeholder.
-    // Impersonation reuses the generating flag but streams into the composer,
-    // not the chat, so it must never spawn an assistant typing bubble.
+    // Continuation started → the reply extends an existing bubble, so flag
+    // that one as typing instead of appending a placeholder. The streaming
+    // listener then grows it in place (see ChatWebViewBuildListeners).
+    final continuationId = current.continuationTargetId;
+    if (!state.wasGenerating && current.isGenerating && continuationId != null) {
+      final target = current.messages.firstWhereOrNull(
+        (m) => m.id == continuationId,
+      );
+      if (target != null) {
+        bridge.updateMessage(target.copyWith(isTyping: true));
+        state.regenStreamingSent = true;
+      }
+    }
+
+    // Fresh generation started (no regen/continuation target) → inject typing
+    // placeholder. Impersonation reuses the generating flag but streams into
+    // the composer, not the chat, so it must never spawn a typing bubble.
     final shouldInjectPlaceholder =
         !state.wasGenerating &&
         current.isGenerating &&
         current.regenTargetId == null &&
+        continuationId == null &&
         !state.streamingSent &&
         !isImpersonating;
     state.wasGenerating = current.isGenerating;
@@ -487,6 +502,7 @@ class ChatWebViewWidgetFields {
     required this.isGeneratingImage,
     required this.isPostGenRunning,
     required this.regenTargetId,
+    this.continuationTargetId,
     required this.greetingTotal,
     required this.messages,
     required this.buildThemeMap,
@@ -548,6 +564,10 @@ class ChatWebViewWidgetFields {
   final bool isGeneratingImage;
   final bool isPostGenRunning;
   final String? regenTargetId;
+
+  /// Id of the assistant message a continuation run extends, or null.
+  /// Mirrors `ChatState.continuationTargetId`.
+  final String? continuationTargetId;
   final int greetingTotal;
   final List<ChatMessage> messages;
 

@@ -21,7 +21,7 @@ ChatMessage mergeContinuationMessage(
   ChatMessage original,
   ChatMessage generated,
 ) {
-  final content = _joinContinuation(original.content, generated.content);
+  final content = joinContinuation(original.content, generated.content);
 
   final swipes = original.swipes.isEmpty
       ? [content]
@@ -71,7 +71,10 @@ ChatMessage mergeContinuationMessage(
   );
 }
 
-String _joinContinuation(String original, String continuation) {
+/// Joins an assistant message with the text a continuation run produced.
+/// Shared with the live WebView preview so the bubble streams exactly the
+/// text the merge will persist.
+String joinContinuation(String original, String continuation) {
   if (original.isEmpty) return continuation;
   if (continuation.isEmpty) return original;
   return '$original\n\n$continuation';

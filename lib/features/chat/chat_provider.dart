@@ -711,12 +711,27 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     final lastIdx = current.messages.length - 1;
     if (lastIdx < 0) return;
     final lastMsg = current.messages[lastIdx];
-    if (lastMsg.role != 'assistant') return;
+    if (lastMsg.role != 'assistant') {
+      // Nothing to extend when the user spoke last — the useful action there
+      // is a plain reply to that message. `regenerateLastAssistant` already
+      // routes a trailing user message through the full generation pipeline
+      // (post-gen stages included), so reuse it instead of continuing an
+      // assistant message that is no longer at the end of the chat.
+      if (lastMsg.role == 'user') await regenerateLastAssistant();
+      return;
+    }
 
     final genId = _abortHandler.nextGenId();
     _abortHandler.clearStreaming();
+    // Continuation never rolls a message back on abort; drop any restoration
+    // snapshot a previous regenerate left behind so Stop cannot re-append it.
+    _abortHandler.restorationMessage = null;
     state = AsyncData(
-      current.copyWith(isGenerating: true, generationStartTime: DateTime.now()),
+      current.copyWith(
+        isGenerating: true,
+        generationStartTime: DateTime.now(),
+        continuationTargetId: lastMsg.id,
+      ),
     );
 
     final notifService = GenerationNotificationService.instance;
@@ -796,6 +811,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
               isGenerating: false,
               isGeneratingImage: false,
               isPostGenRunning: false,
+              continuationTargetId: null,
               error: e.toString(),
             ),
           );

@@ -15,6 +15,7 @@ import '../bridge/chat_bridge_controller.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../editing_message_provider.dart';
+import '../services/continuation_message_merger.dart';
 import 'chat_message_sync.dart';
 import 'chat_webview_sync_dispatcher.dart';
 
@@ -37,6 +38,7 @@ class ChatWebViewBuildListeners {
     required this.sessionId,
     required this.messages,
     required this.regenTargetId,
+    required this.continuationTargetId,
     required this.visibleStartIndex,
     required this.onRefreshExtBlocksPanel,
     required this.onSyncExtBlockPanels,
@@ -51,6 +53,10 @@ class ChatWebViewBuildListeners {
   final String? sessionId;
   final List<ChatMessage> messages;
   final String? regenTargetId;
+
+  /// Id of the assistant message a continuation run is extending, or null.
+  /// See [ChatState.continuationTargetId].
+  final String? continuationTargetId;
   final int visibleStartIndex;
   final Future<void> Function(String sessionId, String messageId)
   onRefreshExtBlocksPanel;
@@ -158,6 +164,28 @@ class ChatWebViewBuildListeners {
           syncState.regenStreamingSent = true;
         }
         return;
+      }
+
+      // Continuation streaming: the reply extends an existing assistant
+      // message, so grow that bubble in place. Appending a virtual streaming
+      // message instead would show the continuation as its own block that
+      // visibly collapses into the original once the merged message lands.
+      final continuationId = continuationTargetId;
+      if (continuationId != null) {
+        final idx = messages.indexWhere((m) => m.id == continuationId);
+        if (idx >= 0) {
+          final original = messages[idx];
+          final updated = original.copyWith(
+            content: joinContinuation(original.content, next.text),
+            reasoning: next.reasoning ?? original.reasoning,
+            isTyping: true,
+          );
+          b.updateMessage(updated);
+          // No virtual streaming message was appended for this run, so the
+          // falling edge must not try to remove one.
+          syncState.regenStreamingSent = true;
+          return;
+        }
       }
 
       // POST-cleaner streaming: rewrite the existing last assistant message

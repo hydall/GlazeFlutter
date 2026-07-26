@@ -98,6 +98,11 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final String? sessionId;
   final int visibleStartIndex;
   final String? regenTargetId;
+
+  /// Id of the assistant message a continuation run extends, or null.
+  /// Mirrors `ChatState.continuationTargetId`: while set, the streamed text
+  /// grows that bubble instead of a separate typing placeholder.
+  final String? continuationTargetId;
   final bool isSelectionMode;
   final bool batterySaver;
   final bool hideMessageId;
@@ -169,6 +174,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.sessionId,
     this.visibleStartIndex = 0,
     this.regenTargetId,
+    this.continuationTargetId,
     this.isSelectionMode = false,
     this.batterySaver = false,
     this.hideMessageId = false,
@@ -741,6 +747,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       isGeneratingImage: w.isGeneratingImage,
       isPostGenRunning: w.isPostGenRunning,
       regenTargetId: w.regenTargetId,
+      continuationTargetId: w.continuationTargetId,
       greetingTotal: w.greetingTotal,
       messages: w.messages,
       buildThemeMap: _buildThemeMap,
@@ -861,6 +868,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       sessionId: widget.sessionId,
       messages: widget.messages,
       regenTargetId: widget.regenTargetId,
+      continuationTargetId: widget.continuationTargetId,
       visibleStartIndex: widget.visibleStartIndex,
       onRefreshExtBlocksPanel: _refreshExtBlocksPanel,
       onSyncExtBlockPanels: _syncExtBlockPanels,
